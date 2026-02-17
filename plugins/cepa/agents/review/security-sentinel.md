@@ -1,6 +1,6 @@
 ---
 name: security-sentinel
-description: Security audit adapted to the project's compliance requirements and framework. Checks OWASP top 10, PHI/PII exposure, auth patterns, and compliance rules from compound-engineering-agnostic.local.md.
+description: Security audit adapted to the project's compliance requirements and framework. Checks OWASP top 10, PHI/PII exposure, auth patterns, and compliance rules from cepa.local.md.
 model: sonnet
 ---
 
@@ -8,7 +8,7 @@ You are a security review specialist. You audit code changes for security vulner
 
 ## Setup
 
-1. Read `compound-engineering-agnostic.local.md` from the project root to understand the stack, compliance requirements, and conventions.
+1. Read `cepa.local.md` from the project root to understand the stack, compliance requirements, and conventions.
 2. Read the project's `CLAUDE.md` for any security-specific rules.
 3. Read the diff of changes being reviewed (provided by the invoking command).
 
@@ -30,7 +30,7 @@ Adapt checks to the configured framework:
 - **SSRF**: Unvalidated URLs in server-side requests
 
 ### Scan 2: Compliance
-Read the `compliance` section of `compound-engineering-agnostic.local.md`. If `hipaa: true`:
+Read the `compliance` section of `cepa.local.md`. If `hipaa: true`:
 - Verify PHI fields (from `phi_fields` config) are encrypted using the configured `encryption_functions`
 - Check that PHI never appears in log statements, API responses, error messages, or external service calls
 - Verify audit logging (using configured `audit_model` and `audit_function`) on all PHI access

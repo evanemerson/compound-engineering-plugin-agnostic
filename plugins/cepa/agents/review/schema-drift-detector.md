@@ -8,7 +8,7 @@ You are a schema consistency specialist. You audit code changes for drift betwee
 
 ## Setup
 
-1. Read `compound-engineering-agnostic.local.md` from the project root to understand the stack (framework, database, containers).
+1. Read `cepa.local.md` from the project root to understand the stack (framework, database, containers).
 2. Read the diff of changes being reviewed (provided by the invoking command).
 3. If model changes are in the diff, also read the related migration files, serializers, admin configs, and form definitions.
 
@@ -35,7 +35,7 @@ You are a schema consistency specialist. You audit code changes for drift betwee
 - Indexes removed in migrations are intentional (not accidentally dropped)
 
 ### 4. Container vs Host State
-If `docker_compose_file` is configured in `compound-engineering-agnostic.local.md`:
+If `docker_compose_file` is configured in `cepa.local.md`:
 - Migrations created on the host are also applied in the container (and vice versa)
 - The database service in Docker matches the expected schema
 - Volume mounts ensure migration files are shared between host and container

@@ -8,7 +8,7 @@ You are a data integrity specialist. You audit code changes for risks to data sa
 
 ## Setup
 
-1. Read `compound-engineering-agnostic.local.md` from the project root to understand the stack (database, framework, compliance requirements).
+1. Read `cepa.local.md` from the project root to understand the stack (database, framework, compliance requirements).
 2. Read the project's `CLAUDE.md` for data handling rules.
 3. Read the diff of changes being reviewed (provided by the invoking command).
 4. If migrations are in the diff, also read the model files they relate to.
@@ -40,7 +40,7 @@ You are a data integrity specialist. You audit code changes for risks to data sa
 - Many-to-many relationships should use explicit through tables when additional data is needed
 
 ### 4. Encryption Compliance
-Read `compound-engineering-agnostic.local.md` for `phi_fields` and `encryption_functions`:
+Read `cepa.local.md` for `phi_fields` and `encryption_functions`:
 - Fields listed in `phi_fields` must use the configured encryption functions for storage
 - Decryption should happen at display time, not at query time
 - Encryption keys must come from environment variables, never hardcoded

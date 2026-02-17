@@ -1,4 +1,4 @@
-# compound-engineering-agnostic
+# cepa
 
 Compound engineering plugin for Claude Code. Provides parallel review agents, solution documentation, and interactive triage.
 
@@ -24,9 +24,9 @@ Compound engineering plugin for Claude Code. Provides parallel review agents, so
 ### Commands (3)
 | Command | Purpose |
 |---|---|
-| `/compound-engineering-agnostic:review` | Run all active agents in parallel, collect findings |
-| `/compound-engineering-agnostic:compound` | Document a solved problem with 5 sub-agents |
-| `/compound-engineering-agnostic:triage` | Interactively approve/skip findings from review |
+| `/cepa:review` | Run all active agents in parallel, collect findings |
+| `/cepa:compound` | Document a solved problem with 5 sub-agents |
+| `/cepa:triage` | Interactively approve/skip findings from review |
 
 ### Skills (2)
 | Skill | Purpose |
@@ -36,14 +36,14 @@ Compound engineering plugin for Claude Code. Provides parallel review agents, so
 
 ## Framework-Agnostic
 
-All agents read `compound-engineering-agnostic.local.md` from the project root. Configure your stack, compliance rules, and conventions there. Agents adapt automatically.
+All agents read `cepa.local.md` from the project root. Configure your stack, compliance rules, and conventions there. Agents adapt automatically.
 
 ## Per-Project Setup
 
-Create `compound-engineering-agnostic.local.md` in your project root:
+Create `cepa.local.md` in your project root:
 
 ```markdown
-# compound-engineering-agnostic Project Configuration
+# cepa Project Configuration
 
 ## Stack
 - framework: Django 5.x

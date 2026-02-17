@@ -1,4 +1,4 @@
-# compound-engineering-agnostic Marketplace
+# cepa Marketplace
 
 Custom Claude Code plugin marketplace for compound engineering workflows.
 
@@ -6,17 +6,17 @@ Custom Claude Code plugin marketplace for compound engineering workflows.
 
 ```bash
 claude /plugin marketplace add https://github.com/evanemerson/compound-engineering-plugin-agnostic
-claude /plugin install compound-engineering-agnostic
+claude /plugin install cepa
 ```
 
 ## Update
 
 ```bash
-claude /plugin update compound-engineering-agnostic
+claude /plugin update cepa
 ```
 
 ## Contents
 
-- **compound-engineering-agnostic** — 9 agents, 3 commands, 2 skills for compound engineering
+- **cepa** — 9 agents, 3 commands, 2 skills for compound engineering
 
-See [plugins/compound-engineering-agnostic/README.md](plugins/compound-engineering-agnostic/README.md) for full documentation.
+See [plugins/cepa/README.md](plugins/cepa/README.md) for full documentation.

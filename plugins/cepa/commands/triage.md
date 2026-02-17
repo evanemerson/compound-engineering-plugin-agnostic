@@ -1,5 +1,5 @@
 ---
-description: Interactive review of findings from /compound-engineering-agnostic:review. Present each finding for approve, skip, or customize decisions.
+description: Interactive review of findings from /cepa:review. Present each finding for approve, skip, or customize decisions.
 allowed-tools: Bash(git diff:*), Bash(git show:*)
 ---
 
@@ -7,7 +7,7 @@ allowed-tools: Bash(git diff:*), Bash(git show:*)
 
 Interactively review findings from the most recent review. Present each finding one at a time for the user to approve, skip, or customize.
 
-**Announce at start:** "I'm using the compound-engineering-agnostic:triage command to review findings interactively."
+**Announce at start:** "I'm using the cepa:triage command to review findings interactively."
 
 ## Step 1: Load Findings
 
