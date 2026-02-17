@@ -338,7 +338,7 @@ Step 4 feeds back into step 1. The `learnings-researcher` agent searches your so
 
 ## Acknowledgments
 
-This plugin is built on the ideas from [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin) by [Kieran Klaassen](https://github.com/EveryInc). His original plugin introduced the compound engineering workflow — the plan/work/review/compound loop, the parallel review agents, the solution documentation pattern, and the concept that each unit of work should make subsequent work easier. The agent architectures, review categories, and documentation format in CEPA are directly adapted from his work.
+This plugin is built on the ideas from [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin) by [Kieran Klaassen](https://github.com/kieranklaassen). His original plugin introduced the compound engineering workflow — the plan/work/review/compound loop, the parallel review agents, the solution documentation pattern, and the concept that each unit of work should make subsequent work easier. The agent architectures, review categories, and documentation format in CEPA are directly adapted from his work.
 
 I came across the original plugin while working on a Django project and found that many of the agents were built around Ruby on Rails conventions — `schema.rb` drift detection, DHH-style code review, StandardRB linting, Hotwire/Turbo race conditions. Rather than fork and rewrite, I wanted an agnostic version where a single configuration file (`cepa.local.md`) could tell every agent what stack, compliance rules, and conventions to use. Same ideas, any framework.
 
