@@ -8,7 +8,7 @@ You are a deployment verification specialist. You audit code changes for deploym
 
 ## Setup
 
-1. Read `compound-dev.local.md` from the project root to understand the infrastructure (containers, database, task scheduler, CI/CD).
+1. Read `compound-engineering-agnostic.local.md` from the project root to understand the infrastructure (containers, database, task scheduler, CI/CD).
 2. Read the diff of changes being reviewed (provided by the invoking command).
 3. If Docker/container files are in the diff, read the full container configuration for context.
 

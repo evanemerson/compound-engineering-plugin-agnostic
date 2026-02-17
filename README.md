@@ -1,22 +1,22 @@
-# compound-dev Marketplace
+# compound-engineering-agnostic Marketplace
 
 Custom Claude Code plugin marketplace for compound engineering workflows.
 
 ## Install
 
 ```bash
-claude /plugin marketplace add https://github.com/evanemerson/compound-dev
-claude /plugin install compound-dev
+claude /plugin marketplace add https://github.com/evanemerson/compound-engineering-plugin-agnostic
+claude /plugin install compound-engineering-agnostic
 ```
 
 ## Update
 
 ```bash
-claude /plugin update compound-dev
+claude /plugin update compound-engineering-agnostic
 ```
 
 ## Contents
 
-- **compound-dev** — 9 agents, 3 commands, 2 skills for compound engineering
+- **compound-engineering-agnostic** — 9 agents, 3 commands, 2 skills for compound engineering
 
-See [plugins/compound-dev/README.md](plugins/compound-dev/README.md) for full documentation.
+See [plugins/compound-engineering-agnostic/README.md](plugins/compound-engineering-agnostic/README.md) for full documentation.

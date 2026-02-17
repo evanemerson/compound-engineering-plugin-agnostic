@@ -1,13 +1,13 @@
 ---
 name: compound-docs
-description: Solution documentation format, categories, and bidirectional plan-solution linking rules. Used by the /compound-dev:compound command.
+description: Solution documentation format, categories, and bidirectional plan-solution linking rules. Used by the /compound-engineering-agnostic:compound command.
 ---
 
 # Compound Documentation Skill
 
 ## Overview
 
-Define the format, categories, and linking rules for solution documents created by the `/compound-dev:compound` command. Solution documents capture solved problems so that future work benefits from past experience.
+Define the format, categories, and linking rules for solution documents created by the `/compound-engineering-agnostic:compound` command. Solution documents capture solved problems so that future work benefits from past experience.
 
 ## Document Format
 
@@ -118,7 +118,7 @@ To identify the originating plan:
 
 ## Configurable Behavior
 
-Read `compound-dev.local.md` for project-specific adjustments:
+Read `compound-engineering-agnostic.local.md` for project-specific adjustments:
 - Additional categories can be added per-project
 - Custom frontmatter fields can be required
 - Solution directory path can be customized

@@ -1,6 +1,6 @@
 ---
 name: file-todos
-description: Structured YAML frontmatter format for review findings in todos/. Used by /compound-dev:review and /compound-dev:triage commands.
+description: Structured YAML frontmatter format for review findings in todos/. Used by /compound-engineering-agnostic:review and /compound-engineering-agnostic:triage commands.
 ---
 
 # File-Based Todo Tracking
@@ -100,7 +100,7 @@ ready    →  completed (fixed and verified)
 
 ## Frontmatter Summary
 
-The `summary` block in frontmatter is updated by `/compound-dev:triage` as decisions are made:
+The `summary` block in frontmatter is updated by `/compound-engineering-agnostic:triage` as decisions are made:
 
 ```yaml
 summary:

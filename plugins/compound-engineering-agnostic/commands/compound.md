@@ -7,9 +7,9 @@ allowed-tools: Bash(git log:*), Bash(git diff:*), Bash(git status:*)
 
 Document a solved problem so that future work benefits from this experience. Uses 5 parallel sub-agents to extract, classify, and write the solution document.
 
-**Announce at start:** "I'm using the compound-dev:compound command to document this solution."
+**Announce at start:** "I'm using the compound-engineering-agnostic:compound command to document this solution."
 
-**Required sub-skill:** Use `compound-dev:compound-docs` skill for document format and categories.
+**Required sub-skill:** Use `compound-engineering-agnostic:compound-docs` skill for document format and categories.
 
 ## Step 1: Gather Context
 

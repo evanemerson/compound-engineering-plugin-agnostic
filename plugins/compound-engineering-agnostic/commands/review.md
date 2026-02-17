@@ -7,7 +7,7 @@ allowed-tools: Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git s
 
 Orchestrate parallel review agents on the current code changes. Collect findings, score severity, and write results to `todos/`.
 
-**Announce at start:** "I'm using the compound-dev:review command to run parallel review agents."
+**Announce at start:** "I'm using the compound-engineering-agnostic:review command to run parallel review agents."
 
 ## Step 1: Determine Review Scope
 
@@ -21,13 +21,13 @@ Save the diff output — you'll pass it to each agent.
 
 ## Step 2: Read Project Configuration
 
-1. Read `compound-dev.local.md` from the project root
+1. Read `compound-engineering-agnostic.local.md` from the project root
 2. Check the `## Review Agents (Active)` section to determine which agents to spawn
 3. Read the project's `CLAUDE.md` for any additional review rules
 
 ## Step 3: Spawn Review Agents
 
-Launch agents in parallel. For each active agent listed in `compound-dev.local.md`, dispatch a Task with:
+Launch agents in parallel. For each active agent listed in `compound-engineering-agnostic.local.md`, dispatch a Task with:
 - `subagent_type`: The agent name from this plugin (e.g., `security-sentinel`, `performance-oracle`)
 - `prompt`: Include the full diff and instruct the agent to perform its review
 
@@ -36,7 +36,7 @@ Launch agents in parallel. For each active agent listed in `compound-dev.local.m
 
 Run `learnings-researcher` first with the diff summary. Include its output as additional context when dispatching review agents below.
 
-**Review agents (from compound-dev plugin):**
+**Review agents (from compound-engineering-agnostic plugin):**
 - `security-sentinel` — Security + compliance audit
 - `performance-oracle` — Performance + query optimization
 - `python-reviewer` — Python code quality + framework patterns
@@ -93,7 +93,7 @@ Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` with this format:
 ---
 
 **Summary:** X findings (Y P1, Z P2, W P3)
-**Next step:** Run `/compound-dev:triage` to review findings interactively.
+**Next step:** Run `/compound-engineering-agnostic:triage` to review findings interactively.
 ```
 
 ## Step 6: Report
@@ -101,10 +101,10 @@ Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` with this format:
 Present a summary to the user:
 - Total findings by severity
 - Top P1 findings (if any) with brief descriptions
-- Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/compound-dev:triage` to review each finding interactively."
+- Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/compound-engineering-agnostic:triage` to review each finding interactively."
 
 ## When to Stop
 
 - If no changes are found to review, report that and stop
-- If `compound-dev.local.md` doesn't exist, inform the user they need to create one
+- If `compound-engineering-agnostic.local.md` doesn't exist, inform the user they need to create one
 - If agents fail to return useful results, report partial results and note which agents had issues

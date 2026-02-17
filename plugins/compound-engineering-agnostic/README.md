@@ -1,4 +1,4 @@
-# compound-dev
+# compound-engineering-agnostic
 
 Compound engineering plugin for Claude Code. Provides parallel review agents, solution documentation, and interactive triage.
 
@@ -24,9 +24,9 @@ Compound engineering plugin for Claude Code. Provides parallel review agents, so
 ### Commands (3)
 | Command | Purpose |
 |---|---|
-| `/compound-dev:review` | Run all active agents in parallel, collect findings |
-| `/compound-dev:compound` | Document a solved problem with 5 sub-agents |
-| `/compound-dev:triage` | Interactively approve/skip findings from review |
+| `/compound-engineering-agnostic:review` | Run all active agents in parallel, collect findings |
+| `/compound-engineering-agnostic:compound` | Document a solved problem with 5 sub-agents |
+| `/compound-engineering-agnostic:triage` | Interactively approve/skip findings from review |
 
 ### Skills (2)
 | Skill | Purpose |
@@ -36,14 +36,14 @@ Compound engineering plugin for Claude Code. Provides parallel review agents, so
 
 ## Framework-Agnostic
 
-All agents read `compound-dev.local.md` from the project root. Configure your stack, compliance rules, and conventions there. Agents adapt automatically.
+All agents read `compound-engineering-agnostic.local.md` from the project root. Configure your stack, compliance rules, and conventions there. Agents adapt automatically.
 
 ## Per-Project Setup
 
-Create `compound-dev.local.md` in your project root:
+Create `compound-engineering-agnostic.local.md` in your project root:
 
 ```markdown
-# compound-dev Project Configuration
+# compound-engineering-agnostic Project Configuration
 
 ## Stack
 - framework: Django 5.x

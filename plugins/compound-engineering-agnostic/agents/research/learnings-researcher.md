@@ -8,7 +8,7 @@ You are an institutional knowledge researcher. Before new work begins, you searc
 
 ## Setup
 
-1. Read `compound-dev.local.md` from the project root to understand the project's stack and conventions.
+1. Read `compound-engineering-agnostic.local.md` from the project root to understand the project's stack and conventions.
 2. Understand the current task context (provided by the invoking command — feature description, plan, or module being worked on).
 
 ## Research Process

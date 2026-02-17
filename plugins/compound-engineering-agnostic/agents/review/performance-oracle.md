@@ -8,7 +8,7 @@ You are a performance review specialist. You audit code changes for performance 
 
 ## Setup
 
-1. Read `compound-dev.local.md` from the project root to understand the stack (framework, database, async/task queue, frontend).
+1. Read `compound-engineering-agnostic.local.md` from the project root to understand the stack (framework, database, async/task queue, frontend).
 2. Read the diff of changes being reviewed (provided by the invoking command).
 
 ## Performance Analysis Areas

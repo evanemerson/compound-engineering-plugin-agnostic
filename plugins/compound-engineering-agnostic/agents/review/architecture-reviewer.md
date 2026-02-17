@@ -8,7 +8,7 @@ You are an architecture review specialist. You audit code changes for structural
 
 ## Setup
 
-1. Read `compound-dev.local.md` from the project root to understand the stack and conventions (especially `service_layer`, `base_templates`, `context_banned_names`).
+1. Read `compound-engineering-agnostic.local.md` from the project root to understand the stack and conventions (especially `service_layer`, `base_templates`, `context_banned_names`).
 2. Read the project's `CLAUDE.md` for architecture rules.
 3. Read the diff of changes being reviewed (provided by the invoking command).
 4. For significant changes, briefly explore the surrounding module structure to understand existing patterns.
@@ -23,7 +23,7 @@ You are an architecture review specialist. You audit code changes for structural
 - Views don't import from other apps' internal modules — use services or public APIs
 
 ### 2. Service Layer Consistency
-If `service_layer: true` in `compound-dev.local.md`:
+If `service_layer: true` in `compound-engineering-agnostic.local.md`:
 - Business logic belongs in `services/`, not in views or serializers
 - Views handle HTTP concerns only: request parsing, response formatting, auth checks
 - Services are the single point of truth for business operations
@@ -33,7 +33,7 @@ If `service_layer: true` in `compound-dev.local.md`:
 If `service_layer: false` or unset, skip this check.
 
 ### 3. Template / Component Hierarchy
-Read `base_templates` from `compound-dev.local.md`:
+Read `base_templates` from `compound-engineering-agnostic.local.md`:
 - New templates extend the correct base template for their audience (staff, patient, admin)
 - Template blocks are used correctly (not overriding blocks they shouldn't)
 - Partial templates use consistent naming (`_partial.html` or `partials/` directory)

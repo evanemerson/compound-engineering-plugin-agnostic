@@ -1,6 +1,6 @@
 {
-  "name": "compound-dev",
-  "description": "Compound engineering: 8 review agents, solution documentation, and interactive triage. Framework-agnostic via compound-dev.local.md.",
+  "name": "compound-engineering-agnostic",
+  "description": "Compound engineering: 8 review agents, solution documentation, and interactive triage. Framework-agnostic via compound-engineering-agnostic.local.md.",
   "version": "1.0.0",
   "author": {
     "name": "Evan",

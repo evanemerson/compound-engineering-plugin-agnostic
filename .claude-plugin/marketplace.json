@@ -1,21 +1,21 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "compound-dev",
-  "description": "Compound engineering workflow: parallel review agents, solution documentation, and interactive triage. Framework-agnostic — adapts to any stack via per-project compound-dev.local.md configuration.",
+  "name": "compound-engineering-agnostic",
+  "description": "Compound engineering workflow: parallel review agents, solution documentation, and interactive triage. Framework-agnostic — adapts to any stack via per-project compound-engineering-agnostic.local.md configuration.",
   "owner": {
     "name": "Evan",
     "email": "evan@dpcpro.com"
   },
   "plugins": [
     {
-      "name": "compound-dev",
+      "name": "compound-engineering-agnostic",
       "description": "8 review agents, solution documentation, and interactive triage for compound engineering workflows",
       "version": "1.0.0",
       "author": {
         "name": "Evan",
         "email": "evan@dpcpro.com"
       },
-      "source": "./plugins/compound-dev",
+      "source": "./plugins/compound-engineering-agnostic",
       "category": "development"
     }
   ]

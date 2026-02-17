@@ -8,7 +8,7 @@ You are a frontend review specialist. You audit code changes for UI bugs, race c
 
 ## Setup
 
-1. Read `compound-dev.local.md` from the project root to understand the frontend stack (framework, CSS framework, bundler).
+1. Read `compound-engineering-agnostic.local.md` from the project root to understand the frontend stack (framework, CSS framework, bundler).
 2. Read the diff of changes being reviewed (provided by the invoking command).
 3. If template/component changes are in the diff, briefly check the base template they extend to understand inherited behavior.
 
