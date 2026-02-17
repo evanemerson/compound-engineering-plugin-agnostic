@@ -1,0 +1,11 @@
+{
+  "name": "compound-dev",
+  "description": "Compound engineering: 8 review agents, solution documentation, and interactive triage. Framework-agnostic via compound-dev.local.md.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Evan",
+    "email": "evan@dpcpro.com"
+  },
+  "license": "MIT",
+  "keywords": ["review", "agents", "compound-engineering", "documentation", "triage", "security", "performance"]
+}
