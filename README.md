@@ -104,6 +104,27 @@ claude /plugin install ralph-loop           # Iterative autonomous loops
 | Commit and create PR | `commit-commands` | `/commit-push-pr` |
 | Update CLAUDE.md | `claude-md-management` | `/revise-claude-md` |
 
+You don't need to run every step every time. Each command is standalone — use what fits the situation:
+
+**Most common — just building a feature:**
+1. `/brainstorm` — if it's non-trivial
+2. Code it (with or without `/write-plan` + `/execute-plan`)
+3. `/commit`
+
+**When you want a thorough review before PR:**
+1. `/cepa:review` → `/cepa:triage`
+2. Fix what you approved
+3. `/commit-push-pr`
+
+**When you solved a tricky bug worth remembering:**
+1. `/cepa:compound` — documents it so `learnings-researcher` finds it next time
+
+**When you want the full loop (big feature, production-critical):**
+1. `/brainstorm` → `/write-plan` → `/execute-plan`
+2. `/cepa:review` → `/cepa:triage` → fix
+3. `/cepa:compound` (if you learned something)
+4. `/commit-push-pr`
+
 ---
 
 ## Per-Project Configuration: `cepa.local.md`
