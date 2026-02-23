@@ -8,7 +8,7 @@ Every agent reads a single per-project configuration file (`cepa.local.md`) to a
 
 ```bash
 # Register the marketplace (one-time per machine)
-claude /plugin marketplace add https://github.com/evanemerson/compound-engineering-plugin-agnostic
+claude /plugin marketplace add evanemerson/compound-engineering-plugin-agnostic
 
 # Install the plugin
 claude /plugin install cepa
@@ -60,11 +60,39 @@ claude /plugin update cepa
 
 ---
 
-## Designed to Work With Official Plugins
+## Designed to Work With Companion Plugins
 
-CEPA handles the review-triage-document cycle. For the rest of the engineering workflow, use Claude's official plugins:
+CEPA handles the review-triage-document cycle. For the rest of the engineering workflow, it pairs with two kinds of companion plugins:
 
-| Workflow Step | Official Plugin | Command |
+### Superpowers (Community Plugin)
+
+[Superpowers](https://github.com/obra/superpowers) by Jesse Vincent provides the brainstorm-plan-execute workflow that feeds into CEPA's review cycle. It's installed from its own marketplace:
+
+```bash
+# Register the superpowers marketplace (one-time per machine)
+claude /plugin marketplace add obra/superpowers-marketplace
+
+# Install the plugin
+claude /plugin install superpowers
+```
+
+### Anthropic Official Plugins
+
+These are installed from the built-in `claude-plugins-official` marketplace:
+
+```bash
+claude /plugin install code-review          # GitHub PR review with scored findings
+claude /plugin install pr-review-toolkit    # 6 additional review agents
+claude /plugin install commit-commands      # /commit, /commit-push-pr
+claude /plugin install claude-md-management # /revise-claude-md
+claude /plugin install security-guidance    # Security pattern hooks on file edits
+claude /plugin install pyright-lsp          # Python type checking
+claude /plugin install ralph-loop           # Iterative autonomous loops
+```
+
+### Full Workflow
+
+| Step | Plugin | Command |
 |---|---|---|
 | Brainstorm a feature | `superpowers` | `/brainstorm` |
 | Write an implementation plan | `superpowers` | `/write-plan` |
@@ -75,19 +103,6 @@ CEPA handles the review-triage-document cycle. For the rest of the engineering w
 | Post review on GitHub PR | `code-review` | `/code-review` |
 | Commit and create PR | `commit-commands` | `/commit-push-pr` |
 | Update CLAUDE.md | `claude-md-management` | `/revise-claude-md` |
-
-### Recommended Official Plugins
-
-```bash
-claude /plugin install superpowers          # Brainstorm, plan, execute, TDD, debugging
-claude /plugin install code-review          # GitHub PR review with scored findings
-claude /plugin install pr-review-toolkit    # 6 additional review agents
-claude /plugin install commit-commands      # /commit, /commit-push-pr
-claude /plugin install claude-md-management # /revise-claude-md
-claude /plugin install security-guidance    # Security pattern hooks on file edits
-claude /plugin install pyright-lsp          # Python type checking
-claude /plugin install ralph-loop           # Iterative autonomous loops
-```
 
 ---
 
@@ -296,8 +311,8 @@ Create these directories in your project and commit them to git:
 your-project/
 ├── cepa.local.md          # Per-project config (commit to git)
 ├── docs/
-│   ├── brainstorms/       # Design brainstorm docs (from superpowers:/brainstorm)
-│   ├── plans/             # Implementation plans (from superpowers:/write-plan)
+│   ├── brainstorms/       # Design brainstorm docs (from /brainstorm)
+│   ├── plans/             # Implementation plans (from /write-plan)
 │   └── solutions/         # Solution docs (from /cepa:compound)
 │       ├── build-errors/
 │       ├── database-issues/
@@ -323,8 +338,8 @@ touch docs/brainstorms/.gitkeep docs/plans/.gitkeep docs/solutions/.gitkeep todo
 The idea behind compound engineering is that each unit of work makes the next one easier:
 
 ```
-1. Plan    ──→  superpowers:/write-plan
-2. Work    ──→  superpowers:/execute-plan
+1. Plan    ──→  /write-plan
+2. Work    ──→  /execute-plan
 3. Review  ──→  /cepa:review  →  /cepa:triage
 4. Learn   ──→  /cepa:compound  (writes to docs/solutions/)
         │
@@ -342,6 +357,6 @@ This plugin is built on the ideas from [Compound Engineering](https://github.com
 
 I came across the original plugin while working on a Django project and found that many of the agents were built around Ruby on Rails conventions — `schema.rb` drift detection, DHH-style code review, StandardRB linting, Hotwire/Turbo race conditions. Rather than fork and rewrite, I wanted an agnostic version where a single configuration file (`cepa.local.md`) could tell every agent what stack, compliance rules, and conventions to use. Same ideas, any framework.
 
-I also wanted to lean on Claude's official plugins (`superpowers`, `code-review`, `pr-review-toolkit`, `commit-commands`, etc.) for everything they already cover well — brainstorming, planning, execution, TDD, PR review — and only build custom agents for the gaps. CEPA handles the review-triage-document cycle. The official plugins handle everything else. Together they cover the full compound engineering workflow without reinventing what already exists.
+I also wanted to lean on companion plugins for everything they already cover well — [Superpowers](https://github.com/obra/superpowers) for brainstorming, planning, execution, and TDD; the [official Anthropic plugins](https://github.com/anthropics/claude-plugins-official) for PR review, commits, and CLAUDE.md management — and only build custom agents for the gaps. CEPA handles the review-triage-document cycle. The companion plugins handle everything else. Together they cover the full compound engineering workflow without reinventing what already exists.
 
 As for the name: yes, it's another acronym. **C**ompound **E**ngineering **P**lugin **A**gnostic. I needed something short enough that `/cepa:review` wouldn't wear out my keyboard, and descriptive enough that I'd remember what it stands for in six months. If the acronym steps on any toes out there — sorry, I just really didn't want to type `/compound-engineering-plugin-agnostic:review` forty times a day.
