@@ -4,7 +4,7 @@ Every bug you fix, every feature you ship, every review finding you address — 
 
 That's compound engineering. Instead of treating each unit of work as isolated, you capture what you learned — what broke, why, how you fixed it, how to prevent it — and feed it back into the system. The next time you start a task, the system searches those learnings and surfaces relevant past experience before you write a line of code. Over time, your codebase accumulates institutional knowledge that prevents repeated mistakes and accelerates new work.
 
-CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with up to 11 parallel agents, document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
+CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with parallel agents (8 from cepa plus 3 from pr-review-toolkit), document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
 
 ## The Loop
 
@@ -25,7 +25,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | Command | What It Does |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end |
-| `/cepa:review` | Spawn up to 11 review agents in parallel, collect findings with P1/P2/P3 severity |
+| `/cepa:review` | Spawn review agents in parallel (8 cepa + 3 pr-review-toolkit), collect findings with P1/P2/P3 severity |
 | `/cepa:triage` | Interactively approve/skip each finding from review, one at a time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents |
 
@@ -41,13 +41,13 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 | Agent | What It Does |
 |---|---|
-| `security-sentinel` | OWASP top 10, compliance (HIPAA/SOC2/PCI), PHI/PII exposure, auth patterns |
+| `security-sentinel` | OWASP top 10, compliance (HIPAA/SOC2/PCI), auth patterns, data exposure, input validation, secrets scanning |
 | `performance-oracle` | N+1 queries, missing indexes, caching, task queue, frontend perf |
 | `python-reviewer` | Pythonic patterns, framework conventions, logging compliance, testing |
 | `data-integrity-guardian` | Migration safety, transactions, referential integrity, encryption |
 | `architecture-reviewer` | Module boundaries, service layers, URL conventions, task queue placement |
-| `schema-drift-detector` | Model/migration/serializer/admin/form alignment |
-| `frontend-reviewer` | Race conditions, event lifecycle, polling, CSS consistency, accessibility |
+| `schema-drift-detector` | Model/migration/serializer/admin alignment, missing migrations, index consistency |
+| `frontend-reviewer` | Race conditions, event listener lifecycle, polling conflicts, CSS consistency, template correctness |
 | `deployment-verifier` | Container config, env vars, static assets, backwards compatibility, rollback |
 
 ### Skills (2)
@@ -90,7 +90,7 @@ claude /plugin install superpowers
 
 ### Step 3: Install pr-review-toolkit (required)
 
-During review, cepa spawns 3 additional agents from pr-review-toolkit alongside its own 8 review agents.
+During review, cepa spawns 3 additional agents from pr-review-toolkit alongside its own 8 review agents. This plugin is in the built-in `claude-plugins-official` marketplace — no marketplace registration needed.
 
 ```bash
 claude /plugin install pr-review-toolkit
@@ -141,6 +141,7 @@ claude /plugin update cepa
 - data-integrity-guardian
 - architecture-reviewer
 - schema-drift-detector
+- frontend-reviewer
 - deployment-verifier
 ```
 
@@ -158,7 +159,7 @@ mkdir -p docs/brainstorms docs/plans docs/solutions todos
 /cepa:task add user authentication to the portal
 ```
 
-cepa will: audit your git state → search past learnings → brainstorm the approach → write a plan → build with TDD → push and create a PR → review with 11 parallel agents → document what was learned → propose system updates.
+cepa will: audit your git state → search past learnings → brainstorm the approach → write a plan → build with TDD → push and create a PR → review with parallel agents → document what was learned → propose system updates.
 
 You can also use each command independently:
 

@@ -46,4 +46,4 @@ Primary: newcomers who've never heard of compound engineering. Lead with what/wh
 - [ ] scripts/setup.sh — automated install
 - [ ] docs/CONFIGURATION.md — full cepa.local.md reference
 - [ ] marketplace.json — version bump
-- [ ] COMPARISON.md — update for current state
+- [ ] COMPARISON.md — update for current state (local-only, gitignored)

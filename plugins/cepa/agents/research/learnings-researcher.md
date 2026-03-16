@@ -44,14 +44,21 @@ Search `docs/plans/` for plans that touched the same areas:
 - Plans with solution links (check `## Solutions` sections)
 - Plans for the same feature area
 
-### Step 4: Search CLAUDE.md
+### Step 4: Search Deferred Items
+
+Check `memory/tasks.md` for deferred items from prior tasks:
+- Undone P2/P3 findings that relate to the current task area
+- Deferred plan items for the same modules or features
+- Items tagged with relevant file paths or concepts
+
+### Step 5: Search CLAUDE.md
 
 Check the project's `CLAUDE.md` for rules that were likely added as prevention measures from past issues. Look for:
 - Rules mentioning the same modules or files
 - Convention rules related to the current task
 - Warning comments that reference specific patterns
 
-### Step 5: Search Git History (Optional)
+### Step 6: Search Git History (Optional)
 
 If the above searches found relevant solutions, check git blame on the files being modified:
 - Who last changed these files and when
