@@ -409,4 +409,4 @@ I came across the original plugin while working on a Django project and found th
 
 I also wanted to lean on companion plugins for everything they already cover well — [Superpowers](https://github.com/obra/superpowers) for brainstorming, planning, execution, and TDD; the [official Anthropic plugins](https://github.com/anthropics/claude-plugins-official) for PR review, commits, and CLAUDE.md management — and only build custom agents for the gaps. CEPA handles the review-triage-document cycle and the orchestration loop. The companion plugins handle everything else. Together they cover the full compound engineering workflow without reinventing what already exists.
 
-As for the name: **C**ompound **E**ngineering **P**lugin **A**gnostic. I needed something short enough that `/cepa:review` wouldn't wear out my keyboard, and descriptive enough that I'd remember what it stands for in six months.
+As for the name: **C**ompound **E**ngineering **P**lugin **A**gnostic. I needed something short enough that `/cepa:task` wouldn't wear out my keyboard, and descriptive enough that I'd remember what it stands for in six months. Acronyms are better, right? 
