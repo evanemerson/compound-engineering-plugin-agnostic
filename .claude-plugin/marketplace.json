@@ -3,8 +3,8 @@
   "name": "cepa",
   "description": "Compound engineering workflow: parallel review agents, solution documentation, and interactive triage. Framework-agnostic — adapts to any stack via per-project cepa.local.md configuration.",
   "owner": {
-    "name": "Evan",
-    "email": "evan@dpcpro.com"
+    "name": "Evan Emerson",
+    "email": "evan@evanemerson.com"
   },
   "plugins": [
     {
@@ -12,8 +12,8 @@
       "description": "8 review agents, solution documentation, and interactive triage for compound engineering workflows",
       "version": "1.1.0",
       "author": {
-        "name": "Evan",
-        "email": "evan@dpcpro.com"
+        "name": "Evan Emerson",
+        "email": "evan@evanemerson.com"
       },
       "source": "./plugins/cepa",
       "category": "development"
