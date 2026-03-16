@@ -367,7 +367,7 @@ Create `cepa.local.md` in your project root. Every agent reads it and adapts to 
 - deployment-verifier
 ```
 
-For the full reference with examples for Next.js, FastAPI, Rails, and a section-by-section guide, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+For the full reference with examples for Next.js, FastAPI, Rails, and a section-by-section guide, see [CONFIGURATION.md](CONFIGURATION.md).
 
 ---
 
