@@ -43,10 +43,11 @@ claude /plugin update cepa
 | `frontend-reviewer` | Race conditions (HTMX, React, vanilla JS), event listener lifecycle, polling conflicts, CSS framework consistency, accessibility |
 | `deployment-verifier` | Container config, pending migrations, static asset pipeline, environment variable completeness, backwards compatibility, rollback safety |
 
-### Commands (3)
+### Commands (4)
 
 | Command | What It Does |
 |---|---|
+| `/cepa:task` | **Full compound engineering loop orchestrator.** Git safety audit → research learnings → brainstorm → plan → build → review → compound. Delegates to superpowers skills for planning/execution and cepa skills for review/documentation. See [The Compound Engineering Loop](#the-compound-engineering-loop) below. |
 | `/cepa:review` | Runs `learnings-researcher` first, then spawns all active review agents in parallel on your current changes. Collects findings with P1/P2/P3 severity, deduplicates, and writes structured results to `todos/`. |
 | `/cepa:compound` | Documents a solved problem using 5 parallel sub-agents (context analyzer, solution extractor, related docs finder, prevention strategist, category classifier). Creates a solution doc with bidirectional plan linking. |
 | `/cepa:triage` | Interactive review of findings from `/cepa:review`. Presents each finding one at a time (P1 first). You approve, skip, or customize each one. |
@@ -62,7 +63,7 @@ claude /plugin update cepa
 
 ## Designed to Work With Companion Plugins
 
-CEPA handles the review-triage-document cycle. For the rest of the engineering workflow, it pairs with two kinds of companion plugins:
+`/cepa:task` orchestrates the full loop end-to-end, delegating to superpowers skills for planning/execution and using cepa's own agents for review/documentation. You can also use each piece independently:
 
 ### Superpowers (Community Plugin)
 
@@ -92,17 +93,18 @@ claude /plugin install ralph-loop           # Iterative autonomous loops
 
 ### Full Workflow
 
-| Step | Plugin | Command |
-|---|---|---|
-| Brainstorm a feature | `superpowers` | `/brainstorm` |
-| Write an implementation plan | `superpowers` | `/write-plan` |
-| Execute the plan (TDD) | `superpowers` | `/execute-plan` |
-| **Review changes** | **cepa** | **`/cepa:review`** |
-| **Triage findings** | **cepa** | **`/cepa:triage`** |
-| **Document what you learned** | **cepa** | **`/cepa:compound`** |
-| Post review on GitHub PR | `code-review` | `/code-review` |
-| Commit and create PR | `commit-commands` | `/commit-push-pr` |
-| Update CLAUDE.md | `claude-md-management` | `/revise-claude-md` |
+| Workflow Step | Plugin | Command | Used by `/cepa:task` |
+|---|---|---|---|
+| **Full loop (all phases)** | **cepa** | **`/cepa:task`** | — |
+| Brainstorm a feature | `superpowers` | `/brainstorm` | Phase 2 |
+| Write an implementation plan | `superpowers` | `/write-plan` | Phase 3 |
+| Execute the plan (TDD) | `superpowers` | `/execute-plan` | Phase 3 |
+| **Review changes** | **cepa** | **`/cepa:review`** | Phase 4 |
+| **Triage findings** | **cepa** | **`/cepa:triage`** | Phase 4 |
+| **Document what you learned** | **cepa** | **`/cepa:compound`** | Phase 5 |
+| Post review on GitHub PR | `pr-review-toolkit` | `/review-pr` | Phase 4 (fallback) |
+| Commit and create PR | `commit-commands` | `/commit-push-pr` | — |
+| Update CLAUDE.md | `claude-md-management` | `/revise-claude-md` | — |
 
 You don't need to run every step every time. Each command is standalone — use what fits the situation:
 
@@ -354,21 +356,32 @@ touch docs/brainstorms/.gitkeep docs/plans/.gitkeep docs/solutions/.gitkeep todo
 
 ---
 
-## The Compound Loop
+## The Compound Engineering Loop
 
-The idea behind compound engineering is that each unit of work makes the next one easier:
+The idea behind compound engineering is that each unit of work makes the next one easier. `/cepa:task` orchestrates the entire loop:
 
 ```
-1. Plan    ──→  /write-plan
-2. Work    ──→  /execute-plan
-3. Review  ──→  /cepa:review  →  /cepa:triage
-4. Learn   ──→  /cepa:compound  (writes to docs/solutions/)
-        │
-        └──→  learnings-researcher reads docs/solutions/
-              before the next unit of work starts
+Plan → Work → Review → Compound
+  ↑                        |
+  └────── learnings ───────┘
 ```
 
-Step 4 feeds back into step 1. The `learnings-researcher` agent searches your solution docs at the start of every review, surfacing relevant past mistakes and patterns. Over time, the system accumulates institutional knowledge that prevents repeated errors.
+### Phase 1: Git Safety Audit + Context Gathering
+Check for uncommitted changes, unpushed branches, stashes. Pull GitHub issue context if an issue number is provided. Create a properly-prefixed branch.
+
+### Phase 2: Research + Design (PLAN)
+Run `learnings-researcher` to surface past solutions from `docs/solutions/`. Then delegate to `superpowers:brainstorming` for design exploration and `superpowers:writing-plans` for the implementation plan.
+
+### Phase 3: Plan + Build (WORK)
+Commit the plan before implementation starts. Delegate to `superpowers:subagent-driven-development` (same session) or `superpowers:executing-plans` (parallel session). TDD-driven: test first, then implement.
+
+### Phase 4: Ship + Review (REVIEW)
+Push branch, create PR. Auto-run `/cepa:review` (or `/pr-review-toolkit:review-pr` as fallback). P1/Critical findings are auto-fixed immediately. P2/P3 presented as numbered choices.
+
+### Phase 5: Compound (COMPOUND)
+**Always runs — this is where the magic happens.** Small tasks get inline capture. Large tasks get the full `/cepa:compound` with 5 parallel documentation agents. Auto-proposes CLAUDE.md rule updates when prevention strategies are identified. Saves undone items to `memory/tasks.md`.
+
+The compound phase feeds back into phase 2. The `learnings-researcher` agent searches your solution docs at the start of every task, surfacing relevant past mistakes and patterns. Over time, the system accumulates institutional knowledge that prevents repeated errors.
 
 ---
 

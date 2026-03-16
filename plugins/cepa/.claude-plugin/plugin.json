@@ -1,7 +1,7 @@
 {
   "name": "cepa",
-  "description": "Compound engineering: 8 review agents, solution documentation, and interactive triage. Framework-agnostic via cepa.local.md.",
-  "version": "1.0.0",
+  "description": "Compound engineering: full task orchestration, 8 review agents, solution documentation, and interactive triage. Framework-agnostic via cepa.local.md.",
+  "version": "1.1.0",
   "author": {
     "name": "Evan",
     "email": "evan@dpcpro.com"
