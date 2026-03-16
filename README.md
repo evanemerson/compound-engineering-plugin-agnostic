@@ -145,7 +145,7 @@ claude /plugin update cepa
 - deployment-verifier
 ```
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the full reference with examples for Next.js, FastAPI, Rails, and more.
+See [CONFIGURATION.md](CONFIGURATION.md) for the full reference with examples for Next.js, FastAPI, Rails, and more.
 
 ### 2. Create project directories
 
