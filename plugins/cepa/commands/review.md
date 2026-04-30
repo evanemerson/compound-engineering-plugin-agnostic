@@ -112,6 +112,12 @@ Present a summary to the user:
 - Top P1 findings (if any) with brief descriptions
 - Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/cepa:triage` to review each finding interactively."
 
+## Step 7: CLAUDE.md Suggestions
+
+If any P1 or P2 findings were written, run `/cepa:revise-claude-md` to surface preventive rules from this review. The revise command reads the latest `todos/review-*.md` automatically, then shows proposed CLAUDE.md additions and waits for approval — it never auto-edits.
+
+If only P3 findings (or none) surfaced, skip this step — a clean review doesn't need new rules.
+
 ## When to Stop
 
 - If no changes are found to review, report that and stop
