@@ -92,4 +92,4 @@ Present to the user:
 - File path where the solution was saved
 - Any plan-solution links created
 - Prevention recommendations that might warrant CLAUDE.md updates
-- Say: "Solution documented. Consider running `/revise-claude-md` if prevention rules should be added to CLAUDE.md."
+- Say: "Solution documented. Consider running `/claude-md-management:revise-claude-md` if prevention rules should be added to CLAUDE.md."
