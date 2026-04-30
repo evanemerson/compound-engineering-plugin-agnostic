@@ -46,11 +46,20 @@ Run `learnings-researcher` first with the diff summary. Include its output as ad
 - `frontend-reviewer` — UI bugs + race conditions
 - `deployment-verifier` — Deploy readiness + backwards compatibility
 
-**Official agents (if pr-review-toolkit plugin is installed):**
-Also dispatch these using their plugin agent names:
-- `silent-failure-hunter` — Silent error swallowing
-- `pr-test-analyzer` — Test coverage gaps
-- `code-simplifier` — Code simplification opportunities
+**Companion agents (from `pr-review-toolkit` plugin — install if missing):**
+These cover angles the cepa agents intentionally don't, so they're part of the
+default rotation when active in `cepa.local.md`. Dispatch via the Task tool
+using the bare name; the runtime resolves which plugin owns each.
+- `silent-failure-hunter` — Silent error swallowing, inadequate error handling
+- `pr-test-analyzer` — Test coverage gaps, missing behavioral tests
+- `comment-analyzer` — Comment accuracy, comment rot, WHAT-vs-WHY hygiene
+- `type-design-analyzer` — Type/model invariants, encapsulation quality (use when new types/models are added)
+- `code-simplifier` — Simplification opportunities (run last — after the others have surfaced concrete issues)
+
+NOTE: `pr-review-toolkit:code-reviewer` is intentionally NOT included — it
+overlaps with `python-reviewer` + `architecture-reviewer` and produces
+duplicate findings. If a project doesn't use the cepa python/architecture
+agents, swap in `code-reviewer` from `cepa.local.md` instead.
 
 Launch ALL active agents in parallel (use multiple Task tool calls in a single message).
 
