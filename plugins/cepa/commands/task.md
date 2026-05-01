@@ -14,11 +14,30 @@ Orchestrate the complete compound engineering loop from idea to merged PR. Each 
 
 ## Phase 1: Git Safety Audit + Context Gathering
 
-**Purpose:** Never start new work in a confused git state. Gather all available context before planning.
+**Purpose:** Never start new work in a confused git state. Gather all available context before planning. Local git state is not enough — branches sit "done" on GitHub without being merged, and main lags behind.
 
-### 1.1 Git State Audit
+### 1.1 Open PR Audit (FIRST — before local checks)
 
-Run these checks and present the results as a status report:
+Branching from a stale main while same-author PRs are still open re-introduces problems on every cycle: cross-cutting infra (templates, design tokens, config) added in a prior PR is missing from the new branch, migration sequences collide, and service-layer ripple from prior PRs creates merge conflicts later.
+
+**Run this FIRST, before the local git status check:**
+
+```bash
+gh pr list --author @me --state open --json number,title,headRefName,baseRefName,mergeable,reviewDecision
+```
+
+For each open PR, surface it to the user as part of the status report (Section 1.3). Pay special attention to **same-feature-arc** PRs — branches whose `headRefName` shares a prefix or phase indicator with the requested task (e.g. user requests "Phase B2" and PR #83 is "Phase B1 …" — almost certainly should merge first).
+
+**Treat any same-author open PR with overlapping scope as a blocker** — do not silently proceed. Present a numbered choice:
+1. Merge PR #N first, then start this work
+2. Explicitly proceed without merging — I know about the overlap and accept the risk
+3. Abandon this task
+
+If no open PRs exist, note that and continue.
+
+### 1.2 Local Git State Audit
+
+Run these checks:
 
 ```bash
 git status
@@ -36,7 +55,7 @@ Check for:
 - Unpushed commits on any branch
 - Current branch assessment (on main = good, on feature branch = warn)
 
-### 1.2 Present Status Report
+### 1.3 Present Combined Status Report
 
 ```
 ## Git Status
@@ -46,18 +65,25 @@ Check for:
 **Unpushed branches:** feat/old-thing (3 commits ahead)
 **Stashes:** 1 stash (2 days old)
 
+## Open PRs (same-author)
+
+- #83 feat/phase-b1-tag-design — open, mergeable, approved  ← OVERLAPS with requested "Phase B2" work
+- #91 fix/celery-beat-import — open, mergeable, no review yet
+
 Ready to proceed? [Y / address issues first]
 ```
 
-**If issues found:** Present numbered choices:
+**If local issues found:** Present numbered choices:
 1. Stash current changes and proceed
 2. Commit current changes first
 3. Abandon current changes (confirm destructive action)
 4. Stay on current branch and work here instead
 
-**Only proceed after git state is clean and on main.**
+**If overlapping PRs found:** Present the blocker choice from 1.1.
 
-### 1.3 GitHub Issue Context
+**Only proceed after git state is clean, on main, AND no unmerged same-feature-arc PRs (or the user explicitly accepted the risk).**
+
+### 1.4 GitHub Issue Context
 
 If the user provides a GitHub issue number (or the task description references one):
 
@@ -73,7 +99,7 @@ Pull in:
 
 Include this context in the planning phase.
 
-### 1.4 Create Branch
+### 1.5 Create Branch
 
 ```bash
 git checkout main
@@ -298,6 +324,7 @@ If the user invokes `/cepa:task` on an existing feature branch (not main):
 ## Rules
 
 - **Never skip the git safety audit** — this is the whole point of Phase 1
+- **Always audit open PRs first** — `gh pr list --author @me --state open` runs before local checks. Same-feature-arc unmerged PRs are a blocker, not a warning
 - **Never skip design** — even for "simple" tasks, run brainstorming (it can be brief)
 - **Always research learnings before planning** — check docs/solutions/ and CLAUDE.md
 - **Always commit the plan** before implementation starts
