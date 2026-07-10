@@ -23,8 +23,17 @@ date: YYYY-MM-DD
 tags: [tag1, tag2, tag3]
 related: [docs/solutions/category/other-solution.md]
 plan: docs/plans/YYYY-MM-DD-feature-name.md  # optional, if this work originated from a plan
+status: stale                # optional — set only by /cepa:compound-refresh
+stale_reason: what was found # required when status: stale
+stale_date: YYYY-MM-DD       # required when status: stale
 ---
 ```
+
+The three `stale_*` fields are written only by `/cepa:compound-refresh` when
+a doc's accuracy is in doubt but the evidence is insufficient to Update,
+Replace, or Delete. Consumers must treat a `status: stale` doc as
+unreliable: `learnings-researcher` reports it separately as
+"Stale (do not act on)" and never extracts its Detection section.
 
 ### Body Sections
 
@@ -141,7 +150,7 @@ To identify the originating plan:
 
 ### How terms enter
 
-- **Accretion** — `/cepa:compound` captures qualifying terms surfaced while documenting a solution. Friction reliably surfaces *peripheral* terms.
+- **Accretion** — `/cepa:compound` captures qualifying terms surfaced while documenting a solution. Friction reliably surfaces *peripheral* terms. **Bootstrap exception:** when `/cepa:compound` creates `CONCEPTS.md` (the file doesn't exist yet and a term qualifies), it also seeds the solved problem's area — same scoped-seed rules as below — so the first captured terms don't dangle against undefined siblings.
 - **Seeding and reconciliation** — `/cepa:compound-refresh` proactively defines the core domain nouns of the area it refreshes, and scrubs entries that violate the rules below. Seeding catches the *stable-central* terms accretion never reaches: the nouns a system is built around rarely break, so they rarely appear in a learning.
 
 A seed is scoped: define only terms actually investigated against code in the area being worked, sized by the source (the area's declared domain model — schema, core types, primary models) and the qualifying bar, never a target count.

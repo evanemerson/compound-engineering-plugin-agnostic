@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(gh pr create:*), Bash(rm docs/solutions/*)
 ---
 
 # Compound Refresh
@@ -33,7 +33,10 @@ the remainder is the scope hint.
   cases stale instead of acting: add `status: stale`,
   `stale_reason: <what was found>`, `stale_date: YYYY-MM-DD` to the doc's
   frontmatter. If a write fails, record the action as **Recommended** in the
-  report and continue — never stop or ask. When a scope hint was provided
+  report and continue — never stop or ask. **Multi-step actions are atomic
+  (see Phase 3):** a failed write inside a Consolidate or Replace makes the
+  ENTIRE action Recommended — "continue" means continue to the next doc,
+  never onward to that action's delete step. When a scope hint was provided
   but matched nothing, report the miss and exit without widening to all
   docs; process everything only when NO hint was given.
 
@@ -118,7 +121,10 @@ current codebase. Dimensions that go stale independently:
 - **Related links** — do cross-referenced docs still exist and agree?
 - **Detection section** — the `cepa:compound-docs` skill makes `## Detection`
   mandatory. A doc missing one, or whose Detection signals reference
-  constructs that no longer exist, is drift. During an Update, backfill or
+  constructs that no longer exist, is drift. **A missing Detection section
+  alone justifies classifying the doc as Update** — backfilling the
+  mandatory section is substantive maintenance, not a review breadcrumb;
+  core rule 2 ("prefer no-write Keep") does not apply to it. Backfill or
   fix the Detection section when the investigation evidence supports
   concrete signals; otherwise flag the gap in the report rather than
   inventing vague bullets.
@@ -172,15 +178,26 @@ canonical choice):
   backfill per Phase 1.
 - **Consolidate** — merge the subsumed doc's unique content into the
   canonical doc (as a section or addendum), update the canonical doc's
-  `related` frontmatter, delete the subsumed doc, and repoint any inbound
-  links to the canonical doc.
+  `related` frontmatter, repoint any inbound links to the canonical doc,
+  and delete the subsumed doc last.
 - **Replace** — a replacement subagent writes the successor at the same
   path (or a better-named one, with inbound links repointed) using the
-  investigation evidence; validate its frontmatter against the
+  investigation evidence; validate its frontmatter and sections against the
   `cepa:compound-docs` spec (including `## Detection`), then delete the old
-  doc if the path changed.
+  doc if the path changed. If the successor fails validation or the
+  replacement subagent fails, do NOT delete the old doc — stale-mark it per
+  the headless rules and record the Replace as Recommended with the
+  validation failure noted.
 - **Delete** — final inbound-link check, remove the file, clean decorative
   citations in the same commit.
+
+**Multi-step actions are atomic.** Deletion is always the LAST step of its
+action and is gated on verification: before deleting a subsumed or replaced
+doc, confirm the merged/successor content exists on disk with the expected
+sections. If any earlier write in the action failed, perform no further
+steps of that action — leave every involved doc in place and record the
+entire action as Recommended. "Continue" always means continue to the next
+doc, never to a delete whose prerequisites failed.
 
 ## Phase 4: Vocabulary Reconciliation (CONCEPTS.md)
 
@@ -195,6 +212,10 @@ Aggregate the vocabulary signals collected in Phase 1 and reconcile against
 3. Scrub existing entries that violate the skill's stands-on-its-own rules
    (file paths, class names, config values, status metadata, duplicates
    under different names). Refresh is an audit — the full scrub is in scope.
+   When the scrub resolves a duplicate-under-different-names or settles
+   terms the corpus used interchangeably, append a one-line resolution note
+   under the file's `## Flagged ambiguities` tail — that section is the
+   audit trail for vocabulary opinions, and this pass is its writer.
 4. If `CONCEPTS.md` does not exist and at least one term qualifies,
    bootstrap it with the skill's preamble and a conservative seed of the
    in-scope area's core nouns.

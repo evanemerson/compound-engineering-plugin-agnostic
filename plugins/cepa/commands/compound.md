@@ -87,7 +87,12 @@ plan: [path to originating plan, if known]
 ## Detection
 [From Agent 4 — concrete code patterns review agents should flag, per the
 `cepa:compound-docs` Detection spec. Mandatory — a doc without Detection
-signals only helps humans who happen to read it.]
+signals only helps humans who happen to read it. If Agent 4 returned no
+signals meeting the spec's bar, re-prompt Agent 4 once with the spec's
+example; if still none, write the section with an explicit
+`<!-- BACKFILL: no concrete signals extracted -->` marker and flag it in
+the Step 5 report. Never invent vague bullets to satisfy the mandatory
+rule.]
 
 ## Related
 [From Agent 3 — links to related solutions]
@@ -125,6 +130,13 @@ root, following the `cepa:compound-docs` skill's vocabulary-map rules:
 4. Apply edits silently in both modes — vocabulary capture is a side effect
    of documenting, not a decision the user makes per run. Skip entirely
    (and say so in the report) when no candidates qualify.
+5. **Failure is never reported as emptiness.** If the CONCEPTS.md write
+   fails, report the outcome as `failed — <reason>` and list the qualifying
+   terms so a human can apply them manually — never stop, never prompt. If
+   Agent 5's output contains no parseable candidate-terms block, report
+   "vocabulary capture skipped — classifier returned no candidates block".
+   Neither case may be reported as "no qualifying terms" — that phrase
+   claims a scan happened and came up empty.
 
 ## Step 5: Report
 
@@ -132,6 +144,6 @@ Present to the user:
 - Summary of what was documented
 - File path where the solution was saved
 - Any plan-solution links created
-- CONCEPTS.md outcome: created (N entries), updated (terms added/refined), or no qualifying terms
+- CONCEPTS.md outcome: created (N entries), updated (terms added/refined), no qualifying terms, vocabulary capture skipped (no candidates block), or failed — reason + terms for manual apply
 - Prevention recommendations that might warrant CLAUDE.md updates
 - Say: "Solution documented. Consider running `/claude-md-management:revise-claude-md` if prevention rules should be added to CLAUDE.md."

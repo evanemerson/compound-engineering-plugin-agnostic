@@ -156,6 +156,17 @@ deploy_verdict:
   verdict: GO            # GO | NO-GO | GO WITH CONDITIONS | not-evaluated
   basis: "no P1s; two P2s are post-deploy hygiene"
   conditions: []         # e.g. ["run migration 0042 before deploy"]
+detection_signals:               # Detection pipeline coverage, every run
+  matched_docs: 4                # solution docs matching the diff
+  docs_with_detection: 2         # of those, docs that had a ## Detection section
+  signals_passed: 5              # Detection bullets relayed to review agents
+  sources:
+    - docs/solutions/ui-bugs/example-doc.md
+  backfill_candidates:           # matched docs lacking Detection — feed /cepa:compound-refresh
+    - docs/solutions/logic-errors/old-doc.md
+learnings_research: "ok"         # or "failed — <reason>" when the researcher
+                                 # errored; a lost institutional-memory input
+                                 # must never look like a normal run
 ```
 
 Rules:
