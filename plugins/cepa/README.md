@@ -59,7 +59,7 @@ Plan → Work → Review → Compound
 |---|---|
 | `learnings-researcher` | Search `docs/solutions/` for relevant past learnings before new work |
 
-### Review Agents (8)
+### Review Agents (11 — 8 roster + 3 conditional)
 | Agent | Purpose |
 |---|---|
 | `security-sentinel` | OWASP top 10, compliance checks, PHI/PII exposure |
@@ -69,7 +69,16 @@ Plan → Work → Review → Compound
 | `architecture-reviewer` | Module boundaries, service layers, URL conventions |
 | `schema-drift-detector` | Model/migration/serializer alignment |
 | `frontend-reviewer` | Race conditions, event lifecycle, CSS consistency |
-| `deployment-verifier` | Container config, env vars, rollback safety |
+| `deployment-verifier` | Container config, env vars — Go/No-Go verdict + rollback plan |
+
+Conditional tier — dispatched by diff signals, no roster listing needed
+(opt out with `- !agent-name`):
+
+| Agent | Purpose |
+|---|---|
+| `adversarial-reviewer` | Failure-scenario construction on large/risky diffs (payments, auth, PHI, migrations) |
+| `reliability-reviewer` | Retries, timeouts, idempotency, races on queue/webhook/transaction code |
+| `previous-comments-reviewer` | Verifies prior review findings weren't lost or re-broken |
 
 ### Skills (3)
 | Skill | Purpose |

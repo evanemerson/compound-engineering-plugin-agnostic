@@ -9,8 +9,8 @@
   "plugins": [
     {
       "name": "cepa",
-      "description": "8 review agents, solution documentation, batch-first triage, and gated or hands-off execution (/cepa:lfg) for compound engineering workflows",
-      "version": "1.3.0",
+      "description": "11 review agents (8 roster + 3 signal-dispatched), solution documentation, batch-first triage, and gated or hands-off execution (/cepa:lfg) for compound engineering workflows",
+      "version": "1.4.0",
       "author": {
         "name": "Evan Emerson",
         "email": "evan@evanemerson.com"

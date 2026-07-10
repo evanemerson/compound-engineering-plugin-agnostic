@@ -202,6 +202,19 @@ Control which agents run during `/cepa:review`. Comment out or remove agents you
 
 The `learnings-researcher` always runs regardless of this list — it's not a review agent, it's the knowledge retrieval step that feeds context to the others.
 
+**Conditional-tier agents** (`adversarial-reviewer`, `reliability-reviewer`,
+`previous-comments-reviewer`) are NOT listed here — they dispatch
+automatically when their diff signal fires (see the review command's
+"Conditional tier" section). To disable one for a project, add an exclusion
+line to this section:
+
+```markdown
+## Review Agents (Active)
+- security-sentinel
+- performance-oracle
+- !adversarial-reviewer    # never dispatch in this project
+```
+
 ### Autonomy
 
 Controls whether `/cepa:task` runs with interactive gates or hands-off. See
