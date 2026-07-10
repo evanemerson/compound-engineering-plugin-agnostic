@@ -45,13 +45,14 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (6)
+### Commands (7)
 | Command | Purpose |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
 | `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` (supports `mode:headless`) |
 | `/cepa:triage` | Triage findings — batch auto-apply by default, `interactive` for one-at-a-time |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents (supports `mode:headless`) |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents; seeds CONCEPTS.md (supports `mode:headless`) |
+| `/cepa:compound-refresh` | Refresh `docs/solutions/` — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md (supports `mode:headless`) |
 | `/cepa:lfg` | **BETA** — hands-off pipeline: build all, review-fix until clean, PR, CI-green loop, compound, one report |
 | `/cepa:setup` | Project health check + scaffold/CI bootstrap (`fix` to apply) |
 
@@ -84,7 +85,7 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 ### Skills (3)
 | Skill | Purpose |
 |---|---|
-| `compound-docs` | Solution document format, categories, plan-solution linking |
+| `compound-docs` | Solution document format (mandatory Detection sections), categories, plan-solution linking, CONCEPTS.md vocabulary map |
 | `file-todos` | Structured YAML frontmatter format for review findings in `todos/`, with confidence + action-class scoring |
 | `autonomy` | The autonomy contract shared by task/lfg/review/triage |
 
