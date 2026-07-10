@@ -58,7 +58,7 @@ Launch agents in parallel. For each active agent listed in `cepa.local.md`, disp
 
 Run `learnings-researcher` first with the diff summary. Include its output as additional context when dispatching review agents below.
 
-**Review agents (from cepa plugin):**
+**Review agents (from cepa plugin — roster tier, controlled by `cepa.local.md`):**
 - `security-sentinel` — Security + compliance audit
 - `performance-oracle` — Performance + query optimization
 - `python-reviewer` — Python code quality + framework patterns
@@ -66,7 +66,34 @@ Run `learnings-researcher` first with the diff summary. Include its output as ad
 - `architecture-reviewer` — Module boundaries + patterns
 - `schema-drift-detector` — Model/migration/serializer alignment
 - `frontend-reviewer` — UI bugs + race conditions
-- `deployment-verifier` — Deploy readiness + backwards compatibility
+- `deployment-verifier` — Go/No-Go deploy verdict + rollback plan
+
+**Roster skip rules:** a roster agent whose entire domain is absent from the
+diff may be skipped — `frontend-reviewer` when the diff touches no templates,
+JS/CSS, or frontend components; `schema-drift-detector` when it touches no
+models, migrations, serializers, or admin; `deployment-verifier` when it
+touches no config, dependencies, Docker/compose, env, or migration files.
+When in doubt, run the agent. Every skipped agent is recorded in the
+findings file header with the rule that skipped it — a silent skip is
+indistinguishable from a clean pass.
+
+**Conditional tier (dispatched by diff signals — no roster listing needed):**
+These three run automatically when their signal fires, in any project. A
+project opts out of one by adding `- !agent-name` to its
+`## Review Agents (Active)` list.
+- `adversarial-reviewer` — dispatch when the diff is large (roughly 300+
+  changed lines) OR touches risky paths: payments/billing, auth/session,
+  PHI/PII-flagged fields (per `## Compliance`), or data migrations. Failure-
+  scenario construction on the code most likely to hurt.
+- `reliability-reviewer` — dispatch when the diff touches task-queue code,
+  webhooks, scheduled jobs, transaction blocks with side effects, external
+  API calls, locks, or cache invalidation.
+- `previous-comments-reviewer` — dispatch when `todos/review-*.md` files
+  exist for this project OR `memory/tasks.md` has entries touching the
+  diff's files. Verifies prior findings weren't lost or re-broken.
+
+List which conditional agents fired (and which signals triggered them) in
+the findings file header alongside any roster skips.
 
 **Companion agents (from `pr-review-toolkit` plugin — install if missing):**
 These cover angles the cepa agents intentionally don't, so they're part of the
