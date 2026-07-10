@@ -1,5 +1,6 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
+argument-hint: "[PR number] [mode:headless]"
 allowed-tools: Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*)
 ---
 
@@ -42,7 +43,9 @@ Save the diff output — you'll pass it to each agent.
 
 1. Read `cepa.local.md` from the project root
 2. Check the `## Review Agents (Active)` section to determine which agents to spawn
-3. Read the project's `CLAUDE.md` for any additional review rules
+3. Check the `## Integrations` section (if present) for optional stage
+   providers — see "Integration Dispatch" in Step 3
+4. Read the project's `CLAUDE.md` for any additional review rules
 
 ## Step 3: Spawn Review Agents
 
@@ -82,6 +85,17 @@ agents, swap in `code-reviewer` from `cepa.local.md` instead.
 
 Launch ALL active agents in parallel (use multiple Task tool calls in a single message).
 
+**Integration Dispatch (optional):** when `cepa.local.md` has an
+`## Integrations` section AND the named skill is installed (skip silently
+otherwise):
+- `qa:` — if the diff touches templates, JS/CSS, or frontend components,
+  invoke the configured skill after the review agents return and fold its
+  results in as findings.
+- `second_opinion:` — if the diff touches payment, auth, or PHI-flagged
+  paths (per the `## Compliance` section), invoke the configured skill on
+  those files; its findings merge into the set below. This is additional
+  review only — it never loosens the compliance carve-out in Step 4.
+
 ## Step 4: Collect and Deduplicate Findings
 
 After all agents return:
@@ -90,46 +104,30 @@ After all agents return:
 3. Score each finding with `confidence` (0-100) and `action_class`
    (`mechanical` / `corroborated` / `judgment`) per the `file-todos` skill
    field definitions. Merged duplicates become `corroborated` with the max
-   confidence of their sources. Anything touching compliance-sensitive
-   surfaces (PHI/PII fields, auth, payments) without a spelled-out verified
-   fix is `judgment`.
+   confidence of their sources. **The compliance carve-out is absolute:**
+   anything touching compliance-sensitive surfaces (PHI/PII fields, auth,
+   payments) is always `judgment` — confidence and fix completeness never
+   override this.
 4. Sort by severity: P1 first, then P2, then P3
 
 ## Step 5: Write Findings to todos/
 
-Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` with this format:
+Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` in the
+**`cepa:file-todos` skill format — that skill is the single canonical spec**
+(YAML frontmatter with the `summary` block including `applied`/`deferred`
+counters, then `### N` findings with `status`, `severity`, `agent`,
+`category`, `confidence`, `action_class`, `file`, `lines`, `title`, and
+`**Problem:**`/`**Fix:**` bodies). Do not invent a variant format:
+`/cepa:triage` and `/cepa:lfg` machine-parse these fields, and a divergent
+file silently produces "0 eligible findings".
+
+End the file body with:
 
 ```markdown
-# Review Findings — YYYY-MM-DD HH:MM
-
-**Scope:** [description of what was reviewed — branch name, PR number, etc.]
-**Agents:** [list of agents that ran]
-
-## P1 — Critical
-
-### Finding 1
-- **Agent:** security-sentinel
-- **Status:** pending
-- **Confidence:** 90
-- **Action class:** corroborated
-- **Location:** `path/to/file.py:42-48`
-- **Problem:** [description]
-- **Fix:** [concrete suggestion]
-
-## P2 — High
-
-### Finding 2
-...
-
-## P3 — Medium
-
-### Finding 3
-...
-
 ---
 
 **Summary:** X findings (Y P1, Z P2, W P3)
-**Next step:** Run `/cepa:triage` to review findings interactively.
+**Next step:** Run `/cepa:triage` (batch auto-apply by default; pass `interactive` for one-at-a-time).
 ```
 
 ## Step 6: Report
@@ -137,7 +135,7 @@ Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` with this format:
 Present a summary to the user:
 - Total findings by severity
 - Top P1 findings (if any) with brief descriptions
-- Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/cepa:triage` to review each finding interactively."
+- Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/cepa:triage` to triage them (batch auto-apply by default; `interactive` for one-at-a-time)."
 
 ## When to Stop
 

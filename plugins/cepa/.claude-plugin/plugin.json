@@ -1,6 +1,6 @@
 {
   "name": "cepa",
-  "description": "Compound engineering: full task orchestration, 8 review agents, solution documentation, and interactive triage. Framework-agnostic via cepa.local.md.",
+  "description": "Compound engineering: full task orchestration (gated or autonomous), 8 review agents with confidence-scored findings, solution documentation, batch-first triage, and the hands-off /cepa:lfg pipeline. Framework-agnostic via cepa.local.md.",
   "version": "1.3.0",
   "author": {
     "name": "Evan",

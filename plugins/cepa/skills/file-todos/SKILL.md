@@ -65,6 +65,8 @@ Remove patient name from log parameters...
 - severity: P2
 - agent: performance-oracle
 - category: Database
+- confidence: 75
+- action_class: mechanical
 - file: backend/apps/billing/views.py
 - lines: 155-170
 - title: N+1 query in payment list view
@@ -82,7 +84,7 @@ Each finding under `## Findings` uses this structure:
 
 | Field | Required | Values | Description |
 |---|---|---|---|
-| `status` | yes | `pending`, `ready`, `skipped` | Triage state |
+| `status` | yes | `pending`, `ready`, `skipped`, `applied`, `deferred`, `completed` | Triage state (see Status Lifecycle) |
 | `severity` | yes | `P1`, `P2`, `P3` | Priority level |
 | `agent` | yes | agent name | Which agent found it |
 | `category` | yes | free text | Agent-specific category (OWASP, Database, Migration, etc.) |
@@ -109,12 +111,14 @@ pending  →  deferred  (filed as residual work by an autonomous run —
 ready    →  completed (fixed and verified)
 ```
 
-`skipped` removal applies to interactive triage only. Autonomous runs never
-delete findings: unresolved items become `deferred` so the record survives.
+`skipped` removal applies to human-driven triage only (a batch-table reply
+or the one-at-a-time flow). Autonomous runs never delete findings:
+unresolved items become `deferred` so the record survives.
 
 ## Frontmatter Summary
 
-The `summary` block in frontmatter is updated by `/cepa:triage` as decisions are made:
+The `summary` block in frontmatter is updated by `/cepa:triage` (both modes)
+and by autonomous runs as decisions are made:
 
 ```yaml
 summary:
@@ -122,9 +126,11 @@ summary:
   p1: 2
   p2: 5
   p3: 5
-  pending: 3    # Updated as triage progresses
-  ready: 7
+  pending: 1    # Updated as triage progresses
+  ready: 4
   skipped: 2
+  applied: 3    # Auto-applied fixes (tests passed)
+  deferred: 2   # Filed as residual work (memory/tasks.md + PR body)
 ```
 
 ## Querying Findings
@@ -138,7 +144,9 @@ To find all pending P1 findings across all review files:
 
 - One file per review run — never append findings to an existing file
 - Finding numbers are sequential within a file, starting at 1
-- Skipped findings are removed entirely from the file during triage (not just marked)
+- Skipped findings are removed entirely from the file during human-driven
+  triage (not just marked). Autonomous runs never delete — they mark
+  `deferred` and file to the residual sinks
 - The frontmatter `summary` is the source of truth for counts
 - Keep finding titles under 80 characters
 - Code snippets in Problem/Fix sections use fenced code blocks with language tags

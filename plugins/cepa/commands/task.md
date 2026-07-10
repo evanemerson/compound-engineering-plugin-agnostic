@@ -170,6 +170,11 @@ These will be factored into the design.
 
 If no relevant learnings found, say so and move on.
 
+**Bug-shaped tasks:** if the task is a defect report ("X is broken", an
+error message, a regression) and `cepa.local.md` has an `## Integrations`
+`debugging:` entry whose skill is installed, route the investigation through
+that skill before designing a fix; its root-cause findings feed 2.2.
+
 ### 2.2 Design
 
 **Delegate to:** `superpowers:brainstorming`
@@ -260,7 +265,7 @@ EOF
 
 ### 4.3 Auto-Review
 
-Run `/cepa:review` if `cepa.local.md` exists in the project, otherwise fall back to `/pr-review-toolkit:review-pr`.
+Run `/cepa:review` if `cepa.local.md` exists in the project, otherwise fall back to `/pr-review-toolkit:review-pr`. In `full` autonomy, invoke it as `/cepa:review mode:headless`.
 
 ### 4.4 Auto-Fix Critical Issues
 
@@ -269,7 +274,9 @@ After review completes:
 - **P2 / Important findings:** *[autonomy-convertible]* Present as numbered choices for user to approve/skip.
 - **P3 / Suggestions:** *[autonomy-convertible]* List for awareness. Ask if user wants to address any.
 
-If using cepa:review, run `/cepa:triage` for the interactive flow on P2/P3.
+If using cepa:review in gated mode, run `/cepa:triage interactive` for
+per-finding approval on P2/P3 (plain `/cepa:triage` is batch mode, which
+auto-applies eligible fixes — use it only when the user wants that).
 
 **Full autonomy:** apply the auto-apply rubric (`cepa:autonomy` §4) instead
 of asking — checkpoint, auto-apply `mechanical`/`corroborated` findings with
@@ -294,7 +301,8 @@ Quick inline capture — no full compound doc needed:
 - Should a rule be added to prevent recurrence?
 
 **For medium/large tasks (features, refactors):**
-Run `/cepa:compound` with the full 5-agent documentation flow.
+Run `/cepa:compound` with the full 5-agent documentation flow (in `full`
+autonomy: `/cepa:compound mode:headless`).
 
 ### 5.2 Auto-Propose System Updates
 
@@ -353,6 +361,10 @@ Next steps:
 2. Start next task (/cepa:task)
 3. Address deferred items
 ```
+
+If `cepa.local.md` has an `## Integrations` `post_deploy:` entry whose skill
+is installed, add "Run <skill> after merging to verify production" to the
+next steps.
 
 ---
 

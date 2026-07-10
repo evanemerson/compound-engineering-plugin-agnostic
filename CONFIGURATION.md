@@ -216,12 +216,12 @@ the `cepa:autonomy` skill for the full contract.
   review fixes (mechanical/corroborated, confidence ≥ 75), files everything
   else durably to `memory/tasks.md` + the findings file + the PR body, and
   delivers one consolidated report. Destructive actions still gate.
-- `gated` (default) — numbered choices and interactive triage, as before.
+- `gated` (default) — numbered choices and per-finding triage (`/cepa:triage interactive`), as before.
 
 Resolution order (first match wins): an in-prompt request
-(`auto` / `confirm:ask`) → a remembered user preference already in context →
-this key → default `gated`. `/cepa:lfg` is always fully autonomous
-regardless of this key.
+(`auto` / `confirm:auto` / `confirm:ask`) → a remembered user preference
+already in context → this key → default `gated`. `/cepa:lfg` is always
+fully autonomous regardless of this key.
 
 ### Integrations
 
@@ -237,7 +237,11 @@ skipped silently, so the loop is complete without any of them.
 - debugging: /investigate    # root-cause investigation entry point for bug tasks
 ```
 
-How the loop uses them: `/cepa:review` and `/cepa:lfg` step 4 invoke `qa`
-when the diff touches templates/JS/CSS and `second_opinion` when it touches
-payment, auth, or PHI-flagged paths; `/cepa:task` suggests `post_deploy`
-after merge; bug-shaped tasks route through `debugging` before planning.
+How the loop uses them: `/cepa:review` Step 3 ("Integration Dispatch")
+invokes `qa` when the diff touches templates/JS/CSS and `second_opinion`
+when it touches payment, auth, or PHI-flagged paths — `/cepa:lfg` inherits
+both through its review rounds; `/cepa:task` Phase 5.4 adds a `post_deploy`
+next step after merge, and its Phase 2.1 routes bug-shaped tasks through
+`debugging` before design. `second_opinion` adds review coverage only — it
+never loosens the absolute compliance carve-out (compliance-sensitive
+findings stay `judgment`).

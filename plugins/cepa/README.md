@@ -1,6 +1,6 @@
 # cepa
 
-Compound engineering plugin for Claude Code. Orchestrates the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, and interactive triage.
+Compound engineering plugin for Claude Code. Orchestrates the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, batch-first triage, and optional hands-off execution (autonomy contract + /cepa:lfg).
 
 ## The Compound Engineering Loop
 
@@ -34,7 +34,7 @@ Plan → Work → Review → Compound
 - Pushes branch, creates PR via `gh pr create`
 - Auto-runs `/cepa:review` (or `/pr-review-toolkit:review-pr` as fallback)
 - P1/Critical findings: auto-fixed immediately
-- P2/P3 findings: presented as numbered choices
+- P2/P3 findings: presented as numbered choices (gated mode); in `full` autonomy, safe verified fixes auto-apply and the rest are filed durably per the `autonomy` skill
 
 ### Phase 5: Compound (COMPOUND)
 - **Always runs** — this is where the magic happens
@@ -85,7 +85,7 @@ This plugin delegates to skills from other installed plugins:
 | Plugin | Skills Used |
 |---|---|
 | `superpowers` | `brainstorming`, `writing-plans`, `executing-plans`, `subagent-driven-development`, `finishing-a-development-branch`, `test-driven-development` |
-| `pr-review-toolkit` | `review-pr` (fallback when `cepa.local.md` doesn't exist) |
+| `pr-review-toolkit` | `review-pr` (fallback), plus companion review agents: `silent-failure-hunter`, `pr-test-analyzer`, `comment-analyzer`, `type-design-analyzer`, `code-simplifier` |
 
 ## Framework-Agnostic
 

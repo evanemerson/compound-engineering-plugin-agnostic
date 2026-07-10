@@ -1,5 +1,6 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
+argument-hint: "[mode:headless]"
 allowed-tools: Bash(git log:*), Bash(git diff:*), Bash(git status:*)
 ---
 
