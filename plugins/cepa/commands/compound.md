@@ -1,5 +1,6 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
+argument-hint: "[mode:headless]"
 allowed-tools: Bash(git log:*), Bash(git diff:*), Bash(git status:*)
 ---
 
@@ -10,6 +11,18 @@ Document a solved problem so that future work benefits from this experience. Use
 **Announce at start:** "I'm using the cepa:compound command to document this solution."
 
 **Required sub-skill:** Use `cepa:compound-docs` skill for document format and categories.
+
+## Modes
+
+Parse a `mode:headless` token from anywhere in the arguments and strip it.
+
+- **Interactive (default):** run as written below.
+- **`mode:headless`** (for callers like `/cepa:lfg` and autonomous
+  `/cepa:task`): never prompt. Write the solution doc and plan links exactly
+  as below, but do NOT suggest or perform CLAUDE.md edits — return the saved
+  doc path(s), the plan links created, and the prevention recommendations as
+  structured output for the caller's report. Sub-agents return text to this
+  orchestrator; only the orchestrator writes files.
 
 ## Step 1: Gather Context
 

@@ -1,6 +1,6 @@
 # cepa
 
-Compound engineering plugin for Claude Code. Orchestrates the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, and interactive triage.
+Compound engineering plugin for Claude Code. Orchestrates the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, batch-first triage, and optional hands-off execution (autonomy contract + /cepa:lfg).
 
 ## The Compound Engineering Loop
 
@@ -34,7 +34,7 @@ Plan → Work → Review → Compound
 - Pushes branch, creates PR via `gh pr create`
 - Auto-runs `/cepa:review` (or `/pr-review-toolkit:review-pr` as fallback)
 - P1/Critical findings: auto-fixed immediately
-- P2/P3 findings: presented as numbered choices
+- P2/P3 findings: presented as numbered choices (gated mode); in `full` autonomy, safe verified fixes auto-apply and the rest are filed durably per the `autonomy` skill
 
 ### Phase 5: Compound (COMPOUND)
 - **Always runs** — this is where the magic happens
@@ -45,13 +45,14 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (4)
+### Commands (5)
 | Command | Purpose |
 |---|---|
-| `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound) |
-| `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` |
-| `/cepa:triage` | Interactively approve/skip each finding from review |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents |
+| `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
+| `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` (supports `mode:headless`) |
+| `/cepa:triage` | Triage findings — batch auto-apply by default, `interactive` for one-at-a-time |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents (supports `mode:headless`) |
+| `/cepa:lfg` | **BETA** — hands-off pipeline: build all, review-fix until clean, PR, CI-green loop, compound, one report |
 
 ### Research Agents (1)
 | Agent | Purpose |
@@ -70,11 +71,12 @@ Plan → Work → Review → Compound
 | `frontend-reviewer` | Race conditions, event lifecycle, CSS consistency |
 | `deployment-verifier` | Container config, env vars, rollback safety |
 
-### Skills (2)
+### Skills (3)
 | Skill | Purpose |
 |---|---|
 | `compound-docs` | Solution document format, categories, plan-solution linking |
-| `file-todos` | Structured YAML frontmatter format for review findings in `todos/` |
+| `file-todos` | Structured YAML frontmatter format for review findings in `todos/`, with confidence + action-class scoring |
+| `autonomy` | The autonomy contract shared by task/lfg/review/triage |
 
 ## Dependencies
 
@@ -83,7 +85,7 @@ This plugin delegates to skills from other installed plugins:
 | Plugin | Skills Used |
 |---|---|
 | `superpowers` | `brainstorming`, `writing-plans`, `executing-plans`, `subagent-driven-development`, `finishing-a-development-branch`, `test-driven-development` |
-| `pr-review-toolkit` | `review-pr` (fallback when `cepa.local.md` doesn't exist) |
+| `pr-review-toolkit` | `review-pr` (fallback), plus companion review agents: `silent-failure-hunter`, `pr-test-analyzer`, `comment-analyzer`, `type-design-analyzer`, `code-simplifier` |
 
 ## Framework-Agnostic
 

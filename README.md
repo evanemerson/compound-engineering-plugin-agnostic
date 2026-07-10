@@ -4,7 +4,7 @@ Every bug you fix, every feature you ship, every review finding you address — 
 
 That's compound engineering. Instead of treating each unit of work as isolated, you capture what you learned — what broke, why, how you fixed it, how to prevent it — and feed it back into the system. The next time you start a task, the system searches those learnings and surfaces relevant past experience before you write a line of code. Over time, your codebase accumulates institutional knowledge that prevents repeated mistakes and accelerates new work.
 
-CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with parallel agents (8 from cepa plus 3 from pr-review-toolkit), document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
+CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with parallel agents (8 from cepa plus 5 from pr-review-toolkit), document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
 
 ## The Loop
 
@@ -20,14 +20,15 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 ## What's Included
 
-### Commands (4)
+### Commands (5)
 
 | Command | What It Does |
 |---|---|
-| `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end |
-| `/cepa:review` | Spawn review agents in parallel (8 cepa + 3 pr-review-toolkit), collect findings with P1/P2/P3 severity |
-| `/cepa:triage` | Interactively approve/skip each finding from review, one at a time |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents |
+| `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
+| `/cepa:review` | Spawn review agents in parallel (8 cepa + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Supports `mode:headless` |
+| `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Supports `mode:headless` |
+| `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
 
 ### Agents (9)
 
@@ -50,12 +51,13 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `frontend-reviewer` | Race conditions, event listener lifecycle, polling conflicts, CSS consistency, template correctness |
 | `deployment-verifier` | Container config, env vars, static assets, backwards compatibility, rollback |
 
-### Skills (2)
+### Skills (3)
 
 | Skill | What It Does |
 |---|---|
 | `compound-docs` | Solution document format, 8-category taxonomy, plan-solution bidirectional linking |
-| `file-todos` | YAML frontmatter format for review findings in `todos/` |
+| `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
+| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution, verification evidence, safe auto-apply, residual durability |
 
 ---
 
@@ -90,7 +92,7 @@ claude /plugin install superpowers
 
 ### Step 3: Install pr-review-toolkit (required)
 
-During review, cepa spawns 3 additional agents from pr-review-toolkit alongside its own 8 review agents. This plugin is in the built-in `claude-plugins-official` marketplace — no marketplace registration needed.
+During review, cepa spawns 5 additional agents from pr-review-toolkit alongside its own 8 review agents. This plugin is in the built-in `claude-plugins-official` marketplace — no marketplace registration needed.
 
 ```bash
 claude /plugin install pr-review-toolkit
@@ -171,7 +173,7 @@ You can also use each command independently:
 
 ## The 5 Phases
 
-When you run `/cepa:task`, it orchestrates the complete compound engineering loop across 5 phases. Here's exactly what happens in each one.
+When you run `/cepa:task`, it orchestrates the complete compound engineering loop across 5 phases. A Phase 0 first resolves gated vs. full autonomy (in-prompt flag → remembered preference → `cepa.local.md` `autonomy:` key); the walkthrough below describes the gated default — in `full` autonomy the marked gates resolve silently per the `autonomy` skill and the build executes the whole plan directly. Here's exactly what happens in each phase.
 
 ### Phase 1: Git Safety Audit + Context Gathering
 
@@ -251,10 +253,10 @@ gh pr create --title "<concise title>" --body "<summary from design/plan>"
 
 **Step 4.3 — Auto-Review**
 
-If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 11 agents in parallel:
+If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 14 agents in parallel:
 
 - **8 cepa agents:** security-sentinel, performance-oracle, python-reviewer, data-integrity-guardian, architecture-reviewer, schema-drift-detector, frontend-reviewer, deployment-verifier
-- **3 pr-review-toolkit agents:** silent-failure-hunter, pr-test-analyzer, code-simplifier
+- **5 pr-review-toolkit agents:** silent-failure-hunter, pr-test-analyzer, comment-analyzer, type-design-analyzer, code-simplifier
 
 The `learnings-researcher` runs first and feeds its findings as additional context to all review agents. Findings are deduplicated and written to `todos/review-YYYY-MM-DD-HHMMSS.md` with P1/P2/P3 severity.
 
@@ -266,7 +268,7 @@ If `cepa.local.md` doesn't exist, falls back to `/pr-review-toolkit:review-pr`.
 - **P2 (Important):** Presented as numbered choices for the user to approve or skip.
 - **P3 (Suggestions):** Listed for awareness. User picks what to address.
 
-If cepa:review was used, runs `/cepa:triage` for the interactive flow on P2/P3 findings.
+If cepa:review was used, runs `/cepa:triage interactive` for per-finding approval on P2/P3 (batch mode — the default — auto-applies safe verified fixes instead). In `full` autonomy, findings are handled by the auto-apply rubric with residuals filed durably.
 
 ### Phase 5: Compound (COMPOUND)
 
@@ -323,7 +325,7 @@ CEPA delegates to companion plugins for planning, execution, and additional revi
 | Plugin | Source | What cepa uses |
 |---|---|---|
 | **superpowers** | [obra/superpowers-marketplace](https://github.com/obra/superpowers) | `brainstorming`, `writing-plans`, `subagent-driven-development`, `executing-plans` skills |
-| **pr-review-toolkit** | claude-plugins-official | `review-pr` command (fallback), `silent-failure-hunter`, `pr-test-analyzer`, `code-simplifier` agents |
+| **pr-review-toolkit** | claude-plugins-official | `review-pr` command (fallback), `silent-failure-hunter`, `pr-test-analyzer`, `comment-analyzer`, `type-design-analyzer`, `code-simplifier` agents |
 
 Optional but recommended:
 

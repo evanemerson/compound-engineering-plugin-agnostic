@@ -40,6 +40,15 @@ This is the file that makes cepa framework-agnostic. Create `cepa.local.md` in y
 - schema-drift-detector
 - frontend-reviewer
 - deployment-verifier
+
+## Autonomy
+- autonomy: <full/gated>
+
+## Integrations
+- qa: <skill to verify frontend changes in a browser, e.g. /qa>
+- second_opinion: <skill for an independent review on high-risk diffs, e.g. /codex>
+- post_deploy: <skill to verify production after merge, e.g. /canary>
+- debugging: <skill for root-cause investigation, e.g. /investigate>
 ```
 
 ## Section-by-Section Guide
@@ -192,3 +201,47 @@ Control which agents run during `/cepa:review`. Comment out or remove agents you
 ```
 
 The `learnings-researcher` always runs regardless of this list — it's not a review agent, it's the knowledge retrieval step that feeds context to the others.
+
+### Autonomy
+
+Controls whether `/cepa:task` runs with interactive gates or hands-off. See
+the `cepa:autonomy` skill for the full contract.
+
+```markdown
+## Autonomy
+- autonomy: full
+```
+
+- `full` — the loop completes every plan task, auto-applies safe verified
+  review fixes (mechanical/corroborated, confidence ≥ 75), files everything
+  else durably to `memory/tasks.md` + the findings file + the PR body, and
+  delivers one consolidated report. Destructive actions still gate.
+- `gated` (default) — numbered choices and per-finding triage (`/cepa:triage interactive`), as before.
+
+Resolution order (first match wins): an in-prompt request
+(`auto` / `confirm:auto` / `confirm:ask`) → a remembered user preference
+already in context → this key → default `gated`. `/cepa:lfg` is always
+fully autonomous regardless of this key.
+
+### Integrations
+
+Optional stage providers for the loop. Each entry names a skill the loop
+uses **when it is installed** — missing entries or uninstalled skills are
+skipped silently, so the loop is complete without any of them.
+
+```markdown
+## Integrations
+- qa: /qa                    # browser QA on frontend-touching diffs (review phase)
+- second_opinion: /codex     # independent review on billing/auth/PHI diffs (review phase)
+- post_deploy: /canary       # production verification after merge
+- debugging: /investigate    # root-cause investigation entry point for bug tasks
+```
+
+How the loop uses them: `/cepa:review` Step 3 ("Integration Dispatch")
+invokes `qa` when the diff touches templates/JS/CSS and `second_opinion`
+when it touches payment, auth, or PHI-flagged paths — `/cepa:lfg` inherits
+both through its review rounds; `/cepa:task` Phase 5.4 adds a `post_deploy`
+next step after merge, and its Phase 2.1 routes bug-shaped tasks through
+`debugging` before design. `second_opinion` adds review coverage only — it
+never loosens the absolute compliance carve-out (compliance-sensitive
+findings stay `judgment`).
