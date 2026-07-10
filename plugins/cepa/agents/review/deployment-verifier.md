@@ -103,6 +103,13 @@ Rules for the verdict:
   **GO WITH CONDITIONS**, with the point of no return stated explicitly.
 - The rollback plan must be executable by someone who didn't write the diff
   — name the actual migration numbers, services, and commands.
+- **A NO-GO or GO WITH CONDITIONS verdict must ALSO be emitted as a finding**
+  (P1 for NO-GO with its basis; P2 for each unmet condition, condition text
+  in the Fix section) — severity-based gates in triage and lfg act on
+  findings, and a verdict that exists only as prose can be shipped past. The
+  orchestrator records the verdict in the findings file's `deploy_verdict`
+  frontmatter and, for NO-GO / GO WITH CONDITIONS, a `## Deploy Verdict`
+  body section (see the `cepa:file-todos` skill's Run Metadata rules).
 
 Skip findings that are:
 - Development-only concerns that don't affect production

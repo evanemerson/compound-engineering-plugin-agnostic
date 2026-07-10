@@ -1,6 +1,6 @@
 ---
 name: previous-comments-reviewer
-description: Verifies that findings from previous reviews and deferred items were actually addressed — not lost, silently reverted, or re-broken. Conditional-tier agent, dispatched when prior review records exist for the branch or touched files.
+description: Verifies that findings from previous reviews and deferred items were actually addressed — not lost, silently reverted, or re-broken. Conditional-tier agent, dispatched when any prior review file exists in the project (effectively always-on once review history exists), when memory/tasks.md entries touch the diff, or when the PR has human review threads.
 model: sonnet
 ---
 
@@ -12,9 +12,18 @@ codebase while nobody is looking.
 
 ## Setup
 
-1. Read the two most recent `todos/review-*.md` files (by filename date).
-   Parse every finding and its status (`pending`, `ready`, `deferred`,
-   `applied`, `completed`).
+1. Read the frontmatter `summary` of EVERY `todos/review-*.md` file (cheap —
+   one YAML block each). Fully parse: (a) the two most recent files, and
+   (b) any older file whose summary shows nonzero `pending` or `ready` —
+   unresolved promises must not age out of the continuity check. Note in
+   your output how many files you scanned vs. skipped-as-fully-resolved.
+   Statuses are the canonical six from the `cepa:file-todos` skill
+   (`pending`, `ready`, `skipped`, `applied`, `deferred`, `completed`).
+   `skipped` findings were explicitly declined by a human — never re-raise
+   them unless this diff regresses the code they pointed at. Files from
+   before v1.4 may lack `confidence`/`action_class`; `status`, `severity`,
+   and `file` are sufficient for every check below — never skip a file over
+   missing fields.
 2. Read `memory/tasks.md` if it exists — deferred items and undone work from
    prior sessions live here.
 3. If reviewing a PR, fetch its review threads (`gh pr view <n> --comments`
@@ -68,6 +77,6 @@ or CLAUDE.md rule via `/cepa:compound`, and say so in a P3 finding.
 
 ## Output
 
-Standard cepa finding format. Each finding cites the prior record: the
-review file and finding number (or memory/tasks.md line / PR thread URL) it
-traces back to.
+Findings use the `cepa:file-todos` skill's finding fields. Each finding
+cites the prior record: the review file and finding number (or
+memory/tasks.md line / PR thread URL) it traces back to.

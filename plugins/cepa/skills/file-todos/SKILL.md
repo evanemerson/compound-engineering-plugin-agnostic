@@ -133,6 +133,45 @@ summary:
   deferred: 2   # Filed as residual work (memory/tasks.md + PR body)
 ```
 
+## Run Metadata (optional frontmatter fields)
+
+Review runs record dispatch decisions and the deploy verdict in frontmatter —
+these fields, not ad-hoc prose, are the sanctioned "header record":
+
+```yaml
+agents_skipped:
+  - agent: frontend-reviewer
+    rule: "no templates/JS/CSS in diff"
+conditional_dispatch:            # all three conditional agents, every run
+  - agent: adversarial-reviewer
+    dispatched: true
+    signal: "diff touches billing paths"
+  - agent: reliability-reviewer
+    dispatched: false
+    reason: "no queue/webhook/transaction/external-call code"
+  - agent: previous-comments-reviewer
+    dispatched: false
+    reason: "excluded by cepa.local.md (!previous-comments-reviewer)"
+deploy_verdict:
+  verdict: GO            # GO | NO-GO | GO WITH CONDITIONS | not-evaluated
+  basis: "no P1s; two P2s are post-deploy hygiene"
+  conditions: []         # e.g. ["run migration 0042 before deploy"]
+```
+
+Rules:
+- `conditional_dispatch` lists ALL conditional-tier agents each run, fired or
+  not, with the one-line signal evaluation — "didn't fire" must be
+  distinguishable from "fired and found nothing" and from "excluded by
+  config". Fired conditional agents also appear in the `agents:` list.
+- `deploy_verdict.verdict` is `not-evaluated` (with the skip rule as
+  `basis`) when deployment-verifier was skipped — a missing verdict is
+  never silent.
+- When the verdict is NO-GO or GO WITH CONDITIONS, the full verdict block
+  including the rollback plan is ALSO written into the file body as a
+  `## Deploy Verdict` section, and the basis/conditions are additionally
+  emitted as a P1 (NO-GO) or P2 (conditions) finding so severity-based
+  gates (triage, lfg) act on it.
+
 ## Querying Findings
 
 To find all pending P1 findings across all review files:

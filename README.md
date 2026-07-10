@@ -56,8 +56,8 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | Agent | Dispatch signal | What It Does |
 |---|---|---|
 | `adversarial-reviewer` | Large diff (~300+ lines) or risky paths (payments, auth, PHI, data migrations) | Constructs concrete failure scenarios — hostile sequencing, partial failure, TOCTOU — and traces the code through them |
-| `reliability-reviewer` | Task queues, webhooks, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
-| `previous-comments-reviewer` | Prior `todos/review-*.md` or `memory/tasks.md` entries touching the diff | Verifies prior findings weren't lost, silently reverted, or re-broken |
+| `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
+| `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
 ### Skills (3)
 
@@ -261,7 +261,7 @@ gh pr create --title "<concise title>" --body "<summary from design/plan>"
 
 **Step 4.3 — Auto-Review**
 
-If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 14 agents in parallel:
+If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 17 agents in parallel:
 
 - **8 roster cepa agents:** security-sentinel, performance-oracle, python-reviewer, data-integrity-guardian, architecture-reviewer, schema-drift-detector, frontend-reviewer, deployment-verifier
 - **3 conditional cepa agents (signal-dispatched):** adversarial-reviewer, reliability-reviewer, previous-comments-reviewer

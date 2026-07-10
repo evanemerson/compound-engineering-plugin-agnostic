@@ -74,6 +74,6 @@ modes that only appear under retries, concurrency, and partial failure.
 
 ## Output
 
-Standard cepa finding format. Each Problem section names the concrete
+Findings use the `cepa:file-todos` skill's finding fields. Each Problem section names the concrete
 interleaving or failure sequence (who runs when, what each actor sees), not
 just the pattern name.
