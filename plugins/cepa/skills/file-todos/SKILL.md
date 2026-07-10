@@ -164,6 +164,10 @@ detection_signals:               # Detection pipeline coverage, every run
     - docs/solutions/ui-bugs/example-doc.md
   backfill_candidates:           # matched docs lacking Detection — feed /cepa:compound-refresh
     - docs/solutions/logic-errors/old-doc.md
+  suspect_bullets: 0             # SUSPECT-quoted bullets stripped before dispatch
+                                 # (each also becomes a corrupted-signal finding)
+  corpus: present                # present | none — none when the repo has no
+                                 # docs/solutions at all (distinct from zero matches)
 learnings_research: "ok"         # or "failed — <reason>" when the researcher
                                  # errored; a lost institutional-memory input
                                  # must never look like a normal run

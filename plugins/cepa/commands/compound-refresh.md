@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(gh pr create:*), Bash(rm docs/solutions/*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*)
 ---
 
 # Compound Refresh
@@ -120,8 +120,9 @@ current codebase. Dimensions that go stale independently:
 - **Code snippets** — do they reflect the current implementation?
 - **Related links** — do cross-referenced docs still exist and agree?
 - **Detection section** — the `cepa:compound-docs` skill makes `## Detection`
-  mandatory. A doc missing one, or whose Detection signals reference
-  constructs that no longer exist, is drift. **A missing Detection section
+  mandatory. A doc missing one — where "missing" includes an empty section
+  or one containing only a `<!-- BACKFILL ... -->` marker — or whose
+  Detection signals reference constructs that no longer exist, is drift. **A missing Detection section
   alone justifies classifying the doc as Update** — backfilling the
   mandatory section is substantive maintenance, not a review breadcrumb;
   core rule 2 ("prefer no-write Keep") does not apply to it. Backfill or
@@ -142,10 +143,11 @@ verification than one stating a general principle.
 isolation when candidates are numerous — parallel only when docs are truly
 independent (overlapping docs are investigated together). Each returns: path,
 evidence per dimension, recommended outcome, confidence, open questions.
-Replacement docs are written by subagents one at a time, sequentially,
-following the `cepa:compound-docs` format. The orchestrator performs ALL
-deletions, consolidation merges, and metadata edits centrally — investigation
-subagents never write.
+Replacement docs are drafted by subagents one at a time, sequentially,
+following the `cepa:compound-docs` format — each returns its draft to the
+orchestrator rather than writing it (see Phase 3's Replace flow). The
+orchestrator performs ALL file writes, deletions, consolidation merges, and
+metadata edits centrally — subagents never write.
 
 ## Phase 2: Document-Set Analysis
 
@@ -180,16 +182,23 @@ canonical choice):
   canonical doc (as a section or addendum), update the canonical doc's
   `related` frontmatter, repoint any inbound links to the canonical doc,
   and delete the subsumed doc last.
-- **Replace** — a replacement subagent writes the successor at the same
-  path (or a better-named one, with inbound links repointed) using the
-  investigation evidence; validate its frontmatter and sections against the
-  `cepa:compound-docs` spec (including `## Detection`), then delete the old
-  doc if the path changed. If the successor fails validation or the
-  replacement subagent fails, do NOT delete the old doc — stale-mark it per
+- **Replace** — a replacement subagent drafts the successor from the
+  investigation evidence and RETURNS its full content — subagents never
+  write files. The orchestrator validates the returned draft against the
+  `cepa:compound-docs` spec (frontmatter and sections, including
+  `## Detection`) BEFORE anything touches disk, then writes it (same path,
+  or a better-named one with inbound links repointed) and deletes the old
+  doc if the path changed. The old doc is never overwritten or deleted
+  until the successor has passed validation. If the draft fails validation
+  or the subagent fails, leave the old doc untouched — stale-mark it per
   the headless rules and record the Replace as Recommended with the
   validation failure noted.
 - **Delete** — final inbound-link check, remove the file, clean decorative
-  citations in the same commit.
+  citations in the same commit. Removal is always
+  `git rm docs/solutions/<relative-path>` — the exact relative path, no
+  flags, no `..` segments, never raw `rm`. `git rm` only removes tracked
+  files, stages the deletion atomically for Phase 5, and keeps recovery a
+  `git checkout` away.
 
 **Multi-step actions are atomic.** Deletion is always the LAST step of its
 action and is gated on verification: before deleting a subsumed or replaced
