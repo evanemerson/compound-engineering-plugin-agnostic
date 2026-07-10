@@ -18,11 +18,13 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
 
 - **Interactive (default):** run as written below.
 - **`mode:headless`** (for callers like `/cepa:lfg` and autonomous
-  `/cepa:task`): never prompt. Write the solution doc and plan links exactly
-  as below, but do NOT suggest or perform CLAUDE.md edits — return the saved
-  doc path(s), the plan links created, and the prevention recommendations as
-  structured output for the caller's report. Sub-agents return text to this
-  orchestrator; only the orchestrator writes files.
+  `/cepa:task`): never prompt. Write the solution doc, plan links, and
+  CONCEPTS.md vocabulary updates (Step 4.5 — a silent side effect in every
+  mode) exactly as below, but do NOT suggest or perform CLAUDE.md edits —
+  return the saved doc path(s), the plan links created, the CONCEPTS.md
+  outcome, and the prevention recommendations as structured output for the
+  caller's report. Sub-agents return text to this orchestrator; only the
+  orchestrator writes files.
 
 ## Step 1: Gather Context
 
@@ -46,10 +48,10 @@ Launch these 5 agents simultaneously using Task tool calls:
 **Prompt:** "Search `docs/solutions/` for existing solution documents that relate to this problem. Look for: (1) Similar symptoms. (2) Same files or modules affected. (3) Related patterns or anti-patterns. Return a list of related document paths with brief descriptions of how they relate."
 
 ### Agent 4: Prevention Strategist
-**Prompt:** "Based on the root cause and fix, determine: (1) How could this have been prevented? (2) Should there be a linter rule, test, or CI check? (3) Should CLAUDE.md be updated with a new rule? (4) Are there other places in the codebase where the same pattern might cause issues? Return concrete prevention recommendations."
+**Prompt:** "Based on the root cause and fix, determine: (1) How could this have been prevented? (2) Should there be a linter rule, test, or CI check? (3) Should CLAUDE.md be updated with a new rule? (4) Are there other places in the codebase where the same pattern might cause issues? (5) Detection signals: 2-5 concrete, greppable code patterns a review agent should flag when it sees similar code in a future diff — name the exact construct and where it's dangerous, each with one clause on why it fails (per the `cepa:compound-docs` skill's Detection section spec; signals for automated reviewers, distinct from the prevention rules for humans). Return concrete prevention recommendations and the Detection signals separately."
 
 ### Agent 5: Category Classifier
-**Prompt:** "Based on the problem and solution, classify this into one of these categories: build-errors, database-issues, runtime-errors, performance-issues, security-issues, ui-bugs, integration-issues, logic-errors. Also suggest 3-5 tags for the document. Return the category and tags."
+**Prompt:** "Based on the problem and solution, classify this into one of these categories: build-errors, database-issues, runtime-errors, performance-issues, security-issues, ui-bugs, integration-issues, logic-errors. Also suggest 3-5 tags for the document. Additionally, list candidate domain vocabulary terms this problem involved — entities, named processes, or status concepts whose meaning is project-specific and precise enough that a new engineer would need them defined (per the `cepa:compound-docs` skill's CONCEPTS.md qualifying bar; general programming vocabulary never qualifies). For each candidate: the term and a one-sentence definition drawn from how the code actually uses it. Return the category, tags, and candidate terms (or 'none qualify')."
 
 ## Step 3: Assemble Solution Document
 
@@ -82,6 +84,11 @@ plan: [path to originating plan, if known]
 ## Prevention
 [From Agent 4 — how to prevent recurrence]
 
+## Detection
+[From Agent 4 — concrete code patterns review agents should flag, per the
+`cepa:compound-docs` Detection spec. Mandatory — a doc without Detection
+signals only helps humans who happen to read it.]
+
 ## Related
 [From Agent 3 — links to related solutions]
 ```
@@ -98,11 +105,33 @@ plan: [path to originating plan, if known]
      - [Solution title](../solutions/<category>/<filename>.md) — YYYY-MM-DD
      ```
 
+## Step 4.5: Vocabulary Capture (CONCEPTS.md)
+
+Reconcile Agent 5's candidate terms against `CONCEPTS.md` at the project
+root, following the `cepa:compound-docs` skill's vocabulary-map rules:
+
+1. Drop candidates that fail the qualifying bar or violate the
+   stands-on-its-own rules (implementation specifics, config values).
+2. **If `CONCEPTS.md` exists:** add missing qualifying terms; refine an
+   existing entry only when this solution surfaced new precision. Never
+   duplicate a term already covered under another name — add an
+   `*Avoid:*` alias instead.
+3. **If `CONCEPTS.md` does not exist** and at least one term qualifies:
+   create it with the skill's preamble, the qualifying term(s), and the
+   core domain nouns of the solved problem's area that meet the bar —
+   seeded from that area's declared model (schema, core types, primary
+   models) only. Do not reach for repo-wide nouns this run never touched;
+   hold borderline terms for a later run.
+4. Apply edits silently in both modes — vocabulary capture is a side effect
+   of documenting, not a decision the user makes per run. Skip entirely
+   (and say so in the report) when no candidates qualify.
+
 ## Step 5: Report
 
 Present to the user:
 - Summary of what was documented
 - File path where the solution was saved
 - Any plan-solution links created
+- CONCEPTS.md outcome: created (N entries), updated (terms added/refined), or no qualifying terms
 - Prevention recommendations that might warrant CLAUDE.md updates
 - Say: "Solution documented. Consider running `/claude-md-management:revise-claude-md` if prevention rules should be added to CLAUDE.md."
