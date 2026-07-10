@@ -20,7 +20,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 ## What's Included
 
-### Commands (5)
+### Commands (6)
 
 | Command | What It Does |
 |---|---|
@@ -29,6 +29,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Supports `mode:headless` |
 | `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
+| `/cepa:setup` | Health-check a project's cepa scaffold (read-only) or `fix` it: create missing dirs/config and install a stack-matched CI template |
 
 ### Agents (12)
 

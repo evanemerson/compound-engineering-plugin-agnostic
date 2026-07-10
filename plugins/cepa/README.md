@@ -45,7 +45,7 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (5)
+### Commands (6)
 | Command | Purpose |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
@@ -53,6 +53,7 @@ Plan → Work → Review → Compound
 | `/cepa:triage` | Triage findings — batch auto-apply by default, `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents (supports `mode:headless`) |
 | `/cepa:lfg` | **BETA** — hands-off pipeline: build all, review-fix until clean, PR, CI-green loop, compound, one report |
+| `/cepa:setup` | Project health check + scaffold/CI bootstrap (`fix` to apply) |
 
 ### Research Agents (1)
 | Agent | Purpose |

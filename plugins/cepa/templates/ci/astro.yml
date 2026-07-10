@@ -1,0 +1,41 @@
+# cepa CI template — Astro/static site
+# Installed by /cepa:setup fix. Adapt the TODO lines to the project before
+# committing. Gate: the site must build; content/schema errors fail here
+# instead of at the host's deploy step.
+name: CI
+
+on:
+  push:
+    branches: [main] # TODO: match the repo's default/integration branches
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # TODO (monorepo layouts): uncomment and point at the site directory
+    # defaults:
+    #   run:
+    #     working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22" # TODO: match .nvmrc / engines / deploy config
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build site
+        run: npx astro build
+        # Default is the PURE build on purpose: `npm run build` scripts often
+        # chain post-build steps with network side effects (IndexNow pings
+        # notify search engines about undeployed content) or secret
+        # requirements. TODO: switch to `npm run build` ONLY after confirming
+        # the build script has no side-effecting or secret-needing steps.
+
+      # TODO (optional): enable a link check once the build is green in CI.
+      # - name: Check internal links
+      #   run: npx linkinator ./dist --recurse --silent

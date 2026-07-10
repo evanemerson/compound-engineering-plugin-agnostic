@@ -1,0 +1,112 @@
+# cepa CI template — Django + PostgreSQL + Redis (pytest gate + migration
+# drift check + informational ruff). Modeled on a production-proven workflow.
+# Installed by /cepa:setup fix — adapt every TODO line to the project before
+# committing. Common divergences to check in the project's test settings:
+#   - Settings module name (config.settings.test vs .testing) — and whether
+#     pytest.ini already pins it via addopts --ds= (then the env var is
+#     redundant but must not contradict it).
+#   - DATABASE_URL vs discrete DB_* env vars — and whether the DB HOST is
+#     read from env or HARDCODED (e.g. "db"). If hardcoded, run the job in a
+#     container (uncomment `container:` below) so the service name resolves
+#     as the hostname, instead of using localhost port mappings.
+#   - SECRET_KEY default: some projects error on an empty default — set one.
+#   - Encryption keys (Fernet): generate at runtime, never commit one.
+#   - Whether tests require real Redis (autouse cache.clear() fixtures do).
+name: CI
+
+on:
+  pull_request:
+    branches: [main] # TODO: add integration branches (e.g. dev)
+  push:
+    branches: [main] # TODO: match the repo's flow
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    # TODO: uncomment when the test settings hardcode service hostnames
+    # (e.g. DB host "db") — inside a container, services resolve by name:
+    # container: python:3.12-slim-bookworm
+    defaults:
+      run:
+        working-directory: backend # TODO: match the project layout
+    services:
+      db: # TODO: name must match the hostname the settings expect
+        image: pgvector/pgvector:0.8.1-pg18 # TODO: match prod PG version
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_test # TODO: match DB_NAME the settings expect
+        ports:
+          - 5432:5432 # not needed for container jobs
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379 # not needed for container jobs
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # TODO: settings module — must name the TEST settings or ALLOWED_HOSTS
+      # etc. revert to env-driven values.
+      DJANGO_SETTINGS_MODULE: config.settings.testing
+      SECRET_KEY: ci-insecure-test-secret-key
+      # TODO: pick ONE database style and delete the other:
+      # DATABASE_URL: postgres://postgres:postgres@localhost:5432/app_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: app_test
+      DB_HOST: localhost # TODO: delete if the settings hardcode the host
+      DB_PORT: "5432"
+      # TODO: Redis URLs — keep the localhost lines for port-mapped jobs,
+      # or swap each for its commented container-job alternative:
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      # CELERY_BROKER_URL: redis://redis:6379/0     # container jobs
+      CELERY_RESULT_BACKEND: redis://localhost:6379/0
+      # CELERY_RESULT_BACKEND: redis://redis:6379/0 # container jobs
+      REDIS_CACHE_URL: redis://localhost:6379/1
+      # REDIS_CACHE_URL: redis://redis:6379/1       # container jobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # TODO: match the project's Dockerfile
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt # TODO
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt # TODO: match deps layout
+      # TODO: keep only if the project uses Fernet field encryption; match
+      # the env var name the settings read (ENCRYPTION_KEY,
+      # FIELD_ENCRYPTION_KEY, ...):
+      - name: Generate a test encryption key (Fernet)
+        run: echo "FIELD_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
+      - name: Check for missing migrations (model/migration drift)
+        run: python manage.py makemigrations --check --dry-run
+      - name: Run tests
+        run: pytest -q
+
+  lint:
+    name: ruff (informational)
+    runs-on: ubuntu-latest
+    # Non-blocking by default — most existing codebases carry lint debt.
+    # Tighten to a blocking gate (remove continue-on-error) once clean.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend # TODO: match the project layout
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check .
