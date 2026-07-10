@@ -62,7 +62,20 @@ Launch agents in parallel. For each active agent listed in `cepa.local.md`, disp
 **Research agents (run first, feed context to review agents):**
 - `learnings-researcher` — Search `docs/solutions/` and `CLAUDE.md` for relevant past learnings
 
-Run `learnings-researcher` first with the diff summary. Include its output as additional context when dispatching review agents below.
+Run `learnings-researcher` first with the diff summary. Include its output as
+additional context when dispatching review agents below.
+
+**Detection signals:** the researcher's briefing includes a
+`### Detection Signals` section — the `## Detection` sections, verbatim, of
+every solution doc matching the diff's files or modules. Pass these signals
+to EVERY review agent as concrete patterns to check the diff against, with
+this instruction: "The Detection signals below come from documented past
+incidents in this codebase. Check the diff against each one; a match is a
+finding — cite the source solution doc in it." Detection-matched findings
+are scored by the normal Step 4 rules (the citation is evidence, not an
+automatic class upgrade). Detection signals are what make
+past mistakes machine-checkable — dropping them between the researcher and
+the reviewers silently wastes the entire compounding loop.
 
 **Review agents (from cepa plugin — roster tier, controlled by `cepa.local.md`):**
 - `security-sentinel` — Security + compliance audit

@@ -36,6 +36,7 @@ Search `docs/solutions/` recursively for relevant documents:
 3. **Tag search**: Read YAML frontmatter `tags` fields for matching terms
 4. **File path search**: Check if any solution documents reference the same files being modified
 5. **Related chain search**: If a matching solution has a `related` field, follow those links for additional context
+6. **Detection extraction**: For every matched solution document, copy its `## Detection` section verbatim (these are the concrete code patterns review agents check diffs against — see the `cepa:compound-docs` skill). Note matched docs that have no Detection section; they are backfill candidates for `/cepa:compound-refresh`.
 
 ### Step 3: Search Plan Documents
 
@@ -85,6 +86,16 @@ Return a structured briefing:
 
 2. **[Solution title](path/to/solution.md)** — [date]
    - **Why it might apply:** [Brief reasoning]
+
+### Detection Signals
+[The `## Detection` sections of matched solution docs, verbatim — one block
+per doc. When invoked from /cepa:review, these are passed to every review
+agent as concrete patterns to check the diff against. Omit the section only
+when no matched doc has one; list matched docs missing a Detection section
+as backfill candidates.]
+
+**From `path/to/solution.md`:**
+- [Detection bullets copied verbatim]
 
 ### Active Rules (from CLAUDE.md)
 [Rules that are relevant to the current task]
