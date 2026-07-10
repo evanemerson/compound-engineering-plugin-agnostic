@@ -48,6 +48,8 @@ summary:
 - severity: P1
 - agent: security-sentinel
 - category: Compliance
+- confidence: 90
+- action_class: corroborated
 - file: backend/apps/communications/views/thread.py
 - lines: 42-48
 - title: PHI exposed in log statement
@@ -84,9 +86,15 @@ Each finding under `## Findings` uses this structure:
 | `severity` | yes | `P1`, `P2`, `P3` | Priority level |
 | `agent` | yes | agent name | Which agent found it |
 | `category` | yes | free text | Agent-specific category (OWASP, Database, Migration, etc.) |
+| `confidence` | yes | `0`-`100` | How certain the finding is real and the fix is right. 100 = verified against the code; 75 = strong evidence; 50 = plausible but unverified |
+| `action_class` | yes | `mechanical`, `corroborated`, `judgment` | Auto-apply eligibility — see the `autonomy` skill §4. `mechanical` = unambiguous fix; `corroborated` = multiple agents converged on it; `judgment` = needs a human decision |
 | `file` | yes | relative path | File where the issue is |
 | `lines` | no | `N` or `N-M` | Line number or range |
 | `title` | yes | short text | One-line summary |
+
+When agents merge duplicate findings (same location, same reason), the merged
+finding's `action_class` becomes `corroborated` and its `confidence` is the
+maximum of the merged findings' scores.
 
 The `**Problem:**` and `**Fix:**` sections follow as markdown body. Include code snippets where relevant.
 
@@ -95,8 +103,14 @@ The `**Problem:**` and `**Fix:**` sections follow as markdown body. Include code
 ```
 pending  →  ready     (approved during triage — will be fixed)
 pending  →  skipped   (rejected during triage — removed from file)
+pending  →  applied   (auto-applied by an autonomous run — fix committed)
+pending  →  deferred  (filed as residual work by an autonomous run —
+                       also recorded in memory/tasks.md and the PR body)
 ready    →  completed (fixed and verified)
 ```
+
+`skipped` removal applies to interactive triage only. Autonomous runs never
+delete findings: unresolved items become `deferred` so the record survives.
 
 ## Frontmatter Summary
 
