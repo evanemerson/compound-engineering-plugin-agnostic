@@ -65,11 +65,14 @@ jobs:
       DB_NAME: app_test
       DB_HOST: localhost # TODO: delete if the settings hardcode the host
       DB_PORT: "5432"
-      # TODO: Redis URLs — hostname is `localhost` with port mappings,
-      # `redis` for container jobs:
+      # TODO: Redis URLs — keep the localhost lines for port-mapped jobs,
+      # or swap each for its commented container-job alternative:
       CELERY_BROKER_URL: redis://localhost:6379/0
+      # CELERY_BROKER_URL: redis://redis:6379/0     # container jobs
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
+      # CELERY_RESULT_BACKEND: redis://redis:6379/0 # container jobs
       REDIS_CACHE_URL: redis://localhost:6379/1
+      # REDIS_CACHE_URL: redis://redis:6379/1       # container jobs
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

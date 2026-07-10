@@ -13,6 +13,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # TODO (monorepo layouts): uncomment and point at the site directory
+    # defaults:
+    #   run:
+    #     working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
 
@@ -25,10 +29,12 @@ jobs:
         run: npm ci
 
       - name: Build site
-        run: npm run build
-        # TODO: if the build script chains post-build steps that need
-        # secrets (OG images, IndexNow pings), either provide the env vars
-        # here or run `npx astro build` directly as the CI gate.
+        run: npx astro build
+        # Default is the PURE build on purpose: `npm run build` scripts often
+        # chain post-build steps with network side effects (IndexNow pings
+        # notify search engines about undeployed content) or secret
+        # requirements. TODO: switch to `npm run build` ONLY after confirming
+        # the build script has no side-effecting or secret-needing steps.
 
       # TODO (optional): enable a link check once the build is green in CI.
       # - name: Check internal links
