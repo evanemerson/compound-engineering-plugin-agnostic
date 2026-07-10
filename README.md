@@ -4,7 +4,7 @@ Every bug you fix, every feature you ship, every review finding you address — 
 
 That's compound engineering. Instead of treating each unit of work as isolated, you capture what you learned — what broke, why, how you fixed it, how to prevent it — and feed it back into the system. The next time you start a task, the system searches those learnings and surfaces relevant past experience before you write a line of code. Over time, your codebase accumulates institutional knowledge that prevents repeated mistakes and accelerates new work.
 
-CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with parallel agents (8 from cepa plus 5 from pr-review-toolkit), document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
+CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with parallel agents (11 from cepa — 8 roster + 3 signal-dispatched — plus 5 from pr-review-toolkit), document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
 
 ## The Loop
 
@@ -25,12 +25,12 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | Command | What It Does |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
-| `/cepa:review` | Spawn review agents in parallel (8 cepa + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Supports `mode:headless` |
+| `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Supports `mode:headless` |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Supports `mode:headless` |
 | `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
 
-### Agents (9)
+### Agents (12)
 
 **Research:**
 
@@ -49,7 +49,15 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `architecture-reviewer` | Module boundaries, service layers, URL conventions, task queue placement |
 | `schema-drift-detector` | Model/migration/serializer/admin alignment, missing migrations, index consistency |
 | `frontend-reviewer` | Race conditions, event listener lifecycle, polling conflicts, CSS consistency, template correctness |
-| `deployment-verifier` | Container config, env vars, static assets, backwards compatibility, rollback |
+| `deployment-verifier` | Container config, env vars, static assets, backwards compatibility — ends in a Go/No-Go verdict with a rollback plan |
+
+**Review — conditional tier** (dispatched automatically by diff signals; opt out per project with `- !agent-name` in `cepa.local.md`):
+
+| Agent | Dispatch signal | What It Does |
+|---|---|---|
+| `adversarial-reviewer` | Large diff (~300+ lines) or risky paths (payments, auth, PHI, data migrations) | Constructs concrete failure scenarios — hostile sequencing, partial failure, TOCTOU — and traces the code through them |
+| `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
+| `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
 ### Skills (3)
 
@@ -92,7 +100,7 @@ claude /plugin install superpowers
 
 ### Step 3: Install pr-review-toolkit (required)
 
-During review, cepa spawns 5 additional agents from pr-review-toolkit alongside its own 8 review agents. This plugin is in the built-in `claude-plugins-official` marketplace — no marketplace registration needed.
+During review, cepa spawns 5 additional agents from pr-review-toolkit alongside its own 11 review agents (8 roster + 3 conditional). This plugin is in the built-in `claude-plugins-official` marketplace — no marketplace registration needed.
 
 ```bash
 claude /plugin install pr-review-toolkit
@@ -253,9 +261,10 @@ gh pr create --title "<concise title>" --body "<summary from design/plan>"
 
 **Step 4.3 — Auto-Review**
 
-If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 14 agents in parallel:
+If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 17 agents in parallel:
 
-- **8 cepa agents:** security-sentinel, performance-oracle, python-reviewer, data-integrity-guardian, architecture-reviewer, schema-drift-detector, frontend-reviewer, deployment-verifier
+- **8 roster cepa agents:** security-sentinel, performance-oracle, python-reviewer, data-integrity-guardian, architecture-reviewer, schema-drift-detector, frontend-reviewer, deployment-verifier
+- **3 conditional cepa agents (signal-dispatched):** adversarial-reviewer, reliability-reviewer, previous-comments-reviewer
 - **5 pr-review-toolkit agents:** silent-failure-hunter, pr-test-analyzer, comment-analyzer, type-design-analyzer, code-simplifier
 
 The `learnings-researcher` runs first and feeds its findings as additional context to all review agents. Findings are deduplicated and written to `todos/review-YYYY-MM-DD-HHMMSS.md` with P1/P2/P3 severity.

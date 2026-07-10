@@ -1,6 +1,6 @@
 ---
 name: deployment-verifier
-description: Pre-deploy checklist covering container configuration, pending migrations, static assets, environment variables, task scheduler changes, and service connectivity.
+description: Pre-deploy verification ending in an explicit Go/No-Go verdict with a rollback plan. Covers container configuration, pending migrations, static assets, environment variables, task scheduler changes, and service connectivity.
 model: sonnet
 ---
 
@@ -77,6 +77,39 @@ For each finding, report:
 - **Problem**: What the deployment risk is
 - **Scenario**: When this would cause a problem (during deploy, after deploy, during rollback)
 - **Fix**: Concrete action to mitigate the risk
+
+## Go/No-Go Verdict (always end with this)
+
+After the findings, close with an explicit verdict block — never leave the
+deploy decision implicit:
+
+```markdown
+## Deploy Verdict: GO | NO-GO | GO WITH CONDITIONS
+
+**Basis:** [one sentence — e.g. "no P1s; two P2s are post-deploy hygiene"]
+**Conditions (if any):** [what must happen before/at deploy — run migration
+X first, set env var Y, deploy during low traffic]
+
+**Rollback plan:**
+1. [exact steps: git revert/redeploy target, `migrate <app> <prev>` for each
+   reversible migration — name them; flag any IRREVERSIBLE migration here]
+2. [external state to restore: feature flags, third-party config, crons]
+3. [verification: the health checks/queries proving the rollback worked]
+```
+
+Rules for the verdict:
+- Any P1 → **NO-GO** until fixed.
+- An irreversible migration or un-rollback-able external change → at most
+  **GO WITH CONDITIONS**, with the point of no return stated explicitly.
+- The rollback plan must be executable by someone who didn't write the diff
+  — name the actual migration numbers, services, and commands.
+- **A NO-GO or GO WITH CONDITIONS verdict must ALSO be emitted as a finding**
+  (P1 for NO-GO with its basis; P2 for each unmet condition, condition text
+  in the Fix section) — severity-based gates in triage and lfg act on
+  findings, and a verdict that exists only as prose can be shipped past. The
+  orchestrator records the verdict in the findings file's `deploy_verdict`
+  frontmatter and, for NO-GO / GO WITH CONDITIONS, a `## Deploy Verdict`
+  body section (see the `cepa:file-todos` skill's Run Metadata rules).
 
 Skip findings that are:
 - Development-only concerns that don't affect production
