@@ -20,14 +20,15 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 ## What's Included
 
-### Commands (4)
+### Commands (5)
 
 | Command | What It Does |
 |---|---|
-| `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end |
-| `/cepa:review` | Spawn review agents in parallel (8 cepa + 3 pr-review-toolkit), collect findings with P1/P2/P3 severity |
-| `/cepa:triage` | Interactively approve/skip each finding from review, one at a time |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents |
+| `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
+| `/cepa:review` | Spawn review agents in parallel (8 cepa + 3 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Supports `mode:headless` |
+| `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Supports `mode:headless` |
+| `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
 
 ### Agents (9)
 
@@ -50,12 +51,13 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `frontend-reviewer` | Race conditions, event listener lifecycle, polling conflicts, CSS consistency, template correctness |
 | `deployment-verifier` | Container config, env vars, static assets, backwards compatibility, rollback |
 
-### Skills (2)
+### Skills (3)
 
 | Skill | What It Does |
 |---|---|
 | `compound-docs` | Solution document format, 8-category taxonomy, plan-solution bidirectional linking |
-| `file-todos` | YAML frontmatter format for review findings in `todos/` |
+| `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
+| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution, verification evidence, safe auto-apply, residual durability |
 
 ---
 

@@ -45,13 +45,14 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (4)
+### Commands (5)
 | Command | Purpose |
 |---|---|
-| `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound) |
-| `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` |
-| `/cepa:triage` | Interactively approve/skip each finding from review |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents |
+| `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
+| `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` (supports `mode:headless`) |
+| `/cepa:triage` | Triage findings — batch auto-apply by default, `interactive` for one-at-a-time |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents (supports `mode:headless`) |
+| `/cepa:lfg` | **BETA** — hands-off pipeline: build all, review-fix until clean, PR, CI-green loop, compound, one report |
 
 ### Research Agents (1)
 | Agent | Purpose |
@@ -70,11 +71,12 @@ Plan → Work → Review → Compound
 | `frontend-reviewer` | Race conditions, event lifecycle, CSS consistency |
 | `deployment-verifier` | Container config, env vars, rollback safety |
 
-### Skills (2)
+### Skills (3)
 | Skill | Purpose |
 |---|---|
 | `compound-docs` | Solution document format, categories, plan-solution linking |
-| `file-todos` | Structured YAML frontmatter format for review findings in `todos/` |
+| `file-todos` | Structured YAML frontmatter format for review findings in `todos/`, with confidence + action-class scoring |
+| `autonomy` | The autonomy contract shared by task/lfg/review/triage |
 
 ## Dependencies
 

@@ -1,11 +1,19 @@
 {
   "name": "cepa",
   "description": "Compound engineering: full task orchestration, 8 review agents, solution documentation, and interactive triage. Framework-agnostic via cepa.local.md.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": {
     "name": "Evan",
     "email": "evan@dpcpro.com"
   },
   "license": "MIT",
-  "keywords": ["review", "agents", "compound-engineering", "documentation", "triage", "security", "performance"]
+  "keywords": [
+    "review",
+    "agents",
+    "compound-engineering",
+    "documentation",
+    "triage",
+    "security",
+    "performance"
+  ]
 }
