@@ -12,6 +12,26 @@ Orchestrate the complete compound engineering loop from idea to merged PR. Each 
 
 ---
 
+## Phase 0: Autonomy Resolution
+
+Resolve the run's autonomy level per the **`cepa:autonomy` skill §1** (first
+match wins): in-prompt request (`auto` / `confirm:auto` / `confirm:ask` or
+equivalent plain language) → remembered user preference already in context →
+`autonomy:` key in the project's `cepa.local.md` → default `gated`.
+
+- **`gated`** — every gate below fires as written (numbered choices,
+  AskUserQuestion).
+- **`full`** — gates marked *[autonomy-convertible]* below resolve silently
+  per the autonomy contract; destructive actions remain gated; residual work
+  is filed durably (autonomy §5) instead of asked about; one consolidated
+  report (autonomy §6) ends the run. For a fully hands-off run, prefer
+  `/cepa:lfg`, which is this loop with the autonomous variant of every phase.
+
+State the resolved level in the announcement: "Autonomy: full — I'll report
+at the end" or "Autonomy: gated."
+
+---
+
 ## Phase 1: Git Safety Audit + Context Gathering
 
 **Purpose:** Never start new work in a confused git state. Gather all available context before planning. Local git state is not enough — branches sit "done" on GitHub without being merged, and main lags behind.
@@ -32,6 +52,9 @@ For each open PR, surface it to the user as part of the status report (Section 1
 1. Merge PR #N first, then start this work
 2. Explicitly proceed without merging — I know about the overlap and accept the risk
 3. Abandon this task
+
+(In `full` autonomy this is a blocked-stop, not a choice: report the overlap
+and exit — merging open work is always a human decision.)
 
 If no open PRs exist, note that and continue.
 
@@ -73,11 +96,14 @@ Check for:
 Ready to proceed? [Y / address issues first]
 ```
 
-**If local issues found:** Present numbered choices:
+**If local issues found:** *[autonomy-convertible]* Present numbered choices:
 1. Stash current changes and proceed
 2. Commit current changes first
 3. Abandon current changes (confirm destructive action)
 4. Stay on current branch and work here instead
+
+(In `full` autonomy: stash with a labeled message and note it in the report.
+Option 3 — abandoning changes — is destructive and never taken autonomously.)
 
 **If overlapping PRs found:** Present the blocker choice from 1.1.
 
@@ -113,7 +139,9 @@ Branch prefix selection:
 - `refactor/` — code restructuring, no behavior change
 - `chore/` — tooling, deps, config
 
-Ask the user for a short description if not provided with the task. Construct the branch name automatically.
+Ask the user for a short description if not provided with the task. Construct
+the branch name automatically. *[autonomy-convertible: in `full` autonomy,
+derive the description from the task itself — never ask.]*
 
 ---
 
@@ -178,9 +206,9 @@ git commit -m "docs: add implementation plan for <feature>"
 
 ### 3.2 Build
 
-**Delegate to:** `superpowers:subagent-driven-development` (default, same session) OR `superpowers:executing-plans` (parallel session)
-
-Let the user choose. Default to subagent-driven for same-session execution.
+**Gated mode — delegate to:** `superpowers:subagent-driven-development`
+(default, same session) OR `superpowers:executing-plans` (parallel session).
+*[autonomy-convertible]* Let the user choose; default to subagent-driven.
 
 These skills handle:
 - Task-by-task implementation
@@ -188,6 +216,13 @@ These skills handle:
 - Spec compliance review
 - Code quality review
 - Commits per task
+
+**Full autonomy — execute the plan directly** per the `cepa:autonomy` skill
+§2-§3 (the execution contract and verification-evidence rules). Do not
+delegate to checkpoint-based skills: complete **every** task in the plan at
+agent speed — no session-subsetting, no "first few tasks then check in" —
+committing per task, recording blocked tasks durably, and producing
+verification evidence for every behavior change.
 
 ---
 
@@ -231,10 +266,16 @@ Run `/cepa:review` if `cepa.local.md` exists in the project, otherwise fall back
 
 After review completes:
 - **P1 / Critical findings:** Fix immediately. Commit, push. No questions asked.
-- **P2 / Important findings:** Present as numbered choices for user to approve/skip.
-- **P3 / Suggestions:** List for awareness. Ask if user wants to address any.
+- **P2 / Important findings:** *[autonomy-convertible]* Present as numbered choices for user to approve/skip.
+- **P3 / Suggestions:** *[autonomy-convertible]* List for awareness. Ask if user wants to address any.
 
 If using cepa:review, run `/cepa:triage` for the interactive flow on P2/P3.
+
+**Full autonomy:** apply the auto-apply rubric (`cepa:autonomy` §4) instead
+of asking — checkpoint, auto-apply `mechanical`/`corroborated` findings with
+confidence ≥ 75, run the autofix self-review, rerun affected tests, and file
+everything else as `deferred` residuals (autonomy §5). A `judgment`-class P1
+is a blocked-stop.
 
 ---
 
@@ -273,6 +314,10 @@ Apply this rule?
 2. Modify first
 3. Skip
 ```
+
+*[autonomy-convertible: in `full` autonomy, never edit CLAUDE.md mid-run —
+put the drafted rule in the final report as a numbered choice AND in
+`memory/tasks.md` so it survives.]*
 
 **Review agent rules:**
 If a pattern should be caught by review agents, propose adding it to `cepa.local.md`.
@@ -329,8 +374,8 @@ If the user invokes `/cepa:task` on an existing feature branch (not main):
 - **Always research learnings before planning** — check docs/solutions/ and CLAUDE.md
 - **Always commit the plan** before implementation starts
 - **Auto-fix P1s** — don't ask, just fix critical issues
-- **Numbered choices for everything else** — user picks the number, you execute
-- **One task in progress at a time** — don't parallelize implementation tasks
+- **Numbered choices for everything else** (gated mode) — user picks the number, you execute. In `full` autonomy, gates marked *[autonomy-convertible]* resolve silently per the `cepa:autonomy` skill; residuals are filed durably, never dropped
+- **One task in progress at a time** — don't parallelize implementation tasks unless they are provably independent (disjoint files, autonomy §2)
 - **Always run compound** — scale the effort (inline for small, full for large), but never skip
 - **Propose system updates immediately** — don't defer CLAUDE.md/rule updates to later
 - **Save undone items** — nothing gets lost between sessions

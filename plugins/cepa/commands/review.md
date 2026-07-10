@@ -9,6 +9,25 @@ Orchestrate parallel review agents on the current code changes. Collect findings
 
 **Announce at start:** "I'm using the cepa:review command to run parallel review agents."
 
+## Modes
+
+Parse a `mode:headless` token from anywhere in the arguments and strip it.
+
+- **Interactive (default):** run as written below, ending with the Step 6
+  report and the `/cepa:triage` suggestion.
+- **`mode:headless`** (for callers like `/cepa:lfg`, scheduled runs, and
+  autonomous `/cepa:task`): never prompt the user for anything. Skip the
+  conversational parts of Step 6 and instead end by returning a structured
+  summary: the findings file path, counts by severity, and the counts of
+  auto-apply-eligible findings (`mechanical`/`corroborated` with
+  confidence ≥ 75 — see the `cepa:autonomy` skill §4). The caller decides
+  what to apply. If `cepa.local.md` is missing in headless mode, run the
+  cepa review agents with stack details inferred from the repo, note the
+  missing config in the findings file, and continue — never block.
+
+**Fail-safe:** if the harness exposes no blocking-question tool, behave as
+headless even without the token.
+
 ## Step 1: Determine Review Scope
 
 Identify what to review:
@@ -68,7 +87,13 @@ Launch ALL active agents in parallel (use multiple Task tool calls in a single m
 After all agents return:
 1. Collect all findings from all agents
 2. Deduplicate: If multiple agents flagged the same location for similar reasons, merge into one finding with combined reasoning
-3. Sort by severity: P1 first, then P2, then P3
+3. Score each finding with `confidence` (0-100) and `action_class`
+   (`mechanical` / `corroborated` / `judgment`) per the `file-todos` skill
+   field definitions. Merged duplicates become `corroborated` with the max
+   confidence of their sources. Anything touching compliance-sensitive
+   surfaces (PHI/PII fields, auth, payments) without a spelled-out verified
+   fix is `judgment`.
+4. Sort by severity: P1 first, then P2, then P3
 
 ## Step 5: Write Findings to todos/
 
@@ -85,6 +110,8 @@ Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` with this format:
 ### Finding 1
 - **Agent:** security-sentinel
 - **Status:** pending
+- **Confidence:** 90
+- **Action class:** corroborated
 - **Location:** `path/to/file.py:42-48`
 - **Problem:** [description]
 - **Fix:** [concrete suggestion]
@@ -116,4 +143,6 @@ Present a summary to the user:
 
 - If no changes are found to review, report that and stop
 - If `cepa.local.md` doesn't exist, inform the user they need to create one
+  (interactive mode only — headless mode infers the stack and continues, per
+  the Modes section)
 - If agents fail to return useful results, report partial results and note which agents had issues

@@ -1,33 +1,88 @@
 ---
-description: Interactive review of findings from /cepa:review. Present each finding for approve, skip, or customize decisions.
+description: Triage findings from /cepa:review. Default batch mode auto-applies safe verified fixes and presents the rest as one decision table; pass "interactive" for the classic one-at-a-time flow.
 allowed-tools: Bash(git diff:*), Bash(git show:*)
 ---
 
 # Compound Triage
 
-Interactively review findings from the most recent review. Present each finding one at a time for the user to approve, skip, or customize.
+Triage findings from the most recent review. **Batch mode is the default:**
+auto-apply the findings that are safe to apply, then present everything else
+as a single decision table. The classic one-finding-at-a-time flow is
+available with the `interactive` argument.
 
-**Announce at start:** "I'm using the cepa:triage command to review findings interactively."
+**Announce at start:** "I'm using the cepa:triage command — batch mode" (or
+"— interactive mode").
 
-## Step 1: Load Findings
+## Step 1: Load Findings (both modes)
 
 1. Search `todos/` for the most recent `review-*.md` file (by filename date, or use the most recently modified)
 2. Parse all findings with `status: pending`
-3. Count findings by severity and report: "Found X pending findings (Y P1, Z P2, W P3). Starting with P1 findings."
+3. Count findings by severity and report: "Found X pending findings (Y P1, Z P2, W P3)."
 
 If no pending findings exist, report that and stop.
 
-## Step 2: Present Findings (P1 First)
+## Batch Mode (default)
 
-For each finding, starting with P1 (critical), then P2, then P3:
+### Step 2a: Auto-Apply Eligible Findings
+
+Apply the auto-apply rubric from the **`cepa:autonomy` skill §4**:
+`mechanical` or `corroborated` findings with `confidence ≥ 75` are eligible;
+`judgment` findings never are.
+
+1. **Checkpoint first:** commit the current tree (`checkpoint: pre-triage`)
+   or stash, so the auto-apply diff is isolated.
+2. Apply each eligible finding's fix. Mark it `status: applied` in the
+   findings file.
+3. **Autofix self-review** (autonomy §4): diff only the changes introduced
+   since the checkpoint, review that diff for duplicated helpers, broadened
+   contracts, and advisory-only findings; fix what the self-review surfaces.
+4. Rerun the affected tests (and again after any self-review edits). A fix
+   that breaks tests gets reverted and demoted to the decision table with a
+   note.
+5. Commit: `fix(review): apply triaged findings`.
+
+### Step 3a: Present the Decision Table
+
+Present ALL remaining findings at once — one table, not a sequence:
+
+```
+## Triage — X auto-applied, Y need decisions
+
+| # | Sev | Class | Confidence | Location | Title |
+|---|-----|-------|------------|----------|-------|
+| 3 | P1  | judgment | 80 | billing/services.py:112 | Refund path bypasses SubscriptionService |
+| 7 | P2  | judgment | 60 | portal/views.py:45 | Magic-link reuse window |
+...
+
+Reply with: "fix 3, 7", "fix all", "defer all", or "skip 7" (combinable).
+```
+
+Show code context on request, not preemptively. P1s in this table lead and
+are called out — they should be resolved before merging.
+
+### Step 4a: Execute Decisions and Summarize
+
+- "fix N" → mark `ready`, then implement the fixes in severity order,
+  test, and commit.
+- "defer N" / "defer all" → mark `deferred` AND append to `memory/tasks.md`
+  (autonomy §5 — deferrals must be durable).
+- "skip N" → remove from the file (interactive skips only; a skip is an
+  explicit human judgment that the finding is wrong).
+
+Finish with the summary: applied / fixed / deferred / skipped counts and the
+findings file path.
+
+## Interactive Mode (`interactive` argument)
+
+The classic flow — present each finding one at a time, P1 first:
 
 ### Present the Finding
 
-Display clearly:
 ```
 ## Finding N of M — [Severity]
 
 **Agent:** [which agent found it]
+**Class:** [action_class] (confidence NN)
 **Location:** `path/to/file.py:42-48`
 
 **Problem:**
@@ -52,36 +107,17 @@ Use AskUserQuestion with these options:
 - **Skip:** Remove the finding from the todos file entirely
 - **Customize:** Let the user modify the finding via conversation, then ask approve/skip again
 
-## Step 3: Summary
-
-After all findings are reviewed, present a summary:
-
-```
-## Triage Complete
-
-- Approved: X findings (Y P1, Z P2, W P3)
-- Skipped: X findings
-
-### Approved Findings:
-1. [P1] Brief description — `file.py:42`
-2. [P2] Brief description — `file.py:88`
-...
-```
-
-Update the todos file to reflect final state — only approved findings remain with `status: ready`.
-
-## Step 4: Next Steps
-
-Based on what was approved:
-- If P1 findings were approved: "There are critical findings to address. These should be fixed before merging."
-- If only P2/P3: "No critical issues. Consider addressing these in this branch or a follow-up."
-- Say: "To fix approved findings, work through them in priority order. The findings file is at `todos/<filename>.md`."
+After all findings, present the same summary as batch mode and update the
+todos file so only approved findings remain `ready`.
 
 ## Rules
 
-- Always start with P1 findings — don't let the user skip ahead to P3 while P1s are pending
-- Present ONE finding at a time — don't batch them
-- Show the actual code context for each finding, not just the agent's description
-- If the user says "approve all remaining", do it — but confirm first with the count
-- If the user says "skip all P3", do it in batch
-- Keep a running count: "Finding 3 of 12 (2 approved, 0 skipped)"
+- Batch mode is the default; only use interactive when asked
+- Never auto-apply a `judgment` finding — no matter the confidence
+- Checkpoint before auto-applying, self-review the auto-apply diff, and
+  rerun tests after (autonomy §4) — an unreviewed autofix is not a fix
+- Deferred findings always land in `memory/tasks.md`, not just the todos file
+- P1 findings lead every table and every interactive sequence
+- In interactive mode: one finding at a time, show code context, keep a
+  running count; "approve all remaining" works after confirming the count;
+  "skip all P3" works as a batch
