@@ -45,11 +45,13 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (8)
+### Commands (10)
 | Command | Purpose |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
 | `/cepa:plan-review` | Persona-panel review of a plan before build; findings in the standard todos/ format (supports `mode:headless`) |
+| `/cepa:sweep` | Scheduled residual sweep — drains the sinks through lfg runs and closes items everywhere they're filed (supports `mode:headless`) |
+| `/cepa:resolve-pr` | Judge and resolve human PR review feedback per the autonomy rubric (supports `mode:headless`) |
 | `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` (supports `mode:headless`) |
 | `/cepa:triage` | Triage findings — batch auto-apply by default, `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents; seeds CONCEPTS.md (supports `mode:headless`) |
@@ -83,7 +85,7 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 | `reliability-reviewer` | Retries, timeouts, idempotency, races on queue/webhook/transaction code |
 | `previous-comments-reviewer` | Verifies prior review findings weren't lost or re-broken |
 
-### Skills (5)
+### Skills (6)
 | Skill | Purpose |
 |---|---|
 | `compound-docs` | Solution document format (mandatory Detection sections), categories, plan-solution linking, CONCEPTS.md vocabulary map |
@@ -91,6 +93,7 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 | `autonomy` | The autonomy contract shared by task/lfg/review/triage — gate resolution, execution (parallel safety, idempotency), evidence, auto-apply, residuals |
 | `implementation-units` | Canonical plan-task format: stable `U<N>` ids, per-unit test scenarios, verification split |
 | `plan-review` | Persona roster, activation signals, and synthesis rules for `/cepa:plan-review` |
+| `pr-feedback` | Fetch model, six-verdict rubric, reply conventions, and vendored gh scripts for `/cepa:resolve-pr` |
 
 ## Dependencies
 
