@@ -1,6 +1,6 @@
 ---
 name: file-todos
-description: Structured YAML frontmatter format for review findings in todos/. Used by /cepa:review and /cepa:triage commands.
+description: Structured YAML frontmatter format for review findings in todos/. The single canonical spec, produced by /cepa:review and /cepa:plan-review, consumed by /cepa:triage and /cepa:lfg.
 ---
 
 # File-Based Todo Tracking
@@ -174,6 +174,13 @@ detection_signals:               # Detection pipeline coverage, every run
 learnings_research: "ok"         # or "failed — <reason>" when the researcher
                                  # errored; a lost institutional-memory input
                                  # must never look like a normal run
+agents_failed:                   # reviewers/personas that errored mid-run —
+  - agent: security-lens         # a failed reviewer is a named coverage gap,
+    reason: "subagent error"     # never a clean pass
+dropped_below_anchor: 0          # plan-review: findings dropped at anchor 0/25
+validation_drops:                # plan-review: malformed findings dropped at
+  - agent: coherence             # synthesis step 1, counted per persona —
+    count: 0                     # an uncounted drop is a silently lost finding
 ```
 
 Rules:

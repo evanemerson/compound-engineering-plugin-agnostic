@@ -94,7 +94,11 @@ Strength-of-argument concerns ("motivation is thin") do not meet the bar.
 Strictly ordered, after all personas return:
 
 1. **Validate** each persona's output against the template contract; drop
-   malformed findings (note the gap, never narrate parser diagnostics).
+   malformed findings (never narrate parser diagnostics). Record a
+   per-persona `validation_drops` count in the findings file's Run
+   Metadata — an uncounted drop is a silently lost finding. A persona
+   whose ENTIRE output fails validation is a failed persona
+   (`agents_failed`), never a clean pass.
 2. **Anchor gate:** 0/25 dropped (count them), 50 → P3 advisory,
    75/100 → actionable.
 3. **Dedup** by fingerprint `normalize(section) + normalize(title)`
@@ -117,7 +121,10 @@ Strictly ordered, after all personas return:
 | severity P2 | `severity: P2` |
 | severity P3, or anchor 50 | `severity: P3` |
 | anchor | `confidence` (verbatim: 100/75/50) |
+| persona name | `agent:` |
+| persona's review domain (Coherence, Feasibility, Scope, Security, Product, Adversarial) | `category:` |
 | autofix `safe_auto` | `action_class: mechanical` |
+| autofix `gated_auto` | `action_class: judgment` — deliberate collapse: cepa has no middle auto-tier, and a gated fix that two personas corroborate gets promoted by the row below, which is the only auto path it should have |
 | cross-persona-agreed finding | `action_class: corroborated` |
 | everything else (incl. all contradictions) | `action_class: judgment` |
 | section + evidence quotes | folded into the `**Problem:**` body |

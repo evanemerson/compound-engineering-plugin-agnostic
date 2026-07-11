@@ -222,9 +222,14 @@ git commit -m "docs: add implementation plan for <feature>"
 Run `/cepa:plan-review` on the committed plan — never build from an
 unreviewed plan. *[autonomy-convertible]*
 
-- **Gated mode:** run it interactive; P1 findings are fixed in the plan
-  immediately (mirroring 4.4's severity handling), P2/P3 presented as
-  numbered choices alongside the findings file.
+- **Gated mode:** run it interactive. P1 `mechanical`/`corroborated`
+  findings are fixed in the plan immediately; `judgment`-class P1s —
+  always including compliance-surface findings, per autonomy §4's
+  absolute carve-out — lead the numbered choices, never auto-fixed. For
+  P2/P3 decisions, run `/cepa:triage interactive` on the findings file
+  (they stay `status: pending` so triage can see them); anything the
+  user declines is set `status: deferred` and appended (deduped) to
+  `memory/tasks.md` before build starts — never left stranded.
 - **Full autonomy:** run `mode:headless`; eligible fixes auto-apply to the
   plan per autonomy §4 (committed as `docs: revise plan per plan review`),
   judgment findings go durable per §5, and a judgment-class P1 plan
