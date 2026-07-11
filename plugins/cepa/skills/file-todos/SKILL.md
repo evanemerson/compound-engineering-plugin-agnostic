@@ -93,6 +93,7 @@ Each finding under `## Findings` uses this structure:
 | `file` | yes | relative path | File where the issue is |
 | `lines` | no | `N` or `N-M` | Line number or range |
 | `title` | yes | short text | One-line summary |
+| `resolved` | no | date + branch/PR | Only on `deferred → completed`: when and where the deferred item was fixed |
 
 When agents merge duplicate findings (same location, same reason), the merged
 finding's `action_class` becomes `corroborated` and its `confidence` is the
@@ -109,6 +110,8 @@ pending  →  applied   (auto-applied by an autonomous run — fix committed)
 pending  →  deferred  (filed as residual work by an autonomous run —
                        also recorded in memory/tasks.md and the PR body)
 ready    →  completed (fixed and verified)
+deferred →  completed (fixed later in a dedicated pass, outside triage —
+                       add a `resolved:` line naming the date and branch)
 ```
 
 `skipped` removal applies to human-driven triage only (a batch-table reply

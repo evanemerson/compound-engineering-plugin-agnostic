@@ -171,6 +171,29 @@ Compare in-scope docs against each other, not just against reality:
 
 ## Phase 3: Execute
 
+**Execution gate — decided BEFORE any write.** Record three things: the
+starting ref (current branch name, or the exact SHA when detached), the set
+of paths with uncommitted changes, and whether this run OWNS the current
+branch. Own means the user invoked the refresh while working on this
+branch, or a pipeline caller (e.g. `/cepa:lfg`) invoked it as part of this
+branch's flow; a scheduled or standalone headless run does not own a
+feature branch it merely finds itself on. Ambiguous ownership or detached
+HEAD counts as not owned. Two rules consume this record:
+
+- **Not-owned branch → report-only mode.** Phases 3 and 4 make NO writes
+  and stage nothing — no Edit, no `git rm`, no CONCEPTS.md changes. Every
+  action is produced as Recommended from the investigation evidence alone.
+  The invariant is "never mutate work that isn't this run's own," not
+  merely "never commit into it" — a mutated tree or staged deletion left
+  behind lands in the branch owner's next commit even if this run commits
+  nothing. (On main, and on an owned branch, writes proceed normally.)
+- **Dirty candidates are read-only.** A candidate doc (or CONCEPTS.md)
+  that already had uncommitted changes at record time is user work in
+  progress: classify it, report its intended change as Recommended
+  ("dirty at start — not touched"), and never edit, stage, or commit it.
+  Editing on top of uncommitted changes blends user work into refresh
+  output; the blend cannot be unpicked afterwards.
+
 Apply each classification (interactive mode confirms only the ambiguous
 ones first — Delete with non-obvious evidence, Replace successors, unclear
 canonical choice):
@@ -249,18 +272,20 @@ CONCEPTS.md: <scanned, no qualifying terms | created with N entries | updated �
 Then per file: path, classification, evidence found, action taken. For
 Consolidate: which doc was canonical, what merged, what was deleted. In
 headless mode, split actions into **Applied** (writes succeeded) and
-**Recommended** (writes failed — with enough context for a human to apply
-manually).
+**Recommended**, naming the sub-case per item: *write failed* (apply
+manually) or *withheld by the execution gate* (report-only mode or
+dirty-at-start candidate — nothing on disk was changed; review, then
+apply). The two sub-cases need different human responses; never conflate
+them.
 
 **Commit:** skip when nothing changed. Stage ONLY the files this refresh
 touched. Commit message summarizes the refresh (e.g., "docs: refresh 3
 stale learnings, consolidate 2, delete 1").
 
-**Record the starting point first.** Before Phase 3 executes any action,
-record the starting ref — the current branch name, or the exact SHA when
-detached — and whether the tree has uncommitted changes. The rules below
-exist to honor one invariant: **the run never leaves HEAD somewhere the
-user didn't put it, and never lands commits in work that isn't its own.**
+These rules consume the record made by Phase 3's execution gate (starting
+ref, dirty paths, ownership) and honor the same invariant: **the run never
+leaves HEAD somewhere the user didn't put it, and never mutates or commits
+into work that isn't its own.**
 
 Headless rules:
 
@@ -274,20 +299,20 @@ Headless rules:
   the refresh while working on that branch, or a pipeline caller (e.g.
   `/cepa:lfg`) invoked it as part of that branch's flow: separate commit on
   the current branch; HEAD never moves.
-- **On a feature branch the run does not own** — a scheduled or standalone
-  headless run that simply finds itself there — do NOT commit: someone
-  else's open PR would suddenly contain doc refreshes and deletions.
-  Downgrade every action to **Recommended**, with the exact `git add`/
-  `git commit` commands and a summary of the staged-but-uncommitted diff in
-  the report. When ownership is ambiguous, treat the branch as not owned.
-- **Detached HEAD:** treat as not-owned — Recommended, never commit.
+- **On a feature branch the run does not own** (per the Phase 3 execution
+  gate): the run was in report-only mode — nothing was written or staged,
+  so there is nothing to commit. Every action appears in the report as
+  Recommended with the exact edits/commands a human needs to apply it.
+- **Detached HEAD:** not-owned → report-only mode; never commit.
 - **Git failure at any step:** include the recommended commands in the
   report and continue; if the failure happened after a branch was created,
   still restore the starting ref before finishing.
 
 Interactive mode: offer commit options fitting the current branch state, as
-before — and any option that creates a branch ends by checking the starting
-ref back out, same invariant.
+before. Options that create a branch default to returning to the starting
+ref; an option may explicitly offer to stay on the new branch, and choosing
+it satisfies the invariant — a destination the user picked IS where the
+user put HEAD.
 
 ## When to Stop
 
