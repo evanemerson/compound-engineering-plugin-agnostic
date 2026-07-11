@@ -57,11 +57,41 @@ When a command executes an implementation plan autonomously:
 - **Don't leave features 80% done.** A finished feature that ships beats a
   perfect feature that doesn't. If a task is genuinely blocked, record the
   blocker durably (§5) and continue with unblocked tasks.
-- **One task in flight at a time** unless tasks are provably independent
-  (no shared files); independent tasks may run as parallel subagents in
-  isolated worktrees, merged in dependency order.
+- **Idempotency before implementation.** If a task's work is already
+  present and matches the plan's intent (files exist with the expected
+  capability, or the task's verification criteria are already satisfied),
+  it likely shipped on a prior branch or session: verify it matches, mark
+  the task complete, move on. Never silently reimplement — re-runs after a
+  blocked exit or failed round hit this constantly.
+- **One task in flight at a time** unless the parallel safety check
+  passes. **File overlap is necessary but not sufficient** for
+  independence: also serialize tasks that contend on things absent from
+  their file lists — shared types/APIs/interfaces, DB migrations,
+  generated artifacts or clients, lockfiles, snapshots, shared
+  config/schema, or an environment singleton (one dev server/port, a
+  shared database, package installs). Reason about these; don't just diff
+  paths. Cap parallel workers at a bounded batch (~3-5) even when more
+  tasks are independent — over-parallelizing costs more in contention and
+  integration than it saves. Abort criteria: broad unplanned edits,
+  out-of-scope test failures, or repeated conflicts → stop parallelizing,
+  finish serially. Parallel workers run in isolated worktrees and are
+  merged in dependency order; **on merge conflict, `git merge --abort`
+  and re-run that task serially against the merged tree** — hand-resolving
+  silently discards one task's intent.
+- **Workers get a bounded packet and never commit.** A parallel worker
+  receives the goal, its own task section, and the relevant verification
+  entries — not "read the whole plan." Workers implement and may run
+  their unit's focused tests as a self-check; the orchestrator owns
+  staging, commits, and the authoritative test runs. Integration inspects
+  the **actual tree, not reported paths** — workers create files the plan
+  didn't anticipate.
 - **Commit incrementally.** Each completed task or logical chunk gets a
-  commit. Never batch the whole plan into one commit.
+  commit. Never batch the whole plan into one commit. The heuristic: can
+  you write a commit message describing a complete, valuable change? If
+  the message would be "WIP" or "partial X", wait.
+- **Never start the next task on a broken tree.** After each task: review
+  the diff against the task's declared scope, run the relevant tests, and
+  fix before dispatching the next.
 - **Run the project's test and lint commands** (from CLAUDE.md or Makefile)
   before declaring any task complete.
 
@@ -73,10 +103,31 @@ it complete, produce verification evidence:
 - The existing tests for the affected behavior were inspected.
 - The right proof was chosen: an existing failing test, a strengthened
   existing test that owns the contract, a new focused regression test, or a
-  recorded deliberate exception with its replacement verification.
+  recorded deliberate exception with its replacement verification. **Never
+  add a duplicate regression test when an existing test is the right
+  home** — strengthen that test, then observe the failure.
 - New/changed tests were seen to fail for the right reason before the fix,
   and pass after.
 - The full test suite (or the project's standard test command) passed.
+- **System-wide check for integration-heavy changes:** what fires when
+  this runs — callbacks, middleware, observers, event handlers? Trace two
+  levels out. Unit tests with mocks prove logic in isolation; integration
+  tests with real objects prove the layers work together.
+
+The evidence record per behavior-changing task has a named shape, so
+callers' gates can check it mechanically: `behavior_changed` (what),
+`existing_tests_inspected` (which), `tests_added_or_changed` (paths),
+`red_observed` (the failure seen before the fix, when applicable),
+`verification_run` (command + result), `exception_reason` (only for
+recorded deliberate exceptions).
+
+**Provenance rule for subagent-executed tasks:** the red-before-fix
+observation exists only in the worker's report — worker prompts must
+require these evidence fields in the final message, and evidence for
+delegated work comes from that report, never reconstructed from the diff
+afterward. If a worker omitted a field, re-derive what the current tree
+allows and mark the rest **UNVERIFIED** — never fabricate an observation
+the worker never reported.
 
 Callers that receive work back (e.g. `/cepa:lfg` receiving the build phase's
 result) must require this evidence when behavior changed. If evidence is
