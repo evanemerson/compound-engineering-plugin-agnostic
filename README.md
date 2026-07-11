@@ -20,14 +20,15 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 ## What's Included
 
-### Commands (6)
+### Commands (7)
 
 | Command | What It Does |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
-| `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Supports `mode:headless` |
+| `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Supports `mode:headless` |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Seeds the CONCEPTS.md vocabulary map. Supports `mode:headless` |
+| `/cepa:compound-refresh` | Refresh `docs/solutions/` against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md. Supports `mode:headless` |
 | `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
 | `/cepa:setup` | Health-check a project's cepa scaffold (read-only) or `fix` it: create missing dirs/config and install a stack-matched CI template |
 
@@ -64,7 +65,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 | Skill | What It Does |
 |---|---|
-| `compound-docs` | Solution document format, 8-category taxonomy, plan-solution bidirectional linking |
+| `compound-docs` | Solution document format (with mandatory Detection sections for review agents), 8-category taxonomy, plan-solution bidirectional linking, CONCEPTS.md vocabulary-map format |
 | `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
 | `autonomy` | The autonomy contract: gate resolution, run-to-completion execution, verification evidence, safe auto-apply, residual durability |
 

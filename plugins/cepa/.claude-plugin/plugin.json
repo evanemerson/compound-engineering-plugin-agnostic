@@ -1,7 +1,7 @@
 {
   "name": "cepa",
   "description": "Compound engineering: full task orchestration (gated or autonomous), 11 review agents (8 roster + 3 signal-dispatched) with confidence-scored findings, solution documentation, batch-first triage, and the hands-off /cepa:lfg pipeline. Framework-agnostic via cepa.local.md.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": {
     "name": "Evan",
     "email": "evan@dpcpro.com"
