@@ -62,8 +62,12 @@ your knowledge base." and stop.
 With 9+ candidates, triage before deep investigation: read all frontmatter,
 cluster by module/category, spot-check whether each cluster's primary
 referenced files still exist, and work the clusters in impact order (a dense
-cluster with missing references first). Interactive mode confirms the
-starting cluster; headless processes all clusters in that order.
+cluster with missing references first). Headless processes all clusters in
+that order. Interactive mode confirms the starting cluster, then proceeds
+cluster by cluster — after finishing one, ask whether to continue to the
+next or stop. Either way, docs left uninvestigated are never silent: the
+report's "Not processed this run" line (Phase 5) names them, and "Scanned"
+counts only docs actually investigated.
 
 ## Maintenance Model
 
@@ -276,8 +280,20 @@ Scanned: N docs
 
 Kept: X | Updated: Y | Consolidated: C | Replaced: Z | Deleted: W | Marked stale: S
 Detection sections backfilled: D (gaps flagged, not backfilled: G)
+Not processed this run: K docs (clusters ...)   <- whenever candidates found > docs investigated
 CONCEPTS.md: <scanned, no qualifying terms | created with N entries | updated — added A, refined R, scrubbed V>
 ```
+
+**Derived-rule check on every stale-mark, Replace, and Delete:** these
+outcomes all mean the doc's guidance changed standing — so run the same
+markdown citation grep the Delete flow uses, but over instruction files
+(CLAUDE.md, AGENTS.md, cepa.local.md). Any rule citing or plainly derived
+from the affected doc gets a flagged line in the report ("instruction-file
+rule may derive from <doc> — review it"), because the rule keeps steering
+agents after its provenance went stale. Never edit instruction files
+autonomously — the flag is the deliverable. (Projects that promote
+solution-doc prevention rules into CLAUDE.md accumulate exactly this
+exposure; one scanned project carries 20+ such rules.)
 
 Then per file: path, classification, evidence found, action taken. For
 Consolidate: which doc was canonical, what merged, what was deleted. In

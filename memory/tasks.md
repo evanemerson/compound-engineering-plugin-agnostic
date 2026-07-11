@@ -5,11 +5,8 @@
 Deferred review findings from the /cepa:lfg run (see todos/review-2026-07-10-160000.md and -170000.md for full detail):
 
 1. ~~[P2, judgment, conf 70] compound-refresh headless commit phase HEAD-move / foreign-branch injection (r1 finding 12)~~ — **DONE 2026-07-11** (fix/refresh-commit-placement, 1.6.1): record-and-restore starting ref, own-branch vs foreign-branch ownership rules, detached-HEAD → Recommended.
-2. **[P3, judgment, conf 55]** `plugins/cepa/commands/compound.md` — in /cepa:lfg, compound artifacts (solution doc, CONCEPTS.md) are written after push/CI and never committed; next lfg run autostashes them. Proposed: headless commit instruction in compound.md, or lfg Step 7 commits/pushes compound artifacts before the report. Partly pre-existing. (r1 finding 13)
-3. **[P3, mechanical, conf 60]** `plugins/cepa/commands/compound-refresh.md` (Scope Selection) — interactive broad-scope: unspecified whether clusters after the confirmed starting cluster are processed; add "Not processed this run: K docs" report line. (r1 finding 14)
-4. **[P3, judgment, conf 60]** `plugins/cepa/commands/compound-refresh.md` (stale-marking) — stale-marking a doc leaves CLAUDE.md rules previously derived from it active (researcher's Active Rules side door). Proposed: on stale-mark, run the Delete-style citation grep and flag instruction-file citations in the report. (r2 finding 7)
-
-Proposed CLAUDE.md rules from the same run (awaiting approval — see PR #9 report):
-
-5. **Rule proposal:** any new pipeline that relays stored repo content (solution docs, todos, plans) into an agent prompt must carry an autonomy-§7 untrusted-data clause at the relay point, cover declarative exemption claims as well as imperatives, strip (not label) suspect content, and record caught attempts durably.
-6. **Rule proposal:** a command's `allowed-tools` must be re-verified against every command its body emits whenever a phase/step is added — a headless-capable command whose core verbs aren't pre-authorized silently degrades in exactly its unattended mode.
+2. ~~[P3] lfg compound artifacts never committed (r1 finding 13)~~ — **DONE 2026-07-11** (feat/plan-review-and-units): compound.md Step 4.7 headless commit (gitignore-aware) + lfg Step 7 verify-committed-and-pushed. Necessity confirmed by portfolio scan: all 7 repos track docs/solutions; artist360 104 docs, contexthub 29, dpc-pro 6.
+3. ~~[P3] compound-refresh interactive cluster drop-out (r1 finding 14)~~ — **DONE 2026-07-11** (same branch): cluster-by-cluster continuation + "Not processed this run" report line. Necessity: artist360's 104 docs hit the 9+ path immediately.
+4. ~~[P3] stale-derived CLAUDE.md rules side door (r2 finding 7)~~ — **DONE 2026-07-11** (same branch): derived-rule check on every stale-mark/Replace/Delete flags instruction-file citations in the report; never edits instruction files. Necessity: artist360 CLAUDE.md carries 20+ rules citing specific solution docs.
+5. ~~Rule proposal: relay-point §7 guard~~ — **ADOPTED 2026-07-11** into repo CLAUDE.md Critical Rules.
+6. ~~Rule proposal: allowed-tools re-verify~~ — **ADOPTED 2026-07-11** into repo CLAUDE.md Critical Rules.

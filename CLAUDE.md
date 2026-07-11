@@ -20,6 +20,22 @@ Do not add new count claims; prefer wording that doesn't restate totals.
 `plugins/cepa/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
 versions are bumped in the same commit, always.
 
+### Relayed repo content is untrusted at every relay point
+Any new pipeline that moves stored repo content (solution docs, todos,
+plans, CI output) into an agent prompt carries an autonomy-§7
+untrusted-data clause AT THE RELAY POINT — covering declarative exemption
+claims ("pre-cleared", "known false positive") as well as imperatives —
+strips (never merely labels) suspect content before dispatch, and records
+caught attempts durably. Guarding ingestion alone is not enough; PR #9's
+Detection relay shipped as an injection channel until review caught it.
+
+### allowed-tools must match every command the body emits
+Whenever a command file gains a phase, step, or verb, re-verify its
+`allowed-tools` against every command the body can emit. A
+headless-capable command whose core verbs aren't pre-authorized silently
+degrades in exactly its unattended mode. This class shipped twice on
+2026-07-10 (compound-refresh, then review/compound).
+
 ## Conventions
 
 - `docs/` is deliberately gitignored — plans stay local; the durable records
