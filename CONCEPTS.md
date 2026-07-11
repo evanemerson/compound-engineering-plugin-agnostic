@@ -16,6 +16,32 @@ A solution doc that matched the current work but carries no usable Detection sig
 ### Stale marking
 The refresh outcome for a doc whose accuracy is in doubt but where evidence is insufficient to update, replace, or delete it. A stale-marked doc is quarantined by consumers: it is reported separately, never presented as trustworthy, and its Detection signals are never relayed.
 
+## Planning
+
+### Implementation Unit
+One meaningful, atomically-committable change inside a plan, carrying its
+own files, test scenarios, and verification outcomes. Units have stable
+IDs that are never renumbered — reordering, splitting, and deletion all
+preserve existing IDs so cross-references from findings, solution docs,
+and executors survive plan edits.
+
+### Plan-review panel
+A set of persona reviewers dispatched over a plan document before any
+code is written. Two personas always run; the rest activate on signals in
+the document, and every non-dispatch is recorded with its reason.
+
+### Confidence anchor
+A discrete confidence value with defined behavior at each level: the two
+lowest levels are never emitted, the middle level is advisory, and only
+the top two levels are actionable. Distinct from a sliding 0-100 score —
+each anchor routes, not ranks.
+
+### Validated origin
+The state of a plan whose upstream authority — a design document or a
+scope-pinning issue — has been verified to exist by the reviewer itself,
+never taken from the plan's own claims. Validated origin suppresses
+premise-level challenge; its absence invites full premise scrutiny.
+
 ## Review pipeline
 
 ### Finding
