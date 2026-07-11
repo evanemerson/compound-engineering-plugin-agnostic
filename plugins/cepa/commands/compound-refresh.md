@@ -253,12 +253,41 @@ headless mode, split actions into **Applied** (writes succeeded) and
 manually).
 
 **Commit:** skip when nothing changed. Stage ONLY the files this refresh
-touched. Interactive mode: offer commit options fitting the current branch
-state. Headless defaults: on main → create `docs/refresh-<scope>`, commit,
-attempt a PR (report the branch name if PR creation fails); on a feature
-branch → separate commit on that branch; git failure → include the
-recommended commands in the report and continue. Commit message summarizes
-the refresh (e.g., "docs: refresh 3 stale learnings, consolidate 2, delete 1").
+touched. Commit message summarizes the refresh (e.g., "docs: refresh 3
+stale learnings, consolidate 2, delete 1").
+
+**Record the starting point first.** Before Phase 3 executes any action,
+record the starting ref — the current branch name, or the exact SHA when
+detached — and whether the tree has uncommitted changes. The rules below
+exist to honor one invariant: **the run never leaves HEAD somewhere the
+user didn't put it, and never lands commits in work that isn't its own.**
+
+Headless rules:
+
+- **On main (or the repo's default branch):** create `docs/refresh-<scope>`
+  from the starting ref, commit the staged refresh files, push and attempt
+  a PR (report the branch name if PR creation fails) — then check the
+  starting ref back out, always. Unrelated dirty files are protected twice:
+  selective staging keeps them out of the commit, and the checkout-back
+  returns them with HEAD. Never stash them — a stash is user work at risk.
+- **On a feature branch that is this run's own work** — the user invoked
+  the refresh while working on that branch, or a pipeline caller (e.g.
+  `/cepa:lfg`) invoked it as part of that branch's flow: separate commit on
+  the current branch; HEAD never moves.
+- **On a feature branch the run does not own** — a scheduled or standalone
+  headless run that simply finds itself there — do NOT commit: someone
+  else's open PR would suddenly contain doc refreshes and deletions.
+  Downgrade every action to **Recommended**, with the exact `git add`/
+  `git commit` commands and a summary of the staged-but-uncommitted diff in
+  the report. When ownership is ambiguous, treat the branch as not owned.
+- **Detached HEAD:** treat as not-owned — Recommended, never commit.
+- **Git failure at any step:** include the recommended commands in the
+  report and continue; if the failure happened after a branch was created,
+  still restore the starting ref before finishing.
+
+Interactive mode: offer commit options fitting the current branch state, as
+before — and any option that creates a branch ends by checking the starting
+ref back out, same invariant.
 
 ## When to Stop
 
