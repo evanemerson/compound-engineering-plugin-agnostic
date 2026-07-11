@@ -203,11 +203,33 @@ This skill will:
 3. Save to `docs/plans/YYYY-MM-DD-<feature-name>.md`
 4. Offer execution choice (subagent-driven or parallel session)
 
+**Post-condition — the saved plan follows `cepa:implementation-units`:**
+tasks rendered as `### U<N>.` units (Files with test paths, Test
+scenarios, Verification) plus a `## Verification Contract` section.
+Superpowers owns the planning process; cepa owns the artifact format —
+restructure the output to units before committing if it lacks them. For
+trivially atomic work, the skill's plan-warranted gate (4 skip
+conditions) allows skipping the plan document entirely — record why.
+
 **Commit the plan before starting implementation:**
 ```bash
 git add docs/plans/
 git commit -m "docs: add implementation plan for <feature>"
 ```
+
+### 3.1b Plan Review
+
+Run `/cepa:plan-review` on the committed plan — never build from an
+unreviewed plan. *[autonomy-convertible]*
+
+- **Gated mode:** run it interactive; P1 findings are fixed in the plan
+  immediately (mirroring 4.4's severity handling), P2/P3 presented as
+  numbered choices alongside the findings file.
+- **Full autonomy:** run `mode:headless`; eligible fixes auto-apply to the
+  plan per autonomy §4 (committed as `docs: revise plan per plan review`),
+  judgment findings go durable per §5, and a judgment-class P1 plan
+  finding stops for the user — a critical design decision precedes any
+  build.
 
 ### 3.2 Build
 
@@ -385,6 +407,8 @@ If the user invokes `/cepa:task` on an existing feature branch (not main):
 - **Never skip design** — even for "simple" tasks, run brainstorming (it can be brief)
 - **Always research learnings before planning** — check docs/solutions/ and CLAUDE.md
 - **Always commit the plan** before implementation starts
+- **Never build from an unreviewed plan** — the plan-review panel (3.1b)
+  runs between plan commit and build
 - **Auto-fix P1s** — don't ask, just fix critical issues
 - **Numbered choices for everything else** (gated mode) — user picks the number, you execute. In `full` autonomy, gates marked *[autonomy-convertible]* resolve silently per the `cepa:autonomy` skill; residuals are filed durably, never dropped
 - **One task in progress at a time** — don't parallelize implementation tasks unless they are provably independent (disjoint files, autonomy §2)
