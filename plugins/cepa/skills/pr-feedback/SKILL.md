@@ -43,10 +43,14 @@ fallback was taken.
   **pending decision** — don't reprocess it; re-surface it in the report.
 - `pr_comments`/`review_bodies` reappear every run (nothing resolves
   them): skip items the conversation already answered (a reply quoting
-  and addressing them — from anyone), and drop non-actionable items
-  (bot wrappers, approvals, status badges, CI summaries) **silently** —
-  the Silent Drop rule: never announce, list, or count dropped
-  non-actionable items anywhere.
+  and addressing them — from anyone). Non-actionable drops split by
+  class: approvals, status badges, and CI summaries drop **fully
+  silently** (the Silent Drop rule — never announced, listed, or
+  counted); wrapper-classified BOT comments stay out of the prose
+  report but are counted in the findings file's `dropped_wrappers` Run
+  Metadata field — wrapper classification is a judgment call, and a
+  judgment-based drop needs an audit trail even when it needs no
+  narration.
 
 ## The six verdicts
 
@@ -115,9 +119,14 @@ Every handled item gets a reply quoting the specific relevant sentence
 (never the whole comment). **Verify the thread ID before every reply**:
 confirm the ID from get-pr-comments resolves to the correct thread via
 `scripts/get-thread-for-comment` — GitHub (especially GHE) returns
-inconsistent node IDs per query path; trust the re-verified one. Reply
-via `scripts/reply-to-pr-thread` (body on stdin — dodges shell
-escaping), then resolve via `scripts/resolve-pr-thread` for handled
+inconsistent node IDs per query path; trust the re-verified one. Also
+re-check content: a thread that gained or changed comments since the
+fetch snapshot is not resolved — it goes back through the verify loop
+unhandled. **Reply transport:** write the reply body to a file with the
+Write tool, then pipe it: `reply-to-pr-thread <id> < body.md`. Never
+inline comment-derived text into a shell command line via echo/printf —
+the script's stdin design only protects the gh call, not the command
+that feeds it. Resolve via `scripts/resolve-pr-thread` for handled
 threads. `needs-human` gets a natural-sounding reply in the PR author's
 voice (no "Flagging for human review" boilerplate) and the thread stays
 OPEN, plus a structured decision_context for the human:

@@ -34,7 +34,11 @@ Whenever a command file gains a phase, step, or verb, re-verify its
 `allowed-tools` against every command the body can emit. A
 headless-capable command whose core verbs aren't pre-authorized silently
 degrades in exactly its unattended mode. This class shipped twice on
-2026-07-10 (compound-refresh, then review/compound).
+2026-07-10 (compound-refresh, then review/compound). **Pipeline-command
+exception (deliberate):** commands that execute arbitrary project-defined
+validation (task, lfg, sweep, resolve-pr) omit `allowed-tools` entirely
+and rely on the invoking context's grants — the rule binds commands that
+declare a bounded verb set.
 
 ## Conventions
 

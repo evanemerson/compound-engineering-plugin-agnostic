@@ -51,8 +51,16 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
 - No argument → the current branch's PR (`gh pr view --json number`).
 - PR number → that PR. Comment/thread URL → **targeted mode**: fetch
   only that thread (via `get-thread-for-comment`), then run the same
-  judge → fix → reply flow on it alone.
+  judge → fix → reply flow on it alone. Targeted mode still writes the
+  findings file (`scope: pr-feedback:#N`, single finding) and ends with
+  the same report — a targeted verdict is as durable as a full-run one.
 - No PR found → stop with "No PR to resolve."
+- **Unattended ownership gate:** in `mode:headless` (or fail-safe
+  headless), verify the PR's `author.login` is the operator/pipeline
+  identity (the same allowlist check `/cepa:sweep` uses); otherwise
+  every item demotes to needs-human and the run reports — an unattended
+  resolver must not push commits to a PR nobody authorized it for.
+  Interactive runs proceed; the user is present.
 
 ## Step 2: Fetch
 
@@ -99,18 +107,35 @@ Stage ONLY the files the fixes changed. Commit
 ## Step 7: Reply and Resolve (after push only)
 
 Per the skill's conventions: verdict-templated replies quoting the
-specific sentence, thread-ID re-verification before every reply,
-resolve handled threads, needs-human replies in natural voice with the
-thread left OPEN. Update finding statuses: fixed* → `applied`,
-replied/not-addressing/declined → `skipped` (retained, evidence in
-body), needs-human → `pending` (interactive) / `deferred` (headless,
-plus the §5 sinks).
+specific sentence — **the reply body is written to a file with the
+Write tool and piped to `reply-to-pr-thread` on stdin; never inline
+comment-derived text into a shell command line** — thread-ID
+re-verification before every reply, AND a content re-check: if the
+thread gained or changed comments since the Step 2 snapshot, do not
+resolve — route it back through Step 8 as unhandled. Resolve handled
+threads; needs-human replies in natural voice with the thread left OPEN.
+
+**Statuses follow successful posts:** a finding flips to `applied` /
+`skipped` only after its reply (and resolve, where applicable) actually
+posted; a failed reply leaves the status unchanged, records
+`reply_failed: <reason>` in the finding body, and the item re-enters
+the Step 8 loop. needs-human → `pending` (interactive) / `deferred`
+(headless, plus the §5 sinks).
+
+## Step 7.5: Record
+
+Commit the findings file, its status updates, and any memory/tasks.md
+entries as a second commit — `chore: record PR feedback verdicts (#N)`
+— and push it. The run ends tree-clean; verdicts must not evaporate
+with the session.
 
 ## Step 8: Verify
 
-Re-fetch. Unhandled threads remaining → loop from Step 3, at most 2
+Re-fetch ALL THREE buckets (not just review_threads). Unhandled threads
+or `reply_failed` items remaining → loop from Step 3, at most 2
 fix-verify cycles total; before a third, stop and surface the recurring
-pattern as needs-human. Suggest `/cepa:review mode:headless <N>` as
+pattern as needs-human — items still `reply_failed` at the cap go
+needs-human with the §5 sinks. Suggest `/cepa:review mode:headless <N>` as
 independent post-fix verification (it dispatches the
 previous-comments-reviewer on the PR-threads signal).
 

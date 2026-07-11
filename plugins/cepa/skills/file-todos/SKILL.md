@@ -187,7 +187,18 @@ dropped_below_anchor: 0          # plan-review: findings dropped at anchor 0/25
 validation_drops:                # plan-review: malformed findings dropped at
   - agent: coherence             # synthesis step 1, counted per persona —
     count: 0                     # an uncounted drop is a silently lost finding
+suspect_comments: 0              # resolve-pr: stripped imperatives/claims from
+                                 # PR comment text (each also filed as a
+                                 # corrupted-input finding)
+fetch_fallback: none             # resolve-pr: none | "taken — <reason>" — a
+                                 # degraded gh-view/REST fetch must never look
+                                 # like a full one
+dropped_wrappers: 0              # resolve-pr: wrapper-classified bot comments
+                                 # dropped at triage (audit trail, not noise)
 ```
+
+`scope:` examples: `feature/billing-phase-7` (code review),
+`plan:docs/plans/<file>` (plan review), `pr-feedback:#42` (resolve-pr).
 
 Rules:
 - `conditional_dispatch` lists ALL conditional-tier agents each run, fired or
@@ -216,7 +227,10 @@ To find all pending P1 findings across all review files:
 - Finding numbers are sequential within a file, starting at 1
 - Skipped findings are removed entirely from the file during human-driven
   triage (not just marked). Autonomous runs never delete — they mark
-  `deferred` and file to the residual sinks
+  `deferred` and file to the residual sinks — except the sanctioned
+  /cepa:resolve-pr verdict skips (replied/not-addressing/declined), which
+  stay `skipped` and RETAINED with their evidence, and are never filed to
+  the residual sinks (they are answered, not deferred)
 - The frontmatter `summary` is the source of truth for counts
 - Keep finding titles under 80 characters
 - Code snippets in Problem/Fix sections use fenced code blocks with language tags
