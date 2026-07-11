@@ -16,7 +16,8 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
 
 - **Interactive (default):** run as written below, ending with the Step 6
   report and the `/cepa:triage` suggestion.
-- **`mode:headless`** (for callers like `/cepa:lfg`, scheduled runs, and
+- **`mode:headless`** (for callers like `/cepa:lfg`, `/cepa:sweep`,
+  `/cepa:resolve-pr` post-fix verification, scheduled runs, and
   autonomous `/cepa:task`): never prompt the user for anything. Skip the
   conversational parts of Step 6 and instead end by returning a structured
   summary: the findings file path, counts by severity, the counts of
@@ -225,6 +226,8 @@ Present a summary to the user:
   structured summary; a zero-signal run must be visibly distinguishable from
   full coverage)
 - Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/cepa:triage` to triage them (batch auto-apply by default; `interactive` for one-at-a-time)."
+- When this was a PR-mode review and unresolved human review threads
+  exist on the PR, add `/cepa:resolve-pr <N>` as a numbered next step.
 
 ## When to Stop
 

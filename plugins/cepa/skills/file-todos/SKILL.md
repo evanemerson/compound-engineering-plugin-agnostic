@@ -1,6 +1,6 @@
 ---
 name: file-todos
-description: Structured YAML frontmatter format for review findings in todos/. The single canonical spec, produced by /cepa:review and /cepa:plan-review, consumed by /cepa:triage and /cepa:lfg.
+description: Structured YAML frontmatter format for review findings in todos/. The single canonical spec, produced by /cepa:review, /cepa:plan-review, and /cepa:resolve-pr, consumed by /cepa:triage, /cepa:lfg, and /cepa:sweep.
 ---
 
 # File-Based Todo Tracking
@@ -109,6 +109,10 @@ pending  →  skipped   (rejected during triage — removed from file)
 pending  →  applied   (auto-applied by an autonomous run — fix committed)
 pending  →  deferred  (filed as residual work by an autonomous run —
                        also recorded in memory/tasks.md and the PR body)
+pending  →  skipped   (autonomous, /cepa:resolve-pr verdicts only:
+                       replied / not-addressing / declined — the finding
+                       is RETAINED in the file with its evidence, unlike
+                       human-triage skips)
 ready    →  completed (fixed and verified)
 deferred →  completed (fixed later in a dedicated pass, outside triage —
                        add a `resolved:` line naming the date and branch)
@@ -116,7 +120,9 @@ deferred →  completed (fixed later in a dedicated pass, outside triage —
 
 `skipped` removal applies to human-driven triage only (a batch-table reply
 or the one-at-a-time flow). Autonomous runs never delete findings:
-unresolved items become `deferred` so the record survives.
+unresolved items become `deferred` so the record survives — and the one
+sanctioned autonomous `skipped` (the /cepa:resolve-pr verdict edge above)
+retains the finding in the file with its evidence, never removes it.
 
 ## Frontmatter Summary
 

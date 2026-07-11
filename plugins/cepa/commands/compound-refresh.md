@@ -182,7 +182,7 @@ Compare in-scope docs against each other, not just against reality:
 starting ref (current branch name, or the exact SHA when detached), the set
 of paths with uncommitted changes, and whether this run OWNS the current
 branch. Own means the user invoked the refresh while working on this
-branch, or a pipeline caller (e.g. `/cepa:lfg`) invoked it as part of this
+branch, or a pipeline caller (e.g. `/cepa:lfg` or `/cepa:sweep`) invoked it as part of this
 branch's flow; a scheduled or standalone headless run does not own a
 feature branch it merely finds itself on. Ambiguous ownership or detached
 HEAD counts as not owned. Two rules consume this record:
@@ -324,8 +324,8 @@ Headless rules:
   returns them with HEAD. Never stash them — a stash is user work at risk.
 - **On a feature branch that is this run's own work** — the user invoked
   the refresh while working on that branch, or a pipeline caller (e.g.
-  `/cepa:lfg`) invoked it as part of that branch's flow: separate commit on
-  the current branch; HEAD never moves.
+  `/cepa:lfg` or `/cepa:sweep`) invoked it as part of that branch's flow:
+  separate commit on the current branch; HEAD never moves.
 - **On a feature branch the run does not own** (per the Phase 3 execution
   gate): the run was in report-only mode — nothing was written or staged,
   so there is nothing to commit. Every action appears in the report as
