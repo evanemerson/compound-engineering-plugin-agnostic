@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*)
 ---
 
 # Compound Documentation
@@ -22,9 +22,10 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   CONCEPTS.md vocabulary updates (Step 4.5 — a silent side effect in every
   mode) exactly as below, but do NOT suggest or perform CLAUDE.md edits —
   return the saved doc path(s), the plan links created, the CONCEPTS.md
-  outcome, and the prevention recommendations as structured output for the
-  caller's report. Sub-agents return text to this orchestrator; only the
-  orchestrator writes files.
+  outcome, the commit outcome (Step 4.7 — committed SHA, local-only list,
+  or `failed — <reason>`), and the prevention recommendations as structured
+  output for the caller's report. Sub-agents return text to this
+  orchestrator; only the orchestrator writes files.
 
 ## Step 1: Gather Context
 
@@ -138,6 +139,24 @@ root, following the `cepa:compound-docs` skill's vocabulary-map rules:
    Neither case may be reported as "no qualifying terms" — that phrase
    claims a scan happened and came up empty.
 
+## Step 4.7: Commit the Artifacts (headless mode)
+
+In headless mode, the artifacts must not be left uncommitted — a caller
+pipeline (`/cepa:lfg`) runs this command after its push, and an uncommitted
+artifact gets autostashed by the next run's git audit, so the compounding
+output would structurally never ship.
+
+1. Identify what this command wrote: the solution doc, the plan file (if a
+   `## Solutions` link was added), and CONCEPTS.md (if Step 4.5 touched it).
+2. Drop anything gitignored (`git check-ignore <path>` — some repos ignore
+   `docs/` entirely); those are reported as local-only, never force-added.
+3. If anything tracked remains: stage ONLY those files, commit
+   `docs(compound): <solution title>`, and push when the current branch has
+   an upstream. A failed commit or push is reported as
+   `commit: failed — <reason>` with the file list — never silently dropped.
+
+Interactive mode skips this step — the user decides when to commit.
+
 ## Step 5: Report
 
 Present to the user:
@@ -145,5 +164,6 @@ Present to the user:
 - File path where the solution was saved
 - Any plan-solution links created
 - CONCEPTS.md outcome: created (N entries), updated (terms added/refined), no qualifying terms, vocabulary capture skipped (no candidates block), or failed — reason + terms for manual apply
+- Commit outcome (headless): committed SHA + files, local-only (gitignored) list, or failed — reason
 - Prevention recommendations that might warrant CLAUDE.md updates
 - Say: "Solution documented. Consider running `/claude-md-management:revise-claude-md` if prevention rules should be added to CLAUDE.md."

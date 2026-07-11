@@ -164,9 +164,17 @@ Run `/cepa:compound mode:headless` for medium/large work, or the inline
 capture from `/cepa:task` Phase 5.1 for small fixes. **Verify the returned
 solution-doc path exists on disk** before claiming it in the report; a
 missing doc means "Compound outcome: failed (reason)" (autonomy §6), not a
-silent no-op. Proposed CLAUDE.md / cepa.local.md rules are NOT applied —
-they go in the report as numbered choices, and into `memory/tasks.md` so
-they survive if the report is ignored.
+silent no-op. **Then verify the compound artifacts are committed and
+pushed** — headless `/cepa:compound` commits what it wrote (its Step 6);
+if any tracked artifact (solution doc, plan-link edit, CONCEPTS.md) is
+still uncommitted, commit it here (`docs(compound): <title>`, staging only
+those files) and push before the report. An artifact left uncommitted gets
+autostashed by the NEXT run's Step 1 — the compounding output would
+structurally never ship. Artifacts under a gitignored path (some repos
+gitignore `docs/`) are exempt: report them as local-only. Proposed
+CLAUDE.md / cepa.local.md rules are NOT applied — they go in the report as
+numbered choices, and into `memory/tasks.md` so they survive if the report
+is ignored.
 
 ## Step 8: The Report
 
