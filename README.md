@@ -20,11 +20,12 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 ## What's Included
 
-### Commands (7)
+### Commands (8)
 
 | Command | What It Does |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
+| `/cepa:plan-review` | Persona-panel review of a plan document before build — conditional activation, confidence anchors, findings in the standard todos/ format. Supports `mode:headless` |
 | `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Seeds the CONCEPTS.md vocabulary map. Supports `mode:headless` |
@@ -61,13 +62,15 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
 | `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
-### Skills (3)
+### Skills (5)
 
 | Skill | What It Does |
 |---|---|
 | `compound-docs` | Solution document format (with mandatory Detection sections for review agents), 8-category taxonomy, plan-solution bidirectional linking, CONCEPTS.md vocabulary-map format |
 | `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
-| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution, verification evidence, safe auto-apply, residual durability |
+| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety, idempotency), verification evidence, safe auto-apply, residual durability |
+| `implementation-units` | Canonical plan-task format: `### U<N>.` units with stable IDs, per-unit test scenarios, verification split, plan-warranted gate |
+| `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
 
 ---
 
@@ -234,11 +237,22 @@ Delegates to `superpowers:writing-plans`, which:
 2. Breaks work into bite-sized tasks (2-5 minutes each)
 3. Saves to `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
-The plan is committed before implementation starts:
+The saved plan is structured as Implementation Units (the
+`implementation-units` skill — stable `U<N>` ids, per-unit files, test
+scenarios, and verification), then committed before implementation starts:
 ```bash
 git add docs/plans/
 git commit -m "docs: add implementation plan for <feature>"
 ```
+
+**Step 3.1b — Plan Review**
+
+Runs `/cepa:plan-review` on the committed plan — a small persona panel
+(coherence and feasibility always; scope, security, product, and
+adversarial lenses activate on signals) reviews the plan before any code
+is written. Eligible fixes are applied to the plan and committed;
+judgment calls surface as numbered choices (gated) or go durable
+(autonomous). Never build from an unreviewed plan.
 
 **Step 3.2 — Build**
 
