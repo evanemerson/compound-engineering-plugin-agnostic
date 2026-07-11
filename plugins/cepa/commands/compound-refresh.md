@@ -36,7 +36,10 @@ the remainder is the scope hint.
   report and continue — never stop or ask. **Multi-step actions are atomic
   (see Phase 3):** a failed write inside a Consolidate or Replace makes the
   ENTIRE action Recommended — "continue" means continue to the next doc,
-  never onward to that action's delete step. When a scope hint was provided
+  never onward to that action's delete step. **All writes are additionally
+  subject to Phase 3's execution gate** (report-only mode on a branch the
+  run doesn't own; dirty paths read-only) — the gate outranks "apply all
+  unambiguous actions." When a scope hint was provided
   but matched nothing, report the miss and exit without widening to all
   docs; process everything only when NO hint was given.
 
@@ -171,6 +174,36 @@ Compare in-scope docs against each other, not just against reality:
 
 ## Phase 3: Execute
 
+**Execution gate — decided BEFORE any write.** Record three things: the
+starting ref (current branch name, or the exact SHA when detached), the set
+of paths with uncommitted changes, and whether this run OWNS the current
+branch. Own means the user invoked the refresh while working on this
+branch, or a pipeline caller (e.g. `/cepa:lfg`) invoked it as part of this
+branch's flow; a scheduled or standalone headless run does not own a
+feature branch it merely finds itself on. Ambiguous ownership or detached
+HEAD counts as not owned. Two rules consume this record:
+
+- **Not-owned branch → report-only mode.** Phases 3 and 4 make NO writes
+  and stage nothing — no Edit, no `git rm`, no CONCEPTS.md changes. Every
+  action is produced as Recommended from the investigation evidence alone.
+  The invariant is "never mutate work that isn't this run's own," not
+  merely "never commit into it" — a mutated tree or staged deletion left
+  behind lands in the branch owner's next commit even if this run commits
+  nothing. (On main, and on an owned branch, writes proceed normally.)
+- **Dirty paths are read-only — all of them.** Any file with uncommitted
+  changes is user work in progress: never edit, stage, or commit it. This
+  covers candidate docs and CONCEPTS.md, and equally the CITING files that
+  Delete/Consolidate/Replace would touch for citation cleanup or link
+  repointing — a side door is still a door. Re-check dirtiness immediately
+  before each write (scheduled runs are long; a file can become dirty
+  mid-run). An action whose write set includes any dirty path is withheld
+  WHOLE and reported as Recommended ("dirty path <p> — not touched"):
+  partial execution would either blend user work into refresh output (a
+  blend that cannot be unpicked afterwards) or leave half-applied state,
+  e.g. a deleted doc with its citations dangling. Deferring the whole
+  action costs one refresh cycle; both alternatives cost user work or tree
+  consistency.
+
 Apply each classification (interactive mode confirms only the ambiguous
 ones first — Delete with non-obvious evidence, Replace successors, unclear
 canonical choice):
@@ -249,16 +282,48 @@ CONCEPTS.md: <scanned, no qualifying terms | created with N entries | updated �
 Then per file: path, classification, evidence found, action taken. For
 Consolidate: which doc was canonical, what merged, what was deleted. In
 headless mode, split actions into **Applied** (writes succeeded) and
-**Recommended** (writes failed — with enough context for a human to apply
-manually).
+**Recommended**, naming the sub-case per item: *write failed* (apply
+manually), *withheld by the execution gate* (report-only mode or dirty
+path — nothing on disk was changed; review, then apply), or *draft failed
+validation* (Replace successor rejected — do not apply as-is; fix the
+draft or re-run). The sub-cases need different human responses; never
+conflate them.
 
 **Commit:** skip when nothing changed. Stage ONLY the files this refresh
-touched. Interactive mode: offer commit options fitting the current branch
-state. Headless defaults: on main → create `docs/refresh-<scope>`, commit,
-attempt a PR (report the branch name if PR creation fails); on a feature
-branch → separate commit on that branch; git failure → include the
-recommended commands in the report and continue. Commit message summarizes
-the refresh (e.g., "docs: refresh 3 stale learnings, consolidate 2, delete 1").
+touched. Commit message summarizes the refresh (e.g., "docs: refresh 3
+stale learnings, consolidate 2, delete 1").
+
+These rules consume the record made by Phase 3's execution gate (starting
+ref, dirty paths, ownership) and honor the same invariant: **the run never
+leaves HEAD somewhere the user didn't put it, and never mutates or commits
+into work that isn't its own.**
+
+Headless rules:
+
+- **On main (or the repo's default branch):** create `docs/refresh-<scope>`
+  from the starting ref, commit the staged refresh files, push and attempt
+  a PR (report the branch name if PR creation fails) — then check the
+  starting ref back out, always. Unrelated dirty files are protected twice:
+  selective staging keeps them out of the commit, and the checkout-back
+  returns them with HEAD. Never stash them — a stash is user work at risk.
+- **On a feature branch that is this run's own work** — the user invoked
+  the refresh while working on that branch, or a pipeline caller (e.g.
+  `/cepa:lfg`) invoked it as part of that branch's flow: separate commit on
+  the current branch; HEAD never moves.
+- **On a feature branch the run does not own** (per the Phase 3 execution
+  gate): the run was in report-only mode — nothing was written or staged,
+  so there is nothing to commit. Every action appears in the report as
+  Recommended with the exact edits/commands a human needs to apply it.
+- **Detached HEAD:** not-owned → report-only mode; never commit.
+- **Git failure at any step:** include the recommended commands in the
+  report and continue; if the failure happened after a branch was created,
+  still restore the starting ref before finishing.
+
+Interactive mode: offer commit options fitting the current branch state, as
+before. Options that create a branch default to returning to the starting
+ref; an option may explicitly offer to stay on the new branch, and choosing
+it satisfies the invariant — a destination the user picked IS where the
+user put HEAD.
 
 ## When to Stop
 
