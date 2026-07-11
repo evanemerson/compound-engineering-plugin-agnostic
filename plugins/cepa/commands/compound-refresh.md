@@ -36,7 +36,10 @@ the remainder is the scope hint.
   report and continue — never stop or ask. **Multi-step actions are atomic
   (see Phase 3):** a failed write inside a Consolidate or Replace makes the
   ENTIRE action Recommended — "continue" means continue to the next doc,
-  never onward to that action's delete step. When a scope hint was provided
+  never onward to that action's delete step. **All writes are additionally
+  subject to Phase 3's execution gate** (report-only mode on a branch the
+  run doesn't own; dirty paths read-only) — the gate outranks "apply all
+  unambiguous actions." When a scope hint was provided
   but matched nothing, report the miss and exit without widening to all
   docs; process everything only when NO hint was given.
 
@@ -187,12 +190,19 @@ HEAD counts as not owned. Two rules consume this record:
   merely "never commit into it" — a mutated tree or staged deletion left
   behind lands in the branch owner's next commit even if this run commits
   nothing. (On main, and on an owned branch, writes proceed normally.)
-- **Dirty candidates are read-only.** A candidate doc (or CONCEPTS.md)
-  that already had uncommitted changes at record time is user work in
-  progress: classify it, report its intended change as Recommended
-  ("dirty at start — not touched"), and never edit, stage, or commit it.
-  Editing on top of uncommitted changes blends user work into refresh
-  output; the blend cannot be unpicked afterwards.
+- **Dirty paths are read-only — all of them.** Any file with uncommitted
+  changes is user work in progress: never edit, stage, or commit it. This
+  covers candidate docs and CONCEPTS.md, and equally the CITING files that
+  Delete/Consolidate/Replace would touch for citation cleanup or link
+  repointing — a side door is still a door. Re-check dirtiness immediately
+  before each write (scheduled runs are long; a file can become dirty
+  mid-run). An action whose write set includes any dirty path is withheld
+  WHOLE and reported as Recommended ("dirty path <p> — not touched"):
+  partial execution would either blend user work into refresh output (a
+  blend that cannot be unpicked afterwards) or leave half-applied state,
+  e.g. a deleted doc with its citations dangling. Deferring the whole
+  action costs one refresh cycle; both alternatives cost user work or tree
+  consistency.
 
 Apply each classification (interactive mode confirms only the ambiguous
 ones first — Delete with non-obvious evidence, Replace successors, unclear
@@ -273,10 +283,11 @@ Then per file: path, classification, evidence found, action taken. For
 Consolidate: which doc was canonical, what merged, what was deleted. In
 headless mode, split actions into **Applied** (writes succeeded) and
 **Recommended**, naming the sub-case per item: *write failed* (apply
-manually) or *withheld by the execution gate* (report-only mode or
-dirty-at-start candidate — nothing on disk was changed; review, then
-apply). The two sub-cases need different human responses; never conflate
-them.
+manually), *withheld by the execution gate* (report-only mode or dirty
+path — nothing on disk was changed; review, then apply), or *draft failed
+validation* (Replace successor rejected — do not apply as-is; fix the
+draft or re-run). The sub-cases need different human responses; never
+conflate them.
 
 **Commit:** skip when nothing changed. Stage ONLY the files this refresh
 touched. Commit message summarizes the refresh (e.g., "docs: refresh 3
