@@ -275,19 +275,51 @@ End the file body with:
 **Next step:** Run `/cepa:triage` (batch auto-apply by default; pass `interactive` for one-at-a-time).
 ```
 
-## Step 6: Report
+## Step 6: Report (interactive mode)
 
-Present a summary to the user:
-- Total findings by severity
-- Top P1 findings (if any) with brief descriptions
+Present a summary as labeled content, then close with the `## Next steps`
+numbered tail per the **`cepa:autonomy` skill §6** — the same shape every
+cepa command ends with. (Headless mode never reaches here: it returns the
+structured summary from the Modes section instead — the interactive tail
+is for a human picker and callers can't parse it.)
+
+**This tail is top-level only.** Orchestrating commands always invoke
+review with `mode:headless` (lfg Step 4, sweep, resolve-pr verification,
+and `/cepa:task` Phase 4.3 in BOTH gated and full autonomy) — so they get
+the structured summary, own the run's single final `## Next steps` tail
+themselves, and this interactive tail fires only when the user invoked
+`/cepa:review` directly. Never emit it as a sub-step of another command.
+
+**Summary:**
+- Total findings by severity; top P1 findings (if any) with brief descriptions.
 - Detection coverage: "Detection signals: N from M docs" — and when matched
-  docs lack Detection sections, "K matched docs need backfill — run
-  `/cepa:compound-refresh <scope>`" (this line also belongs in the headless
-  structured summary; a zero-signal run must be visibly distinguishable from
-  full coverage)
-- Say: "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`. Run `/cepa:triage` to triage them (batch auto-apply by default; `interactive` for one-at-a-time)."
-- When this was a PR-mode review and unresolved human review threads
-  exist on the PR, add `/cepa:resolve-pr <N>` as a numbered next step.
+  docs lack Detection sections, "K matched docs need backfill" (this line
+  also belongs in the headless structured summary; a zero-signal run must be
+  visibly distinguishable from full coverage).
+- When this was a PR-mode review with unresolved human review threads, state
+  the count ("M open human review threads") — so a clean-diff PR with open
+  threads never reports as fully resolved.
+- "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`."
+
+**`## Next steps`** — 1-indexed per §6; include only the options this run
+produced, renumbered from 1, always ending with a "Stop here" option and a
+one-line recommendation. The candidates:
+1. **Run `/cepa:triage`** — triage the N findings (batch auto-apply by
+   default; `interactive` for one-at-a-time). The lead choice whenever
+   findings were written.
+2. **Run `/cepa:resolve-pr <N>`** — only when this was a PR-mode review with
+   unresolved human review threads; address the M open threads.
+3. **Run `/cepa:compound-refresh <scope>`** — only when K matched docs need
+   Detection backfill (K > 0).
+4. **Stop here** — read the findings file yourself; nothing auto-runs.
+
+Collapse the tail to `1. **Stop here** — clean review, nothing to triage.`
+ONLY when there is genuinely nothing to act on: zero findings written AND
+no open PR threads (option 2's condition) AND no Detection backfill
+candidates (option 3's K==0). If any of those hold, keep the applicable
+options and renumber from 1 (dropping option 1 triage when zero findings)
+— a clean diff with open human threads or backfill candidates must still
+surface them as choices, never collapse them away.
 
 ## When to Stop
 
