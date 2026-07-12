@@ -47,7 +47,11 @@ assumption.
 ## Step 2: Learnings + Plan
 
 1. Dispatch `learnings-researcher` with the task description. Fold its
-   findings into planning context.
+   findings into planning context. When `cepa.local.md` has an
+   `## Integrations` `grounding:` key, run the `cepa:grounding` skill's
+   availability check (and refresh) first; if available, tell the
+   researcher and state the remaining shared query budget — degradation
+   is recorded per the skill, never silent.
 2. If the argument is an existing plan path in `docs/plans/`, use it.
    Otherwise produce a plan: delegate to `superpowers:writing-plans` if
    available, else write the plan yourself. **The plan's task list follows

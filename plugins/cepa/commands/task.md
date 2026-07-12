@@ -153,6 +153,13 @@ derive the description from the task itself — never ask.]*
 
 **Before brainstorming, search institutional knowledge:**
 
+When `cepa.local.md` has an `## Integrations` `grounding:` key, first run
+the `cepa:grounding` skill's availability check (and its refresh, when
+all legs pass); if available, say so in the researcher's dispatch and
+state how many of the shared 5-query budget remain — its optional graph
+pre-step activates only on that signal, and any degradation is recorded
+per the skill, never silent.
+
 Dispatch the `learnings-researcher` agent with the task description. It searches:
 - `docs/solutions/` — past problems and fixes
 - `CLAUDE.md` — existing rules and patterns
