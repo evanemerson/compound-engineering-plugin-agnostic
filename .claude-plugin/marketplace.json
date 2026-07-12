@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "cepa",
-  "description": "Compound engineering workflow: parallel review agents, solution documentation, batch-first triage, and autonomous execution. Framework-agnostic \u2014 adapts to any stack via per-project cepa.local.md configuration.",
+  "description": "Compound engineering workflow: parallel review agents, solution documentation, batch-first triage, and autonomous execution. Framework-agnostic — adapts to any stack via per-project cepa.local.md configuration.",
   "owner": {
     "name": "Evan Emerson",
     "email": "evan@evanemerson.com"
@@ -9,8 +9,8 @@
   "plugins": [
     {
       "name": "cepa",
-      "description": "11 review agents (8 roster + 3 signal-dispatched), persona plan review, Implementation-Units plan format, scheduled residual sweep, PR-feedback resolution, solution documentation, batch-first triage, and gated or hands-off execution (/cepa:lfg) for compound engineering workflows",
-      "version": "1.8.0",
+      "description": "11 review agents (8 roster + 3 signal-dispatched), persona plan review, Implementation-Units plan format, scheduled residual sweep, PR-feedback resolution, optional graphify grounding, solution documentation, batch-first triage, and gated or hands-off execution (/cepa:lfg) for compound engineering workflows",
+      "version": "1.9.0",
       "author": {
         "name": "Evan Emerson",
         "email": "evan@evanemerson.com"

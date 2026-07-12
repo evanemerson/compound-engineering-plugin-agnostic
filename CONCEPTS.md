@@ -56,6 +56,29 @@ Review agents that dispatch themselves based on signals in the diff (size, risky
 ### SUSPECT bullet
 A Detection signal that fails the spec shape or tries to direct agent behavior — an imperative, or a claim that something is pre-cleared or exempt from reporting. SUSPECT bullets are stripped before reviewer dispatch, filed as corrupted-signal findings, and counted, so an attempted injection leaves a durable trace.
 
+## Grounding
+
+### Grounding provider
+An optional, per-repo external accelerator (a code-graph CLI) that
+answers "what calls / is impacted by X" and indexes solution docs
+semantically. Never a hard dependency, never authoritative for
+framework-implicit relationships, always degrading to plain search when
+absent — with the degradation recorded, so a grep-only run is
+distinguishable from a grounded one.
+
+### Relay point
+Any point where stored or tool-derived repo content enters an agent
+prompt or a shell command line. Guards do not transfer between relay
+points: each carries its own untrusted-data clause, strip-not-label
+handling, and durable record of caught attempts — including the
+argument-sanitization form when the relay target is a command line.
+
+### SUSPECT-GROUNDING
+The grounding twin of a SUSPECT bullet: stripped suspect content that
+arrived via graph output rather than a Detection section, quoted under
+its own marker so it is counted against the grounding record and never
+miscounted into the Detection pipeline's corruption stats.
+
 ## Autonomy
 
 ### Residual

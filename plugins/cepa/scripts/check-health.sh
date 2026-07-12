@@ -37,6 +37,40 @@ if [ -d todos ]; then
   info "review files: $(ls todos/review-*.md 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
+# --- grounding provider (optional) ------------------------------------------
+# Facts only; /cepa:setup interprets (cepa:grounding skill is the contract).
+# Section-scoped awk, same reason as the roster count above.
+check_ignore_leg() {
+  # distinguish "not ignored" (exit 1) from git itself erroring (exit >1) —
+  # a wrong MISS diagnosis sends the human to edit .gitignore when git is broken
+  git check-ignore -q "$1" 2>/dev/null
+  case $? in
+    0) ok "grounding: $1 is git-ignored" ;;
+    1) miss "grounding: $1 NOT git-ignored (refresh would dirty the tree — provider degrades)" ;;
+    *) miss "grounding: git check-ignore errored on $1 (git problem, not an ignore problem)" ;;
+  esac
+}
+if [ -f cepa.local.md ] && awk '/^## Integrations/{f=1;next} /^## /{f=0} f' cepa.local.md | grep -q '^grounding:'; then
+  info "grounding provider configured"
+  command -v graphify >/dev/null 2>&1 && ok "grounding: graphify binary on PATH" || miss "grounding: graphify binary NOT on PATH (reviews silently run grep-only)"
+  if [ -e graphify-out ] && [ ! -d graphify-out ]; then
+    miss "grounding: graphify-out exists but is NOT a directory (collision — remove it before any graph build)"
+  else
+    [ -f graphify-out/graph.json ] && ok "grounding: graphify-out/graph.json exists" || miss "grounding: graphify-out/graph.json missing (initial build is a human action)"
+  fi
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    check_ignore_leg graphify-out
+    [ -e graph.json ] && check_ignore_leg graph.json
+  else
+    miss "grounding: not a git repo — ignore legs unverifiable (availability leg 3 fails at runtime; provider degrades every run)"
+  fi
+  grep -q "^## Compliance" cepa.local.md && info "grounding configured in a COMPLIANCE repo — graphify-out arms the global graphify skill's LLM doc pass; human policy needed (cepa:grounding skill)"
+elif [ -f cepa.local.md ] && grep -qi 'grounding' cepa.local.md; then
+  # mentioned but not at the sanctioned location (column-0 'grounding:' under
+  # ## Integrations) — setup report and runtime LLM read could diverge
+  info "grounding mentioned in cepa.local.md but not parseable at the sanctioned location (column-0 'grounding:' under ## Integrations) — see cepa:grounding skill"
+fi
+
 # --- git -------------------------------------------------------------------
 if git rev-parse --git-dir >/dev/null 2>&1; then
   ok "git repo (branch: $(git branch --show-current))"

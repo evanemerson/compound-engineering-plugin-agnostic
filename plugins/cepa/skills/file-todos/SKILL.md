@@ -180,6 +180,28 @@ detection_signals:               # Detection pipeline coverage, every run
 learnings_research: "ok"         # or "failed — <reason>" when the researcher
                                  # errored; a lost institutional-memory input
                                  # must never look like a normal run
+grounding:                       # only when cepa.local.md configures a
+  provider: graphify             # grounding: key — see emission scope below
+  status: fresh                  # fresh | stale — <reason> |
+                                 # degraded — <verb> failed after N queries
+                                 # (partial output was relayed and stands) |
+                                 # unavailable — <reason>
+  refreshed: true                # graphify update ran this run (code-layer
+                                 # freshness ONLY — semantic nodes reflect the
+                                 # last human-scheduled pass)
+  queries: 3                     # shared total, orchestrator + researcher
+                                 # pre-step (budget 5 — cepa:grounding skill);
+                                 # researcher addend comes from its mandatory
+                                 # status line, never estimated
+  pre_step: ok                   # the researcher's status line verbatim:
+                                 # ok — N queries used, … | skipped — <reason>
+                                 # | failed — <reason> | none (researcher not
+                                 # told grounding was available)
+  args_skipped: 0                # arguments rejected by the sanitization rules,
+                                 # BOTH sites (invoker + researcher pre-step)
+  suspect_stripped: 0            # stripped blocks from BOTH strip sites (each
+                                 # also filed as a corrupted-input finding under
+                                 # grounding, never under detection_signals)
 agents_failed:                   # reviewers/personas that errored mid-run —
   - agent: security-lens         # a failed reviewer is a named coverage gap,
     reason: "subagent error"     # never a clean pass
@@ -208,6 +230,18 @@ Rules:
 - `deploy_verdict.verdict` is `not-evaluated` (with the skip rule as
   `basis`) when deployment-verifier was skipped — a missing verdict is
   never silent.
+- `grounding` emission scope, in repos whose `cepa.local.md` configures
+  a `grounding:` key: every `/cepa:review` findings file carries the
+  block, on every path (fresh, stale, degraded, unavailable) — there an
+  absent block is a recording defect. An lfg-invoked plan-review
+  findings file carries it when lfg's Step 2 ran the grounding check
+  (lfg folds those facts in). Producers that never run grounding
+  (resolve-pr, standalone plan-review) omit it — omission by a
+  non-grounding producer is normal, not a defect. Command phases that
+  ground but write no findings file record strips/failures in
+  `memory/tasks.md` per the `cepa:grounding` skill's durable-sink rule.
+  In repos with no `grounding:` key the block is absent by definition —
+  existing files stay valid, no migration.
 - When the verdict is NO-GO or GO WITH CONDITIONS, the full verdict block
   including the rollback plan is ALSO written into the file body as a
   `## Deploy Verdict` section, and the basis/conditions are additionally
