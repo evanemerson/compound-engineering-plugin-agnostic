@@ -241,11 +241,20 @@ line over silent omission.
 
 ## 6. The Consolidated Report
 
-An autonomous run ends with exactly one report. Render it as **labeled
+A run ends with exactly one **final report**. Render it as **labeled
 sections** (headers, not trailing prose) and close it with a numbered
 `## Next steps` tail. The shape below is the contract, not a suggestion —
-it holds identically in `full` and `gated` mode, and whether the run
-shipped, stopped blocked, or did nothing.
+it governs the *final report* identically whether the run was `full` or
+`gated`, and whether it shipped, stopped blocked, or did nothing. It does
+NOT govern a gated run's mid-run interactive gates: those `[autonomy-
+convertible]` numbered choices (stash decisions, overlapping-PR blockers,
+rule approvals) are how gated mode asks, live, before the report exists —
+this contract never suppresses them.
+
+A headless report written to a file (e.g. `/cepa:sweep`'s
+`todos/sweep-*.md`) uses the same tail shape, but as the durable list of
+decisions awaiting the human — read and answered later, not picked
+synchronously.
 
 **Body sections** — include each that applies, each under its own header:
 
@@ -282,8 +291,10 @@ follow-on work, and each blocked item's decision. Its rules:
   loop can be closed with a single number.
 - End with one recommendation line naming the recommended number
   ("My read: 1 — <one clause>").
-- This is the only numbered choice list in the report; proposals and
-  options never appear in mid-run narration, only here.
+- This is the only numbered choice list in the *final report*; in an
+  autonomous (`full`) run, proposals and options belong in this tail, not
+  in mid-run narration. (Gated mid-run interactive gates are the separate
+  mechanism above — untouched by this rule.)
 
 Nothing important may exist only in mid-run narration; if it matters, it is
 in the report.
