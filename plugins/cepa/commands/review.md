@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
 ---
 
 # Compound Review
@@ -29,7 +29,9 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   candidates, plus any `learnings_research: failed` record — see Steps 3
   and 6), and — whenever `cepa.local.md` configures a `grounding:` key —
   the `grounding` status line verbatim (a caller must be told when the
-  run silently ran grep-only). The caller decides what to apply. If `cepa.local.md` is missing in headless mode, run the
+  run silently ran grep-only), and — whenever `cepa.local.md` configures a
+  `brain:` key — the `brain` status line verbatim (same reason). The caller
+  decides what to apply. If `cepa.local.md` is missing in headless mode, run the
   cepa review agents with stack details inferred from the repo, note the
   missing config in the findings file, and continue — never block.
 
@@ -101,6 +103,17 @@ into the `grounding` Run Metadata block (Step 5): sum its queries into
 SUSPECT-GROUNDING blocks are grounding events, NEVER counted in
 `detection_signals.suspect_bullets` or filed as corrupted-signal
 findings), and the line itself into `pre_step:`.
+
+When `cepa.local.md` has an `## Integrations` `brain:` key, likewise run the
+`cepa:brain` pre-flight (`GET /health`) and, if available, tell the
+researcher so its cross-repo recall pre-step activates (see the
+`cepa:brain` skill). Fold its `brain pre-step:` status line into a `brain`
+Run Metadata block (Step 5) exactly as above, routing `SUSPECT-BRAIN`
+strips to `brain.suspect_stripped` (never `detection_signals`). Brain
+recall is institutional-knowledge retrieval (cross-repo `docs/solutions`),
+so it feeds the researcher's normal briefing to all review agents — like
+grounding's `query` output, not its agent-restricted blast-radius output —
+carried as flagged evidence capped at confidence 75 with its provenance.
 
 **Detection signals:** the researcher's briefing includes a
 `### Detection Signals` section — the `## Detection` sections, verbatim, of

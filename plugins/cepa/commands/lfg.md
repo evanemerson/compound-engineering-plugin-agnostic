@@ -56,7 +56,9 @@ assumption.
    findings file's `grounding` Run Metadata block when updating statuses
    there — a caught injection attempt or degradation in the planning
    phase must not evaporate with the briefing (`cepa:grounding` skill,
-   durable-sink rule).
+   durable-sink rule). If a `brain:` key is present, also run the
+   `cepa:brain` pre-flight and tell the researcher (its cross-repo recall
+   pre-step); fold the `brain` facts into the same Step 2.6 findings file.
 2. If the argument is an existing plan path in `docs/plans/`, use it.
    Otherwise produce a plan: delegate to `superpowers:writing-plans` if
    available, else write the plan yourself. **The plan's task list follows

@@ -200,3 +200,14 @@ Read `cepa.local.md` for project-specific adjustments:
 - Custom frontmatter fields can be required
 - Solution directory path can be customized
 - Linking rules can be adjusted
+
+## Brain writeback (optional)
+
+When a repo opts into the cross-repo brain (`brain:` key in
+`cepa.local.md` — see the `cepa:brain` skill), the solution doc on disk
+stays the source of truth, and `/cepa:compound` ALSO mirrors it into the
+brain as typed `memory_payload` atoms (Root Cause / Solution / Prevention /
+Detection points → short prose `lessons`/`constraints`/`failures`, fenced
+code stripped, evidence-only). The doc format above is unchanged; the brain
+is a regenerable compiled index over these docs, never their replacement.
+CONCEPTS terms captured in the same run are written as `lessons` atoms.

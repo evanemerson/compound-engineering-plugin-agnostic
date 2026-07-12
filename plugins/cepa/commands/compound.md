@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(bash:*)
 ---
 
 # Compound Documentation
@@ -138,6 +138,50 @@ root, following the `cepa:compound-docs` skill's vocabulary-map rules:
    "vocabulary capture skipped — classifier returned no candidates block".
    Neither case may be reported as "no qualifying terms" — that phrase
    claims a scan happened and came up empty.
+
+## Step 4.6: Brain Writeback (optional — participating repos only)
+
+When `cepa.local.md` has an `## Integrations` `brain:` key, mirror this
+solution into the cross-repo brain per the **`cepa:brain` skill** (the
+canonical contract). No key → skip entirely; the doc on disk is unchanged
+and authoritative either way.
+
+1. **Decompose, never post the raw doc.** The Agent Memory API takes typed
+   atom arrays and rejects (422) content with ≥2 fenced code blocks or
+   >15k chars. Turn this solution into `memory_payload` atoms — the Root
+   Cause / Solution / Prevention / Detection points as short prose
+   `lessons`/`constraints`/`failures`, **fenced code stripped**, each atom
+   well under 15k. Add the qualifying CONCEPTS terms as `lessons` atoms.
+2. **PHI scrub** — run `brain-client.sh scrub` over every atom before egress
+   (count redactions) when `brain_phi_scrub: true` OR the repo's
+   `cepa.local.md` has a `## Compliance` section (the scrub is FORCED for
+   compliance repos — see the skill; if the scrub tool can't run, SUPPRESS
+   the writeback, do not send unscrubbed).
+3. **Write via the vendored client** (never inline the key on a command
+   line): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh" writeback
+   <payload.json>` which reads `BRAIN_URL` + `MCP_ACCESS_KEY` +
+   `BRAIN_WORKSPACE_ID` from the repo's gitignored `.env.local`, posts
+   `/writeback` with a base `idempotency_key` from
+   `idkey <repo> <doc-path> <payload.json>` (a CONTENT hash — the API
+   appends its own row index; unchanged docs dedup, edited docs get new
+   rows), then `PATCH /memories/:id/review evidence_only` on each returned
+   id. **Promote the ids the call DID return even on a partial (5xx) failure,
+   before degrading** — never leave rows stranded in `pending`. A
+   422/oversize atom is a recorded skip (`suppressed_writebacks`), never silent.
+4. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
+   doc's source path already has active memories (edited doc), `PATCH review
+   mark_stale` on them so recall stops serving the pre-edit version, THEN
+   write the current atoms (their new content hash makes them new rows).
+   (OB1's `supersede` action is a no-op without a related id — use `mark_stale`.)
+5. Record the outcome in the `brain` Run Metadata block; for interactive
+   runs with no findings file, append a one-line `memory/tasks.md` record
+   for any strip/suppression/scrub. A brain failure degrades (grep-only
+   world continues) and loses nothing — the file is source-of-truth.
+
+Compliance: writeback happens ONLY for a repo that declares the `brain:`
+key (opt-in, fail-closed) — and for a `## Compliance` repo the PHI scrub is
+mandatory (step 2). A repo without the `brain:` key is never written,
+regardless of content.
 
 ## Step 4.7: Commit the Artifacts (headless mode)
 

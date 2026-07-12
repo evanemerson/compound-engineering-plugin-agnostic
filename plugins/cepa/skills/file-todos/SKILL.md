@@ -202,6 +202,22 @@ grounding:                       # only when cepa.local.md configures a
   suspect_stripped: 0            # stripped blocks from BOTH strip sites (each
                                  # also filed as a corrupted-input finding under
                                  # grounding, never under detection_signals)
+brain:                           # only when cepa.local.md configures a brain:
+  provider: ob1                  # key (opt-in) — see the cepa:brain skill
+  status: fresh                  # fresh | degraded — <verb> failed: <code> |
+                                 # unavailable — <reason>
+  role: consumer                 # consumer | producer | both
+  queries: 1                     # recall calls this run (budget 1)
+  written: 0                     # memory atoms written (producer)
+  suppressed_writebacks: 0       # atoms skipped (422 / oversize / non-participant)
+                                 # — recorded, never silent
+  scrubbed: 0                    # PHI patterns redacted before egress
+                                 # (brain_phi_scrub repos)
+  args_skipped: 0                # recall-query candidates rejected by sanitization
+  suspect_stripped: 0            # stripped recall blocks (SUSPECT-BRAIN) — each
+                                 # a corrupted-input finding under brain, NEVER
+                                 # detection_signals
+  pre_step: ok                   # researcher recall pre-step status line verbatim
 agents_failed:                   # reviewers/personas that errored mid-run —
   - agent: security-lens         # a failed reviewer is a named coverage gap,
     reason: "subagent error"     # never a clean pass
@@ -242,6 +258,14 @@ Rules:
   `memory/tasks.md` per the `cepa:grounding` skill's durable-sink rule.
   In repos with no `grounding:` key the block is absent by definition —
   existing files stay valid, no migration.
+- `brain` emission scope mirrors `grounding`, in repos whose `cepa.local.md`
+  configures a `brain:` key (opt-in): any findings file a participating run
+  writes carries the block on every path (fresh/degraded/unavailable) — an
+  absent block there is a recording defect; producers that never touch the
+  brain omit it; phases with no findings file (compound interactive,
+  task/lfg research) record brain strips/suppressions/scrubs in
+  `memory/tasks.md` per the `cepa:brain` skill's durable-sink rule. No
+  `brain:` key → block absent by definition, existing files stay valid.
 - When the verdict is NO-GO or GO WITH CONDITIONS, the full verdict block
   including the rollback plan is ALSO written into the file body as a
   `## Deploy Verdict` section, and the basis/conditions are additionally

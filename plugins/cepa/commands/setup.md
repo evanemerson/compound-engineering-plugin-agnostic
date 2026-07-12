@@ -77,6 +77,18 @@ Beyond the script's facts, check:
    are not covered by any command's `allowed-tools`, and without these
    the pre-step reports `failed — permission denial` on every headless
    run (cepa:grounding skill, headless permissions note).
+7. **Brain provider** — when `cepa.local.md` has an `## Integrations`
+   `brain:` key (see the `cepa:brain` skill), interpret: a gitignored
+   `.env.local` must define `BRAIN_URL`, `MCP_ACCESS_KEY`, and
+   `BRAIN_WORKSPACE_ID`, and `.env.local` must be git-ignored — flag a
+   missing/tracked `.env.local` prominently (a committed key is a leak).
+   A `brain:` key in a repo WITH a `## Compliance` section is fine (the PHI
+   scrub is forced on) but note it so the operator confirms the
+   certification. For unattended use, name the operator settings-allowlist
+   entry the recall pre-step needs (`Bash(bash:*)`) — subagent Bash calls
+   aren't covered by `allowed-tools`, so without it the pre-step reports
+   `failed — permission denial` every headless run. Fix mode NEVER writes
+   keys or stands up the OB1 instance — that's the human U1 setup step.
 
 ## Step 3: Report
 

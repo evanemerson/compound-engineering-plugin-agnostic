@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*)
 ---
 
 # Compound Refresh
@@ -244,6 +244,20 @@ sections. If any earlier write in the action failed, perform no further
 steps of that action — leave every involved doc in place and record the
 entire action as Recommended. "Continue" always means continue to the next
 doc, never to a delete whose prerequisites failed.
+
+**Brain sync (participating repos only).** When `cepa.local.md` has a
+`brain:` key and this run OWNS the branch, mirror each executed action into
+the cross-repo brain per the **`cepa:brain` skill**, via
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"` (reads the key from
+`.env.local`, never inline): a Delete or stale-mark → `mark_stale` the
+memories for that source path; a Replace/Update → `mark_stale` the prior
+memories for that path (OB1's `supersede` is a no-op without a related id),
+then write the successor's atoms (new content hash → new rows). No `brain:` key or
+report-only mode → no brain calls (not configured — not a failure). A brain
+call that FAILS when configured → degrade (`status: degraded — <verb>
+failed`) and continue; files stay source-of-truth, so a miss loses nothing,
+but it is never silent. Record counts/status in the `brain` Run Metadata
+block.
 
 ## Phase 4: Vocabulary Reconciliation (CONCEPTS.md)
 

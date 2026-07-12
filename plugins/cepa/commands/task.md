@@ -164,6 +164,13 @@ failure/degradation is appended as a one-line record to
 `memory/tasks.md` (`- grounding: <event> — <source> — <date>`) — the
 briefing alone is not a record.
 
+When `cepa.local.md` has an `## Integrations` `brain:` key, likewise run the
+`cepa:brain` skill's pre-flight (`GET /health`); if available, tell the
+researcher so its cross-repo recall pre-step activates. Same durable-sink
+rule for this no-findings-file phase: any `SUSPECT-BRAIN` strip, skipped
+arg, or degradation is appended to `memory/tasks.md`
+(`- brain: <event> — <source> — <date>`).
+
 Dispatch the `learnings-researcher` agent with the task description. It searches:
 - `docs/solutions/` — past problems and fixes
 - `CLAUDE.md` — existing rules and patterns
