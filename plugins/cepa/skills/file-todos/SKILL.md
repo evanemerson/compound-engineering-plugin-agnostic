@@ -180,6 +180,18 @@ detection_signals:               # Detection pipeline coverage, every run
 learnings_research: "ok"         # or "failed — <reason>" when the researcher
                                  # errored; a lost institutional-memory input
                                  # must never look like a normal run
+grounding:                       # only when cepa.local.md configures a
+  provider: graphify             # grounding: key — then emitted on EVERY run
+  status: fresh                  # fresh | stale — <reason> | unavailable — <reason>
+  refreshed: true                # graphify update ran this run (code-layer
+                                 # freshness ONLY — semantic nodes reflect the
+                                 # last human-scheduled pass)
+  queries: 3                     # shared total, orchestrator + researcher
+                                 # pre-step (budget 5 — cepa:grounding skill)
+  args_skipped: 0                # arguments rejected by the sanitization charset
+  suspect_stripped: 0            # stripped blocks from BOTH strip sites (each
+                                 # also filed as a corrupted-input finding under
+                                 # grounding, never under detection_signals)
 agents_failed:                   # reviewers/personas that errored mid-run —
   - agent: security-lens         # a failed reviewer is a named coverage gap,
     reason: "subagent error"     # never a clean pass
@@ -208,6 +220,11 @@ Rules:
 - `deploy_verdict.verdict` is `not-evaluated` (with the skip rule as
   `basis`) when deployment-verifier was skipped — a missing verdict is
   never silent.
+- `grounding` is emitted only by runs in repos whose `cepa.local.md`
+  configures a `grounding:` key — there it appears on EVERY run and
+  every path (fresh, stale, degraded, unavailable), and an absent block
+  is a recording defect. In repos with no `grounding:` key the block is
+  absent by definition — existing files stay valid, no migration.
 - When the verdict is NO-GO or GO WITH CONDITIONS, the full verdict block
   including the rollback plan is ALSO written into the file body as a
   `## Deploy Verdict` section, and the basis/conditions are additionally
