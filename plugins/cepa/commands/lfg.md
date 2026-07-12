@@ -233,10 +233,15 @@ is ignored.
 
 ## Step 8: The Report
 
-Deliver the consolidated report per **autonomy §6**: shipped work, evidence
-summary, review rounds + applied/deferred counts, CI outcome, every residual
-with its sink, proposed system updates as numbered choices, and any blocked
-items with exactly what input is needed. Then output:
+Deliver the consolidated report per **autonomy §6**: labeled body sections
+(shipped work, evidence summary, review rounds + applied/deferred counts,
+CI outcome, every residual with its sink, git-state changes, blocked
+items) closing with the required `## Next steps` numbered tail — 1-indexed,
+each choice a bold action + one-line why, consolidating proposed system
+updates and every blocked decision, always ending with a "**Stop here**"
+option and a one-line recommendation. Operational instructions
+("merge with `gh pr merge`") stay in the body and never consume a choice
+number. Then output:
 
 `<promise>DONE</promise>`
 

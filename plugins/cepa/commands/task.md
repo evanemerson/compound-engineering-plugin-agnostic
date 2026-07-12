@@ -385,6 +385,15 @@ Save to project memory at `memory/tasks.md`:
 
 ### 5.4 Final Status
 
+Deliver the report as labeled sections closing with the `## Next steps`
+numbered tail, per the **`cepa:autonomy` skill §6** — same contract the
+lfg terminal report uses. The body carries What shipped / Findings /
+Learnings / System updates / Git state; operational instructions
+("merge the PR with `gh pr merge`") stay in the body and never consume a
+choice number. The tail is 1-indexed, each item a bold action + one-line
+why, always ends with a "**Stop here**" option, and closes with a
+one-line recommendation. Shape:
+
 ```
 ## Loop Complete
 
@@ -394,15 +403,17 @@ Save to project memory at `memory/tasks.md`:
 **Learnings:** <summary of what was documented>
 **System updates:** X rules added to CLAUDE.md, Y items deferred
 
-Next steps:
-1. Merge the PR on GitHub
-2. Start next task (/cepa:task)
-3. Address deferred items
+## Next steps
+1. **<recommended action>** — <one-line why>
+2. **<other option>** — <one-line why>
+3. **Stop here** — the loop is complete; nothing is required.
+
+My read: 1 — <one clause>.
 ```
 
 If `cepa.local.md` has an `## Integrations` `post_deploy:` entry whose skill
-is installed, add "Run <skill> after merging to verify production" to the
-next steps.
+is installed, add a "**Run <skill>** to verify production" choice to the
+`## Next steps` list.
 
 ---
 

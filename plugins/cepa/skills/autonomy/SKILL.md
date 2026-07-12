@@ -241,7 +241,13 @@ line over silent omission.
 
 ## 6. The Consolidated Report
 
-An autonomous run ends with exactly one report containing:
+An autonomous run ends with exactly one report. Render it as **labeled
+sections** (headers, not trailing prose) and close it with a numbered
+`## Next steps` tail. The shape below is the contract, not a suggestion —
+it holds identically in `full` and `gated` mode, and whether the run
+shipped, stopped blocked, or did nothing.
+
+**Body sections** — include each that applies, each under its own header:
 
 - What shipped: branch, PR, commits, tasks completed vs planned.
 - Verification evidence summary: tests added/changed, suite results.
@@ -256,9 +262,28 @@ An autonomous run ends with exactly one report containing:
   `git stash pop` command to restore it) and every checkpoint commit (SHA).
   A stash the report never mentions is lost user work.
 - Residuals: every filed item with its sink.
-- Proposed system updates (CLAUDE.md / cepa.local.md rules) as numbered
-  choices — proposals belong in the report, not mid-run.
-- Anything blocked, with exactly what input is needed.
+- Anything blocked: what is blocked and exactly what input unblocks it
+  (the blocking item also becomes a numbered choice in the tail).
+
+**The `## Next steps` tail — required, always the last section.** One
+numbered list is the SINGLE place every forward-looking choice lives:
+proposed system updates (CLAUDE.md / cepa.local.md rules), recommended
+follow-on work, and each blocked item's decision. Its rules:
+
+- Numbering ALWAYS starts at **(1)**. Operational instructions that are
+  not choices for the user (e.g. "merge with `gh pr merge`", "run the
+  migration before deploy") stay in the body sections above and never
+  consume a number — a choice list that starts at (2) because an
+  instruction ate (1) is precisely the defect this rule prevents.
+- Each item is a **bold action lead-in** followed by a one-line
+  why/consequence — enough to choose from without scrolling up.
+- The list ALWAYS ends with an explicit do-nothing option
+  (e.g. "**Stop here** — the run is complete; nothing is required") so the
+  loop can be closed with a single number.
+- End with one recommendation line naming the recommended number
+  ("My read: 1 — <one clause>").
+- This is the only numbered choice list in the report; proposals and
+  options never appear in mid-run narration, only here.
 
 Nothing important may exist only in mid-run narration; if it matters, it is
 in the report.
