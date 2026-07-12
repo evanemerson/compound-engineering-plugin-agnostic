@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(bash:*)
 ---
 
 # Compound Documentation
@@ -138,6 +138,40 @@ root, following the `cepa:compound-docs` skill's vocabulary-map rules:
    "vocabulary capture skipped — classifier returned no candidates block".
    Neither case may be reported as "no qualifying terms" — that phrase
    claims a scan happened and came up empty.
+
+## Step 4.6: Brain Writeback (optional — participating repos only)
+
+When `cepa.local.md` has an `## Integrations` `brain:` key, mirror this
+solution into the cross-repo brain per the **`cepa:brain` skill** (the
+canonical contract). No key → skip entirely; the doc on disk is unchanged
+and authoritative either way.
+
+1. **Decompose, never post the raw doc.** The Agent Memory API takes typed
+   atom arrays and rejects (422) content with ≥2 fenced code blocks or
+   >15k chars. Turn this solution into `memory_payload` atoms — the Root
+   Cause / Solution / Prevention / Detection points as short prose
+   `lessons`/`constraints`/`failures`, **fenced code stripped**, each atom
+   well under 15k. Add the qualifying CONCEPTS terms as `lessons` atoms.
+2. **PHI scrub** if `brain_phi_scrub: true` — run the skill's redaction pass
+   over every atom before egress; count redactions.
+3. **Write via the vendored client** (never inline the key on a command
+   line): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh" writeback ...`
+   which reads the URL + `MCP_ACCESS_KEY` from the repo's gitignored
+   `.env.local`, posts `/writeback` with a stable `idempotency_key`
+   (`<repo>:<doc-path>:<atom-index>`), then `PATCH /memories/:id/review`
+   `evidence_only` on each returned id. A 422/oversize atom is a recorded
+   skip (`suppressed_writebacks`), never silent.
+4. **Supersede prior versions:** if this doc's source path already has an
+   active memory (edited doc), the client issues `supersede` on the old one
+   so recall never serves two contradictory versions.
+5. Record the outcome in the `brain` Run Metadata block; for interactive
+   runs with no findings file, append a one-line `memory/tasks.md` record
+   for any strip/suppression/scrub. A brain failure degrades (grep-only
+   world continues) and loses nothing — the file is source-of-truth.
+
+Compliance: writeback happens ONLY for a repo that declares the `brain:`
+key (opt-in, fail-closed). A repo without it is never written, regardless
+of content.
 
 ## Step 4.7: Commit the Artifacts (headless mode)
 
