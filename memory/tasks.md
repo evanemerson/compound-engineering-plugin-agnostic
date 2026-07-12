@@ -19,8 +19,9 @@ Deferred review findings from the /cepa:lfg run (see todos/review-2026-07-10-160
    (needs the server-only `service_role` key) → belongs in OB1-server tooling, build
    alongside U1. Until then the recall provenance filter (`brain-participants.tsv`) is
    the sole Stage-1 retraction backstop. (Plan decision 9; gauntlet prev-comments #5.)
-8. **[OUTSTANDING, U1] `brain-participants.tsv` manifest** — active/retracted registry
+8. ~~[U1] `brain-participants.tsv` manifest~~ — **DONE 2026-07-12**: `~/webapps/OB1/cepa-setup/brain-participants.tsv` (4 repos active) — active/retracted registry
    the recall filter reads; create with the OB1 instance setup.
-9. **[OUTSTANDING, pre-U5] Live-API validation** — before backfill, confirm on the
-   running instance: `schema_version` literals, `limits.max_items` shape, `mark_stale`
-   drops from recall, content-hash idempotency dedups unchanged / inserts edited.
+9. ~~[pre-U5] Live-API validation~~ — **DONE 2026-07-12, ALL PASS** on the live instance
+   (scqnzwmbhlpdtenfepuw): schema_version literals OK, limits.max_items OK, mark_stale drops
+   from recall, content-hash idempotency dedups, cross-repo recall (project_only:false) works,
+   OpenRouter text-embedding-3-small embeddings work. Brain is LIVE.
