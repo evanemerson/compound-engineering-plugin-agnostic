@@ -37,6 +37,22 @@ if [ -d todos ]; then
   info "review files: $(ls todos/review-*.md 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
+# --- grounding provider (optional) ------------------------------------------
+# Facts only; /cepa:setup interprets (cepa:grounding skill is the contract).
+# Section-scoped awk, same reason as the roster count above.
+if [ -f cepa.local.md ] && awk '/^## Integrations/{f=1;next} /^## /{f=0} f' cepa.local.md | grep -q '^grounding:'; then
+  info "grounding provider configured"
+  command -v graphify >/dev/null 2>&1 && ok "grounding: graphify binary on PATH" || miss "grounding: graphify binary NOT on PATH (reviews silently run grep-only)"
+  [ -f graphify-out/graph.json ] && ok "grounding: graphify-out/graph.json exists" || miss "grounding: graphify-out/graph.json missing (initial build is a human action)"
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    git check-ignore -q graphify-out 2>/dev/null && ok "grounding: graphify-out is git-ignored" || miss "grounding: graphify-out NOT git-ignored (refresh would dirty the tree — provider degrades)"
+    if [ -e graph.json ]; then
+      git check-ignore -q graph.json 2>/dev/null && ok "grounding: root graph.json is git-ignored" || miss "grounding: root graph.json exists and is NOT git-ignored"
+    fi
+  fi
+  grep -q "^## Compliance" cepa.local.md && info "grounding configured in a COMPLIANCE repo — graphify-out arms the global graphify skill's LLM doc pass; human policy needed (cepa:grounding skill)"
+fi
+
 # --- git -------------------------------------------------------------------
 if git rev-parse --git-dir >/dev/null 2>&1; then
   ok "git repo (branch: $(git branch --show-current))"
