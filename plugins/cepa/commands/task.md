@@ -303,7 +303,13 @@ EOF
 
 ### 4.3 Auto-Review
 
-Run `/cepa:review` if `cepa.local.md` exists in the project, otherwise fall back to `/pr-review-toolkit:review-pr`. In `full` autonomy, invoke it as `/cepa:review mode:headless`.
+Run `/cepa:review` if `cepa.local.md` exists in the project, otherwise fall
+back to `/pr-review-toolkit:review-pr`. Invoke it as `/cepa:review
+mode:headless` in BOTH gated and full autonomy — this is a sub-step, so
+review returns its structured summary (no interactive `## Next steps` tail
+of its own); the human interaction lives in 4.4 below and the run's single
+final tail in Phase 5.4. (Headless still writes the findings file and
+surfaces P1s in its summary.)
 
 ### 4.4 Auto-Fix Critical Issues
 
@@ -312,9 +318,9 @@ After review completes:
 - **P2 / Important findings:** *[autonomy-convertible]* Present as numbered choices for user to approve/skip.
 - **P3 / Suggestions:** *[autonomy-convertible]* List for awareness. Ask if user wants to address any.
 
-If using cepa:review in gated mode, run `/cepa:triage interactive` for
-per-finding approval on P2/P3 (plain `/cepa:triage` is batch mode, which
-auto-applies eligible fixes — use it only when the user wants that).
+In gated autonomy, run `/cepa:triage interactive` for per-finding approval
+on P2/P3 (plain `/cepa:triage` is batch mode, which auto-applies eligible
+fixes — use it only when the user wants that).
 
 **Full autonomy:** apply the auto-apply rubric (`cepa:autonomy` §4) instead
 of asking — checkpoint, auto-apply `mechanical`/`corroborated` findings with
