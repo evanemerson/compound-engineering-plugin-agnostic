@@ -251,10 +251,12 @@ the cross-repo brain per the **`cepa:brain` skill**, via
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"` (reads the key from
 `.env.local`, never inline): a Delete or stale-mark → `mark_stale` the
 memories for that source path; a Replace/Update → `supersede` the prior
-active memory then write the successor's atoms. No `brain:` key, report-only
-mode, or a brain failure → skip silently and continue (files stay
-source-of-truth; the brain is a regenerable index). Record counts in the
-`brain` Run Metadata block.
+active memory then write the successor's atoms. No `brain:` key or
+report-only mode → no brain calls (not configured — not a failure). A brain
+call that FAILS when configured → degrade (`status: degraded — <verb>
+failed`) and continue; files stay source-of-truth, so a miss loses nothing,
+but it is never silent. Record counts/status in the `brain` Run Metadata
+block.
 
 ## Phase 4: Vocabulary Reconciliation (CONCEPTS.md)
 
