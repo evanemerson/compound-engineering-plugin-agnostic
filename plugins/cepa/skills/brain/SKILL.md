@@ -146,6 +146,22 @@ costs more than the grep it replaces defeats the point. Backfill (U5) is
 rate-limited with a per-run batch cap and a resumable state log. Every `/recall` and
 every writeback row is one OpenRouter embedding call — bound them.
 
+## Backfill (one-time, per participating repo)
+
+Vendored scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`:
+
+- `brain-client.sh` — the transport (health/recall/writeback/review/scrub/
+  idkey); keeps `MCP_ACCESS_KEY` off argv via a mode-600 curl config.
+- `brain-backfill.sh` — a resumable work queue (`next`/`done`/`status`) over
+  the repo's `docs/solutions/` + `CONCEPTS.md`, keyed on a gitignored
+  `.brain-backfill-state.log` so re-runs skip already-loaded docs.
+
+Procedure (agent-driven, needs the live instance): `next <repo> <batch>` →
+for each doc, decompose to typed atoms, `scrub` if the repo is
+`brain_phi_scrub`, `writeback` with `idkey <repo> <docpath> <index>`, `PATCH`
+each returned id to `evidence_only`, then `done <repo> <docpath>`. Bounded
+per run; add `.brain-backfill-state.log` to the repo's `.gitignore`.
+
 ## Run Metadata block (`cepa:file-todos`)
 
 Emitted by any run in a participating repo, on every path:
