@@ -155,8 +155,11 @@ unmatched items), per-sink coverage line (swept N / unverifiable +
 reason), suspect_items count, the compound-refresh dispatch's structured
 summary embedded verbatim under its item outcome (its proposed-rule or
 failed-doc residuals are §5-filed by the sweep — they are this run's
-residuals), git state changes (starting ref restored), then
-`<promise>DONE</promise>`.
+residuals), git state changes (starting ref restored), and the §6
+`## Next steps` tail — here the durable, 1-indexed list of decisions
+awaiting the human (each "awaiting human" item and proposed rule as a
+choice; the human answers it later, not synchronously), ending with a
+"**Stop here**" option. Then `<promise>DONE</promise>`.
 
 **In headless mode the report is also WRITTEN to
 `todos/sweep-YYYY-MM-DD-HHMMSS.md`** and committed with the final
