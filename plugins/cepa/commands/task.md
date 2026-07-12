@@ -157,8 +157,12 @@ When `cepa.local.md` has an `## Integrations` `grounding:` key, first run
 the `cepa:grounding` skill's availability check (and its refresh, when
 all legs pass); if available, say so in the researcher's dispatch and
 state how many of the shared 5-query budget remain — its optional graph
-pre-step activates only on that signal, and any degradation is recorded
-per the skill, never silent.
+pre-step activates only on that signal. This phase writes no findings
+file, so grounding events here use the skill's durable-sink rule: any
+pre-step strip (`SUSPECT-GROUNDING`), skipped argument, or
+failure/degradation is appended as a one-line record to
+`memory/tasks.md` (`- grounding: <event> — <source> — <date>`) — the
+briefing alone is not a record.
 
 Dispatch the `learnings-researcher` agent with the task description. It searches:
 - `docs/solutions/` — past problems and fixes

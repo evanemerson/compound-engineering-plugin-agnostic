@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout 60 graphify update:*), Bash(timeout 60 graphify affected:*), Bash(timeout 60 graphify explain:*), Bash(timeout 60 graphify query:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*)
 ---
 
 # Compound Review
@@ -24,10 +24,12 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   auto-apply-eligible findings (`mechanical`/`corroborated` with
   confidence ≥ 75 — see the `cepa:autonomy` skill §4), the
   `deploy_verdict` (verdict + conditions verbatim — a caller must never
-  ship past a NO-GO or unmet condition it was never told about), and the
+  ship past a NO-GO or unmet condition it was never told about), the
   Detection coverage line (signals passed / source docs / backfill
   candidates, plus any `learnings_research: failed` record — see Steps 3
-  and 6). The caller decides what to apply. If `cepa.local.md` is missing in headless mode, run the
+  and 6), and — whenever `cepa.local.md` configures a `grounding:` key —
+  the `grounding` status line verbatim (a caller must be told when the
+  run silently ran grep-only). The caller decides what to apply. If `cepa.local.md` is missing in headless mode, run the
   cepa review agents with stack details inferred from the repo, note the
   missing config in the findings file, and continue — never block.
 
@@ -64,12 +66,18 @@ the **`cepa:grounding` skill** — it is the canonical spec for everything
 in this paragraph. Run the three-leg availability check (binary via
 `command -v graphify`; `graphify-out/graph.json` presence via the Glob
 tool, never Bash; per-path `git check-ignore -q` legs). All legs pass →
-refresh once (`timeout 60 graphify update . < /dev/null`), then run
-`timeout 60 graphify affected "<symbol>" < /dev/null` (and `explain`
-where a hub symbol warrants it) on the diff's top changed symbols —
-arguments sanitized and queries bounded per the skill's shared 5-query
-budget, leaving headroom for the researcher's pre-step. Any leg or verb
-fails → grep-only as today, degradation recorded (never silent). This
+refresh once (`timeout -k 5 60 graphify update . < /dev/null`), run the
+skill's post-refresh cleanliness check (`git status --porcelain` — a new
+un-ignored path degrades the provider and names the path), then run
+`timeout -k 5 60 graphify affected "<symbol>" < /dev/null` (and
+`explain` where a hub symbol warrants it) on the diff's top changed
+symbols — arguments sanitized and AT MOST 3 queries here, per the
+skill's shared 5-query budget, so the researcher's pre-step is never
+silently budget-starved. Failure routing per the skill: an availability
+leg fails → `unavailable` (grep-only); refresh fails → `stale` (query
+still allowed, stale-marked); a query verb fails mid-run → `degraded`/
+`unavailable` per the skill's mid-run rule. Every path is recorded —
+never silent. This
 executes here, at the top of Step 3, unlike the post-return providers in
 Integration Dispatch below — grounding output must exist BEFORE the
 prompts it feeds are assembled.
@@ -85,9 +93,14 @@ Run `learnings-researcher` first with the diff summary. Include its output as
 additional context when dispatching review agents below. When grounding is
 available (block above), say so in the researcher's dispatch and state how
 many of the 5 shared queries remain — its optional pre-step activates only
-on that signal. Fold the researcher's reported pre-step strips and any
-`grounding pre-step: failed — <reason>` line into the `grounding` Run
-Metadata block (Step 5).
+on that signal. Fold the researcher's mandatory pre-step status line
+(`ok — N queries used, …` / `skipped — <reason>` / `failed — <reason>`)
+into the `grounding` Run Metadata block (Step 5): sum its queries into
+`queries:`, its skipped arguments into `args_skipped`, its
+`SUSPECT-GROUNDING` strips into `suspect_stripped` (route on the marker —
+SUSPECT-GROUNDING blocks are grounding events, NEVER counted in
+`detection_signals.suspect_bullets` or filed as corrupted-signal
+findings), and the line itself into `pre_step:`.
 
 **Detection signals:** the researcher's briefing includes a
 `### Detection Signals` section — the `## Detection` sections, verbatim, of

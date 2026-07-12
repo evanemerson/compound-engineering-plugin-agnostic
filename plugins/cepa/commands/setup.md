@@ -70,7 +70,13 @@ Beyond the script's facts, check:
    or edits ignore files — the report names the exact human commands
    instead (`uv tool install graphifyy` — package name deliberately
    `graphifyy`, binary `graphify`; spike-validated at v0.9.12 — then an
-   initial graph build, then the ignore entries).
+   initial graph build, then the ignore entries). For unattended/headless
+   use, also name the operator settings-allowlist entries the researcher
+   pre-step needs (`Bash(timeout -k 5 60 graphify query:*)`,
+   `Bash(timeout -k 5 60 graphify affected:*)`) — a subagent's Bash calls
+   are not covered by any command's `allowed-tools`, and without these
+   the pre-step reports `failed — permission denial` on every headless
+   run (cepa:grounding skill, headless permissions note).
 
 ## Step 3: Report
 
