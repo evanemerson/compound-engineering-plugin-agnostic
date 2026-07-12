@@ -167,7 +167,8 @@ briefing alone is not a record.
 Dispatch the `learnings-researcher` agent with the task description. It searches:
 - `docs/solutions/` — past problems and fixes
 - `CLAUDE.md` — existing rules and patterns
-- `memory/tasks.md` — deferred items from prior tasks
+- `todos/*.md` — the canonical store of open findings (any `pending`/`ready`/`deferred` finding in the task area)
+- `memory/tasks.md` — the deferred-item index that points back to `todos/`
 
 Present relevant findings to the user:
 ```

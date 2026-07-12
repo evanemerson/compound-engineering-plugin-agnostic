@@ -1,7 +1,7 @@
 {
   "name": "cepa",
   "description": "Compound engineering: full task orchestration (gated or autonomous), persona plan review before build, 11 review agents (8 roster + 3 signal-dispatched) with confidence-scored findings, solution documentation, batch-first triage, the hands-off /cepa:lfg pipeline, a scheduled residual sweep, PR-feedback resolution, and an optional graphify grounding provider. Framework-agnostic via cepa.local.md.",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "author": {
     "name": "Evan",
     "email": "evan@dpcpro.com"

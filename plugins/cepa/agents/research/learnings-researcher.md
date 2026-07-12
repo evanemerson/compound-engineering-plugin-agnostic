@@ -89,12 +89,25 @@ Search `docs/plans/` for plans that touched the same areas:
 - Plans with solution links (check `## Solutions` sections)
 - Plans for the same feature area
 
-### Step 4: Search Deferred Items
+### Step 4: Search Open Findings and Deferred Items
 
-Check `memory/tasks.md` for deferred items from prior tasks:
-- Undone P2/P3 findings that relate to the current task area
+`todos/*.md` is the canonical, tracked store of review findings — read it
+directly, never rely on `memory/tasks.md` alone. `memory/tasks.md` is a
+thin cross-cutting index whose entries point back to a canonical `todos/`
+finding; an open finding that was never mirrored into that index is still
+live work, and consulting only the index is exactly how such findings
+silently vanish.
+
+Glob `todos/*.md` and collect every finding whose `status:` is still open
+— `pending`, `ready`, or `deferred` (not `applied`, `completed`, or
+`skipped`) — that relates to the current task area:
+- Undone P2/P3 findings touching the same files or modules
 - Deferred plan items for the same modules or features
 - Items tagged with relevant file paths or concepts
+
+Then read `memory/tasks.md` for the deferred items it indexes, matched to
+their canonical `todos/` finding where one exists — treat it as an
+additional pointer, never as the source of truth.
 
 ### Step 5: Search CLAUDE.md
 
