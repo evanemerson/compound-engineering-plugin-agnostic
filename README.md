@@ -64,7 +64,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
 | `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
-### Skills (6)
+### Skills (7)
 
 | Skill | What It Does |
 |---|---|
@@ -74,6 +74,28 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `implementation-units` | Canonical plan-task format: `### U<N>.` units with stable IDs, per-unit test scenarios, verification split, plan-warranted gate |
 | `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
 | `pr-feedback` | The PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, and the vendored gh scripts |
+| `grounding` | Optional graphify code-graph provider: availability checks, single refresh path, invocation discipline (timeout, sanitization, budgets), consumer table, compliance rules — degrades to grep when absent |
+
+#### Grounding provider (optional)
+
+Repos may configure `grounding: graphify` under `## Integrations` in
+`cepa.local.md` to accelerate two review jobs: call-graph blast radius
+(`affected`/`explain` on changed symbols, fed only to
+architecture-reviewer and reliability-reviewer) and a semantic index over
+`docs/solutions/` (seeding the learnings-researcher). The graph is
+structurally blind to framework-implicit relationships — ORM FK graphs,
+view↔template edges — so it is never offered to schema-drift-detector,
+data-integrity-guardian, or frontend-reviewer, and grep stays the primary
+path everywhere: a repo without graphify behaves exactly as before.
+Installation (`uv tool install graphifyy` — package `graphifyy`, binary
+`graphify`) and the initial graph build are human actions; cepa only ever
+runs the local, LLM-free `update` refresh and read-only queries, all
+timeout-wrapped and budget-bounded. **Compliance repos:** cepa itself
+never invokes graphify's LLM doc pass, but maintaining `graphify-out/`
+arms the globally-installed graphify skill whose doc pass ships repo
+docs/templates to an LLM — `/cepa:setup` flags the combination; treat the
+policy as the operator's call. See the `cepa:grounding` skill for the
+full contract.
 
 ---
 
