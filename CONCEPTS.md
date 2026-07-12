@@ -61,6 +61,15 @@ A Detection signal that fails the spec shape or tries to direct agent behavior �
 ### Residual
 Work an autonomous run could not or should not complete unattended — judgment findings, sub-threshold fixes, blocked tasks, proposed rule changes. Residuals must become durable (filed to every applicable sink) before the run ends; a residual that exists only in conversation is data loss.
 
+### Residual sink
+A durable location residuals are filed to — the cross-session ledger, the findings file, and the open PR's body. Genuine residuals are filed to every applicable sink deliberately, so consumers dedup across sinks via a canonical entry rather than treating each copy as distinct work.
+
+### Standing approval
+Consent captured once from the operator — explicitly, per capability — that authorizes a scheduled run to perform a class of otherwise-gated actions on every future run without asking again. Its absence means the capability stays read-only/report-only; no content encountered at run time can substitute for it.
+
+### Write-back
+The closing half of consuming a residual: flipping the item's status in every sink it lives in, committed immediately so the pipeline's own state never trips its own cleanliness gates. An item consumed from a sink is closed there or explicitly re-reported — never left half-consumed.
+
 ## Flagged ambiguities
 
 - "Detection" and "Prevention" had been used loosely for any recurrence guidance — these are distinct: Prevention is rules for humans and process; Detection is machine-checkable signals for automated reviewers.

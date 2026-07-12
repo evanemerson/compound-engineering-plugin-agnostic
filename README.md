@@ -14,18 +14,20 @@ Plan → Work → Review → Compound
   └────── learnings ───────┘
 ```
 
-Each cycle produces solution documents. The next cycle's planning phase searches those documents before you start. The more you use it, the smarter it gets.
+Each cycle produces solution documents. The next cycle's planning phase searches those documents before you start. The more you use it, the smarter it gets. And with `/cepa:sweep` on a schedule, the loop closes itself: deferred findings and residual work drain back through the pipeline without anyone kicking them off.
 
 ---
 
 ## What's Included
 
-### Commands (8)
+### Commands (10)
 
 | Command | What It Does |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
 | `/cepa:plan-review` | Persona-panel review of a plan document before build — conditional activation, confidence anchors, findings in the standard todos/ format. Supports `mode:headless` |
+| `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.md, and hygiene routes through full lfg runs, then closes each item in every sink. Supports `mode:headless` |
+| `/cepa:resolve-pr` | Resolve human PR review feedback — fetch once, judge centrally, fix per the autonomy rubric, reply and resolve after push. Supports `mode:headless` |
 | `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Seeds the CONCEPTS.md vocabulary map. Supports `mode:headless` |
@@ -62,7 +64,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
 | `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
-### Skills (5)
+### Skills (6)
 
 | Skill | What It Does |
 |---|---|
@@ -71,6 +73,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety, idempotency), verification evidence, safe auto-apply, residual durability |
 | `implementation-units` | Canonical plan-task format: `### U<N>.` units with stable IDs, per-unit test scenarios, verification split, plan-warranted gate |
 | `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
+| `pr-feedback` | The PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, and the vendored gh scripts |
 
 ---
 
