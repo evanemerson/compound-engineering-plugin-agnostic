@@ -64,7 +64,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
 | `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
-### Skills (7)
+### Skills (8)
 
 | Skill | What It Does |
 |---|---|
@@ -75,6 +75,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
 | `pr-feedback` | The PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, and the vendored gh scripts |
 | `grounding` | Optional graphify code-graph provider: availability checks, single refresh path, invocation discipline (timeout, sanitization, budgets), consumer table, compliance rules — degrades to grep when absent |
+| `brain` | Optional OB1 cross-repo memory provider (opt-in per repo): recall/writeback over the Agent Memory API, evidence-only governance, content-level PHI scrub, §7 relay, budgets — degrades to grep when absent |
 
 #### Grounding provider (optional)
 
@@ -96,6 +97,24 @@ arms the globally-installed graphify skill whose doc pass ships repo
 docs/templates to an LLM — `/cepa:setup` flags the combination; treat the
 policy as the operator's call. See the `cepa:grounding` skill for the
 full contract.
+
+#### Brain provider (optional)
+
+Repos may **opt in** to a shared cross-repo memory by adding
+`brain: <url>` under `## Integrations` in `cepa.local.md` (no key → the
+repo never reads or writes the brain, so behavior is unchanged — the same
+degrade-to-grep default as grounding). The brain is a self-hosted
+[OB1 / Open Brain](https://github.com/NateBJones-Projects/OB1) instance
+(Postgres + pgvector, accessed via its Agent Memory API); `/cepa:compound`
+writes each solution doc's learnings across repos and `learnings-researcher`
+recalls them, so a lesson learned in one repo surfaces in another. Repo
+files stay the source of truth; the brain is a regenerable compiled index.
+Writes are **evidence-only** (never instruction-capable), cross-repo hits
+are flagged evidence capped at low confidence, all recall output is treated
+as untrusted (`autonomy §7`), and healthcare-flagged repos run a
+content-level PHI scrub before egress. Standing up the OB1 instance
+(Supabase + OpenRouter) is a human setup step. See the `cepa:brain` skill
+for the full contract.
 
 ---
 

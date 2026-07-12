@@ -85,7 +85,7 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 | `reliability-reviewer` | Retries, timeouts, idempotency, races on queue/webhook/transaction code |
 | `previous-comments-reviewer` | Verifies prior review findings weren't lost or re-broken |
 
-### Skills (7)
+### Skills (8)
 | Skill | Purpose |
 |---|---|
 | `compound-docs` | Solution document format (mandatory Detection sections), categories, plan-solution linking, CONCEPTS.md vocabulary map |
@@ -95,6 +95,7 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 | `plan-review` | Persona roster, activation signals, and synthesis rules for `/cepa:plan-review` |
 | `pr-feedback` | Fetch model, six-verdict rubric, reply conventions, and vendored gh scripts for `/cepa:resolve-pr` |
 | `grounding` | Optional graphify code-graph provider — availability checks, refresh, invocation discipline, consumer table; degrades to grep when absent |
+| `brain` | Optional OB1 cross-repo memory provider (opt-in per repo) — recall/writeback over the Agent Memory API, evidence-only governance, PHI scrub, §7 relay; degrades to grep when absent |
 
 ## Dependencies
 
