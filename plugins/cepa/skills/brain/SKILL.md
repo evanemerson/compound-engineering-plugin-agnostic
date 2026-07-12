@@ -22,23 +22,35 @@ A repo participates only when its `cepa.local.md` declares it under
 
 ```markdown
 ## Integrations
-brain: https://<ref>.functions.supabase.co/agent-memory   # participate (read + write)
-brain_phi_scrub: true                                       # optional: healthcare repos
+brain: enabled            # participate (read + write). Presence is the gate;
+                          # the actual URL/key come from .env.local (below).
+brain_phi_scrub: true     # force the PHI scrub on; AUTO-ON for ## Compliance repos
 ```
 
 No `brain:` key → the repo neither reads nor writes the brain, and every command
 behaves exactly as today. Missing, unreadable, or malformed config is treated as
-**not configured** (fail-closed). This is the single participation gate — there is
-no automatic inclusion and no `## Compliance`-based auto-exclusion.
+**not configured** (fail-closed). This is the single participation gate. Note: a
+repo opts in explicitly, but a repo that carries a `## Compliance` section is
+NOT thereby excluded (participation is the operator's opt-in) — instead the PHI
+scrub below is FORCED on for it (see Compliance).
 
 ## Credentials
 
-- The client reads the brain URL (from the `brain:` value) and `MCP_ACCESS_KEY`
-  from a **gitignored** `.env.local` in the repo root (U1 adds it to `.gitignore`).
-  Never store the key in `cepa.local.md` — it is not gitignored.
+- Presence of the `brain:` key is only the opt-in gate. The client reads the
+  actual `BRAIN_URL`, `MCP_ACCESS_KEY`, and `BRAIN_WORKSPACE_ID` from a
+  **gitignored** `.env.local` in the repo root (U1 adds it to `.gitignore`) — NOT
+  from the `brain:` value (which is a human-readable marker only, so a stale value
+  there can never point the client at the wrong instance). Never store the key in
+  `cepa.local.md` — it is not gitignored.
 - The client authenticates ONLY with `MCP_ACCESS_KEY` (sent as the `x-brain-key`
   header). The Supabase `service_role`/secret and OpenRouter keys live only in the
   OB1 server env and never reach the cepa client.
+- **Headless permissions:** a Task-dispatched subagent's Bash calls are NOT covered
+  by the invoking command's `allowed-tools`. For unattended runs the operator's
+  settings allowlist needs `Bash(bash:*)` (or a `${CLAUDE_PLUGIN_ROOT}/scripts/`
+  scoped entry) so the learnings-researcher's recall pre-step can call
+  `brain-client.sh`; without it the pre-step reports `failed — permission denial`
+  every headless run (recorded, but structural — `/cepa:setup` names the entry).
 
 ## Availability + degrade
 
@@ -56,35 +68,64 @@ continues and already-relayed output stands. Every call carries a per-call timeo
 
 ## The call contract (verified against the OB1 Agent Memory API)
 
-All calls send `x-brain-key: $MCP_ACCESS_KEY` and JSON bodies.
+All calls send `x-brain-key: $MCP_ACCESS_KEY` and JSON bodies. Every body includes
+the exact `schema_version` LITERAL the API requires (a missing/wrong value 400s) and
+`workspace_id` from `BRAIN_WORKSPACE_ID` in `.env.local` (one shared value across the
+portfolio). `brain-client.sh` posts the payload file verbatim, so the invoker (agent)
+builds the payload WITH `schema_version` + `workspace_id` in it.
 
-- **Recall (consumer):** `POST /recall` with
-  `{schema_version, workspace_id, project_id, query, scope:{project_only:false, max_items:10}}`.
-  `project_only:false` is REQUIRED for cross-repo reach (it defaults true = own-repo
-  only). Returns scoped memories with `source_refs` provenance.
-- **Writeback (producer):** `POST /writeback` with a typed `memory_payload` whose
-  fields are ARRAYS (`lessons`, `constraints`, `failures`, `outputs`, …) — each
-  element becomes one memory row. There is NO document/free-form field and NO
-  upsert: a repeated `idempotency_key` is skipped, not updated. Provide a STABLE
-  `idempotency_key` per atom = `<repo>:<doc-path>:<atom-index>` so re-runs dedup.
+- **Recall (consumer):** `POST /recall`,
+  `schema_version: "openbrain.agent_memory.recall.v1"`, body
+  `{workspace_id, project_id, query, scope:{project_only:false}, limits:{max_items:10}}`.
+  `project_only:false` is REQUIRED for cross-repo reach (defaults true = own-repo
+  only). `max_items` lives under `limits`, NOT `scope` (a `scope.max_items` is
+  silently dropped). Returns scoped memories with `source_refs` provenance.
+- **Writeback (producer):** `POST /writeback`,
+  `schema_version: "openbrain.agent_memory.writeback.v1"`, with a typed
+  `memory_payload` whose fields are ARRAYS (`lessons`, `constraints`, `failures`,
+  `outputs`, …) — each element becomes one memory row. There is NO document/free-form
+  field and NO upsert: a repeated `idempotency_key` is skipped, not updated. Provide a
+  STABLE BASE `idempotency_key = <repo>:<doc-path>` per writeback; **the API appends
+  its own row index** (`<base>:<n>`), so do NOT add an atom index yourself (that
+  double-indexes). Because keys are row-positional, inserting an atom mid-document
+  shifts later indices — prefer stable atom ordering, and on a real edit retire the
+  doc's prior memories (mark_stale) and rewrite rather than diff-patching atoms.
 - **Promote (producer, immediately after writeback):**
   `PATCH /memories/:id/review` `{action:"evidence_only"}` for each written memory.
   Writeback stamps `review_status:pending`, which recall drops by default; promoting
   to `evidence_only` makes it recallable while keeping `can_use_as_instruction=false`.
-  (Other actions: `confirm | reject | supersede | mark_stale`.)
-- **Supersede / stale (producer, on edit/prune):** an edited doc → `supersede` the
-  prior active memory for the same source path; compound-refresh prune → `mark_stale`
-  memories whose source path no longer exists on disk. Keeps the brain from serving
-  stale/contradicted knowledge (files are source-of-truth; the brain is a copy).
+  **Partial writeback:** the write is row-by-row and non-atomic — a mid-loop 5xx can
+  leave the first rows inserted (`pending`) before it fails. So ALWAYS promote the
+  ids the call DID return (they come back in the response) BEFORE degrading — never
+  leave rows stranded invisible in `pending`. The stable content idkey makes a later
+  re-run safe (unchanged atoms dedup; it re-surfaces the ids for any missed PATCH).
+- **Retire on edit/prune → `mark_stale` (NOT `supersede`):** an edited doc, or a
+  compound-refresh delete/stale-mark → `PATCH /memories/:id/review`
+  `{action:"mark_stale"}` on the prior memories for that source path. OB1's
+  `supersede` action does NOT set `lifecycle_status` without a `related_memory_id`,
+  and recall does not drop on it; `mark_stale` is the only action that sets
+  `lifecycle_status='stale'`, which recall's scope filter drops. Keeps the brain from
+  serving stale/contradicted knowledge (files are source-of-truth; the brain is a copy).
 - **Health:** `GET /health` → `{ok:true}` (liveness, free).
 - **Never call:** any DELETE (none exists) from a command; hard-deletion is the
   separate `service_role` remediation script (compliance retraction only), never a
   routine command path.
 
-### Portfolio scope
+### Portfolio scope + participant registry
 
-One shared `workspace_id` for the portfolio; `project_id = <repo name>`. This is
-what makes recall cross-repo when combined with `project_only:false`.
+One shared `workspace_id` for the portfolio (from `BRAIN_WORKSPACE_ID`);
+`project_id = <repo name>`. This is what makes recall cross-repo when combined with
+`project_only:false`.
+
+The recall provenance filter needs an authoritative list of which `project_id`s are
+active vs retracted — a consuming repo cannot infer another repo's status on its
+own. That list is a **tracked `brain-participants.tsv`** manifest kept beside the
+OB1 setup (a U1 artifact): one line per repo, `<project_id>\t<active|retracted>`.
+The invoking command reads it and passes it to the researcher; recall drops any
+memory whose `source_refs` `project_id` is `retracted` or absent from the manifest
+(fail-closed — an unknown provenance is dropped, not relayed). Until the manifest
+exists, recall runs but every cross-repo hit is provenance-labeled for the operator
+and no memory is trusted as cleared.
 
 ## Governance — evidence-only, always
 
@@ -99,22 +140,34 @@ what makes recall cross-repo when combined with `project_only:false`.
   capped at `confidence: 75`, carrying its `source_refs` (repo+path+SHA), and is
   **never promoted to a local finding**. Same-repo grep-verification is unchanged.
 
-## Compliance — content-level, not repo-level
+## Compliance — content-level, with a mandatory scrub for `## Compliance` repos
 
-Participation is the user's explicit opt-in (the `brain:` key). For a healthcare or
-otherwise sensitive opted-in repo, set `brain_phi_scrub: true`: before any writeback
-egress, run a redaction pass over the atom content —
+Participation is the operator's explicit opt-in (the `brain:` key); a
+`## Compliance` section does NOT exclude the repo. But the scrub is NOT a
+forgettable second opt-in for those repos: **if the participating repo's
+`cepa.local.md` contains a `## Compliance` section, the PHI scrub is FORCED on**
+regardless of whether `brain_phi_scrub` is written — and if the scrub tool is
+unavailable, writeback is SUPPRESSED (fail-closed), never sent unscrubbed. A
+single forgotten `brain_phi_scrub:` line must never be the only thing between a
+HIPAA repo and cloud egress. (`brain_phi_scrub: true` additionally forces it on
+for a non-`## Compliance` repo the operator judges sensitive.)
 
-- SSN `\b\d{3}-\d{2}-\d{4}\b`, MRN-shaped ids, DOB in patient context, and obvious
-  patient-name-context patterns → replaced with `[REDACTED-PHI]`, count recorded.
+The scrub (`brain-client.sh scrub`) redacts **numeric PHI patterns only**: SSN
+(dash/space/dot-separated), MRN/account-shaped digit runs, and DOB dates in both
+US month-first and ISO-8601 forms. **It does NOT redact patient names** (reliable
+name detection isn't feasible in a regex) — so it ENFORCES the numeric layer of the
+operator's "no real PHI" certification and is explicitly not a full de-identifier.
+Names and any residual rely on the operator's certification plus the hard-delete
+retraction backstop below.
 
-The scrub ENFORCES the operator's "no real PHI" certification rather than trusting
-it; a dev solution doc can still quote a real log/row, so the scrub plus the
-hard-delete retraction backstop cover that residual. If a participating repo must be
-retracted (real PHI slipped in, or policy changes), the operator runs the
-`service_role` hard-delete remediation script (direct DELETE on `agent_memories` +
-orphaned `thoughts`; cascade covers the sidecars) and the recall provenance filter
-drops any remaining memory whose provenance repo is no longer an active participant.
+Retraction backstop: if a participating repo must be retracted (real PHI slipped
+in, or policy changes), (1) the recall provenance filter drops any memory whose
+provenance repo is no longer an active participant, and (2) the operator runs a
+`service_role` hard-delete against `agent_memories` + orphaned `thoughts` (cascade
+covers the sidecars). **That hard-delete is a server-side operator procedure using
+the server-only `service_role` key — it is NOT shipped as a cepa client command**
+(the client never holds `service_role`); it is tracked as outstanding OB1-server
+tooling. Until it exists, the recall provenance filter is the sole Stage-1 backstop.
 
 ## The §7 relay clause
 
@@ -158,7 +211,7 @@ Vendored scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`:
 
 Procedure (agent-driven, needs the live instance): `next <repo> <batch>` →
 for each doc, decompose to typed atoms, `scrub` if the repo is
-`brain_phi_scrub`, `writeback` with `idkey <repo> <docpath> <index>`, `PATCH`
+`brain_phi_scrub`, `writeback` with `idkey <repo> <docpath> <payloadfile>`, `PATCH`
 each returned id to `evidence_only`, then `done <repo> <docpath>`. Bounded
 per run; add `.brain-backfill-state.log` to the repo's `.gitignore`.
 

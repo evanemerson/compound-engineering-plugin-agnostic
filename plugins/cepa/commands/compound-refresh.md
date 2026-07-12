@@ -250,8 +250,9 @@ doc, never to a delete whose prerequisites failed.
 the cross-repo brain per the **`cepa:brain` skill**, via
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"` (reads the key from
 `.env.local`, never inline): a Delete or stale-mark → `mark_stale` the
-memories for that source path; a Replace/Update → `supersede` the prior
-active memory then write the successor's atoms. No `brain:` key or
+memories for that source path; a Replace/Update → `mark_stale` the prior
+memories for that path (OB1's `supersede` is a no-op without a related id),
+then write the successor's atoms (new content hash → new rows). No `brain:` key or
 report-only mode → no brain calls (not configured — not a failure). A brain
 call that FAILS when configured → degrade (`status: degraded — <verb>
 failed`) and continue; files stay source-of-truth, so a miss loses nothing,

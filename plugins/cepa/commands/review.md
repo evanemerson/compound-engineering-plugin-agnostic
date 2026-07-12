@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
 ---
 
 # Compound Review
@@ -29,7 +29,9 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   candidates, plus any `learnings_research: failed` record — see Steps 3
   and 6), and — whenever `cepa.local.md` configures a `grounding:` key —
   the `grounding` status line verbatim (a caller must be told when the
-  run silently ran grep-only). The caller decides what to apply. If `cepa.local.md` is missing in headless mode, run the
+  run silently ran grep-only), and — whenever `cepa.local.md` configures a
+  `brain:` key — the `brain` status line verbatim (same reason). The caller
+  decides what to apply. If `cepa.local.md` is missing in headless mode, run the
   cepa review agents with stack details inferred from the repo, note the
   missing config in the findings file, and continue — never block.
 

@@ -152,26 +152,36 @@ and authoritative either way.
    Cause / Solution / Prevention / Detection points as short prose
    `lessons`/`constraints`/`failures`, **fenced code stripped**, each atom
    well under 15k. Add the qualifying CONCEPTS terms as `lessons` atoms.
-2. **PHI scrub** if `brain_phi_scrub: true` — run the skill's redaction pass
-   over every atom before egress; count redactions.
+2. **PHI scrub** — run `brain-client.sh scrub` over every atom before egress
+   (count redactions) when `brain_phi_scrub: true` OR the repo's
+   `cepa.local.md` has a `## Compliance` section (the scrub is FORCED for
+   compliance repos — see the skill; if the scrub tool can't run, SUPPRESS
+   the writeback, do not send unscrubbed).
 3. **Write via the vendored client** (never inline the key on a command
-   line): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh" writeback ...`
-   which reads the URL + `MCP_ACCESS_KEY` from the repo's gitignored
-   `.env.local`, posts `/writeback` with a stable `idempotency_key`
-   (`<repo>:<doc-path>:<atom-index>`), then `PATCH /memories/:id/review`
-   `evidence_only` on each returned id. A 422/oversize atom is a recorded
-   skip (`suppressed_writebacks`), never silent.
-4. **Supersede prior versions:** if this doc's source path already has an
-   active memory (edited doc), the client issues `supersede` on the old one
-   so recall never serves two contradictory versions.
+   line): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh" writeback
+   <payload.json>` which reads `BRAIN_URL` + `MCP_ACCESS_KEY` +
+   `BRAIN_WORKSPACE_ID` from the repo's gitignored `.env.local`, posts
+   `/writeback` with a base `idempotency_key` from
+   `idkey <repo> <doc-path> <payload.json>` (a CONTENT hash — the API
+   appends its own row index; unchanged docs dedup, edited docs get new
+   rows), then `PATCH /memories/:id/review evidence_only` on each returned
+   id. **Promote the ids the call DID return even on a partial (5xx) failure,
+   before degrading** — never leave rows stranded in `pending`. A
+   422/oversize atom is a recorded skip (`suppressed_writebacks`), never silent.
+4. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
+   doc's source path already has active memories (edited doc), `PATCH review
+   mark_stale` on them so recall stops serving the pre-edit version, THEN
+   write the current atoms (their new content hash makes them new rows).
+   (OB1's `supersede` action is a no-op without a related id — use `mark_stale`.)
 5. Record the outcome in the `brain` Run Metadata block; for interactive
    runs with no findings file, append a one-line `memory/tasks.md` record
    for any strip/suppression/scrub. A brain failure degrades (grep-only
    world continues) and loses nothing — the file is source-of-truth.
 
 Compliance: writeback happens ONLY for a repo that declares the `brain:`
-key (opt-in, fail-closed). A repo without it is never written, regardless
-of content.
+key (opt-in, fail-closed) — and for a `## Compliance` repo the PHI scrub is
+mandatory (step 2). A repo without the `brain:` key is never written,
+regardless of content.
 
 ## Step 4.7: Commit the Artifacts (headless mode)
 

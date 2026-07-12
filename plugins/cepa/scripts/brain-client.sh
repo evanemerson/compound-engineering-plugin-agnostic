@@ -47,6 +47,11 @@ _curl() {
     printf 'header = "content-type: application/json"\n'
     printf 'request = "%s"\n' "$method"
     printf 'max-time = 20\n'
+    # bounded retry: curl retries only transient/timeout/5xx (and 408/429),
+    # NEVER 4xx — so a 422 unsafe-content or 401 bad-key fails fast, while a
+    # transient 5xx or connection drop gets one retry. Writeback is idempotent
+    # (stable content idkey), so a retry can never duplicate a row.
+    printf 'retry = 1\nretry-connrefused\n'
     printf 'silent\nshow-error\nfail-with-body\n'
     if [ -n "$body" ]; then printf 'data = "@%s"\n' "$body"; fi
   } > "$cfg"
@@ -80,22 +85,29 @@ case "$cmd" in
     _curl PATCH "/memories/$1/review" "$local_body"
     ;;
   scrub)
-    # Defense-in-depth PHI redaction for brain_phi_scrub repos. Conservative:
-    # redacts SSN, long digit runs (MRN/account-shaped), and DOB-like dates.
-    # NOT a substitute for the operator's no-real-PHI certification.
+    # Defense-in-depth PHI redaction for brain_phi_scrub repos. Redacts SSN
+    # (dash / space / dot separated), long digit runs (MRN/account-shaped),
+    # and DOB-like dates in BOTH US month-first (MM/DD/YYYY, MM-DD-YYYY) and
+    # ISO-8601 (YYYY-MM-DD, the common log/DB format). NOT a substitute for
+    # the operator's no-real-PHI certification (names are not caught — see
+    # the cepa:brain skill's stated scope).
     [ -f "${1:-}" ] && [ -n "${2:-}" ] || _die "scrub needs <infile> <outfile>"
     sed -E \
-      -e 's/[0-9]{3}-[0-9]{2}-[0-9]{4}/[REDACTED-PHI-SSN]/g' \
+      -e 's/[0-9]{3}[ .-][0-9]{2}[ .-][0-9]{4}/[REDACTED-PHI-SSN]/g' \
       -e 's/\b[0-9]{7,12}\b/[REDACTED-PHI-ID]/g' \
       -e 's#\b(0[1-9]|1[0-2])[/-](0[1-9]|[12][0-9]|3[01])[/-](19|20)[0-9]{2}\b#[REDACTED-PHI-DOB]#g' \
+      -e 's/\b(19|20)[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\b/[REDACTED-PHI-DOB]/g' \
       "$1" > "$2"
     ;;
   idkey)
-    # Stable idempotency_key so re-runs dedup (agent_memories has no upsert;
-    # a repeated key is skipped, not updated). Keyed on (repo, docpath, index),
-    # NOT on content, so an edited doc keeps its identity for supersede.
-    [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ -n "${3:-}" ] || _die "idkey needs <repo> <docpath> <index>"
-    printf '%s:%s:%s\n' "$1" "$2" "$3"
+    # CONTENT-derived idempotency_key so re-runs of an UNCHANGED doc dedup
+    # (agent_memories has no upsert — a repeated key is skipped) while an
+    # EDITED doc gets a new key and its atoms actually persist. The API
+    # appends its own row index (<key>:<n>) per atom, so this is the base.
+    # Pair with `review <id> mark_stale` on the prior memories for the path.
+    [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ -f "${3:-}" ] || _die "idkey needs <repo> <docpath> <payloadfile>"
+    _sha="$(sha256sum "$3" | cut -c1-12)"
+    printf '%s:%s:%s\n' "$1" "$2" "$_sha"
     ;;
   *)
     _die "unknown command: '${cmd}' (health|recall|writeback|review|scrub|idkey)"
