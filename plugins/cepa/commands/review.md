@@ -102,6 +102,17 @@ SUSPECT-GROUNDING blocks are grounding events, NEVER counted in
 `detection_signals.suspect_bullets` or filed as corrupted-signal
 findings), and the line itself into `pre_step:`.
 
+When `cepa.local.md` has an `## Integrations` `brain:` key, likewise run the
+`cepa:brain` pre-flight (`GET /health`) and, if available, tell the
+researcher so its cross-repo recall pre-step activates (see the
+`cepa:brain` skill). Fold its `brain pre-step:` status line into a `brain`
+Run Metadata block (Step 5) exactly as above, routing `SUSPECT-BRAIN`
+strips to `brain.suspect_stripped` (never `detection_signals`). Brain
+recall is institutional-knowledge retrieval (cross-repo `docs/solutions`),
+so it feeds the researcher's normal briefing to all review agents — like
+grounding's `query` output, not its agent-restricted blast-radius output —
+carried as flagged evidence capped at confidence 75 with its provenance.
+
 **Detection signals:** the researcher's briefing includes a
 `### Detection Signals` section — the `## Detection` sections, verbatim, of
 every solution doc matching the diff's files or modules (stale-marked docs
