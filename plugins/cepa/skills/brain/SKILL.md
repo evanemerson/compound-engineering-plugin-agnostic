@@ -90,6 +90,10 @@ builds the payload WITH `schema_version` + `workspace_id` in it.
   double-indexes). Because keys are row-positional, inserting an atom mid-document
   shifts later indices — prefer stable atom ordering, and on a real edit retire the
   doc's prior memories (mark_stale) and rewrite rather than diff-patching atoms.
+  Each `source_refs` element REQUIRES a `kind` field (e.g. `"solution-doc"`) — an
+  object without it 400s; pack repo+path+blob-SHA into `uri` as
+  `<repo>:<doc-path>@<sha>` so provenance survives file moves. (Verified 2026-07-12
+  against the live API during the contexthub backfill.)
 - **Promote (producer, immediately after writeback):**
   `PATCH /memories/:id/review` `{action:"evidence_only"}` for each written memory.
   Writeback stamps `review_status:pending`, which recall drops by default; promoting

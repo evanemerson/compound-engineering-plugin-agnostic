@@ -10,7 +10,7 @@
     {
       "name": "cepa",
       "description": "11 review agents (8 roster + 3 signal-dispatched), persona plan review, Implementation-Units plan format, scheduled residual sweep, PR-feedback resolution, optional graphify grounding, optional OB1 cross-repo brain, solution documentation, batch-first triage, and gated or hands-off execution (/cepa:lfg) for compound engineering workflows",
-      "version": "1.10.0",
+      "version": "1.10.1",
       "author": {
         "name": "Evan Emerson",
         "email": "evan@evanemerson.com"
