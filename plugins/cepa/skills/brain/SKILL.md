@@ -137,8 +137,13 @@ one line per repo, `<project_id>\t<active|retracted>`. The invoking command
 resolves + reads it via `brain-client.sh participants`, which looks first at
 `$BRAIN_PARTICIPANTS_FILE` (set in `.env.local`) then a sibling `brain-ops`
 checkout, and **exits fail-closed (3) if neither resolves** — the caller then
-degrades to provenance-labeled recall rather than guessing a path. It passes the
-resolved registry to the researcher; recall drops any
+degrades to provenance-labeled recall rather than guessing a path. The manifest
+is cross-repo content, so `participants` emits **only schema-valid
+`<project_id>\t(active|retracted)` rows** — the §7 strip AT THE RELAY POINT:
+comments, blanks, and any malformed/injection line are dropped there, never
+relayed into the researcher prompt (empty output + exit 0 = a valid empty
+registry → drop ALL cross-repo hits, distinct from the exit-3 unresolved case).
+It passes the resolved registry to the researcher; recall drops any
 memory whose `source_refs` `project_id` is `retracted` or absent from the manifest
 (fail-closed — an unknown provenance is dropped, not relayed). Until the manifest
 exists, recall runs but every cross-repo hit is provenance-labeled for the operator

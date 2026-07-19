@@ -111,16 +111,32 @@ case "$cmd" in
     #   2. sibling checkout: <repo-parent>/brain-ops/brain-participants.tsv
     # If neither resolves, exit 3 (NOT 0/2): the caller degrades to running
     # recall with every cross-repo hit provenance-labeled and no memory trusted
-    # as cleared — per the cepa:brain "Portfolio scope" contract. Output is the
-    # normalized registry (comments/blanks stripped): "<project_id>\t<status>".
+    # as cleared — per the cepa:brain "Portfolio scope" contract.
+    #
+    # EXIT SEMANTICS (the caller MUST distinguish these):
+    #   0 + rows   → registry resolved, emit the validated rows.
+    #   0 + EMPTY  → registry resolved but has NO active/retracted repos → the
+    #                researcher drops ALL cross-repo hits (every project_id is
+    #                "absent"). This is NOT the same as exit 3.
+    #   3          → manifest unresolved → degrade to provenance-labeled recall.
+    #   2 (_die)   → misconfigured explicit override (config error, not degrade).
     _pf="${BRAIN_PARTICIPANTS_FILE:-}"
-    if [ -z "$_pf" ] || [ ! -f "$_pf" ]; then
+    # An explicit override that doesn't resolve is a config error, not a silent
+    # fall-through to the sibling — surface it (exit 2) rather than mask it.
+    [ -z "$_pf" ] || [ -f "$_pf" ] || _die "BRAIN_PARTICIPANTS_FILE set but not a readable file: $_pf"
+    if [ -z "$_pf" ]; then
       _root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
       _sib="$(dirname "$_root")/brain-ops/brain-participants.tsv"
       [ -f "$_sib" ] && _pf="$_sib" || _pf=""
     fi
     [ -n "$_pf" ] && [ -f "$_pf" ] || { printf 'brain-client: participant manifest not found (set BRAIN_PARTICIPANTS_FILE in .env.local or place brain-ops beside this repo)\n' >&2; exit 3; }
-    grep -vE '^[[:space:]]*(#|$)' "$_pf"
+    # Emit ONLY schema-valid rows: "<project_id>\t<active|retracted>". This IS
+    # the cepa:autonomy §7 strip AT THE RELAY POINT: the manifest is cross-repo
+    # content (lives in brain-ops), so any comment, blank, malformed, CR-tainted,
+    # or injection line is DROPPED here — never relayed into the researcher
+    # prompt. `|| true` makes a zero-valid-row file exit 0-with-empty (the valid
+    # "drop-all" registry above), NOT grep's exit 1 which the caller can't read.
+    tr -d '\r' < "$_pf" | grep -E $'^[A-Za-z0-9._-]+\t(active|retracted)$' || true
     ;;
   idkey)
     # CONTENT-derived idempotency_key so re-runs of an UNCHANGED doc dedup
