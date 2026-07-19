@@ -57,8 +57,11 @@ assumption.
    there — a caught injection attempt or degradation in the planning
    phase must not evaporate with the briefing (`cepa:grounding` skill,
    durable-sink rule). If a `brain:` key is present, also run the
-   `cepa:brain` pre-flight and tell the researcher (its cross-repo recall
-   pre-step); fold the `brain` facts into the same Step 2.6 findings file.
+   `cepa:brain` two-step pre-flight (`GET /health`, then resolve the participant
+   registry via `brain-client.sh participants`) and tell the researcher (its
+   cross-repo recall pre-step), passing it the resolved registry lines (exit 3 →
+   "no manifest", cross-repo hits stay provenance-labeled) so the provenance
+   filter can enforce; fold the `brain` facts into the same Step 2.6 findings file.
 2. If the argument is an existing plan path in `docs/plans/`, use it.
    Otherwise produce a plan: delegate to `superpowers:writing-plans` if
    available, else write the plan yourself. **The plan's task list follows

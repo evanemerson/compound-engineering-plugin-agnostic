@@ -54,11 +54,19 @@ scrub below is FORCED on for it (see Compliance).
 
 ## Availability + degrade
 
-**Pre-flight** (before any recall/writeback in a run), when a `brain:` key exists:
-`GET <url>/health` with the `x-brain-key` header → expect `{ok:true}`. Any failure
-(missing key, non-200, timeout) → provider `unavailable`, grep-only, recorded. Do
-NOT probe with `/recall` (it 400s without a full payload and costs a paid embedding
-call).
+**Pre-flight** (before any recall/writeback in a run), when a `brain:` key exists,
+is TWO steps and both feed the researcher dispatch:
+1. **Liveness** — `GET <url>/health` with the `x-brain-key` header → expect
+   `{ok:true}`. Any failure (missing key, non-200, timeout) → provider
+   `unavailable`, grep-only, recorded. Do NOT probe with `/recall` (it 400s
+   without a full payload and costs a paid embedding call).
+2. **Registry resolution** — for cross-repo recall to be trustworthy the invoker
+   MUST resolve the participant registry via `brain-client.sh participants` and
+   pass its lines to the researcher (see "Portfolio scope + participant registry"
+   below). Exit 0 → pass the registry. Exit 3 (unresolved) → tell the researcher
+   **no manifest**, so every cross-repo hit is provenance-labeled and none is
+   trusted as cleared. Resolution failure does NOT disable recall — it degrades
+   trust, never liveness. A same-repo-only run may skip this step.
 
 **Mid-run degrade rule:** after pre-flight passes, ANY call returning non-2xx
 (400/401/422/500) or timing out degrades the provider for the remainder of the run
@@ -123,9 +131,14 @@ One shared `workspace_id` for the portfolio (from `BRAIN_WORKSPACE_ID`);
 
 The recall provenance filter needs an authoritative list of which `project_id`s are
 active vs retracted — a consuming repo cannot infer another repo's status on its
-own. That list is a **tracked `brain-participants.tsv`** manifest kept beside the
-OB1 setup (a U1 artifact): one line per repo, `<project_id>\t<active|retracted>`.
-The invoking command reads it and passes it to the researcher; recall drops any
+own. That list is a **tracked `brain-participants.tsv`** manifest kept in the
+private `brain-ops` setup repo (a U1 artifact, NOT inside any consuming repo):
+one line per repo, `<project_id>\t<active|retracted>`. The invoking command
+resolves + reads it via `brain-client.sh participants`, which looks first at
+`$BRAIN_PARTICIPANTS_FILE` (set in `.env.local`) then a sibling `brain-ops`
+checkout, and **exits fail-closed (3) if neither resolves** — the caller then
+degrades to provenance-labeled recall rather than guessing a path. It passes the
+resolved registry to the researcher; recall drops any
 memory whose `source_refs` `project_id` is `retracted` or absent from the manifest
 (fail-closed — an unknown provenance is dropped, not relayed). Until the manifest
 exists, recall runs but every cross-repo hit is provenance-labeled for the operator

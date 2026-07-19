@@ -165,8 +165,12 @@ failure/degradation is appended as a one-line record to
 briefing alone is not a record.
 
 When `cepa.local.md` has an `## Integrations` `brain:` key, likewise run the
-`cepa:brain` skill's pre-flight (`GET /health`); if available, tell the
-researcher so its cross-repo recall pre-step activates. Same durable-sink
+`cepa:brain` skill's two-step pre-flight (`GET /health`, then resolve the
+participant registry via `brain-client.sh participants`); if available, tell the
+researcher so its cross-repo recall pre-step activates AND pass it the resolved
+registry lines (exit 3 → tell it "no manifest" so cross-repo hits stay
+provenance-labeled) — without the registry the provenance filter cannot enforce.
+Same durable-sink
 rule for this no-findings-file phase: any `SUSPECT-BRAIN` strip, skipped
 arg, or degradation is appended to `memory/tasks.md`
 (`- brain: <event> — <source> — <date>`).

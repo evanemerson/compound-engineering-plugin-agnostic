@@ -10,12 +10,16 @@
 #   BRAIN_URL=https://<ref>.functions.supabase.co/agent-memory
 #   MCP_ACCESS_KEY=...
 # The Supabase service_role / OpenRouter keys NEVER live here (server-only).
+# Optional, for the `participants` resolver (fail-closed if unresolved):
+#   BRAIN_PARTICIPANTS_FILE=/abs/path/to/brain-ops/brain-participants.tsv
+# If unset, falls back to a sibling <repo-parent>/brain-ops checkout.
 #
 # Usage:
 #   brain-client.sh health
 #   brain-client.sh recall   <payload.json>
 #   brain-client.sh writeback <payload.json>
 #   brain-client.sh review   <memory_id> <confirm|evidence_only|reject|supersede|mark_stale>
+#   brain-client.sh participants                        # resolve + emit registry (fail-closed, exit 3 if unresolved)
 #   brain-client.sh scrub    <infile> <outfile>     # PHI redaction pass
 #   brain-client.sh idkey    <repo> <docpath> <index>   # stable idempotency_key
 # Bodies are passed as FILES, never as argv, so untrusted content is never
@@ -99,6 +103,25 @@ case "$cmd" in
       -e 's/\b(19|20)[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\b/[REDACTED-PHI-DOB]/g' \
       "$1" > "$2"
     ;;
+  participants)
+    # Resolve + emit the brain participant registry, fail-closed. The manifest
+    # lives with the brain-ops setup repo, NOT inside any consuming repo, so the
+    # path is resolved in a fixed order and NEVER guessed:
+    #   1. $BRAIN_PARTICIPANTS_FILE  (set in .env.local — authoritative override)
+    #   2. sibling checkout: <repo-parent>/brain-ops/brain-participants.tsv
+    # If neither resolves, exit 3 (NOT 0/2): the caller degrades to running
+    # recall with every cross-repo hit provenance-labeled and no memory trusted
+    # as cleared — per the cepa:brain "Portfolio scope" contract. Output is the
+    # normalized registry (comments/blanks stripped): "<project_id>\t<status>".
+    _pf="${BRAIN_PARTICIPANTS_FILE:-}"
+    if [ -z "$_pf" ] || [ ! -f "$_pf" ]; then
+      _root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+      _sib="$(dirname "$_root")/brain-ops/brain-participants.tsv"
+      [ -f "$_sib" ] && _pf="$_sib" || _pf=""
+    fi
+    [ -n "$_pf" ] && [ -f "$_pf" ] || { printf 'brain-client: participant manifest not found (set BRAIN_PARTICIPANTS_FILE in .env.local or place brain-ops beside this repo)\n' >&2; exit 3; }
+    grep -vE '^[[:space:]]*(#|$)' "$_pf"
+    ;;
   idkey)
     # CONTENT-derived idempotency_key so re-runs of an UNCHANGED doc dedup
     # (agent_memories has no upsert — a repeated key is skipped) while an
@@ -110,6 +133,6 @@ case "$cmd" in
     printf '%s:%s:%s\n' "$1" "$2" "$_sha"
     ;;
   *)
-    _die "unknown command: '${cmd}' (health|recall|writeback|review|scrub|idkey)"
+    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|idkey)"
     ;;
 esac
