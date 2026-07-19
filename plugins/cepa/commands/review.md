@@ -105,9 +105,11 @@ SUSPECT-GROUNDING blocks are grounding events, NEVER counted in
 findings), and the line itself into `pre_step:`.
 
 When `cepa.local.md` has an `## Integrations` `brain:` key, likewise run the
-`cepa:brain` pre-flight (`GET /health`) and, if available, tell the
-researcher so its cross-repo recall pre-step activates (see the
-`cepa:brain` skill). Fold its `brain pre-step:` status line into a `brain`
+`cepa:brain` two-step pre-flight (`GET /health`, then resolve the participant
+registry via `brain-client.sh participants`) and, if available, tell the
+researcher so its cross-repo recall pre-step activates AND pass it the resolved
+registry lines (exit 3 → "no manifest", cross-repo hits stay provenance-labeled)
+so the provenance filter can enforce (see the `cepa:brain` skill). Fold its `brain pre-step:` status line into a `brain`
 Run Metadata block (Step 5) exactly as above, routing `SUSPECT-BRAIN`
 strips to `brain.suspect_stripped` (never `detection_signals`). Brain
 recall is institutional-knowledge retrieval (cross-repo `docs/solutions`),
