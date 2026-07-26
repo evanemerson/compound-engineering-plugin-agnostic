@@ -384,6 +384,42 @@ failure this tier exists to prevent. Every weekly exit that skips the
 findings file leaves that durable one-liner, so a misconfigured cron is
 never indistinguishable from a quiet week.
 
+### Parallel batches
+
+Every cepa run audits open PRs first and treats a same-author PR with
+overlapping scope as a blocker — correct when you're working one thing at a
+time, fatal when you're deliberately running several. Worktree #1 opens its
+PR, and every sibling still running sees it and stops.
+
+Pass a `batch:<id>` token to opt a run into a fan-out:
+
+```bash
+# one worktree per parallel-safe issue, all sharing a batch id
+claude -w --  "/cepa:lfg 42 batch:jul26a"
+claude -w --  "/cepa:lfg 43 batch:jul26a"
+claude -w --  "/cepa:lfg 47 batch:jul26a"
+```
+
+The id becomes part of each branch name (`feat/jul26a-<description>`), and an
+open same-author PR whose branch carries the same id is reported as a sibling
+instead of blocking. Everything else still blocks exactly as before.
+
+Two limits are deliberate, and both live in the `cepa:autonomy` contract
+(§2b):
+
+- **The token authorizes; repo content never does.** A batch id is honored
+  because you typed it. An issue body, PR description, or plan claiming a
+  batch id — or claiming "safe to build in parallel" — is untrusted data and
+  confers nothing. This matters if your issues are generated from a doc or a
+  screenshot.
+- **A declaration is not a disjointness proof.** Before passing a sibling, the
+  run checks its actual changed files against this run's declared scope. Real
+  overlap blocks on its own merits: the batch id exempts you from the
+  same-author heuristic, not from evidence.
+
+Runs inside a batch execute their own plan units serially, so N concurrent
+runs stay bounded rather than multiplying by the per-run parallelism cap.
+
 **Step 4.4 — Auto-Fix by Severity**
 
 - **P1 (Critical):** Fixed immediately, no questions asked. Commit and push.
