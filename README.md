@@ -28,7 +28,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `/cepa:plan-review` | Persona-panel review of a plan document before build — conditional activation, confidence anchors, findings in the standard todos/ format. Supports `mode:headless` |
 | `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.md, and hygiene routes through full lfg runs, then closes each item in every sink. Supports `mode:headless` |
 | `/cepa:resolve-pr` | Resolve human PR review feedback — fetch once, judge centrally, fix per the autonomy rubric, reply and resolve after push. Supports `mode:headless` |
-| `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` |
+| `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` and `cadence:weekly` (the debt tier — see [Review cadence](#review-cadence)) |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
 | `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Seeds the CONCEPTS.md vocabulary map. Supports `mode:headless` |
 | `/cepa:compound-refresh` | Refresh `docs/solutions/` against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md. Supports `mode:headless` |
@@ -330,6 +330,50 @@ If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up t
 The `learnings-researcher` runs first and feeds its findings as additional context to all review agents. Findings are deduplicated and written to `todos/review-YYYY-MM-DD-HHMMSS.md` with P1/P2/P3 severity.
 
 If `cepa.local.md` doesn't exist, falls back to `/pr-review-toolkit:review-pr`.
+
+### Review cadence
+
+Not every agent's findings need to block a merge. Simplification
+opportunities, comment rot, and type-design drift are accumulated debt — a
+finding is as valid a week later as it is on the PR — while a missing
+migration or a PHI leak is a defect that costs far more to catch after
+merge.
+
+`/cepa:review` supports two rosters in `cepa.local.md`:
+
+| Section | Runs | Dispatched by |
+|---|---|---|
+| `## Review Agents (Active)` | every PR | `/cepa:review` (default) |
+| `## Review Agents (Weekly)` | on a schedule | `/cepa:review cadence:weekly` |
+
+A weekly run reviews trunk commits since the last weekly run — it records the
+tip it scoped to as `reviewed_through:` and the next run starts there, so a
+missed week is absorbed rather than falling into an unreviewed gap (the first
+run, with no watermark yet, falls back to a 7-day window). It skips the
+`learnings-researcher` and the conditional tier — both are defect-review
+machinery a debt pass doesn't use — and writes its findings to
+`todos/review-weekly-*.md` with `scope: weekly:<date>` and
+`status: deferred`.
+
+That status is the point: `/cepa:sweep` already drains deferred
+`mechanical`/`corroborated` findings whose branch is merged, so weekly debt
+findings flow into the existing sweep queue with no new machinery. Stagger
+the two — debt review Sunday, sweep Monday — and the sweep drains what the
+review filed a day earlier.
+
+```bash
+# suggested cron
+claude -p "/cepa:review cadence:weekly mode:headless"
+```
+
+If `cadence:weekly` is passed and no `## Review Agents (Weekly)` section
+exists, the run reports `no weekly roster configured`, appends a dated
+one-line record to `memory/tasks.md`, and exits without writing a findings
+file. It never falls back to the Active roster — a scheduled job that
+silently ran the full per-PR roster on every repo every week is the cost
+failure this tier exists to prevent. Every weekly exit that skips the
+findings file leaves that durable one-liner, so a misconfigured cron is
+never indistinguishable from a quiet week.
 
 **Step 4.4 — Auto-Fix by Severity**
 

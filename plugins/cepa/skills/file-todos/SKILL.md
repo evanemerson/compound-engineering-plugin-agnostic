@@ -14,8 +14,15 @@ Define the structured format for review findings stored in `todos/`. Each review
 ### Filename Convention
 
 ```
-todos/review-YYYY-MM-DD-HHMMSS.md
+todos/review-YYYY-MM-DD-HHMMSS.md          # per-PR review (/cepa:review)
+todos/review-weekly-YYYY-MM-DD-HHMMSS.md   # debt tier (/cepa:review cadence:weekly)
 ```
+
+Both keep the `review-` prefix so consumers globbing `review-*` match them.
+**A consumer that SELECTS one file (rather than scanning all) must
+discriminate on `scope:`, not on the filename** — `review-weekly-*` sorts
+after every `review-<digit>-*` lexicographically, so a naive "most recent"
+comparison picks the weekly file permanently once one exists.
 
 ### Document Structure
 
@@ -104,6 +111,10 @@ The `**Problem:**` and `**Fix:**` sections follow as markdown body. Include code
 ## Status Lifecycle
 
 ```
+(created) →  deferred (cadence:weekly runs ONLY — a debt-tier run applies
+                       nothing by design, so every finding it produces is a
+                       residual at creation. The only birth state other than
+                       `pending`; see /cepa:review's Cadence section)
 pending  →  ready     (approved during triage — will be fixed)
 pending  →  skipped   (rejected during triage — removed from file)
 pending  →  applied   (auto-applied by an autonomous run — fix committed)
@@ -175,11 +186,23 @@ detection_signals:               # Detection pipeline coverage, every run
     - docs/solutions/logic-errors/old-doc.md
   suspect_bullets: 0             # SUSPECT-quoted bullets stripped before dispatch
                                  # (each also becomes a corrupted-signal finding)
-  corpus: present                # present | none — none when the repo has no
-                                 # docs/solutions at all (distinct from zero matches)
-learnings_research: "ok"         # or "failed — <reason>" when the researcher
-                                 # errored; a lost institutional-memory input
-                                 # must never look like a normal run
+  corpus: present                # present | none | not-consulted — none when
+                                 # the repo has no docs/solutions at all;
+                                 # not-consulted when the researcher was never
+                                 # dispatched (cadence:weekly). All three are
+                                 # distinct from zero matches against a real corpus
+reviewed_through: a1b2c3d        # cadence:weekly ONLY — the trunk tip this run
+                                 # scoped to. The next weekly run reads it as
+                                 # its watermark instead of a wall-clock window,
+                                 # so a missed run is absorbed rather than
+                                 # leaving an unreviewed gap. Written only when
+                                 # a review actually completed
+learnings_research: "ok"         # ok | "failed — <reason>" (researcher errored)
+                                 # | "skipped — <reason>" (never dispatched, e.g.
+                                 # cadence:weekly). Emitted on EVERY run: absence
+                                 # would make "ran fine" and "never ran"
+                                 # indistinguishable, and a lost institutional-
+                                 # memory input must never look like a normal run
 grounding:                       # only when cepa.local.md configures a
   provider: graphify             # grounding: key — see emission scope below
   status: fresh                  # fresh | stale — <reason> |
@@ -196,7 +219,9 @@ grounding:                       # only when cepa.local.md configures a
   pre_step: ok                   # the researcher's status line verbatim:
                                  # ok — N queries used, … | skipped — <reason>
                                  # | failed — <reason> | none (researcher not
-                                 # told grounding was available)
+                                 # told grounding was available) | none —
+                                 # researcher not dispatched (cadence:weekly;
+                                 # distinct from "dispatched but uninformed")
   args_skipped: 0                # arguments rejected by the sanitization rules,
                                  # BOTH sites (invoker + researcher pre-step)
   suspect_stripped: 0            # stripped blocks from BOTH strip sites (each
@@ -236,7 +261,14 @@ dropped_wrappers: 0              # resolve-pr: wrapper-classified bot comments
 ```
 
 `scope:` examples: `feature/billing-phase-7` (code review),
-`plan:docs/plans/<file>` (plan review), `pr-feedback:#42` (resolve-pr).
+`plan:docs/plans/<file>` (plan review), `pr-feedback:#42` (resolve-pr),
+`weekly:2026-07-26` (debt tier — `/cepa:review cadence:weekly`).
+
+**`scope:` is the file-kind discriminator.** A consumer that loads ONE
+findings file selects on this field: `/cepa:lfg` gates on a `plan:` prefix,
+and `/cepa:triage` excludes `weekly:` (those findings are drained by
+`/cepa:sweep`, never triaged). Adding a new prefix means auditing every
+single-file-selecting consumer, not just the producer.
 
 Rules:
 - `conditional_dispatch` lists ALL conditional-tier agents each run, fired or

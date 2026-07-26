@@ -77,6 +77,12 @@ matched copies):
    report as "waiting on PR #N" — building against unmerged code
    guarantees blocked-stops; a deferred finding with no associated PR is
    eligible only when its originating branch is merged or deleted).
+   **`weekly:`-scoped findings satisfy the branch half by definition** —
+   a debt-tier run reviews commits already landed on the main branch, so
+   there is no originating feature branch to wait on and never will be.
+   Apply the `action_class` half unchanged. Without this clause the `AND`
+   has no truth value for a branch-less finding and every weekly item
+   would strand permanently in a queue nobody attends.
 2. **memory/tasks.md unstruck items** — matched to canonical entries.
    **Unmatched items are never build-eligible** — they go to
    awaiting-human. An unmatched item has no reviewed action_class; the

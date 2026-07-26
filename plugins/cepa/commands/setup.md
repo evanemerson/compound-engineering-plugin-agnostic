@@ -42,12 +42,41 @@ Beyond the script's facts, check:
    reliability-reviewer, previous-comments-reviewer) should appear only as
    `!` exclusions — listing one as a roster entry is a misconfiguration
    (they dispatch by signal). Flag unknown names — typos silently reduce
-   review coverage.
+   review coverage. **A name with trailing prose is an unknown name**
+   (`- python-reviewer — project is TypeScript`): a justification written
+   onto a roster line does not exclude the agent, it corrupts its name.
+   The fix for an unwanted roster-tier agent is to DELETE the line (or
+   comment it) — `!` only excludes conditional-tier agents.
+1b. **Weekly roster validity** — runs on EVERY project, not only those with
+   a `## Review Agents (Weekly)` section, because the absent-section case is
+   the failure that matters. Three states:
+   - **Present with entries** (the `cadence:weekly` debt tier, see review.md)
+     — validate names as in check 1. An agent listed in BOTH sections is
+     probable misconfiguration: flag it (advice, not error), since the per-PR
+     tier already covers it every run.
+   - **Present but empty** — a scheduled `cadence:weekly` run will fail-closed
+     and review nothing. Flag prominently: it reports as a clean pass to
+     anyone not reading the exit reason.
+   - **Absent** — scan for a near-miss heading (case-insensitive match on
+     "Review Agents" + "Weekly", any nesting level): `## Review Agents
+     (weekly)`, `## Weekly Review Agents`, `### Review Agents (Weekly)`. A
+     near-miss reads as absent to review.md's parser, so a scheduled run
+     fail-closes forever while the config looks configured — flag it as a
+     probable typo. With no near-miss and no weekly schedule, report
+     "weekly tier: not configured" explicitly rather than staying silent;
+     not-configured and misconfigured must be distinguishable in this report,
+     which is the only on-demand check covering the scheduled path.
 2. **Stack ↔ roster fit** — a `frontend: none` project listing
    frontend-reviewer, or a Django project missing schema-drift-detector,
    is worth flagging (advice, not an error).
 3. **Compliance sanity** — if `hipaa: true` or PII fields are declared,
-   security-sentinel and data-integrity-guardian must be in the roster.
+   security-sentinel and data-integrity-guardian must be in
+   `## Review Agents (Active)` **specifically** — not merely present
+   somewhere in the file. Presence only under `## Review Agents (Weekly)`
+   fails this check: it demotes a compliance-critical agent to a once-a-week
+   debt pass, so most PRs would merge without it, and `cepa:autonomy` §4's
+   compliance carve-out assumes both ran against the diff. Check 1b flags an
+   agent in BOTH sections; this check flags one present ONLY in Weekly.
 4. **Plugin version drift** — compare the installed cepa version (script
    INFO line) against the marketplace's latest. Stale installs are how
    projects silently run old contracts; recommend

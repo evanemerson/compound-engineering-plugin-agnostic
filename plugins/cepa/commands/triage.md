@@ -16,11 +16,21 @@ available with the `interactive` argument.
 
 ## Step 1: Load Findings (both modes)
 
-1. Search `todos/` for the most recent `review-*.md` file (by filename date, or use the most recently modified)
+1. Search `todos/` for the most recent `review-*.md` file (by filename date, or use the most recently modified).
+   **Exclude any file whose `scope:` begins with `weekly:`** — debt-tier
+   findings are born `deferred` and are drained by `/cepa:sweep`, never
+   triaged. They also defeat a filename comparison: `review-weekly-*` sorts
+   after every `review-<digit>-*`, so once one exists a naive "most recent"
+   pick selects it permanently and reports "0 pending" while a real PR review
+   sits untriaged in an older-named file. Exclude on `scope:`, not on the
+   filename — the prefix is deliberate (see the `cepa:file-todos` skill).
 2. Parse all findings with `status: pending`
-3. Count findings by severity and report: "Found X pending findings (Y P1, Z P2, W P3)."
+3. Count findings by severity and report: "Found X pending findings (Y P1, Z P2, W P3) in `<path>`."
+   **Always name the file you loaded** — a "0 pending" result must be
+   attributable to a specific file, or selecting the wrong one is
+   indistinguishable from a clean triage.
 
-If no pending findings exist, report that and stop.
+If no pending findings exist, report that — naming the file — and stop.
 
 ## Batch Mode (default)
 
