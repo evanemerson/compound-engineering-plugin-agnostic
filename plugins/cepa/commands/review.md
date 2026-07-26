@@ -1,6 +1,6 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
-argument-hint: "[PR number] [mode:headless]"
+argument-hint: "[PR number] [cadence:weekly] [mode:headless]"
 allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
 ---
 
@@ -38,6 +38,37 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
 **Fail-safe:** if the harness exposes no blocking-question tool, behave as
 headless even without the token.
 
+## Cadence
+
+Parse a `cadence:weekly` token from anywhere in the arguments and strip it.
+Cadence selects WHICH roster runs; it is orthogonal to `mode:`.
+
+- **Default (no `cadence:` token) — the per-PR tier.** Dispatch
+  `## Review Agents (Active)`, the conditional tier, and the
+  `learnings-researcher` pre-step, exactly as written below. Unchanged
+  behavior; every existing caller (`/cepa:task`, `/cepa:lfg`,
+  `/cepa:sweep`, `/cepa:resolve-pr`) lands here.
+- **`cadence:weekly` — the debt tier.** Dispatch
+  `## Review Agents (Weekly)` INSTEAD of the Active roster, over a
+  time-window scope (Step 1). This tier exists for agents whose findings
+  are accumulated debt rather than merge-blocking defects — simplification
+  opportunities, comment rot, type-design drift — where a finding is just
+  as valid a week later as it is on the PR.
+
+  **Skip the `learnings-researcher` pre-step and the entire conditional
+  tier on a weekly run.** Both are diff-signal and task-context machinery
+  serving defect review; a debt pass over a time window consumes neither,
+  and dispatching them is pure cost. Record `conditional_dispatch` for all
+  three as `dispatched: false` with reason `cadence:weekly`.
+
+**Fail-closed:** if `cadence:weekly` is passed and
+`## Review Agents (Weekly)` is absent or contains no roster entries, report
+`no weekly roster configured` and exit **without writing a findings file**.
+NEVER fall back to the Active roster — a scheduled run that silently
+dispatched the full per-PR roster on every repo, every week, is exactly the
+cost failure this tier exists to prevent. An absent section is a
+configuration signal, not an invitation to guess.
+
 ## Step 1: Determine Review Scope
 
 Identify what to review:
@@ -45,6 +76,23 @@ Identify what to review:
 2. If on a feature branch, use `git diff main...HEAD` (or the project's main branch)
 3. If there are uncommitted changes, use `git diff` + `git diff --staged`
 4. Run `git log --oneline main...HEAD` to understand the full commit history
+
+**Weekly cadence overrides all four.** A `cadence:weekly` run reviews the
+main-branch changes in a time window (default 7 days) rather than a PR or
+branch diff:
+
+```bash
+git log --first-parent --since="7 days ago" --format=%H <main-branch>
+git diff <oldest-sha>~1...<main-branch>
+```
+
+Read the commit list and take the **last** SHA — the oldest in the window.
+An **empty list** means no commits landed in the window: report
+`no commits in window` and exit without writing a findings file (an empty
+window is not a clean review). Do not substitute `git rev-parse` or a shell
+pipeline here — the two verbs above are the ones this command's
+`allowed-tools` authorizes, and a scheduled run is exactly where an
+unauthorized verb degrades silently.
 
 Save the diff output — you'll pass it to each agent.
 
@@ -56,6 +104,13 @@ Save the diff output — you'll pass it to each agent.
    exclusions for conditional-tier agents (see Step 3); never dispatch a `!`
    line as an agent name. A `!` on a non-conditional agent name has no
    effect; note it in the `conditional_dispatch` record.
+
+   **On a `cadence:weekly` run, read `## Review Agents (Weekly)` instead**
+   — same line format, same `!` semantics, same name validation. The two
+   sections are independent rosters, not a base and an overlay: a weekly
+   run dispatches the Weekly section alone and never merges in Active. If
+   the section is missing or has no entries, apply the fail-closed rule
+   from the Cadence section above (report and exit; never fall back).
 3. Check the `## Integrations` section (if present) for optional stage
    providers — see "Integration Dispatch" in Step 3
 4. Read the project's `CLAUDE.md` for any additional review rules
@@ -174,7 +229,9 @@ is skipped, set `deploy_verdict: not-evaluated` with the skip rule as basis.
 **Conditional tier (dispatched by diff signals — no roster listing needed):**
 These three run automatically when their signal fires, in any project. A
 project opts out of one by adding `- !agent-name` to its
-`## Review Agents (Active)` list.
+`## Review Agents (Active)` list. **The entire tier is skipped on a
+`cadence:weekly` run** (see the Cadence section) — record all three as
+`dispatched: false` with reason `cadence:weekly`.
 - `adversarial-reviewer` — dispatch when the diff is large (roughly 300+
   changed lines) OR touches risky paths: payments/billing, auth/session,
   PHI/PII-flagged fields (per `## Compliance`), or data migrations. Failure-
@@ -289,6 +346,31 @@ End the file body with:
 **Summary:** X findings (Y P1, Z P2, W P3)
 **Next step:** Run `/cepa:triage` (batch auto-apply by default; pass `interactive` for one-at-a-time).
 ```
+
+### Weekly cadence — file shape
+
+A `cadence:weekly` run writes the same canonical format with three
+differences:
+
+- **Path:** `todos/review-weekly-YYYY-MM-DD-HHMMSS.md`. The `review-`
+  prefix is deliberate — existing consumers that glob `review-*` keep
+  matching it.
+- **`scope:` is `weekly:<YYYY-MM-DD>`**, following the same
+  prefix-as-discriminator convention `/cepa:lfg` relies on when it gates on
+  a `plan:` scope. A caller can tell a debt file from a PR file without
+  parsing findings.
+- **Every finding is written `status: deferred`, not `pending`.** This is
+  what closes the loop: `/cepa:sweep` Step 2 drains `status: deferred`
+  findings that are `mechanical`/`corroborated` with the originating branch
+  merged — which is precisely the shape of debt findings over already-merged
+  main-branch commits. `pending` would strand them: a scheduled unattended
+  run leaves nobody to triage, so they would sit forever and the sweep would
+  never see them. The semantics are also correct per `cepa:autonomy` §5 — a
+  weekly run applies nothing by design, so every finding it produces is a
+  residual at creation.
+
+The `**Next step:**` line for a weekly file names `/cepa:sweep` rather than
+`/cepa:triage`.
 
 ## Step 6: Report (interactive mode)
 

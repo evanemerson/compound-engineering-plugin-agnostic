@@ -85,6 +85,14 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 | `reliability-reviewer` | Retries, timeouts, idempotency, races on queue/webhook/transaction code |
 | `previous-comments-reviewer` | Verifies prior review findings weren't lost or re-broken |
 
+**Cadence tiers.** `cepa.local.md` may declare a second roster,
+`## Review Agents (Weekly)`, dispatched only by `/cepa:review
+cadence:weekly` — the debt tier for agents whose findings accumulate rather
+than block a merge (`code-simplifier`, `comment-analyzer`,
+`type-design-analyzer`). A weekly run reviews the last 7 days of main,
+skips the researcher and conditional tier, and files `status: deferred`
+findings that `/cepa:sweep` drains. See CONFIGURATION.md.
+
 ### Skills (8)
 | Skill | Purpose |
 |---|---|

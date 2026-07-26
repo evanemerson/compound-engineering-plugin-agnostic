@@ -42,7 +42,19 @@ Beyond the script's facts, check:
    reliability-reviewer, previous-comments-reviewer) should appear only as
    `!` exclusions — listing one as a roster entry is a misconfiguration
    (they dispatch by signal). Flag unknown names — typos silently reduce
-   review coverage.
+   review coverage. **A name with trailing prose is an unknown name**
+   (`- python-reviewer — project is TypeScript`): a justification written
+   onto a roster line does not exclude the agent, it corrupts its name.
+   The fix for an unwanted roster-tier agent is to DELETE the line (or
+   comment it) — `!` only excludes conditional-tier agents.
+1b. **Weekly roster validity** — if `## Review Agents (Weekly)` is present
+   (the `cadence:weekly` debt tier, see review.md), validate its names the
+   same way. Two extra checks: an agent listed in BOTH sections is probable
+   misconfiguration — flag it (advice, not error), since the per-PR tier
+   already covers it every run; and an empty-but-present section means a
+   scheduled `cadence:weekly` run will fail-closed and review nothing —
+   flag that prominently, because it reports as a clean pass to anyone not
+   reading the exit reason.
 2. **Stack ↔ roster fit** — a `frontend: none` project listing
    frontend-reviewer, or a Django project missing schema-drift-detector,
    is worth flagging (advice, not an error).

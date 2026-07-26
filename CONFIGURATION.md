@@ -200,7 +200,7 @@ Control which agents run during `/cepa:review`. Comment out or remove agents you
 - performance-oracle
 ```
 
-The `learnings-researcher` always runs regardless of this list — it's not a review agent, it's the knowledge retrieval step that feeds context to the others.
+The `learnings-researcher` runs regardless of this list on a normal review — it's not a review agent, it's the knowledge retrieval step that feeds context to the others. (The one exception is a `cadence:weekly` run, which skips it — see below.)
 
 **Conditional-tier agents** (`adversarial-reviewer`, `reliability-reviewer`,
 `previous-comments-reviewer`) are NOT listed here — they dispatch
@@ -214,6 +214,52 @@ line to this section:
 - performance-oracle
 - !adversarial-reviewer    # never dispatch in this project
 ```
+
+**Removing a roster-tier agent:** delete or comment the line. The `!` prefix
+only excludes conditional-tier agents — writing `- python-reviewer — not a
+Python project` does NOT exclude it, it corrupts the agent name. `/cepa:setup`
+flags names with trailing prose as unknown for exactly this reason.
+
+### Review Agents (Weekly)
+
+Optional second roster for the **debt tier** — agents whose findings are
+accumulated debt rather than merge-blocking defects. Dispatched only by
+`/cepa:review cadence:weekly`, never on a PR.
+
+```markdown
+## Review Agents (Weekly)
+- code-simplifier
+- comment-analyzer
+- type-design-analyzer
+```
+
+Good candidates: `code-simplifier` (simplification opportunities),
+`comment-analyzer` (comment rot), `type-design-analyzer` (already documented
+as "use when new types/models are added" — it was never meant to be
+unconditional).
+
+Keep in `Active`, never here: `security-sentinel`, `data-integrity-guardian`,
+`schema-drift-detector`, `deployment-verifier`, `silent-failure-hunter`.
+These catch defects that cost far more to fix after merge, and
+`deployment-verifier` additionally owns the `deploy_verdict` that
+`/cepa:lfg` refuses to ship past.
+
+**On a compliance project** (`hipaa: true` or declared `phi_fields`),
+`security-sentinel` and `data-integrity-guardian` must stay in `Active` —
+`/cepa:setup` enforces this, and `cepa:autonomy` §4's compliance carve-out
+assumes they ran on the diff.
+
+A weekly run reviews the last 7 days of main-branch commits, skips the
+`learnings-researcher` and the conditional tier, and files findings to
+`todos/review-weekly-*.md` as `status: deferred` — the state `/cepa:sweep`
+drains. Schedule it staggered ahead of your sweep:
+
+```bash
+claude -p "/cepa:review cadence:weekly mode:headless"
+```
+
+If this section is missing or empty, `cadence:weekly` exits without
+reviewing anything rather than falling back to the `Active` roster.
 
 ### Autonomy
 
