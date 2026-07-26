@@ -70,7 +70,13 @@ Beyond the script's facts, check:
    frontend-reviewer, or a Django project missing schema-drift-detector,
    is worth flagging (advice, not an error).
 3. **Compliance sanity** — if `hipaa: true` or PII fields are declared,
-   security-sentinel and data-integrity-guardian must be in the roster.
+   security-sentinel and data-integrity-guardian must be in
+   `## Review Agents (Active)` **specifically** — not merely present
+   somewhere in the file. Presence only under `## Review Agents (Weekly)`
+   fails this check: it demotes a compliance-critical agent to a once-a-week
+   debt pass, so most PRs would merge without it, and `cepa:autonomy` §4's
+   compliance carve-out assumes both ran against the diff. Check 1b flags an
+   agent in BOTH sections; this check flags one present ONLY in Weekly.
 4. **Plugin version drift** — compare the installed cepa version (script
    INFO line) against the marketplace's latest. Stale installs are how
    projects silently run old contracts; recommend

@@ -14,8 +14,13 @@ codebase while nobody is looking.
 
 1. Read the frontmatter `summary` of EVERY `todos/review-*.md` file (cheap —
    one YAML block each). Fully parse: (a) the two most recent files, and
-   (b) any older file whose summary shows nonzero `pending` or `ready` —
-   unresolved promises must not age out of the continuity check. Note in
+   (b) any older file whose summary shows nonzero `pending`, `ready`, **or
+   `deferred`** — unresolved promises must not age out of the continuity
+   check. `deferred` counts as unresolved: a debt-tier file
+   (`scope: weekly:*`) is born with `pending: 0` and every finding already
+   `deferred`, so a `pending`/`ready`-only test reads it as fully resolved on
+   day one and drops it from the check as soon as two newer files land —
+   permanently, since its `pending` never becomes nonzero. Note in
    your output how many files you scanned vs. skipped-as-fully-resolved.
    Statuses are the canonical six from the `cepa:file-todos` skill
    (`pending`, `ready`, `skipped`, `applied`, `deferred`, `completed`).

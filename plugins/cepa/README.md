@@ -89,9 +89,10 @@ Conditional tier — dispatched by diff signals, no roster listing needed
 `## Review Agents (Weekly)`, dispatched only by `/cepa:review
 cadence:weekly` — the debt tier for agents whose findings accumulate rather
 than block a merge (`code-simplifier`, `comment-analyzer`,
-`type-design-analyzer`). A weekly run reviews the last 7 days of main,
-skips the researcher and conditional tier, and files `status: deferred`
-findings that `/cepa:sweep` drains. See CONFIGURATION.md.
+`type-design-analyzer`). A weekly run reviews trunk commits since its last
+watermark (`reviewed_through:`), skips the researcher and conditional tier,
+and files `status: deferred` findings that `/cepa:sweep` drains. See
+CONFIGURATION.md.
 
 ### Skills (8)
 | Skill | Purpose |

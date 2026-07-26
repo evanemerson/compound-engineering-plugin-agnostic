@@ -346,9 +346,12 @@ merge.
 | `## Review Agents (Active)` | every PR | `/cepa:review` (default) |
 | `## Review Agents (Weekly)` | on a schedule | `/cepa:review cadence:weekly` |
 
-A weekly run reviews the last 7 days of main-branch commits instead of a PR
-diff, skips the `learnings-researcher` and the conditional tier (both are
-defect-review machinery a debt pass doesn't use), and writes its findings to
+A weekly run reviews trunk commits since the last weekly run — it records the
+tip it scoped to as `reviewed_through:` and the next run starts there, so a
+missed week is absorbed rather than falling into an unreviewed gap (the first
+run, with no watermark yet, falls back to a 7-day window). It skips the
+`learnings-researcher` and the conditional tier — both are defect-review
+machinery a debt pass doesn't use — and writes its findings to
 `todos/review-weekly-*.md` with `scope: weekly:<date>` and
 `status: deferred`.
 

@@ -191,6 +191,12 @@ detection_signals:               # Detection pipeline coverage, every run
                                  # not-consulted when the researcher was never
                                  # dispatched (cadence:weekly). All three are
                                  # distinct from zero matches against a real corpus
+reviewed_through: a1b2c3d        # cadence:weekly ONLY — the trunk tip this run
+                                 # scoped to. The next weekly run reads it as
+                                 # its watermark instead of a wall-clock window,
+                                 # so a missed run is absorbed rather than
+                                 # leaving an unreviewed gap. Written only when
+                                 # a review actually completed
 learnings_research: "ok"         # ok | "failed — <reason>" (researcher errored)
                                  # | "skipped — <reason>" (never dispatched, e.g.
                                  # cadence:weekly). Emitted on EVERY run: absence

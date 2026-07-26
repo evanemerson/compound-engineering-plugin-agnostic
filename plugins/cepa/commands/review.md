@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [cadence:weekly] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git add:*), Bash(git commit:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git add:*), Bash(git commit:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
 ---
 
 # Compound Review
@@ -158,14 +158,41 @@ isn't on the trunk, into a file whose `scope:` claims trunk provenance, and
 fails, exit via the durable-record path below with
 `weekly run requires clean trunk — <state>`.
 
+**Refresh the ref, then scope from a watermark — not from the clock.**
+
 ```bash
+git fetch --quiet origin <trunk>          # a stale local trunk is not a quiet week
+```
+
+Read `reviewed_through:` from the newest existing `todos/review-weekly-*.md`.
+That SHA is the watermark — the last commit any weekly run actually reviewed.
+
+```bash
+# with a watermark (normal case):
+git diff <watermark>...<trunk>
+
+# first run only, no prior weekly file exists:
 git log --first-parent --since="7 days ago" --format=%H <trunk>
 git diff <oldest-sha>~1...<trunk>
 ```
 
-Read the commit list and take the **last** SHA — the oldest in the window.
-Verify it matches `^[0-9a-f]{7,40}$` before composing the `git diff`; anything
-else means the output was misread, and is a scope failure, not a SHA.
+Take the **last** SHA from the commit list — the oldest in the window. Verify
+any SHA (watermark or extracted) matches `^[0-9a-f]{7,40}$` before composing
+the `git diff`; anything else means the output was misread, and is a scope
+failure, not a SHA.
+
+**Why the watermark and not `--since`:** a wall-clock window silently drops
+commits whenever a run doesn't happen. Miss one Sunday and days 8-14 fall
+between two 7-day windows, reviewed by nothing, recorded nowhere — and across
+a fleet of repos the gap is invisible because a skipped week and a quiet week
+produce identical output. Anchoring to the last reviewed SHA makes a missed
+run self-healing: the next run simply covers a longer range.
+
+Record the trunk tip you scoped to as `reviewed_through:` in the findings file
+(see Step 5) — that becomes the next run's watermark. **Only write it on a run
+that actually completed a review**; an exit via the durable-record path leaves
+the previous watermark standing, so the unreviewed range is picked up next
+time instead of being skipped.
 
 **Three distinct outcomes — never collapse them:**
 
@@ -459,6 +486,15 @@ differences:
   `not-evaluated` with basis `"cadence:weekly — deployment-verifier is
   Active-tier only"`. A missing verdict is never silent, and the weekly file
   stays inside every `review-*` glob.
+- **`reviewed_through: <sha>`** — the trunk tip this run scoped to. The next
+  weekly run reads it as its watermark (Step 1). Written only on a run that
+  completed a review; never on a durable-record exit.
+- **`agents_skipped` lists only Weekly-roster agents skipped by domain**, per
+  the normal skip rules. Non-dispatched **Active**-roster agents are NOT
+  skips — they belong to the other cadence tier and were never in scope for
+  this run. Recording them would report every weekly file as having skipped
+  most of the roster. State the tier in each reason so the two can never be
+  confused.
 
 ### Weekly cadence — §5 sinks and dedup
 

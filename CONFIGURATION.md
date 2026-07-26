@@ -249,10 +249,12 @@ These catch defects that cost far more to fix after merge, and
 `/cepa:setup` enforces this, and `cepa:autonomy` §4's compliance carve-out
 assumes they ran on the diff.
 
-A weekly run reviews the last 7 days of main-branch commits, skips the
-`learnings-researcher` and the conditional tier, and files findings to
+A weekly run reviews trunk commits since the previous weekly run (tracked via
+`reviewed_through:`, falling back to a 7-day window on the first run), skips
+the `learnings-researcher` and the conditional tier, and files findings to
 `todos/review-weekly-*.md` as `status: deferred` — the state `/cepa:sweep`
-drains. Schedule it staggered ahead of your sweep:
+drains. It fetches first, so a stale local clone can't masquerade as a quiet
+week. Schedule it staggered ahead of your sweep:
 
 ```bash
 claude -p "/cepa:review cadence:weekly mode:headless"
