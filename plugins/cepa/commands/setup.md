@@ -47,14 +47,25 @@ Beyond the script's facts, check:
    onto a roster line does not exclude the agent, it corrupts its name.
    The fix for an unwanted roster-tier agent is to DELETE the line (or
    comment it) — `!` only excludes conditional-tier agents.
-1b. **Weekly roster validity** — if `## Review Agents (Weekly)` is present
-   (the `cadence:weekly` debt tier, see review.md), validate its names the
-   same way. Two extra checks: an agent listed in BOTH sections is probable
-   misconfiguration — flag it (advice, not error), since the per-PR tier
-   already covers it every run; and an empty-but-present section means a
-   scheduled `cadence:weekly` run will fail-closed and review nothing —
-   flag that prominently, because it reports as a clean pass to anyone not
-   reading the exit reason.
+1b. **Weekly roster validity** — runs on EVERY project, not only those with
+   a `## Review Agents (Weekly)` section, because the absent-section case is
+   the failure that matters. Three states:
+   - **Present with entries** (the `cadence:weekly` debt tier, see review.md)
+     — validate names as in check 1. An agent listed in BOTH sections is
+     probable misconfiguration: flag it (advice, not error), since the per-PR
+     tier already covers it every run.
+   - **Present but empty** — a scheduled `cadence:weekly` run will fail-closed
+     and review nothing. Flag prominently: it reports as a clean pass to
+     anyone not reading the exit reason.
+   - **Absent** — scan for a near-miss heading (case-insensitive match on
+     "Review Agents" + "Weekly", any nesting level): `## Review Agents
+     (weekly)`, `## Weekly Review Agents`, `### Review Agents (Weekly)`. A
+     near-miss reads as absent to review.md's parser, so a scheduled run
+     fail-closes forever while the config looks configured — flag it as a
+     probable typo. With no near-miss and no weekly schedule, report
+     "weekly tier: not configured" explicitly rather than staying silent;
+     not-configured and misconfigured must be distinguishable in this report,
+     which is the only on-demand check covering the scheduled path.
 2. **Stack ↔ roster fit** — a `frontend: none` project listing
    frontend-reviewer, or a Django project missing schema-drift-detector,
    is worth flagging (advice, not an error).

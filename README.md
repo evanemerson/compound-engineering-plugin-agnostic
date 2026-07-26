@@ -364,10 +364,13 @@ claude -p "/cepa:review cadence:weekly mode:headless"
 ```
 
 If `cadence:weekly` is passed and no `## Review Agents (Weekly)` section
-exists, the run reports `no weekly roster configured` and exits without
-writing a findings file. It never falls back to the Active roster — a
-scheduled job that silently ran the full per-PR roster on every repo every
-week is the cost failure this tier exists to prevent.
+exists, the run reports `no weekly roster configured`, appends a dated
+one-line record to `memory/tasks.md`, and exits without writing a findings
+file. It never falls back to the Active roster — a scheduled job that
+silently ran the full per-PR roster on every repo every week is the cost
+failure this tier exists to prevent. Every weekly exit that skips the
+findings file leaves that durable one-liner, so a misconfigured cron is
+never indistinguishable from a quiet week.
 
 **Step 4.4 — Auto-Fix by Severity**
 

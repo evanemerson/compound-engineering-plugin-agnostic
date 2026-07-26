@@ -259,7 +259,12 @@ claude -p "/cepa:review cadence:weekly mode:headless"
 ```
 
 If this section is missing or empty, `cadence:weekly` exits without
-reviewing anything rather than falling back to the `Active` roster.
+reviewing anything rather than falling back to the `Active` roster — and
+records a dated one-liner in `memory/tasks.md` so the misconfiguration is
+visible instead of looking like a quiet week. `/cepa:setup` also scans for
+near-miss headings (`## Review Agents (weekly)`, `## Weekly Review Agents`),
+since those read as "absent" to the parser and would fail-close a scheduled
+run silently.
 
 ### Autonomy
 
