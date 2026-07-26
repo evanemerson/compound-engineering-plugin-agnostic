@@ -254,7 +254,13 @@ A weekly run reviews trunk commits since the previous weekly run (tracked via
 the `learnings-researcher` and the conditional tier, and files findings to
 `todos/review-weekly-*.md` as `status: deferred` — the state `/cepa:sweep`
 drains. It fetches first, so a stale local clone can't masquerade as a quiet
-week. Schedule it staggered ahead of your sweep:
+week.
+
+It runs in a throwaway `git worktree` detached at trunk, so your checkout and
+current branch are untouched and the agents read the same tree the diff
+describes. Findings are committed there and pushed to trunk; if trunk is
+protected the commit is parked on `chore/weekly-review-<date>` and the branch
+name is reported rather than lost. Schedule it staggered ahead of your sweep:
 
 ```bash
 claude -p "/cepa:review cadence:weekly mode:headless"
