@@ -1,2 +1,5 @@
 COMPARISON.md
 docs
+.env.local
+.brain-backfill-state.log
+cepa.local.md

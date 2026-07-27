@@ -36,7 +36,8 @@ present the queue before executing; headless runs never prompt.
 Record the execution-gate state (starting ref, dirty paths, branch
 ownership — the same record `/cepa:compound-refresh` Phase 3 defines;
 this command is one of its named pipeline callers). Items execute only
-from a clean main. A dirty tree or foreign feature branch AT ANY POINT —
+from a clean `<trunk>` — resolved per `cepa:autonomy` §8, never assumed to
+be `main`. A dirty tree or foreign feature branch AT ANY POINT —
 start or between items — demotes all remaining git-mutating items to
 report-only. **Never stash, anywhere in the run:** the never-stash rule
 binds every replicated lfg step for the whole scheduled run, overriding
@@ -128,7 +129,7 @@ Approved thread items replicate `resolve-pr.md`'s contract the same way.
   condition against that item and the sweep CONTINUES with the next.
 - **Per-item boundary:** every item run ends tree-clean — work-in-
   progress is committed to the item's own branch before any blocked
-  exit — then checkout main, re-verify clean, re-run the gate. A
+  exit — then checkout `<trunk>`, re-verify clean, re-run the gate. A
   boundary that finds dirt demotes all remaining git-mutating items to
   report-only with the named condition.
 
@@ -143,7 +144,7 @@ re-reported — never left half-consumed. Blocked/deferred items stay
 untouched in their sinks with the outcome noted in the report.
 
 **Write-back is committed, immediately:** the sink edits for each item
-land as one commit on main — `chore(sweep): close <finding-ref> —
+land as one commit on `<trunk>` — `chore(sweep): close <finding-ref> —
 <branch/PR>` — BEFORE the per-item boundary re-check runs. The boundary
 check treats the run's own just-committed write-back as clean state
 (it is: committed, not dirty). Uncommitted sink edits would trip the
