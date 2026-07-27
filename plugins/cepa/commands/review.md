@@ -142,20 +142,38 @@ trunk changes in a time window (default 7 days) rather than a PR or
 branch diff:
 
 **Resolve the trunk first** — never hardcode `main`, which is wrong on any
-repo using `master`/`trunk`/`develop`. Try in this order and record which
-rung answered:
+repo using `master`/`trunk`/`develop`/`dev`. Try these rungs in order and
+record which one answered:
 
-```bash
-gh repo view --json defaultBranchRef -q .defaultBranchRef.name   # authoritative
-git symbolic-ref --short refs/remotes/origin/HEAD                # offline fallback
-```
+1. **`trunk:` under `## Conventions` in `cepa.local.md`** — an explicit
+   project override, highest precedence.
+2. `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`
+3. `git symbolic-ref --short refs/remotes/origin/HEAD` (offline fallback)
+4. `main` — last resort, always reported as such, never silent.
 
-Then `main` as a last resort. **`git symbolic-ref` is NOT reliable as the
-primary** — `refs/remotes/origin/HEAD` is unset in most clones (it is only
-written by `clone` without `--no-checkout`, or an explicit
-`git remote set-head`), so it fails on ordinary working copies. Spot-checked
-across four real repos it failed on all four. A resolution that reached the
-`main` last resort is reported as such, never silently.
+**Why the project override outranks the host.** Rungs 2-4 answer *"what does
+GitHub think the default branch is"*, and that is not the same question as
+*"where does work land."* A repo whose GitHub default is `main` but whose
+integration branch is `dev` — because `main` auto-deploys production — is
+common, and on it every rung below 1 resolves to a branch the team does not
+merge into. Nothing but the project can state that, so nothing but the
+project may overrule it.
+
+**`git symbolic-ref` is NOT reliable as the primary** —
+`refs/remotes/origin/HEAD` is unset in most clones (it is only written by
+`clone` without `--no-checkout`, or an explicit `git remote set-head`), so it
+fails on ordinary working copies. Spot-checked across four real repos it
+failed on all four.
+
+**Normalize before using the answer.** The rungs return different shapes:
+rung 2 returns `main`, rung 3 returns `origin/main`. Strip a leading
+`origin/`, and reject any value that does not match `^[A-Za-z0-9._/-]+$`
+(whitespace or shell metacharacters mean the command output was misread —
+that is a scope failure, not a branch name). Everything downstream composes
+`origin/<trunk>` and `refs/heads/<trunk>`, so an unnormalized rung-3 answer
+silently becomes `origin/origin/main`: a ref that does not exist, and a
+`git push origin HEAD:refs/heads/origin/main` that creates a junk branch
+rather than publishing to trunk.
 
 **Precondition — review from a clean trunk checkout, without requiring one.**
 The scope below is ref-based, but review agents read whole files from the
@@ -170,13 +188,41 @@ clean on trunk — that requirement would fail-closed essentially every week, in
 exactly the environment the tier exists for. Spot-checked across four real
 repos, zero satisfied it.
 
-Instead, create a throwaway worktree for the run and review from there:
+Instead, fetch the remote trunk and create a throwaway worktree detached at
+it — **in that order** — then review from there:
 
 ```bash
-git worktree add --detach <tmpdir>/cepa-weekly-<date> <trunk>
+git fetch --quiet origin <trunk>                    # BEFORE the worktree, not after
+git rev-parse --verify --quiet refs/remotes/origin/<trunk>   # resolved trunk really exists
+git worktree add --detach <tmpdir>/cepa-weekly-<date> origin/<trunk>
 # ... run the review with <tmpdir>/cepa-weekly-<date> as the working root ...
 git worktree remove <tmpdir>/cepa-weekly-<date>
 ```
+
+**Detach at `origin/<trunk>`, never the local branch `<trunk>`, and fetch
+before creating the worktree.** Both halves matter and both fail quietly:
+
+- A developer clone's *local* trunk branch is routinely weeks behind
+  `origin/`; nothing on a machine running a weekly cron ever checks it out.
+  Worktree-ing to the local branch reviews a stale tree, and because the
+  diffs below use the same ref, the run reports a quiet week rather than an
+  error — the exact failure the fetch exists to prevent.
+- `git fetch origin <trunk>` updates `refs/remotes/origin/<trunk>`, not the
+  local branch, so fetching cannot rescue a local-ref worktree either.
+- A worktree created before the fetch is pinned to the pre-fetch commit no
+  matter what the fetch then retrieves.
+
+Use `origin/<trunk>` consistently in every diff below, so the tree the agents
+read and the diff they are handed cannot disagree.
+
+If the fetch **errors** (`couldn't find remote ref <trunk>`) or
+`git rev-parse --verify` finds no such ref, the resolved trunk does not exist
+on the remote — a `cepa.local.md` `trunk:` override naming a deleted or
+renamed branch is the likeliest cause. That is a scope resolution failure,
+not an empty week: exit via the durable-record path with
+`scope resolution failed — resolved trunk <trunk> has no remote ref`. Both
+checks are needed; a network-failed fetch can leave a stale-but-present
+`refs/remotes/origin/<trunk>` that `rev-parse` happily verifies.
 
 This leaves the developer's checkout and branch untouched, guarantees agents
 read the same tree the diff describes, and costs one cheap checkout. Put it
@@ -191,22 +237,18 @@ crashed run), exit via the durable-record path below with
 report a leaked worktree path if removal itself fails — a silently abandoned
 worktree accumulates a full repo copy per week.
 
-**Refresh the ref, then scope from a watermark — not from the clock.**
-
-```bash
-git fetch --quiet origin <trunk>          # a stale local trunk is not a quiet week
-```
+**Scope from a watermark — not from the clock.**
 
 Read `reviewed_through:` from the newest existing `todos/review-weekly-*.md`.
 That SHA is the watermark — the last commit any weekly run actually reviewed.
 
 ```bash
 # with a watermark (normal case):
-git diff <watermark>...<trunk>
+git diff <watermark>...origin/<trunk>
 
 # first run only, no prior weekly file exists:
-git log --first-parent --since="7 days ago" --format=%H <trunk>
-git diff <oldest-sha>~1...<trunk>
+git log --first-parent --since="7 days ago" --format=%H origin/<trunk>
+git diff <oldest-sha>~1...origin/<trunk>
 ```
 
 Take the **last** SHA from the commit list — the oldest in the window. Verify

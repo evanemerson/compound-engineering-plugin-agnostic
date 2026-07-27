@@ -26,6 +26,7 @@ This is the file that makes cepa framework-agnostic. Create `cepa.local.md` in y
 - logging_library: <structlog, logging, winston, pino, etc.>
 
 ## Conventions
+- trunk: <the branch work merges into, if not the GitHub default>
 - context_banned_names: [<variable names that shadow framework builtins>]
 - base_templates: [<list of base templates by audience>]
 - service_layer: <true/false>
@@ -153,12 +154,21 @@ Project-specific rules that don't fit into stack or compliance.
 
 ```markdown
 ## Conventions
+- trunk: dev
 - context_banned_names: [messages]
 - base_templates: [base.html, portal/base_portal.html, admin/base_admin.html]
 - service_layer: true (business logic in services/, not views)
 - docker_compose_file: docker-compose.dev.yml
 ```
 
+- `trunk`: The branch work actually merges into. **Omit it unless it differs
+  from your GitHub default branch** — without it the loop resolves the trunk
+  from `gh repo view`, then `git symbolic-ref`, then `main`. Set it when
+  those give the wrong answer: a repo whose default branch is `main` but
+  whose PRs target `dev` (because `main` auto-deploys production) resolves to
+  `main` on every rung, and the weekly review would scope to a branch nobody
+  merges into while `/cepa:task` branches from it. This key outranks all
+  detection — only the project knows where its work lands.
 - `context_banned_names`: Variable names that shadow framework builtins. In Django, `context['messages']` shadows the messages framework. Agents will flag any use of these names.
 - `base_templates`: Your template hierarchy. `architecture-reviewer` verifies new templates extend the correct base.
 - `service_layer`: If true, `architecture-reviewer` enforces that business logic lives in `services/`, not in views or serializers.
@@ -256,9 +266,10 @@ the `learnings-researcher` and the conditional tier, and files findings to
 drains. It fetches first, so a stale local clone can't masquerade as a quiet
 week.
 
-It runs in a throwaway `git worktree` detached at trunk, so your checkout and
-current branch are untouched and the agents read the same tree the diff
-describes. Findings are committed there and pushed to trunk; if trunk is
+It runs in a throwaway `git worktree` detached at `origin/<trunk>` — fetched
+first, so a stale local branch can't be reviewed in place of the real one —
+leaving your checkout and current branch untouched while the agents read the
+same tree the diff describes. Findings are committed there and pushed to trunk; if trunk is
 protected the commit is parked on `chore/weekly-review-<date>` and the branch
 name is reported rather than lost. Schedule it staggered ahead of your sweep:
 
