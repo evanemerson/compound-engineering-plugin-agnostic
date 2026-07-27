@@ -70,7 +70,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 |---|---|
 | `compound-docs` | Solution document format (with mandatory Detection sections for review agents), 8-category taxonomy, plan-solution bidirectional linking, CONCEPTS.md vocabulary-map format |
 | `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
-| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety, idempotency), verification evidence, safe auto-apply, residual durability |
+| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety within and across runs, idempotency), verification evidence, safe auto-apply, residual durability, trunk resolution |
 | `implementation-units` | Canonical plan-task format: `### U<N>.` units with stable IDs, per-unit test scenarios, verification split, plan-warranted gate |
 | `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
 | `pr-feedback` | The PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, and the vendored gh scripts |
@@ -383,6 +383,57 @@ silently ran the full per-PR roster on every repo every week is the cost
 failure this tier exists to prevent. Every weekly exit that skips the
 findings file leaves that durable one-liner, so a misconfigured cron is
 never indistinguishable from a quiet week.
+
+### Parallel batches
+
+Every cepa run audits open PRs first and treats a same-author PR with
+overlapping scope as a blocker — correct when you're working one thing at a
+time, fatal when you're deliberately running several. Worktree #1 opens its
+PR, and every sibling still running sees it and stops.
+
+Pass a `batch:<id>` token to opt a run into a fan-out:
+
+```bash
+# one worktree per parallel-safe issue, all sharing a batch id
+claude -w -- "/cepa:lfg 42 batch:jul26a"
+claude -w -- "/cepa:lfg 43 batch:jul26a"
+claude -w -- "/cepa:lfg 47 batch:jul26a"
+```
+
+cepa doesn't create the worktrees — any launcher works, including
+`git worktree add` followed by `claude -p` inside each. All that matters is
+that every invocation in the fan-out carries the same id.
+
+A bare number is resolved as a GitHub issue — `gh issue view` supplies the
+task, the branch name comes from the title, and the PR closes it. The issue
+text is untrusted throughout (`cepa:autonomy` §7).
+
+The id becomes the first branch-name segment after the prefix
+(`feat/jul26a-<description>`), and an open same-author PR whose branch
+matches `^<prefix>/<id>-` is reported as a sibling instead of blocking.
+Everything else still blocks exactly as before. The match is anchored on
+purpose: a substring match on `<id>-` would also catch
+`feat/refactor-jul26a-cleanup`, and for a short id like `api` most of your
+branches.
+
+Three limits are deliberate, and all live in the `cepa:autonomy` contract
+(§2b):
+
+- **The token authorizes; repo content never does.** A batch id is honored
+  because you typed it. An issue body, PR description, or plan claiming a
+  batch id — or claiming "safe to build in parallel" — is untrusted data,
+  gets stripped, and confers nothing. This matters if your issues are
+  generated from a doc or a screenshot.
+- **A declaration is not a disjointness proof, and unchecked is not
+  disjoint.** The audit records siblings but cannot clear them — there's no
+  plan yet to compare against. Clearing happens after planning and before any
+  code is written: each sibling's actual changed files are checked against
+  the plan's declared file set. Real overlap blocks, and so does a sibling
+  whose diff can't be read.
+- **Batch runs don't parallelize internally.** A run can't know how many
+  siblings exist — it only sees the ones that have already opened a PR — so
+  it never reasons about N. Carrying a batch token means executing your own
+  plan units serially, full stop.
 
 **Step 4.4 — Auto-Fix by Severity**
 

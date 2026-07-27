@@ -141,39 +141,22 @@ Identify what to review:
 trunk changes in a time window (default 7 days) rather than a PR or
 branch diff:
 
-**Resolve the trunk first** — never hardcode `main`, which is wrong on any
-repo using `master`/`trunk`/`develop`/`dev`. Try these rungs in order and
-record which one answered:
+**Resolve the trunk first**, by the `cepa:autonomy` §8 ladder — `trunk:`
+under `## Conventions` in `cepa.local.md`, then
+`gh repo view --json defaultBranchRef`, then
+`git symbolic-ref --short refs/remotes/origin/HEAD`, then `main` — including
+its normalization rule (strip a leading `origin/`; reject anything not
+matching `^[A-Za-z0-9._/-]+$`). Record which rung answered; a resolution that
+reached the `main` last resort is reported as such, never silently. §8 is the
+single definition — do not restate the ladder here, and do not hardcode
+`main`, which is wrong on any repo using `master`/`trunk`/`develop`/`dev`.
 
-1. **`trunk:` under `## Conventions` in `cepa.local.md`** — an explicit
-   project override, highest precedence.
-2. `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`
-3. `git symbolic-ref --short refs/remotes/origin/HEAD` (offline fallback)
-4. `main` — last resort, always reported as such, never silent.
-
-**Why the project override outranks the host.** Rungs 2-4 answer *"what does
-GitHub think the default branch is"*, and that is not the same question as
-*"where does work land."* A repo whose GitHub default is `main` but whose
-integration branch is `dev` — because `main` auto-deploys production — is
-common, and on it every rung below 1 resolves to a branch the team does not
-merge into. Nothing but the project can state that, so nothing but the
-project may overrule it.
-
-**`git symbolic-ref` is NOT reliable as the primary** —
-`refs/remotes/origin/HEAD` is unset in most clones (it is only written by
-`clone` without `--no-checkout`, or an explicit `git remote set-head`), so it
-fails on ordinary working copies. Spot-checked across four real repos it
-failed on all four.
-
-**Normalize before using the answer.** The rungs return different shapes:
-rung 2 returns `main`, rung 3 returns `origin/main`. Strip a leading
-`origin/`, and reject any value that does not match `^[A-Za-z0-9._/-]+$`
-(whitespace or shell metacharacters mean the command output was misread —
-that is a scope failure, not a branch name). Everything downstream composes
-`origin/<trunk>` and `refs/heads/<trunk>`, so an unnormalized rung-3 answer
-silently becomes `origin/origin/main`: a ref that does not exist, and a
-`git push origin HEAD:refs/heads/origin/main` that creates a junk branch
-rather than publishing to trunk.
+Two §8 details bite hardest on this path. `git symbolic-ref` is unusable as a
+primary — `refs/remotes/origin/HEAD` is unset in most clones, and spot-checked
+across four real repos it failed on all four. And an unnormalized rung-3
+answer (`origin/main`) becomes `origin/origin/main` below and turns the
+findings push into `git push origin HEAD:refs/heads/origin/main` — a junk
+branch instead of trunk.
 
 **Precondition — review from a clean trunk checkout, without requiring one.**
 The scope below is ref-based, but review agents read whole files from the
