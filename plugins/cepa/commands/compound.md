@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(gh repo view:*), Bash(bash:*)
 ---
 
 # Compound Documentation
@@ -32,7 +32,11 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
 Before spawning agents, collect the raw materials:
 1. Review the current conversation for the problem that was solved
 2. Run `git log --oneline -20` to see recent commits related to this work
-3. Run `git diff main...HEAD` to see the full set of changes
+3. Run `git diff <trunk>...HEAD` to see the full set of changes — resolve
+   `<trunk>` per `cepa:autonomy` §8 (`trunk:` in `cepa.local.md`, then
+   `gh repo view`, then `git symbolic-ref`, then `main`). On a repo whose
+   work lands on `dev`, `main...HEAD` diffs against a deploy branch and
+   sweeps unrelated commits into the solution doc.
 4. If a plan file path is known (from the conversation), note it for plan-solution linking
 
 ## Step 2: Spawn 5 Parallel Sub-Agents
