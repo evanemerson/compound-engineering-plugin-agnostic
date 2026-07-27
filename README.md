@@ -366,6 +366,15 @@ review filed a day earlier.
 claude -p "/cepa:review cadence:weekly mode:headless"
 ```
 
+The run creates a throwaway `git worktree` detached at trunk and reviews from
+there, so it is safe to schedule against a working developer clone — your
+checkout, branch, and uncommitted changes are untouched. It resolves the trunk
+from `cepa.local.md`'s `trunk:` key first, then `gh repo view`,
+`git symbolic-ref`, and `main` — rather than assuming a branch name. Set
+`trunk:` on any repo where work lands somewhere other than the GitHub default
+branch (a `dev` integration branch with an auto-deploying `main`, say);
+nothing but the project can state that.
+
 If `cadence:weekly` is passed and no `## Review Agents (Weekly)` section
 exists, the run reports `no weekly roster configured`, appends a dated
 one-line record to `memory/tasks.md`, and exits without writing a findings

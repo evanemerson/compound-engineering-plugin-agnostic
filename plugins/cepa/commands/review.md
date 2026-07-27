@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [cadence:weekly] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git add:*), Bash(git commit:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
 ---
 
 # Compound Review
@@ -115,9 +115,11 @@ for phases that write no findings file:
 
 ```
 - cepa:review cadence:weekly — no weekly roster configured — 2026-07-26
-- cepa:review cadence:weekly — no commits in window (<trunk>, 7d) — 2026-07-26
-- cepa:review cadence:weekly — weekly scope resolution failed: <reason> — 2026-07-26
-- cepa:review cadence:weekly — requires clean trunk: <state> — 2026-07-26
+- cepa:review cadence:weekly — no commits since watermark <sha> (<trunk>) — 2026-07-26
+- cepa:review cadence:weekly — scope resolution failed: <reason> — 2026-07-26
+- cepa:review cadence:weekly — could not create trunk worktree: <reason> — 2026-07-26
+- cepa:review cadence:weekly — findings committed but push rejected; parked on <branch> — 2026-07-26
+- cepa:review cadence:weekly — LEAKED worktree at <path> (removal failed) — 2026-07-26
 ```
 
 Keep the reasons distinguishable: a misconfiguration should read as loud and
@@ -140,40 +142,113 @@ trunk changes in a time window (default 7 days) rather than a PR or
 branch diff:
 
 **Resolve the trunk first** — never hardcode `main`, which is wrong on any
-repo using `master`/`trunk`/`develop`:
+repo using `master`/`trunk`/`develop`/`dev`. Try these rungs in order and
+record which one answered:
+
+1. **`trunk:` under `## Conventions` in `cepa.local.md`** — an explicit
+   project override, highest precedence.
+2. `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`
+3. `git symbolic-ref --short refs/remotes/origin/HEAD` (offline fallback)
+4. `main` — last resort, always reported as such, never silent.
+
+**Why the project override outranks the host.** Rungs 2-4 answer *"what does
+GitHub think the default branch is"*, and that is not the same question as
+*"where does work land."* A repo whose GitHub default is `main` but whose
+integration branch is `dev` — because `main` auto-deploys production — is
+common, and on it every rung below 1 resolves to a branch the team does not
+merge into. Nothing but the project can state that, so nothing but the
+project may overrule it.
+
+**`git symbolic-ref` is NOT reliable as the primary** —
+`refs/remotes/origin/HEAD` is unset in most clones (it is only written by
+`clone` without `--no-checkout`, or an explicit `git remote set-head`), so it
+fails on ordinary working copies. Spot-checked across four real repos it
+failed on all four.
+
+**Normalize before using the answer.** The rungs return different shapes:
+rung 2 returns `main`, rung 3 returns `origin/main`. Strip a leading
+`origin/`, and reject any value that does not match `^[A-Za-z0-9._/-]+$`
+(whitespace or shell metacharacters mean the command output was misread —
+that is a scope failure, not a branch name). Everything downstream composes
+`origin/<trunk>` and `refs/heads/<trunk>`, so an unnormalized rung-3 answer
+silently becomes `origin/origin/main`: a ref that does not exist, and a
+`git push origin HEAD:refs/heads/origin/main` that creates a junk branch
+rather than publishing to trunk.
+
+**Precondition — review from a clean trunk checkout, without requiring one.**
+The scope below is ref-based, but review agents read whole files from the
+**working tree**: on a dirty or feature-branch checkout they would report
+`file`/`lines` from code that isn't on the trunk, into a file whose `scope:`
+claims trunk provenance, and `/cepa:sweep` would later apply those fixes
+against the trunk.
+
+Do NOT simply require a clean trunk checkout and exit otherwise. A weekly run
+is scheduled, and on a developer machine the repo is almost never sitting
+clean on trunk — that requirement would fail-closed essentially every week, in
+exactly the environment the tier exists for. Spot-checked across four real
+repos, zero satisfied it.
+
+Instead, fetch the remote trunk and create a throwaway worktree detached at
+it — **in that order** — then review from there:
 
 ```bash
-git symbolic-ref --short refs/remotes/origin/HEAD    # → origin/<trunk>
+git fetch --quiet origin <trunk>                    # BEFORE the worktree, not after
+git rev-parse --verify --quiet refs/remotes/origin/<trunk>   # resolved trunk really exists
+git worktree add --detach <tmpdir>/cepa-weekly-<date> origin/<trunk>
+# ... run the review with <tmpdir>/cepa-weekly-<date> as the working root ...
+git worktree remove <tmpdir>/cepa-weekly-<date>
 ```
 
-Fall back to the branch named in `cepa.local.md`, then to `main`, and state
-in the report which resolution path was used.
+**Detach at `origin/<trunk>`, never the local branch `<trunk>`, and fetch
+before creating the worktree.** Both halves matter and both fail quietly:
 
-**Precondition — clean trunk.** Verify with `git status -b --porcelain` that
-the tree is clean AND HEAD is the resolved trunk. The scope below is
-ref-based, but review agents read whole files from the **working tree**: on a
-dirty feature-branch checkout they would report `file`/`lines` from code that
-isn't on the trunk, into a file whose `scope:` claims trunk provenance, and
-`/cepa:sweep` would later apply those fixes against the trunk. If either check
-fails, exit via the durable-record path below with
-`weekly run requires clean trunk — <state>`.
+- A developer clone's *local* trunk branch is routinely weeks behind
+  `origin/`; nothing on a machine running a weekly cron ever checks it out.
+  Worktree-ing to the local branch reviews a stale tree, and because the
+  diffs below use the same ref, the run reports a quiet week rather than an
+  error — the exact failure the fetch exists to prevent.
+- `git fetch origin <trunk>` updates `refs/remotes/origin/<trunk>`, not the
+  local branch, so fetching cannot rescue a local-ref worktree either.
+- A worktree created before the fetch is pinned to the pre-fetch commit no
+  matter what the fetch then retrieves.
 
-**Refresh the ref, then scope from a watermark — not from the clock.**
+Use `origin/<trunk>` consistently in every diff below, so the tree the agents
+read and the diff they are handed cannot disagree.
 
-```bash
-git fetch --quiet origin <trunk>          # a stale local trunk is not a quiet week
-```
+If the fetch **errors** (`couldn't find remote ref <trunk>`) or
+`git rev-parse --verify` finds no such ref, the resolved trunk does not exist
+on the remote — a `cepa.local.md` `trunk:` override naming a deleted or
+renamed branch is the likeliest cause. That is a scope resolution failure,
+not an empty week: exit via the durable-record path with
+`scope resolution failed — resolved trunk <trunk> has no remote ref`. Both
+checks are needed; a network-failed fetch can leave a stale-but-present
+`refs/remotes/origin/<trunk>` that `rev-parse` happily verifies.
+
+This leaves the developer's checkout and branch untouched, guarantees agents
+read the same tree the diff describes, and costs one cheap checkout. Put it
+under the system temp dir, **never** under `.claude/worktrees/` — that
+directory belongs to interactive parallel sessions and a cleanup pass there
+must never race a scheduled run.
+
+If the worktree cannot be created (disk, permissions, a lock left by a
+crashed run), exit via the durable-record path below with
+`weekly run could not create trunk worktree — <reason>`. Always attempt the
+`git worktree remove` in a cleanup step even when the review fails, and
+report a leaked worktree path if removal itself fails — a silently abandoned
+worktree accumulates a full repo copy per week.
+
+**Scope from a watermark — not from the clock.**
 
 Read `reviewed_through:` from the newest existing `todos/review-weekly-*.md`.
 That SHA is the watermark — the last commit any weekly run actually reviewed.
 
 ```bash
 # with a watermark (normal case):
-git diff <watermark>...<trunk>
+git diff <watermark>...origin/<trunk>
 
 # first run only, no prior weekly file exists:
-git log --first-parent --since="7 days ago" --format=%H <trunk>
-git diff <oldest-sha>~1...<trunk>
+git log --first-parent --since="7 days ago" --format=%H origin/<trunk>
+git diff <oldest-sha>~1...origin/<trunk>
 ```
 
 Take the **last** SHA from the commit list — the oldest in the window. Verify
@@ -521,6 +596,23 @@ paths), the same rule `/cepa:sweep` states for its own write-back. Left
 uncommitted, the very next scheduled run — the sweep this tier hands off to —
 sees a dirty tree at its Step 1 git-safety gate and demotes every git-mutating
 item to report-only, breaking the handoff on its first cycle.
+
+**Write and commit inside the trunk worktree** created in Step 1, not in the
+developer's checkout — that checkout may sit on a feature branch, where the
+commit would land on the wrong branch entirely. The worktree is detached at
+trunk, so publish explicitly:
+
+```bash
+git push origin HEAD:refs/heads/<trunk>
+```
+
+If that push is **rejected** (protected trunk — common; `helm` protects
+`main`), push the commit to `chore/weekly-review-<date>` instead and report
+the branch name in the run's output and in `memory/tasks.md`. A commit that
+exists only inside a worktree about to be removed is destroyed by the cleanup
+step — never let the push failure pass silently.
+
+Remove the worktree only **after** the push is confirmed.
 
 The `**Next step:**` line for a weekly file names `/cepa:sweep` rather than
 `/cepa:triage`.
