@@ -102,6 +102,34 @@ Consent captured once from the operator — explicitly, per capability — that 
 ### Write-back
 The closing half of consuming a residual: flipping the item's status in every sink it lives in, committed immediately so the pipeline's own state never trips its own cleanliness gates. An item consumed from a sink is closed there or explicitly re-reported — never left half-consumed.
 
+## Subagent dispatch
+
+### Model pin
+An explicit model tier attached to a subagent dispatch — declared in the
+agent's own definition or passed as an override on the dispatch call — that
+fixes which tier the work runs at instead of letting it inherit the
+invoking session's tier.
+
+An override on the dispatch call beats the agent's own declaration. Absence
+of a pin is not a neutral default: it is a choice to spend whatever the
+operator's session happens to cost, on every dispatch, with no record that
+a choice was made.
+
+### Automatic-dispatch ceiling
+The most expensive model tier a subagent may run at when a pipeline
+dispatched it rather than a person choosing it for that run. Set below the
+most capable available tier deliberately — the top tier is reserved for
+work someone opted into, so no automated fan-out can escalate to it on its
+own.
+
+### Check-then-override
+The rule for dispatching an agent whose definition is owned upstream: read
+its declared tier first, override only when it declares none or explicitly
+defers, and pass no override when it names one. A blanket override across a
+list of targets is the mirror image of a missing pin — it silently replaces
+a deliberate upstream choice with the caller's default.
+
 ## Flagged ambiguities
 
 - "Detection" and "Prevention" had been used loosely for any recurrence guidance — these are distinct: Prevention is rules for humans and process; Detection is machine-checkable signals for automated reviewers.
+- An unset model tier on a dispatch had been read as a neutral default — it is not: it resolves to the invoking session's tier, which makes cost a property of the operator's session rather than of the task.
