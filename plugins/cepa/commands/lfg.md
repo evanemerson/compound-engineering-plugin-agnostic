@@ -222,7 +222,10 @@ pipeline's contract.
   autonomy §2** passes — independence is read from each unit's declared
   Files set as the starting point, then checked against the contention
   list (file overlap is necessary, not sufficient). Merge in dependency
-  order per §2's integration rules.
+  order per §2's integration rules. Dispatch each unit subagent with an
+  explicit `model: sonnet` override — builders otherwise inherit the
+  session model, and Step 4's review loop catches routine-unit mistakes
+  at sonnet prices.
 - Test-first per task where the plan specifies tests; commit per task.
 - A blocked task gets recorded (autonomy §5) and skipped; the run continues
   with the remaining tasks.

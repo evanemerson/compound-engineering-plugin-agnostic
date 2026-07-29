@@ -459,6 +459,21 @@ indistinguishable from a clean pass.
 These cover angles the cepa agents intentionally don't, so they're part of the
 default rotation when active in `cepa.local.md`. Dispatch via the Task tool
 using the bare name; the runtime resolves which plugin owns each.
+**Companion dispatch model rule — check each companion's frontmatter
+`model:` field before dispatch.** If it is absent or `inherit`, pass an
+explicit `model: sonnet` override on the Task call; if it pins a specific
+model, pass NO override — the pin is the upstream author's deliberate
+choice (as of pr-review-toolkit today: `code-simplifier` pins `opus`; the
+other four ship `inherit`). Unoverridden `inherit` rides the session model,
+which on an Opus- or Fable-tier session silently multiplies review cost;
+the sonnet override puts inherit-shipping companions on the same tier as
+the cepa review agents, whose own frontmatter already pins a model
+(`sonnet` across the roster; `opus` for `adversarial-reviewer`) and who
+therefore need no override. An agent whose frontmatter has NO `model:`
+field at all is a defect — file it as a finding, never let it silently
+inherit. Re-verify the upstream frontmatter facts whenever the
+pr-review-toolkit plugin is updated; this rule is only correct while they
+hold.
 - `silent-failure-hunter` — Silent error swallowing, inadequate error handling
 - `pr-test-analyzer` — Test coverage gaps, missing behavioral tests
 - `comment-analyzer` — Comment accuracy, comment rot, WHAT-vs-WHY hygiene

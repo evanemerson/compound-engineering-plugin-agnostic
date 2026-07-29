@@ -350,6 +350,18 @@ for the final report.
 **Gated mode — delegate to:** `superpowers:subagent-driven-development`
 (default, same session) OR `superpowers:executing-plans` (parallel session).
 *[autonomy-convertible]* Let the user choose; default to subagent-driven.
+When following `subagent-driven-development`, EVERY Task call its process
+issues — the implementer, spec-reviewer, AND code-quality-reviewer
+dispatches alike, on every task in the loop — carries an explicit
+`model: sonnet` override. That skill's own prompt templates never mention
+a model, so do not rely on them to carry the override: add it to each
+dispatch you make while following the skill, every iteration, not just the
+first. Rationale: these are generic subagents with no frontmatter pin, so
+a bare dispatch inherits the session model; routine build work is already
+covered by the Phase 4 review tier, which catches mistakes at sonnet
+prices. (`executing-plans` runs in a separate session whose model is fixed
+at launch — outside this command's reach; choose the model when launching
+that session.)
 
 These skills handle:
 - Task-by-task implementation
