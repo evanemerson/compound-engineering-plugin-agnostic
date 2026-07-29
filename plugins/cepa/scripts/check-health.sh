@@ -31,7 +31,7 @@ for d in docs/plans docs/solutions todos memory memory/tasks.d; do
 done
 [ -f memory/tasks.md ] && ok "file: memory/tasks.md" || miss "file: memory/tasks.md"
 if [ -d memory/tasks.d ]; then
-  info "residual shards: $(ls memory/tasks.d/*.md 2>/dev/null | wc -l | tr -d ' ')"
+  info "residual shards: $(find memory/tasks.d -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
 fi
 if [ -d docs/solutions ]; then
   info "solution docs: $(find docs/solutions -name '*.md' -not -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')"

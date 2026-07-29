@@ -109,9 +109,12 @@ summary**, so an exit that writes no findings file writes nothing anywhere.
 A typo'd heading would then fail-close every week forever, indistinguishable
 from a quiet repo.
 
-Before ANY exit that skips the findings file, append one line to the run's
-residual shard (`memory/tasks.d/<date>-<branch-slug>.md` per `cepa:autonomy`
-§5 sink 1; create dir and file if missing) under a dated heading — the
+Before ANY exit that skips the findings file, append one line to the
+weekly run's residual shard — `memory/tasks.d/<date>-weekly-<slug(trunk)>.md`,
+the weekly **run-type slug** per `cepa:autonomy` §5 sink 1, NOT the
+checkout's branch name or a detached-HEAD SHA (three §5-defensible names
+would scatter a repeating misconfiguration across unrelated-looking
+files); create dir and file if missing — under a dated heading, the
 same durable-sink fallback the `cepa:grounding` and `cepa:brain` skills use
 for phases that write no findings file:
 
@@ -127,9 +130,31 @@ for phases that write no findings file:
 Keep the reasons distinguishable: a misconfiguration should read as loud and
 repeating, a quiet window as benign. Also return
 `weekly_review_failed: <reason>` in the `mode:headless` structured summary so
-a future programmatic caller has something to gate on. Commit this edit with
-the same commit the run makes below; an uncommitted shard file is
-itself the dirty-tree hazard described there.
+a future programmatic caller has something to gate on.
+
+**Every durable-record exit owns its commit** — "the commit the run makes
+below" never happens on these paths, and an uncommitted write into the
+git-tracked `memory/tasks.d/` is itself the dirty-tree hazard described
+below: the next sweep's Step 1 gate demotes on it, every cycle, until a
+human intervenes. Place the commit by which resources exist:
+
+- **Trunk worktree exists** (push-rejected, leaked-worktree records):
+  append and commit inside it — `chore(review): weekly exit record —
+  <reason> — <date>` — before the push or cleanup step the record
+  describes.
+- **No worktree yet, trunk resolvable** (no roster, no commits since
+  watermark): create the Step 1 throwaway worktree for the record alone,
+  commit, publish per the normal push rule, remove.
+- **Trunk unresolvable or worktree creation failed:** append in the
+  current checkout, stage at directory granularity per §5
+  (`git add memory/tasks.d/` — safe in a dirty tree; it can only pick up
+  shard files, and healing a stray stranded shard is a feature), commit
+  it as
+  its own commit on whatever branch is checked out, and report
+  `record: committed on <branch> — <reason>` in the structured summary.
+  A chore commit on a feature branch is loud and mergeable; a stranded
+  uncommitted shard wedges the scheduled pipeline. Never exit leaving
+  the shard uncommitted.
 
 ## Step 1: Determine Review Scope
 
@@ -563,8 +588,13 @@ differences:
 Sink 3 (PR body) is genuinely `no_sink` — a weekly run has no PR; record it
 as such. **Sink 1 is not optional:** append each finding to the run's
 residual shard under a dated heading with severity and `file:line`. The
-weekly worktree is detached at trunk (no branch name), so use the slug
-`weekly-<trunk>`: `memory/tasks.d/<date>-weekly-<trunk>.md`.
+weekly worktree is detached at trunk (no branch name), so the whole run
+uses the **run-type slug** `weekly-<slug(trunk)>` — §5's slug function
+applied to the trunk, so `release/2026` → `weekly-release-2026`, never a
+raw `/` that would write the shard into a subdirectory no
+`memory/tasks.d/*.md` glob can see. This one name governs EVERY weekly
+shard write, including the durable-record exit lines above — never §5's
+generic branch/SHA rule.
 
 This is load-bearing beyond bookkeeping — §5's dedup rule ("skip any item
 already recorded — same file:line + title — anywhere in `memory/tasks.md`
