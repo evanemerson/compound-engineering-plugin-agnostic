@@ -348,7 +348,17 @@ File every residual to ALL of the applicable sinks, silently:
    loud add/add conflict — resolve it by keeping both entry blocks, never
    by discarding one.) For the same reason, **never append to the legacy
    `memory/tasks.md`**: it is read-only for writers; existing entries stay
-   there until write-back closes them in place. **Dedup before appending:**
+   there until write-back closes them in place. One sanctioned exception —
+   the **migration marker**: the first time a run (or `/cepa:setup fix`)
+   creates `memory/tasks.d/` in a repo whose `memory/tasks.md` already has
+   entries but no marker, append exactly one unstruck line there:
+   `- residual sink sharded to memory/tasks.d/ at cepa 1.13.0 — a reader
+   consulting only this file has not seen all residuals — <date>`. A
+   pre-1.13 sweep reads only the legacy file; the marker surfaces as an
+   unmatched awaiting-human item in its report, making the upgrade drift
+   loud instead of a silent clean pass. Post-1.13 readers recognize and
+   never re-queue it; write it once, never per run. **Dedup before
+   appending:**
    skip any item already recorded — same file:line + title — anywhere in
    `memory/tasks.md` or `memory/tasks.d/*.md`; repeated review rounds must
    not re-file the same residual.

@@ -64,6 +64,17 @@ canonical finding is already `status: completed` is reconciled on sight
 (strike-through / completion note, reported as "reconciled: <item>") and
 never re-queued — write-back is self-healing across runs.
 
+**Cross-shard duplicates are reconciled on sight the same way.** Two
+entries with the same file:line + normalized title in different sinks or
+findings files are one defect filed twice — parallel worktree runs cannot
+see a sibling's unmerged shard at append time (§5's dedup only scans the
+run's own tree), so post-merge trunk is exactly where the copies first
+meet, and this serialized run is the only reader positioned to collapse
+them. Keep the older entry as canonical, strike the other with
+`— duplicate of <ref>`, report as "reconciled: <item> (duplicate)", and
+queue only the canonical. Without this, a duplicated judgment item
+reaches awaiting-human twice and the orphan outlives the human's answer.
+
 Sources, with the todos/ finding as the CANONICAL queue entry
 (residual-sink and PR-section copies matched to it via the finding
 reference they carry; normalized-title fallback; write-back closes all

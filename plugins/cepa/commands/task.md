@@ -485,8 +485,7 @@ If a class of bug could be caught by a test, note it for the next task's plannin
 
 Any P2/P3 findings that were skipped, plus any deferred items from the plan:
 
-Save to the run's residual shard (`memory/tasks.d/<date>-<branch-slug>.md`,
-per `cepa:autonomy` §5 sink 1):
+Save to the run's residual shard (`cepa:autonomy` §5 sink 1):
 ```markdown
 ## Undone Items from <branch-name> (<date>)
 1. [P2] Description — `file.py:line`

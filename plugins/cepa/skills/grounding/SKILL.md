@@ -170,7 +170,7 @@ Every invocation:
   `pre_step`) land in its `grounding` Run Metadata block. A command
   phase that produces NO findings file (e.g. /cepa:task's research
   phase) appends a one-line record to the run's residual shard
-  (`memory/tasks.d/<date>-<branch-slug>.md`, `cepa:autonomy` §5 sink 1)
+  (`cepa:autonomy` §5 sink 1)
   for any strip,
   skipped argument, or pre-step failure
   (`- grounding: <event> — <source> — <date>`); /cepa:lfg folds its

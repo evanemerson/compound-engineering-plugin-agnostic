@@ -25,3 +25,4 @@ Deferred review findings from the /cepa:lfg run (see todos/review-2026-07-10-160
    (scqnzwmbhlpdtenfepuw): schema_version literals OK, limits.max_items OK, mark_stale drops
    from recall, content-hash idempotency dedups, cross-repo recall (project_only:false) works,
    OpenRouter text-embedding-3-small embeddings work. Brain is LIVE.
+- residual sink sharded to memory/tasks.d/ at cepa 1.13.0 — a reader consulting only this file has not seen all residuals — 2026-07-29

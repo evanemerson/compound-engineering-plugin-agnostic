@@ -81,7 +81,12 @@ Beyond the script's facts, check:
    a shard count. A repo with a populated `memory/tasks.md` but no
    `memory/tasks.d/` predates the sharded sink (`cepa:autonomy` §5) — note
    it (advice, not error; fix mode creates the directory). Legacy entries
-   need no migration: readers consult both locations.
+   need no migration: readers consult both locations. **Flag prominently
+   when the installed plugin version (check 4) is < 1.13.0 AND shards
+   exist:** that client's sweep reads only the legacy file, so every
+   sharded residual is invisible to it and its "all sinks swept" report is
+   silently incomplete — recommend `claude plugin update cepa@cepa` as the
+   fix, not a config change.
 4. **Plugin version drift** — compare the installed cepa version (script
    INFO line) against the marketplace's latest. Stale installs are how
    projects silently run old contracts; recommend
@@ -151,7 +156,10 @@ Apply, in order — all idempotent, none destructive:
    `todos/`, `memory/`, `memory/tasks.d/` (with a `.gitkeep` — the sharded
    residual sink from `cepa:autonomy` §5), and `memory/tasks.md` (header
    line only; kept for back-compat reading — writers append to `tasks.d/`
-   shards, never to this file).
+   shards, never to this file). When creating `memory/tasks.d/` in a repo
+   whose `memory/tasks.md` already has entries, also append §5's one-time
+   migration marker to the legacy file so pre-1.13 readers surface the
+   drift instead of silently under-reading.
 2. **Config:** if `cepa.local.md` is missing, generate one — infer the
    `## Stack` from the repo (framework files, lockfiles, compose files),
    pick the roster by stack (drop python/schema agents for non-backend
