@@ -40,6 +40,19 @@ validation (task, lfg, sweep, resolve-pr) omit `allowed-tools` entirely
 and rely on the invoking context's grants — the rule binds commands that
 declare a bounded verb set.
 
+### Shared sinks are sharded or serialized; composed paths are slugged
+Any git-tracked file more than one concurrent run can append to must be
+per-run sharded (the `memory/tasks.d/` pattern), single-writer, or
+reconciled only at a serialized trunk point — append-time dedup cannot
+see sibling branches' unmerged writes. Moving a sink means updating
+every reader in the same PR AND leaving a self-announcing marker at the
+old location for lagging readers (their failure mode is a clean pass,
+not an error). Every path component composed from a repo-derived value
+(branch, issue, trunk name) uses autonomy §5's `slug(x)` — defined once
+there; overrides cite it, never restate it. Known latent instance:
+CONCEPTS.md's `## Flagged ambiguities` tail (written by both compound
+and compound-refresh) — shard or serialize it before parallel runs bite.
+
 ## Conventions
 
 - `docs/` is deliberately gitignored — plans stay local; the durable records
