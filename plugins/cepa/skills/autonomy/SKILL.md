@@ -323,11 +323,19 @@ approval.
 
 File every residual to ALL of the applicable sinks, silently:
 
-1. **`memory/tasks.md`** — append under a dated, branch-named heading with
-   severity and file:line. This is the cross-session sink and always exists
-   (create it if missing). **Dedup before appending:** skip any item already
-   recorded anywhere in the file with the same file:line + title — repeated
-   review rounds must not re-file the same residual.
+1. **The run's shard file** — `memory/tasks.d/<YYYY-MM-DD>-<branch-slug>.md`,
+   appended under a dated, branch-named heading with severity and file:line.
+   `<branch-slug>` is the current branch name with every `/` replaced by `-`
+   (`feat/foo-bar` → `feat-foo-bar`); on a detached HEAD use the short SHA.
+   Create the directory and file if missing. This is the cross-session sink.
+   Per-branch shard filenames are what make parallel worktree runs mergeable
+   — two branches never append to the same file, so residual filing never
+   merge-conflicts. For the same reason, **never append to the legacy
+   `memory/tasks.md`**: it is read-only for writers; existing entries stay
+   there until write-back closes them in place. **Dedup before appending:**
+   skip any item already recorded — same file:line + title — anywhere in
+   `memory/tasks.md` or `memory/tasks.d/*.md`; repeated review rounds must
+   not re-file the same residual.
 2. **The findings file in `todos/`** — set the finding's `status: deferred`
    (never delete an unresolved finding in an autonomous run).
 3. **The PR body** — when an open PR exists for the branch, append or replace
