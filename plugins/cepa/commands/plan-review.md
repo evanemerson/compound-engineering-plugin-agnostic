@@ -126,8 +126,8 @@ always `judgment`.
    U-IDs** (`cepa:implementation-units` stability rule).
 4. `judgment` findings go durable, silently (§5): append to the plan's
    `## Deferred / Open Questions` section (create it if the plan lacks
-   one) under `### From YYYY-MM-DD review`, and record in
-   `memory/tasks.md` (deduped). Status differs by mode: in
+   one) under `### From YYYY-MM-DD review`, and record in the run's
+   residual shard (§5 sink 1, deduped). Status differs by mode: in
    **`mode:headless`** set `status: deferred`; in **interactive** mode
    keep `status: pending` so `/cepa:triage` — the advertised decision
    surface — actually surfaces them (a pre-deferred finding is invisible
@@ -137,7 +137,7 @@ always `judgment`.
    self-review rejects is reverted and filed as deferred with an
    "attempted, reverted (reason)" note.
 6. **Commit the tracked review artifacts** (the `todos/` findings file,
-   and `memory/tasks.md` when touched) as
+   and the `memory/tasks.d/` shard when touched) as
    `docs(review): plan-review findings <timestamp>` — gitignore-checked
    like the plan commit, and independent of it, so a gitignored-plan repo
    still ships the review record.

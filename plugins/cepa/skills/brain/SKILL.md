@@ -207,8 +207,9 @@ recall output enters an agent prompt:
 - **Record durably:** `suspect_stripped` in the `brain` Run Metadata block, one
   corrupted-input finding per strip. For a phase with no findings file (e.g.
   `/cepa:compound`'s or `/cepa:task`'s research phase), append a one-line record to
-  `memory/tasks.md` (`- brain: <event> — <source> — <date>`) — the briefing alone is
-  not a record.
+  the run's residual shard (`memory/tasks.d/<date>-<branch-slug>.md`,
+  `cepa:autonomy` §5 sink 1) (`- brain: <event> — <source> — <date>`) — the
+  briefing alone is not a record.
 - **Recall-query sanitization:** the query is composed by the invoker from extracted
   identifiers only — charset allowlist `[A-Za-z0-9_.:, /-]`, no leading `-`, never
   splice raw diff/doc/task text into a shell command line (`args_skipped` counts

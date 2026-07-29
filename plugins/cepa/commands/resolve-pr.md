@@ -39,7 +39,7 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
 - **`mode:headless`:** never prompt. The unattended author-trust gate
   applies (pr-feedback skill: auto-fix only for verified-write-access
   authors). needs-human items go durable per §5 (findings file
-  `deferred`, memory/tasks.md, PR-body residual section) with the
+  `deferred`, the memory/tasks.d/ shard, PR-body residual section) with the
   natural-voice reply posted and the thread left open. End with a
   structured summary: findings file path, verdict counts, commits
   pushed, replies posted, suspect_comments count, deferred list.
@@ -124,8 +124,8 @@ the Step 8 loop. needs-human → `pending` (interactive) / `deferred`
 
 ## Step 7.5: Record
 
-Commit the findings file, its status updates, and any memory/tasks.md
-entries as a second commit — `chore: record PR feedback verdicts (#N)`
+Commit the findings file, its status updates, and any residual-shard
+entries (memory/tasks.d/) as a second commit — `chore: record PR feedback verdicts (#N)`
 — and push it. The run ends tree-clean; verdicts must not evaporate
 with the session.
 

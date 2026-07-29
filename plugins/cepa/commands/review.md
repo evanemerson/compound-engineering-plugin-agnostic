@@ -72,7 +72,8 @@ The per-PR path receives its `cepa:autonomy` §7 clause via the researcher's
 Detection block. **A weekly run skips the researcher, so no clause reaches
 any agent unless this step emits one.** It must: a weekly diff is seven days
 of merged trunk, and on any cepa-using repo that routinely includes
-`todos/review-*.md`, `memory/tasks.md`, and `docs/solutions/*.md` — CLAUDE.md
+`todos/review-*.md`, `memory/tasks.md`, `memory/tasks.d/*.md`, and
+`docs/solutions/*.md` — CLAUDE.md
 *requires* findings files be status-updated in the same commit as their fix.
 Stored findings prose therefore lands in the diff verbatim, unattended, on a
 path whose output feeds `/cepa:sweep`'s auto-apply queue.
@@ -108,8 +109,9 @@ summary**, so an exit that writes no findings file writes nothing anywhere.
 A typo'd heading would then fail-close every week forever, indistinguishable
 from a quiet repo.
 
-Before ANY exit that skips the findings file, append one line to
-`memory/tasks.md` under a dated heading (create the file if missing) — the
+Before ANY exit that skips the findings file, append one line to the run's
+residual shard (`memory/tasks.d/<date>-<branch-slug>.md` per `cepa:autonomy`
+§5 sink 1; create dir and file if missing) under a dated heading — the
 same durable-sink fallback the `cepa:grounding` and `cepa:brain` skills use
 for phases that write no findings file:
 
@@ -126,7 +128,7 @@ Keep the reasons distinguishable: a misconfiguration should read as loud and
 repeating, a quiet window as benign. Also return
 `weekly_review_failed: <reason>` in the `mode:headless` structured summary so
 a future programmatic caller has something to gate on. Commit this edit with
-the same commit the run makes below; an uncommitted `memory/tasks.md` is
+the same commit the run makes below; an uncommitted shard file is
 itself the dirty-tree hazard described there.
 
 ## Step 1: Determine Review Scope
@@ -414,7 +416,8 @@ project opts out of one by adding `- !agent-name` to its
 - `previous-comments-reviewer` — dispatch when ANY `todos/review-*.md` file
   exists in the project (once a project has review history, continuity is
   always worth checking — this agent is effectively always-on after the
-  first review, by design), OR `memory/tasks.md` has entries touching the
+  first review, by design), OR `memory/tasks.md` or `memory/tasks.d/*.md`
+  has entries touching the
   diff's files, OR a PR number was provided and the PR has human review
   threads (`gh pr view <n> --comments`). Verifies prior findings and human
   review requests weren't lost or re-broken.
@@ -558,22 +561,25 @@ differences:
 
 `status: deferred` obliges the full §5 filing, not just the findings file.
 Sink 3 (PR body) is genuinely `no_sink` — a weekly run has no PR; record it
-as such. **Sink 1 is not optional:** append each finding to `memory/tasks.md`
-under a dated heading with severity and `file:line`.
+as such. **Sink 1 is not optional:** append each finding to the run's
+residual shard under a dated heading with severity and `file:line`. The
+weekly worktree is detached at trunk (no branch name), so use the slug
+`weekly-<trunk>`: `memory/tasks.d/<date>-weekly-<trunk>.md`.
 
 This is load-bearing beyond bookkeeping — §5's dedup rule ("skip any item
-already recorded anywhere in the file with the same file:line + title") is
+already recorded — same file:line + title — anywhere in `memory/tasks.md`
+or `memory/tasks.d/*.md`") is
 the **only** dedup in the system, and weekly windows overlap on exactly the
 files that change most. Without it, a `judgment` finding on a hot file is
 re-filed as a new canonical finding every week, sweep's reconciliation cannot
 collapse copies across files, and the awaiting-human list grows without bound
 until nobody reads it. Apply the dedup check against prior
-`todos/review-weekly-*.md` files as well as `memory/tasks.md`.
+`todos/review-weekly-*.md` files as well as both residual-sink locations.
 
 ### Weekly cadence — commit the output
 
 The weekly run is a standalone cron target that writes into `todos/` and
-`memory/tasks.md`, both git-tracked. **Commit them immediately after writing**
+`memory/tasks.d/`, both git-tracked. **Commit them immediately after writing**
 (`chore(review): file weekly debt findings — <date>`, staging only those
 paths), the same rule `/cepa:sweep` states for its own write-back. Left
 uncommitted, the very next scheduled run — the sweep this tier hands off to —
@@ -591,7 +597,7 @@ git push origin HEAD:refs/heads/<trunk>
 
 If that push is **rejected** (protected trunk — common; `helm` protects
 `main`), push the commit to `chore/weekly-review-<date>` instead and report
-the branch name in the run's output and in `memory/tasks.md`. A commit that
+the branch name in the run's output and in the run's shard. A commit that
 exists only inside a worktree about to be removed is destroyed by the cleanup
 step — never let the push failure pass silently.
 
