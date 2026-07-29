@@ -26,10 +26,13 @@ else
 fi
 
 # --- scaffold dirs ---------------------------------------------------------
-for d in docs/plans docs/solutions todos memory; do
+for d in docs/plans docs/solutions todos memory memory/tasks.d; do
   [ -d "$d" ] && ok "dir: $d/" || miss "dir: $d/"
 done
 [ -f memory/tasks.md ] && ok "file: memory/tasks.md" || miss "file: memory/tasks.md"
+if [ -d memory/tasks.d ]; then
+  info "residual shards: $(ls memory/tasks.d/*.md 2>/dev/null | wc -l | tr -d ' ')"
+fi
 if [ -d docs/solutions ]; then
   info "solution docs: $(find docs/solutions -name '*.md' -not -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')"
 fi
