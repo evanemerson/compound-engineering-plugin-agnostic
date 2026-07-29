@@ -13,14 +13,13 @@ name: model-pins
 # into any run: step, so there is no injection surface. Keep it that way — if
 # a future step needs event data, pass it through env: with quoting.
 
+# Deliberately NOT path-filtered. A filter buys nothing here (the check
+# takes seconds) and costs correctness twice: a PR that moves agent
+# definitions outside the filtered paths shows no check at all — which reads
+# as "nothing to review", not as a failure — and a path-filtered required
+# check can never be satisfied on the PRs it skips.
 on:
   pull_request:
-    paths:
-      - 'plugins/cepa/agents/**'
-      - 'plugins/cepa/commands/**'
-      - 'plugins/cepa/skills/**'
-      - 'plugins/cepa/scripts/check-model-pins.sh'
-      - '.github/workflows/model-pins.yml'
   push:
     branches: [main]
 

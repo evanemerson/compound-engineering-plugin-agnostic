@@ -58,8 +58,10 @@ An omitted `model:` is not a neutral default: the dispatch runs at the
 invoking session's tier, so cost becomes a property of whoever launched the
 session. A 10-hour audit on 2026-07-29 put ~91% of weighted spend on
 unpinned dispatches. 1.13.1 fixed the sites that audit pointed at; the
-compound sweep then found four more of identical shape still live, and
-`check-model-pins.sh` found a fifth the sweep missed.
+compound sweep then found four more command files of identical shape still
+live, and `check-model-pins.sh` found a fifth site (the plan-review skill)
+that the sweep missed — then found four more in `review.md` the moment its
+trigger set was widened.
 
 Any PR touching a dispatch is not done until both hold:
 - **Registered agent** (`plugins/cepa/agents/**/*.md`): frontmatter
@@ -71,9 +73,14 @@ Any PR touching a dispatch is not done until both hold:
   invoker — a copied fallback that drifts from its original is how
   `lfg.md` Step 2.6 stayed unpinned after `plan-review.md` was fixed.
 
-Run `bash plugins/cepa/scripts/check-model-pins.sh` before merge: zero
-MISS is required, and every WARN is triaged (pin it, or confirm the match
-is prose). **Never blanket-apply an override across a list of dispatch
+Run `bash plugins/cepa/scripts/check-model-pins.sh` before merge — CI runs
+it on every PR. Zero MISS **and** zero WARN are required; both fail the
+run, because a warning channel that can never fail is not enforcement.
+Close a genuine prose match with `<!-- model-pin: prose -->` on its line,
+so the exemption is reviewable in the diff rather than a judgement that
+left no trace. Note `main` is not branch-protected today, so a red check
+does not physically block a merge — treat it as blocking anyway, or turn
+on protection. **Never blanket-apply an override across a list of dispatch
 targets** — a dispatch-call `model` beats frontmatter, so it silently
 stomps whichever target ships a deliberate pin. Check each target first;
 PR #24's first cut would have downgraded `code-simplifier`'s upstream
