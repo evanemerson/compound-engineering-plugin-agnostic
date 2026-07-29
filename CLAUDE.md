@@ -53,6 +53,39 @@ there; overrides cite it, never restate it. Known latent instance:
 CONCEPTS.md's `## Flagged ambiguities` tail (written by both compound
 and compound-refresh) — shard or serialize it before parallel runs bite.
 
+### Every dispatch declares its model — check the construct, not the site
+An omitted `model:` is not a neutral default: the dispatch runs at the
+invoking session's tier, so cost becomes a property of whoever launched the
+session. A 10-hour audit on 2026-07-29 put ~91% of weighted spend on
+unpinned dispatches. 1.13.1 fixed the sites that audit pointed at; the
+compound sweep then found four more of identical shape still live, and
+`check-model-pins.sh` found a fifth the sweep missed.
+
+Any PR touching a dispatch is not done until both hold:
+- **Registered agent** (`plugins/cepa/agents/**/*.md`): frontmatter
+  declares `model:`, and the value is never `inherit`.
+- **Generic subagent** (Task call seeded from a prompt template, no
+  registered agent type): the dispatch instruction itself carries the
+  `model:` override, because there is no frontmatter to fall back on. When
+  a skill defines the dispatch shape, pin it in the skill AND at every
+  invoker — a copied fallback that drifts from its original is how
+  `lfg.md` Step 2.6 stayed unpinned after `plan-review.md` was fixed.
+
+Run `bash plugins/cepa/scripts/check-model-pins.sh` before merge: zero
+MISS is required, and every WARN is triaged (pin it, or confirm the match
+is prose). **Never blanket-apply an override across a list of dispatch
+targets** — a dispatch-call `model` beats frontmatter, so it silently
+stomps whichever target ships a deliberate pin. Check each target first;
+PR #24's first cut would have downgraded `code-simplifier`'s upstream
+`opus` this way. Verify any prose claim about another file's declared
+model by reading that file in the same change — every factual error in
+that PR was an unread-frontmatter assertion.
+
+This is the third sibling of a class this file already documents
+(allowed-tools mismatch shipped twice on 2026-07-10; hardcoded counts three
+times across #6/#7/#8): a fix scoped to the reported instance leaves the
+rest of the construct live.
+
 ## Conventions
 
 - `docs/` is deliberately gitignored — plans stay local; the durable records

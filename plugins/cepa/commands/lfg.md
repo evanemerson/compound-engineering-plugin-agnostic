@@ -149,7 +149,12 @@ command is unavailable, the fallback must replicate its contract, not just
 its dispatch: run the `cepa:plan-review` skill's FULL persona selection —
 always-on plus every signal-matched conditional persona, recording each
 non-dispatch with its reason — dispatch the selected personas as generic
-subagents, run the learnings-researcher step, synthesize per that skill,
+subagents **with an explicit `model: opus` override** (a generic subagent
+has no frontmatter to fall back on, so an omitted override runs the whole
+panel at the invoking session's tier; `opus` is the automatic-dispatch
+ceiling, matching `/cepa:plan-review` Step 3 — this fallback is a copy of
+that panel and must not drift from it), run the learnings-researcher step,
+synthesize per that skill,
 and **write the findings file to `todos/` in the `cepa:file-todos`
 format** with the full Run Metadata (`conditional_dispatch`,
 `learnings_research`) — findings that live only in conversation evaporate,

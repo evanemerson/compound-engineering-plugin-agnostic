@@ -68,7 +68,13 @@ never be indistinguishable from a clean pass).
 
 Personas are **reference prompts, not registered agents**: the
 orchestrator dispatches generic subagents seeded with
-`references/subagent-template.md` plus the persona file. A failed persona
+`references/subagent-template.md` plus the persona file, **each with an
+explicit `model: opus` override**. Having no registered agent means having
+no frontmatter to fall back on, so an omitted override runs the whole panel
+at the invoking session's tier. `opus` is the automatic-dispatch ceiling,
+not an upgrade: design critique on an unknown answer warrants the higher
+tier, and the pin is what stops an unattended panel from escalating above
+it. Every invoker of this skill carries the same pin. A failed persona
 degrades to a noted coverage gap, never a blocked run.
 
 ## Confidence Anchors

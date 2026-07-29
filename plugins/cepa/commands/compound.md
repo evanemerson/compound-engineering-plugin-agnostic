@@ -41,7 +41,13 @@ Before spawning agents, collect the raw materials:
 
 ## Step 2: Spawn 5 Parallel Sub-Agents
 
-Launch these 5 agents simultaneously using Task tool calls:
+Launch these 5 agents simultaneously using Task tool calls.
+
+**Dispatch each with an explicit `model: sonnet` override.** A generic
+subagent has no frontmatter to fall back on, so an omitted override runs it
+at the invoking session's tier — five of them, on every compound run. These
+five extract and classify evidence the run already gathered; that is
+mechanical-tier work.
 
 ### Agent 1: Context Analyzer
 **Prompt:** "Analyze the conversation context and git history. Extract: (1) What problem was being solved — symptoms, error messages, unexpected behavior. (2) What was tried that didn't work. (3) The timeline of investigation. Return a structured summary."

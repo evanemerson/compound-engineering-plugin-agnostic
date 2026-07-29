@@ -87,9 +87,15 @@ panel with a one-line justification per conditional persona.
 
 Dispatch each persona as a **generic subagent** (no registered agent
 type), seeded with `references/subagent-template.md` + the persona file +
-the document content + the slots. Personas are read-only. All dispatch in
-parallel; a failed persona is a named coverage gap in the findings file,
-never a blocked run. Record non-dispatched conditional personas with the
+the document content + the slots, **with an explicit `model: opus`
+override** — a generic subagent has no frontmatter to fall back on, so an
+omitted override runs the whole panel at the invoking session's tier.
+`opus` here is the automatic-dispatch ceiling, not an upgrade: design
+critique on an unknown answer is the work that warrants the higher tier,
+and the pin is what stops an unattended panel from escalating above it. Do
+not normalize this to `sonnet` and do not remove the pin. Personas are
+read-only. All dispatch in parallel; a failed persona is a named coverage
+gap in the findings file, never a blocked run. Record non-dispatched conditional personas with the
 reason — a non-dispatch must never be indistinguishable from a clean pass.
 
 ## Step 4: Synthesize and Score
