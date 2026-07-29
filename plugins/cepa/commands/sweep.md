@@ -1,5 +1,5 @@
 ---
-description: Scheduled residual sweep — drain cepa's own sinks (deferred findings, memory/tasks.md, PR residuals, hygiene routes) through the lfg pipeline and close each item in every sink it lives in. Use only on explicit user request or a scheduled invocation.
+description: Scheduled residual sweep — drain cepa's own sinks (deferred findings, memory/tasks.d/ shards + legacy memory/tasks.md, PR residuals, hygiene routes) through the lfg pipeline and close each item in every sink it lives in. Use only on explicit user request or a scheduled invocation.
 disable-model-invocation: true
 argument-hint: "[max items] [mode:headless]"
 ---
@@ -65,7 +65,7 @@ canonical finding is already `status: completed` is reconciled on sight
 never re-queued — write-back is self-healing across runs.
 
 Sources, with the todos/ finding as the CANONICAL queue entry
-(memory/tasks.md and PR-section copies matched to it via the finding
+(residual-sink and PR-section copies matched to it via the finding
 reference they carry; normalized-title fallback; write-back closes all
 matched copies):
 
@@ -84,7 +84,10 @@ matched copies):
    Apply the `action_class` half unchanged. Without this clause the `AND`
    has no truth value for a branch-less finding and every weekly item
    would strand permanently in a queue nobody attends.
-2. **memory/tasks.md unstruck items** — matched to canonical entries.
+2. **Residual-sink unstruck items** — from `memory/tasks.d/*.md` AND the
+   legacy `memory/tasks.md` (read both; writers stopped appending to the
+   legacy file at cepa 1.13.0 but its entries stay live until closed) —
+   matched to canonical entries.
    **Unmatched items are never build-eligible** — they go to
    awaiting-human. An unmatched item has no reviewed action_class; the
    sweep must not become its own classifier at queue time in an
@@ -137,7 +140,9 @@ Approved thread items replicate `resolve-pr.md`'s contract the same way.
 
 Per consumed item, close every matched copy: the canonical todos/
 finding → `status: completed` + `resolved: <date> — <branch/PR>`;
-memory/tasks.md → strike-through + `— **DONE <date>** (<branch>)`;
+the residual-sink entry → strike-through + `— **DONE <date>** (<branch>)`
+in place, in whichever file holds it (shard or legacy tasks.md — the
+sweep runs serialized on trunk, so in-place edits are single-writer);
 source-PR residual section → completion note via the §5 read-modify-
 write. An item consumed from a sink is closed in that sink or explicitly
 re-reported — never left half-consumed. Blocked/deferred items stay
