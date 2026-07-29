@@ -459,6 +459,12 @@ indistinguishable from a clean pass.
 These cover angles the cepa agents intentionally don't, so they're part of the
 default rotation when active in `cepa.local.md`. Dispatch via the Task tool
 using the bare name; the runtime resolves which plugin owns each.
+**Every companion dispatch MUST pass an explicit `model: sonnet` override on
+the Task call.** The companions ship `model: inherit` upstream, so a bare
+dispatch rides the session model — on an Opus- or Fable-tier session that
+silently multiplies review cost. The override puts them on the same tier as
+the cepa review agents (whose own frontmatter already pins `sonnet`; agents
+with frontmatter pins need no override).
 - `silent-failure-hunter` — Silent error swallowing, inadequate error handling
 - `pr-test-analyzer` — Test coverage gaps, missing behavioral tests
 - `comment-analyzer` — Comment accuracy, comment rot, WHAT-vs-WHY hygiene

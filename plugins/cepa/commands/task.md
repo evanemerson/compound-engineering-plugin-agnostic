@@ -350,6 +350,11 @@ for the final report.
 **Gated mode — delegate to:** `superpowers:subagent-driven-development`
 (default, same session) OR `superpowers:executing-plans` (parallel session).
 *[autonomy-convertible]* Let the user choose; default to subagent-driven.
+Implementation subagents dispatched under either skill carry an explicit
+`model: sonnet` override on the Task call — builders otherwise inherit the
+session model, and routine units are already covered by the review tier;
+mistakes get caught at sonnet prices. (Review/verification subagents keep
+their own frontmatter pins.)
 
 These skills handle:
 - Task-by-task implementation
