@@ -169,7 +169,9 @@ Every invocation:
   grounding facts (status, queries, `args_skipped`, `suspect_stripped`,
   `pre_step`) land in its `grounding` Run Metadata block. A command
   phase that produces NO findings file (e.g. /cepa:task's research
-  phase) appends a one-line record to `memory/tasks.md` for any strip,
+  phase) appends a one-line record to the run's residual shard
+  (`cepa:autonomy` §5 sink 1)
+  for any strip,
   skipped argument, or pre-step failure
   (`- grounding: <event> — <source> — <date>`); /cepa:lfg folds its
   Step-2 grounding facts into the Step 2.6 plan-review findings file's

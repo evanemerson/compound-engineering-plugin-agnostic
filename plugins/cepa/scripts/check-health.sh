@@ -26,10 +26,13 @@ else
 fi
 
 # --- scaffold dirs ---------------------------------------------------------
-for d in docs/plans docs/solutions todos memory; do
+for d in docs/plans docs/solutions todos memory memory/tasks.d; do
   [ -d "$d" ] && ok "dir: $d/" || miss "dir: $d/"
 done
 [ -f memory/tasks.md ] && ok "file: memory/tasks.md" || miss "file: memory/tasks.md"
+if [ -d memory/tasks.d ]; then
+  info "residual shards: $(find memory/tasks.d -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
+fi
 if [ -d docs/solutions ]; then
   info "solution docs: $(find docs/solutions -name '*.md' -not -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')"
 fi
@@ -76,9 +79,12 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   ok "git repo (branch: $(git branch --show-current))"
   git check-ignore docs/plans >/dev/null 2>&1 && info "docs/plans is GITIGNORED (plans stay local)" || ok "docs/plans is tracked"
   git check-ignore todos >/dev/null 2>&1 && info "todos/ is GITIGNORED" || ok "todos/ is tracked"
+  git check-ignore memory/tasks.d >/dev/null 2>&1 \
+    && miss "memory/tasks.d/ is GITIGNORED (residual shards never commit — weekly review and sweep write-back break)" \
+    || ok "memory/tasks.d is not ignored"
   # exists-on-disk but never committed = scaffold that vanishes on any other
   # checkout; report it as its own state, never as plain OK
-  for d in docs/solutions todos memory; do
+  for d in docs/solutions todos memory memory/tasks.d; do
     if [ -d "$d" ] && ! git check-ignore "$d" >/dev/null 2>&1 && [ -z "$(git ls-files "$d" | head -1)" ]; then
       info "dir $d/ exists but has NO tracked files (uncommitted scaffold)"
     fi

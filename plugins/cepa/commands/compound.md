@@ -178,7 +178,8 @@ and authoritative either way.
    write the current atoms (their new content hash makes them new rows).
    (OB1's `supersede` action is a no-op without a related id — use `mark_stale`.)
 5. Record the outcome in the `brain` Run Metadata block; for interactive
-   runs with no findings file, append a one-line `memory/tasks.md` record
+   runs with no findings file, append a one-line record to the run's
+   residual shard (`cepa:autonomy` §5 sink 1)
    for any strip/suppression/scrub. A brain failure degrades (grep-only
    world continues) and loses nothing — the file is source-of-truth.
 

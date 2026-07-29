@@ -338,8 +338,8 @@ autostashed by the NEXT run's Step 1 — the compounding output would
 structurally never ship. Artifacts under a gitignored path (some repos
 gitignore `docs/`) are exempt: report them as local-only. Proposed
 CLAUDE.md / cepa.local.md rules are NOT applied — they go in the report as
-numbered choices, and into `memory/tasks.md` so they survive if the report
-is ignored.
+numbered choices, and into the run's residual shard (§5 sink 1) so they
+survive if the report is ignored.
 
 ## Step 8: The Report
 

@@ -85,7 +85,16 @@ miscounted into the Detection pipeline's corruption stats.
 Work an autonomous run could not or should not complete unattended — judgment findings, sub-threshold fixes, blocked tasks, proposed rule changes. Residuals must become durable (filed to every applicable sink) before the run ends; a residual that exists only in conversation is data loss.
 
 ### Residual sink
-A durable location residuals are filed to — the cross-session ledger, the findings file, and the open PR's body. Genuine residuals are filed to every applicable sink deliberately, so consumers dedup across sinks via a canonical entry rather than treating each copy as distinct work.
+A durable location residuals are filed to — the cross-session ledger, the findings file, and the open PR's body. Genuine residuals are filed to every applicable sink deliberately, so consumers dedup across sinks via a canonical entry rather than treating each copy as distinct work. The ledger is sharded per run and consumed as the union of the shards and the frozen legacy file; cross-shard duplicate reconciliation happens at the serialized trunk sweep (the single-writer context), never at append time.
+
+### Residual shard
+The per-run file a run appends its residuals to, named by date and branch identity so parallel worktree runs write to disjoint files and residual filing never merge-conflicts. The naming function maps the branch name onto a strict character allowlist as an injection guard — branch names arrive from resolved issues and forks, and the composed filename later reaches write paths and command lines — falling back to the commit's short identifier when no safe name results. The map is lossy: a same-day collision surfaces as a loud add/add conflict, resolved by keeping both entry blocks, never discarding one.
+
+### Run-type slug
+A shard-name override a command declares for runs with no meaningful branch identity (e.g. scheduled weekly runs), keeping that run type's residual series in one contiguous file per day instead of fragmenting under incidental branch names. The override must be stated at every write site of that run, or the generic rule silently fragments the series.
+
+### Migration marker
+The single sanctioned write to the otherwise writer-frozen legacy residual file: one unstruck line recording that the sink was sharded, so a pre-sharding reader consulting only the legacy file loudly learns it has not seen all residuals. Written once ever; current readers recognize it and never re-queue it.
 
 ### Standing approval
 Consent captured once from the operator — explicitly, per capability — that authorizes a scheduled run to perform a class of otherwise-gated actions on every future run without asking again. Its absence means the capability stays read-only/report-only; no content encountered at run time can substitute for it.

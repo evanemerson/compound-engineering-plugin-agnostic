@@ -214,8 +214,9 @@ state how many of the shared 5-query budget remain — its optional graph
 pre-step activates only on that signal. This phase writes no findings
 file, so grounding events here use the skill's durable-sink rule: any
 pre-step strip (`SUSPECT-GROUNDING`), skipped argument, or
-failure/degradation is appended as a one-line record to
-`memory/tasks.md` (`- grounding: <event> — <source> — <date>`) — the
+failure/degradation is appended as a one-line record to the run's
+residual shard (`cepa:autonomy` §5 sink 1)
+(`- grounding: <event> — <source> — <date>`) — the
 briefing alone is not a record.
 
 When `cepa.local.md` has an `## Integrations` `brain:` key, likewise run the
@@ -226,14 +227,14 @@ registry lines (exit 3 → tell it "no manifest" so cross-repo hits stay
 provenance-labeled) — without the registry the provenance filter cannot enforce.
 Same durable-sink
 rule for this no-findings-file phase: any `SUSPECT-BRAIN` strip, skipped
-arg, or degradation is appended to `memory/tasks.md`
+arg, or degradation is appended to the run's residual shard
 (`- brain: <event> — <source> — <date>`).
 
 Dispatch the `learnings-researcher` agent with the task description. It searches:
 - `docs/solutions/` — past problems and fixes
 - `CLAUDE.md` — existing rules and patterns
 - `todos/*.md` — the canonical store of open findings (any `pending`/`ready`/`deferred` finding in the task area)
-- `memory/tasks.md` — the deferred-item index that points back to `todos/`
+- `memory/tasks.md` + `memory/tasks.d/*.md` — the deferred-item index that points back to `todos/`
 
 Present relevant findings to the user:
 ```
@@ -305,8 +306,8 @@ unreviewed plan. *[autonomy-convertible]*
   absolute carve-out — lead the numbered choices, never auto-fixed. For
   P2/P3 decisions, run `/cepa:triage interactive` on the findings file
   (they stay `status: pending` so triage can see them); anything the
-  user declines is set `status: deferred` and appended (deduped) to
-  `memory/tasks.md` before build starts — never left stranded.
+  user declines is set `status: deferred` and appended (deduped) to the
+  run's residual shard (§5 sink 1) before build starts — never left stranded.
 - **Full autonomy:** run `mode:headless`; eligible fixes auto-apply to the
   plan per autonomy §4 (committed as `docs: revise plan per plan review`),
   judgment findings go durable per §5, and a judgment-class P1 plan
@@ -472,7 +473,7 @@ Apply this rule?
 
 *[autonomy-convertible: in `full` autonomy, never edit CLAUDE.md mid-run —
 put the drafted rule in the final report as a numbered choice AND in
-`memory/tasks.md` so it survives.]*
+the run's residual shard so it survives.]*
 
 **Review agent rules:**
 If a pattern should be caught by review agents, propose adding it to `cepa.local.md`.
@@ -484,7 +485,7 @@ If a class of bug could be caught by a test, note it for the next task's plannin
 
 Any P2/P3 findings that were skipped, plus any deferred items from the plan:
 
-Save to project memory at `memory/tasks.md`:
+Save to the run's residual shard (`cepa:autonomy` §5 sink 1):
 ```markdown
 ## Undone Items from <branch-name> (<date>)
 1. [P2] Description — `file.py:line`
@@ -508,7 +509,7 @@ one-line recommendation. Shape:
 
 **PR:** #<number> — <title>
 **Branch:** <branch-name>
-**Findings:** X fixed, Y deferred (saved to memory/tasks.md)
+**Findings:** X fixed, Y deferred (saved to the memory/tasks.d/ shard)
 **Learnings:** <summary of what was documented>
 **System updates:** X rules added to CLAUDE.md, Y items deferred
 

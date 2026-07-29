@@ -41,7 +41,7 @@ Plan → Work → Review → Compound
 - Small tasks: inline capture (what broke, what fixed it, any surprises)
 - Large tasks: full `/cepa:compound` with 5 parallel documentation agents
 - Auto-proposes CLAUDE.md rule updates when prevention strategies are identified
-- Saves undone items to `memory/tasks.md` for the next session
+- Saves undone items to a per-run shard in `memory/tasks.d/` for the next session
 
 ## What's Included
 

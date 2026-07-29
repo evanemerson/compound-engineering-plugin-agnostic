@@ -26,7 +26,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
 | `/cepa:plan-review` | Persona-panel review of a plan document before build — conditional activation, confidence anchors, findings in the standard todos/ format. Supports `mode:headless` |
-| `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.md, and hygiene routes through full lfg runs, then closes each item in every sink. Supports `mode:headless` |
+| `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.d/ residual shards (+ legacy memory/tasks.md), and hygiene routes through full lfg runs, then closes each item in every sink. Supports `mode:headless` |
 | `/cepa:resolve-pr` | Resolve human PR review feedback — fetch once, judge centrally, fix per the autonomy rubric, reply and resolve after push. Supports `mode:headless` |
 | `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` and `cadence:weekly` (the debt tier — see [Review cadence](#review-cadence)) |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
@@ -41,7 +41,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 | Agent | What It Does |
 |---|---|
-| `learnings-researcher` | Search `docs/solutions/`, `CLAUDE.md`, `memory/tasks.md`, and plans for relevant past learnings |
+| `learnings-researcher` | Search `docs/solutions/`, `CLAUDE.md`, `memory/tasks.d/` (+ legacy `memory/tasks.md`), and plans for relevant past learnings |
 
 **Review:**
 
@@ -62,7 +62,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 |---|---|---|
 | `adversarial-reviewer` | Large diff (~300+ lines) or risky paths (payments, auth, PHI, data migrations) | Constructs concrete failure scenarios — hostile sequencing, partial failure, TOCTOU — and traces the code through them |
 | `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
-| `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, `memory/tasks.md` entries touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
+| `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, residual-sink entries (`memory/tasks.d/` or legacy `memory/tasks.md`) touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
 ### Skills (8)
 
@@ -253,7 +253,7 @@ When you run `/cepa:task`, it orchestrates the complete compound engineering loo
 Dispatches the `learnings-researcher` agent, which searches:
 - `docs/solutions/` — past problems and fixes
 - `CLAUDE.md` — existing rules and patterns
-- `memory/tasks.md` — deferred items from prior tasks
+- `memory/tasks.d/` (+ legacy `memory/tasks.md`) — deferred items from prior tasks
 - `docs/plans/` — plans that touched the same areas
 - Git history (optional) — blame and commit messages for files being modified
 
@@ -377,7 +377,8 @@ nothing but the project can state that.
 
 If `cadence:weekly` is passed and no `## Review Agents (Weekly)` section
 exists, the run reports `no weekly roster configured`, appends a dated
-one-line record to `memory/tasks.md`, and exits without writing a findings
+one-line record to the run's residual shard in `memory/tasks.d/`, and exits
+without writing a findings
 file. It never falls back to the Active roster — a scheduled job that
 silently ran the full per-PR roster on every repo every week is the cost
 failure this tier exists to prevent. Every weekly exit that skips the
@@ -462,7 +463,11 @@ Based on learnings, immediately proposes concrete updates:
 
 **Step 5.3 — Save Undone Items**
 
-Skipped P2/P3 findings and deferred plan items are saved to `memory/tasks.md` so nothing gets lost between sessions.
+Skipped P2/P3 findings and deferred plan items are saved to a per-run shard
+in `memory/tasks.d/` (one file per date + branch, so parallel worktree runs
+never merge-conflict — see `cepa:autonomy` §5) and nothing gets lost between
+sessions. The legacy single-file `memory/tasks.md` is still read but no
+longer written.
 
 **Step 5.4 — Final Status**
 
@@ -471,7 +476,7 @@ Skipped P2/P3 findings and deferred plan items are saved to `memory/tasks.md` so
 
 PR: #<number> — <title>
 Branch: <branch-name>
-Findings: X fixed, Y deferred (saved to memory/tasks.md)
+Findings: X fixed, Y deferred (saved to the memory/tasks.d/ shard)
 Learnings: <summary of what was documented>
 System updates: X rules added to CLAUDE.md, Y items deferred
 

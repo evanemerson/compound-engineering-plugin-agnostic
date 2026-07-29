@@ -148,7 +148,8 @@ plan file**, committed separately as `docs: revise plan per plan review`
 apply-only-at-100, for one rubric across the whole pipeline). `judgment`
 findings go durable: the plan's `## Deferred / Open Questions` section
 under `### From YYYY-MM-DD review`, plus the findings file
-(`status: deferred`) and `memory/tasks.md`. The PR-body sink is n/a
+(`status: deferred`) and the run's residual shard (autonomy §5 sink 1).
+The PR-body sink is n/a
 pre-PR — state that in the report rather than leaving it ambiguous. U-ID
 edits obey the stability rule (`cepa:implementation-units`): revisions
 never renumber units.

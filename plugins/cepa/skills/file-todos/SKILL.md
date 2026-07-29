@@ -119,7 +119,8 @@ pending  →  ready     (approved during triage — will be fixed)
 pending  →  skipped   (rejected during triage — removed from file)
 pending  →  applied   (auto-applied by an autonomous run — fix committed)
 pending  →  deferred  (filed as residual work by an autonomous run —
-                       also recorded in memory/tasks.md and the PR body)
+                       also recorded in the memory/tasks.d/ shard and
+                       the PR body)
 pending  →  skipped   (autonomous, /cepa:resolve-pr verdicts only:
                        replied / not-addressing / declined — the finding
                        is RETAINED in the file with its evidence, unlike
@@ -150,7 +151,7 @@ summary:
   ready: 4
   skipped: 2
   applied: 3    # Auto-applied fixes (tests passed)
-  deferred: 2   # Filed as residual work (memory/tasks.md + PR body)
+  deferred: 2   # Filed as residual work (memory/tasks.d/ shard + PR body)
 ```
 
 ## Run Metadata (optional frontmatter fields)
@@ -286,8 +287,8 @@ Rules:
   (lfg folds those facts in). Producers that never run grounding
   (resolve-pr, standalone plan-review) omit it — omission by a
   non-grounding producer is normal, not a defect. Command phases that
-  ground but write no findings file record strips/failures in
-  `memory/tasks.md` per the `cepa:grounding` skill's durable-sink rule.
+  ground but write no findings file record strips/failures in the
+  run's residual shard per the `cepa:grounding` skill's durable-sink rule.
   In repos with no `grounding:` key the block is absent by definition —
   existing files stay valid, no migration.
 - `brain` emission scope mirrors `grounding`, in repos whose `cepa.local.md`
@@ -295,8 +296,8 @@ Rules:
   writes carries the block on every path (fresh/degraded/unavailable) — an
   absent block there is a recording defect; producers that never touch the
   brain omit it; phases with no findings file (compound interactive,
-  task/lfg research) record brain strips/suppressions/scrubs in
-  `memory/tasks.md` per the `cepa:brain` skill's durable-sink rule. No
+  task/lfg research) record brain strips/suppressions/scrubs in the
+  run's residual shard per the `cepa:brain` skill's durable-sink rule. No
   `brain:` key → block absent by definition, existing files stay valid.
 - When the verdict is NO-GO or GO WITH CONDITIONS, the full verdict block
   including the rollback plan is ALSO written into the file body as a

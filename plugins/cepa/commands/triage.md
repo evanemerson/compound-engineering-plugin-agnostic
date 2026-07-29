@@ -81,8 +81,8 @@ are called out — they should be resolved before merging.
 
 - "fix N" → mark `ready`, then implement the fixes in severity order,
   test, and commit.
-- "defer N" / "defer all" → mark `deferred` AND append to `memory/tasks.md`
-  (autonomy §5 — deferrals must be durable).
+- "defer N" / "defer all" → mark `deferred` AND append to the run's
+  residual shard (autonomy §5 sink 1 — deferrals must be durable).
 - "skip N" → remove from the file. Valid on any human-issued reply — batch
   table or one-at-a-time — because a skip is an explicit human judgment that
   the finding is wrong. Autonomous runs never skip; they defer.
@@ -136,7 +136,8 @@ todos file so only approved findings remain `ready`.
   always `judgment` (autonomy §4)
 - Checkpoint before auto-applying, self-review the auto-apply diff, and
   rerun tests after (autonomy §4) — an unreviewed autofix is not a fix
-- Deferred findings always land in `memory/tasks.md`, not just the todos file
+- Deferred findings always land in the memory/tasks.d/ shard (§5 sink 1),
+  not just the todos file
 - P1 findings lead every table and every interactive sequence
 - In interactive mode: one finding at a time, show code context, keep a
   running count; "approve all remaining" works after confirming the count;
