@@ -156,6 +156,11 @@ orchestrator rather than writing it (see Phase 3's Replace flow). The
 orchestrator performs ALL file writes, deletions, consolidation merges, and
 metadata edits centrally — subagents never write.
 
+**Dispatch each with an explicit `model: sonnet` override** — every
+investigation and replacement subagent. A generic subagent has no
+frontmatter to fall back on, so an omitted override runs it at the
+invoking session's tier.
+
 ## Phase 2: Document-Set Analysis
 
 Compare in-scope docs against each other, not just against reality:

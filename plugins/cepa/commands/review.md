@@ -58,7 +58,8 @@ Cadence selects WHICH roster runs; it is orthogonal to `mode:`.
   **Skip the `learnings-researcher` pre-step and the entire conditional
   tier on a weekly run.** Both are diff-signal and task-context machinery
   serving defect review; a debt pass over a time window consumes neither,
-  and dispatching them is pure cost. Record `conditional_dispatch` for all
+  and dispatching them is pure cost. <!-- model-pin: prose -->
+  Record `conditional_dispatch` for all
   three as `dispatched: false` with reason `cadence:weekly`, and — because
   the researcher skip has no slot in that field — also emit
   `learnings_research: "skipped — cadence:weekly"` and
@@ -341,6 +342,11 @@ prompts it feeds are assembled.
 Launch agents in parallel. For each active agent listed in `cepa.local.md`, dispatch a Task with:
 - `subagent_type`: The agent name from this plugin (e.g., `security-sentinel`, `performance-oracle`)
 - `prompt`: Include the full diff and instruct the agent to perform its review
+- **no model override** — every agent in this plugin pins its tier in its
+  own frontmatter (`model: sonnet` across the roster, `model: opus` for
+  `adversarial-reviewer`), and a Task-call override would stomp that
+  deliberate pin. Companions from other plugins are the exception; they
+  follow the check-then-override rule below.
 
 **Research agents (run first, feed context to review agents):**
 - `learnings-researcher` — Search `docs/solutions/` and `CLAUDE.md` for relevant past learnings
@@ -503,7 +509,10 @@ or `frontend-reviewer` — the graph is structurally blind in their
 domains (no ORM edges, no view↔template edges) and its silence there
 reads as false absence of coupling.
 
-Launch ALL active agents in parallel (use multiple Task tool calls in a single message).
+Launch ALL active agents in parallel (use multiple Task tool calls in a
+single message), each carrying its tier by the two rules above: this
+plugin's agents pin `model: sonnet` (or `model: opus`) in frontmatter and
+take no override; companions take the check-then-override rule.
 
 **Integration Dispatch (optional):** when `cepa.local.md` has an
 `## Integrations` section AND the named skill is installed (skip silently

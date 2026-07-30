@@ -1,0 +1,35 @@
+name: model-pins
+
+# Enforces the "every dispatch declares its model" rule in CLAUDE.md.
+# Without a runner, that rule is prose-only compliance — which is the exact
+# failure mode documented in
+# docs/solutions/logic-errors/unpinned-subagent-dispatches-inherit-the-session-model.md
+#
+# The check is read-only and takes seconds. Leg 1 (agent frontmatter) fails
+# the build; Leg 2 (dispatch instructions in prose) is heuristic and only
+# warns, so a false positive never blocks a merge.
+#
+# Security: this workflow interpolates NO event data (no ${{ github.event.* }})
+# into any run: step, so there is no injection surface. Keep it that way — if
+# a future step needs event data, pass it through env: with quoting.
+
+# Deliberately NOT path-filtered. A filter buys nothing here (the check
+# takes seconds) and costs correctness twice: a PR that moves agent
+# definitions outside the filtered paths shows no check at all — which reads
+# as "nothing to review", not as a failure — and a path-filtered required
+# check can never be satisfied on the PRs it skips.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check model pins
+        run: bash plugins/cepa/scripts/check-model-pins.sh

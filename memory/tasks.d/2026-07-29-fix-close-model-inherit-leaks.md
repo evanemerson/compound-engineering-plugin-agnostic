@@ -8,12 +8,25 @@
 - [ ] P2 — plugins/cepa/skills/autonomy/SKILL.md — state the dispatch-model
   policy once as a cited contract; review.md/task.md/lfg.md/adversarial-
   reviewer note cite it instead of restating (finding #5, judgment)
-- [ ] P3 — plugins/cepa/commands/compound.md:44-56 — pin the 5-agent
+- [x] P3 — plugins/cepa/commands/compound.md:44-56 — pin the 5-agent
   fan-out to sonnet or document its exclusion; same for plan-review persona
   dispatch (operator policy: personas run at session model — currently
   written down nowhere) (finding #6, judgment)
-- [ ] P3 — plugins/cepa/commands/setup.md — health check flagging any
+  — DONE 2026-07-29 in PR #25 (1.14.0). Scope was larger than this line
+  said: four command files, plus `skills/plan-review/SKILL.md` found by the
+  new checker, plus four sites in `review.md` found once its trigger set was
+  widened. Personas are pinned `opus`, NOT left at session model — the
+  operator policy this line cites was superseded by the ceiling rule.
+- [x] P3 — plugins/cepa/commands/setup.md — health check flagging any
   agents/**.md missing a `model:` frontmatter key (finding #7, judgment)
+  — PARTIALLY DONE 2026-07-29 in PR #25: implemented as
+  `plugins/cepa/scripts/check-model-pins.sh` + a CI workflow, which covers
+  THIS repo. `/cepa:setup` itself still has no model check, so a downstream
+  consumer project gets nothing — carried forward below.
+- [ ] P3 — plugins/cepa/commands/setup.md — the consumer half of finding
+  #7: `/cepa:setup`'s health check still never looks at `model:`
+  frontmatter, so an installed-plugin project has no equivalent guard
+  (PR #25 review, finding #10)
 - [x] Compound candidate: no docs/solutions/ doc exists for the
   model-inherit-leak-at-dispatch-sites defect class — run /cepa:compound
   after PR #24 merges so Detection can catch future unpinned dispatches
