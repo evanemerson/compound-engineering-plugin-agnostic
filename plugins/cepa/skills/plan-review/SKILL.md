@@ -69,10 +69,11 @@ never be indistinguishable from a clean pass).
 Personas are **reference prompts, not registered agents**: the
 orchestrator dispatches generic subagents seeded with
 `references/subagent-template.md` plus the persona file.
-<!-- model-pin: mode-conditional -->
-The dispatch tier is mode-conditional per `cepa:autonomy` §9c — **an
+<!-- model-pin: mode-conditional interactive=opus headless=sonnet -->
+The dispatch tier is mode-conditional per `cepa:autonomy` §9c-9d — **an
 explicit `model: opus` override on an interactive run, `model: sonnet` when
-the run is headless** (`mode:headless`, or dispatched by sweep or lfg).
+the run resolves to headless** (the `mode:headless` token, this command's
+no-blocking-tool fail-safe, or an lfg-dispatched run).
 Interactively a human asked for this panel and is watching it run once, and a
 plan is the cheapest place to catch a wrong answer; headless it replicates per
 run with nobody watching, so the routine tier applies. Never omit the

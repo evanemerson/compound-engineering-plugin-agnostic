@@ -606,27 +606,60 @@ it is a defect, not a simplification.
 
 ### 9d. Mode-conditional declarations
 
-A dispatch tier may branch **only** where this ladder says so, and only on an
+A dispatch tier may branch **only** where §9c says so, and only on an
 observable invocation signal — never on the orchestrator's judgment and never
-on anything it would have to guess. The signal is the `mode:headless` token
-the invoked command already parses and strips: present → headless, absent →
-interactive. An invoker that always runs unattended (`lfg.md` Step 2.6,
-sweep-dispatched runs) declares the headless literal outright rather than
-branching on a token it knows the value of.
+on anything it would have to guess.
 
-Write it as both literals plus the marker, on the dispatch instruction:
+**The signal is the command's *resolved* mode, not the raw token.** Headless
+when the invoked command resolves to headless — the `mode:headless` token is
+present **or** the command's own fail-safe applies (`/cepa:plan-review`
+behaves as headless whenever the harness exposes no blocking-question tool,
+token or no token). Interactive otherwise. Reading the raw token instead
+mis-resolves the exact case that matters most: a scheduled
+`claude -p "/cepa:plan-review <path>"` carries no token, correctly never
+prompts, and would then have dispatched its whole panel at `opus`,
+unattended, every run — the spend profile §9's opening paragraph exists to
+prevent.
 
+**When the mode cannot be resolved, take the cheaper literal.** Ambiguity
+must never escalate tier; an over-cheap unattended panel is a quality
+question a human can see in the findings, while an over-expensive one is
+invisible until the bill.
+
+An invoker that always runs unattended — `lfg.md` Step 2.6, whose command is
+`disable-model-invocation: true` and reachable only from inside that
+pipeline — declares the headless literal outright rather than branching on a
+token whose value it already knows.
+
+Write the declaration as a single self-contained marker on the dispatch
+instruction, naming both branches, with the prose beneath it stating the same
+two literals for human readers:
+
+<!-- model-pin: prose -->
 ```
-<!-- model-pin: mode-conditional -->
+<!-- model-pin: mode-conditional interactive=opus headless=sonnet -->
 … each with an explicit `model: opus` override interactively, or
 `model: sonnet` when the run is headless (`cepa:autonomy` §9c).
 ```
 
-The marker is what makes the branch enforceable. Leg 2 of
-`check-model-pins.sh` is satisfied by *any one* sanctioned tier in the block,
-so deleting the headless branch would still pass — a silent regression of
-exactly the kind this file documents. The marker adds a leg that requires
-both tiers to be present.
+**The marker is the enforceable declaration; the prose is documentation.**
+Leg 2 of `check-model-pins.sh` is satisfied by *any one* sanctioned tier in
+the block, so deleting the headless branch would still pass it. Leg 3 reads
+the marker and fails three ways: a branch not named, a tier outside §9b's
+set, or a headless tier that costs **more** than the interactive one. That
+last check is the invariant the whole construct exists for — an inverted pair
+is still "a branch," and counting branches would pass it.
+
+The values live in the marker rather than being inferred from the prose
+because inference could not express *which* two tiers, in *which* direction,
+and it broke on ordinary markdown: a correct declaration written as a
+blank-line-separated list failed, and its cheapest remedy was deleting the
+marker — disabling the check at that site. A leg whose false positives are
+most easily fixed by switching it off is not enforcement.
+
+`<!-- model-pin: prose -->` suppresses leg 3 as well as leg 2, so
+documentation *of* this syntax (including the example above) is not scanned
+as a live dispatch.
 
 **Rejected: a true ceiling.** `min(session_model, opus)` — run at the
 session's tier but never above it — is what "the automatic-dispatch ceiling
@@ -649,15 +682,26 @@ Companion agents from other plugins are dispatched by name, and their
 frontmatter is not ours to edit. **Check each companion's `model:` field
 before dispatch:**
 
-- Absent or `inherit` → pass an explicit `model: sonnet` override on the
-  Task call.
-- A specific pin → pass **no** override; it is the upstream author's
-  deliberate choice.
-- No `model:` field at all → still pass `sonnet`, and file it as a finding.
-  Never let it silently inherit.
+- **`inherit`** → pass an explicit `model: sonnet` override. `inherit` is an
+  explicit upstream choice to ride the caller's tier, so overriding it is
+  not overruling a pin.
+- **No `model:` field at all** → pass `model: sonnet` **and file it as a
+  finding**. An omission is a defect upstream, not a decision; never let it
+  silently inherit.
+- **A specific pin inside §9b's sanctioned set** (`haiku`/`sonnet`/`opus`) →
+  pass **no** override; it is the upstream author's deliberate choice.
+- **A specific pin outside the sanctioned set** — `fable`, or any
+  unrecognized value → pass `model: sonnet` **and file it as a finding**.
+  §9b's ceiling is not an upstream author's to waive. Without this clause
+  §9e's "defer to a specific pin" silently overrides §9b's absolute, and an
+  upstream bump to `fable` would auto-dispatch the top tier on every
+  unattended review — across the whole companion fan-out, with a green gate,
+  because leg 1 scans only agents inside *this* repo and cannot see a
+  companion plugin's frontmatter at all.
 
-These facts hold only as of the last time someone read them; re-verify the
-upstream frontmatter whenever the companion plugin is updated.
+**Companion frontmatter is outside CI's reach, so the check is a human
+obligation on every companion-plugin update.** These facts hold only as of
+the last time someone read them.
 
 ### 9f. Enforcement
 
@@ -666,4 +710,24 @@ upstream frontmatter whenever the companion plugin is updated.
 can never fail is not enforcement. Close a genuine prose match (documentation
 about pins, not a live dispatch) with `<!-- model-pin: prose -->` on its line,
 so the exemption is reviewable in the diff rather than a judgement that left
-no trace.
+no trace. The same marker is the only sanctioned way to exempt a leg-3 match;
+deleting a `mode-conditional` marker to quiet the checker disables the check
+at that site and is never the fix.
+
+**Never widen the checker's trigger set and add a dispatch site in the same
+commit without re-running it.** Widening leg 2's regex is what exposed four
+live dispatch sites that both a manual sweep and the checker's first cut had
+missed — a detection change and the thing it detects, landing together, hide
+each other. This applies wherever this script is vendored, not just to its
+home repo.
+
+**What the checker does NOT cover**, so nobody reads a green run as more than
+it is:
+
+| Gap | Why it is not automated |
+|---|---|
+| Whether a mode-conditional pair matches the tier §9c's ladder mandates (`interactive=haiku headless=haiku` passes) | needs a path→expected-tier table in the script — the hardcoded-coupling class that has drifted three times here |
+| Third-party companion frontmatter (§9e) | lives outside this repo; leg 1 cannot see an installed plugin's cache |
+| Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
+
+Each is a human obligation on review, not a covered case.
