@@ -1,6 +1,6 @@
 ---
 name: autonomy
-description: The cepa autonomy contract — how commands resolve gated vs autonomous behavior, execute plans to completion, auto-apply review findings safely, and make residual work durable instead of asking. Referenced by /cepa:task, /cepa:lfg, /cepa:review, /cepa:triage, /cepa:plan-review, /cepa:sweep, and /cepa:resolve-pr.
+description: The cepa autonomy contract — how commands resolve gated vs autonomous behavior, execute plans to completion, auto-apply review findings safely, pin the model tier of every dispatch, and make residual work durable instead of asking. Referenced by /cepa:task, /cepa:lfg, /cepa:review, /cepa:triage, /cepa:plan-review, /cepa:sweep, /cepa:resolve-pr, /cepa:compound, and /cepa:compound-refresh.
 ---
 
 # The cepa Autonomy Contract
@@ -539,3 +539,195 @@ An explicit `--base` on `gh pr create` matters most: `gh` defaults to the
 repository's default branch, which is precisely the value rung 1 exists to
 override, so omitting the flag silently reintroduces the bug on exactly the
 repos that configured their way out of it.
+
+## 9. Dispatch Model Declaration
+
+<!-- model-pin: prose -->
+**Every subagent dispatch declares its model.** Omitted, `inherit`, empty,
+and `null` are the same thing: the dispatch runs at the invoking session's
+tier, so cost stops being a decision anyone made and becomes a property of
+whoever happened to launch the session — multiplied by the fan-out width: the
+whole review roster, the compound fan-out, the persona panel, one subagent per
+implementation unit. A 10-hour usage audit on 2026-07-29 put ~91% of
+weighted spend on unpinned dispatches for exactly this reason.
+
+This section is the single statement of the policy. Commands, skills, and
+agent notes **cite `cepa:autonomy` §9** and add only their local specifics —
+which tier and why *here*. They do not restate the rule. Before this section
+existed the policy was written out longhand in seven places with two
+divergent rationales, and one of them shipped a factual claim about another
+file's frontmatter that the same PR made false.
+
+### 9a. Check the construct, not the site
+
+Where the declaration lives depends on what is being dispatched:
+
+| Construct | Declaration lives in | At the Task call |
+|---|---|---|
+| **Registered agent** (`agents/**/*.md`) | frontmatter `model:` | **no override** — an override beats frontmatter and silently stomps a deliberate pin |
+| **Generic subagent** (Task call seeded from a prompt template, no registered agent type) | the dispatch instruction itself | **the override** — there is no frontmatter to fall back on |
+
+**Never blanket-apply an override across a list of dispatch targets.** Check
+each target's frontmatter first. A dispatch-call `model` outranks
+frontmatter, so one sweeping override downgrades whichever target ships a
+deliberate higher pin — the concrete near-miss was `code-simplifier`'s
+upstream `opus`. Any prose claim about another file's declared model is
+verified by reading that file in the same change; every factual error in PR
+#24 was an unread-frontmatter assertion.
+
+When a skill defines the dispatch shape, the pin belongs in the skill **and
+at every invoker**. A copied fallback that drifts from its original is how
+`lfg.md` Step 2.6 stayed unpinned after `plan-review.md` was fixed.
+
+### 9b. Sanctioned tiers
+
+`haiku`, `sonnet`, `opus`. Two deliberate exclusions:
+
+- **`inherit` is not a tier** — it is a choice to spend at the session's
+  tier, which is the defect above.
+- **`fable` is never dispatched automatically.** The top tier is reserved for
+  work a person opted into in their own session. Its output price and
+  cache-read multiplier mean one unattended fan-out can exhaust a
+  model-weighted subscription cap across every concurrent session.
+
+### 9c. The tier ladder
+
+| Dispatch | Tier | Why |
+|---|---|---|
+| Registered review agents | frontmatter `sonnet` | checklist-shaped review against a bounded diff |
+| `adversarial-reviewer` | frontmatter `opus` | failure-scenario construction is the review that most benefits from strong reasoning |
+| Builders, implementers, mechanical fan-out (compound's 5 agents, compound-refresh investigators, unit subagents, `subagent-driven-development`'s three roles) | `sonnet` | routine work already covered by a review tier that catches mistakes at sonnet prices |
+| Plan-review personas — **interactive** | `opus` | a human asked for this panel, is watching it, and it runs once; a plan is the cheapest place to catch a wrong answer |
+| Plan-review personas — **headless** (`mode:headless`, sweep- or lfg-dispatched) | `sonnet` | nobody is watching and it replicates per run |
+| Third-party companions | see 9e | the pin may not be ours to make |
+
+Changing a declared value takes a recorded rationale. Removing one does not —
+it is a defect, not a simplification.
+
+### 9d. Mode-conditional declarations
+
+A dispatch tier may branch **only** where §9c says so, and only on an
+observable invocation signal — never on the orchestrator's judgment and never
+on anything it would have to guess.
+
+**The signal is the command's *resolved* mode, not the raw token.** Headless
+when the invoked command resolves to headless — the `mode:headless` token is
+present **or** the command's own fail-safe applies (`/cepa:plan-review`
+behaves as headless whenever the harness exposes no blocking-question tool,
+token or no token). Interactive otherwise. Reading the raw token instead
+mis-resolves the exact case that matters most: a scheduled
+`claude -p "/cepa:plan-review <path>"` carries no token, correctly never
+prompts, and would then have dispatched its whole panel at `opus`,
+unattended, every run — the spend profile §9's opening paragraph exists to
+prevent.
+
+**When the mode cannot be resolved, take the cheaper literal.** Ambiguity
+must never escalate tier; an over-cheap unattended panel is a quality
+question a human can see in the findings, while an over-expensive one is
+invisible until the bill.
+
+An invoker that always runs unattended — `lfg.md` Step 2.6, whose command is
+`disable-model-invocation: true` and reachable only from inside that
+pipeline — declares the headless literal outright rather than branching on a
+token whose value it already knows.
+
+Write the declaration as a single self-contained marker on the dispatch
+instruction, naming both branches, with the prose beneath it stating the same
+two literals for human readers:
+
+<!-- model-pin: prose -->
+```
+<!-- model-pin: mode-conditional interactive=opus headless=sonnet -->
+… each with an explicit `model: opus` override interactively, or
+`model: sonnet` when the run is headless (`cepa:autonomy` §9c).
+```
+
+**The marker is the enforceable declaration; the prose is documentation.**
+Leg 2 of `check-model-pins.sh` is satisfied by *any one* sanctioned tier in
+the block, so deleting the headless branch would still pass it. Leg 3 reads
+the marker and fails three ways: a branch not named, a tier outside §9b's
+set, or a headless tier that costs **more** than the interactive one. That
+last check is the invariant the whole construct exists for — an inverted pair
+is still "a branch," and counting branches would pass it.
+
+The values live in the marker rather than being inferred from the prose
+because inference could not express *which* two tiers, in *which* direction,
+and it broke on ordinary markdown: a correct declaration written as a
+blank-line-separated list failed, and its cheapest remedy was deleting the
+marker — disabling the check at that site. A leg whose false positives are
+most easily fixed by switching it off is not enforcement.
+
+`<!-- model-pin: prose -->` suppresses leg 3 as well as leg 2, so
+documentation *of* this syntax (including the example above) is not scanned
+as a live dispatch.
+
+**Rejected: a true ceiling.** `min(session_model, opus)` — run at the
+session's tier but never above it — is what "the automatic-dispatch ceiling
+is opus" literally describes, and it is the intuitive fix for a pin that
+raises tier as well as capping it. It is not adopted because the orchestrator
+cannot reliably introspect its own session model, and a static checker cannot
+evaluate a conditional whose inputs only exist at runtime. A rule the checker
+cannot verify regresses silently, which is the failure mode this repo has now
+shipped four times. The honest path to a real ceiling is a declared
+`model_policy` in `cepa.local.md`; that remains a non-goal, not an oversight.
+Do not "normalize" 9d back toward an inherit-shaped rule without it.
+
+**A dispatch-call `model` clamps in both directions.** It is an assignment,
+not a maximum: on a sonnet session an `opus` override raises the dispatch. A
+pin therefore never describes itself as "just a ceiling."
+
+### 9e. Third-party companions
+
+Companion agents from other plugins are dispatched by name, and their
+frontmatter is not ours to edit. **Check each companion's `model:` field
+before dispatch:**
+
+- **`inherit`** → pass an explicit `model: sonnet` override. `inherit` is an
+  explicit upstream choice to ride the caller's tier, so overriding it is
+  not overruling a pin.
+- **No `model:` field at all** → pass `model: sonnet` **and file it as a
+  finding**. An omission is a defect upstream, not a decision; never let it
+  silently inherit.
+- **A specific pin inside §9b's sanctioned set** (`haiku`/`sonnet`/`opus`) →
+  pass **no** override; it is the upstream author's deliberate choice.
+- **A specific pin outside the sanctioned set** — `fable`, or any
+  unrecognized value → pass `model: sonnet` **and file it as a finding**.
+  §9b's ceiling is not an upstream author's to waive. Without this clause
+  §9e's "defer to a specific pin" silently overrides §9b's absolute, and an
+  upstream bump to `fable` would auto-dispatch the top tier on every
+  unattended review — across the whole companion fan-out, with a green gate,
+  because leg 1 scans only agents inside *this* repo and cannot see a
+  companion plugin's frontmatter at all.
+
+**Companion frontmatter is outside CI's reach, so the check is a human
+obligation on every companion-plugin update.** These facts hold only as of
+the last time someone read them.
+
+### 9f. Enforcement
+
+`bash plugins/cepa/scripts/check-model-pins.sh` — CI runs it on every PR.
+**Zero MISS and zero WARN are both required**, because a warning channel that
+can never fail is not enforcement. Close a genuine prose match (documentation
+about pins, not a live dispatch) with `<!-- model-pin: prose -->` on its line,
+so the exemption is reviewable in the diff rather than a judgement that left
+no trace. The same marker is the only sanctioned way to exempt a leg-3 match;
+deleting a `mode-conditional` marker to quiet the checker disables the check
+at that site and is never the fix.
+
+**Never widen the checker's trigger set and add a dispatch site in the same
+commit without re-running it.** Widening leg 2's regex is what exposed four
+live dispatch sites that both a manual sweep and the checker's first cut had
+missed — a detection change and the thing it detects, landing together, hide
+each other. This applies wherever this script is vendored, not just to its
+home repo.
+
+**What the checker does NOT cover**, so nobody reads a green run as more than
+it is:
+
+| Gap | Why it is not automated |
+|---|---|
+| Whether a mode-conditional pair matches the tier §9c's ladder mandates (`interactive=haiku headless=haiku` passes) | needs a path→expected-tier table in the script — the hardcoded-coupling class that has drifted three times here |
+| Third-party companion frontmatter (§9e) | lives outside this repo; leg 1 cannot see an installed plugin's cache |
+| Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
+
+Each is a human obligation on review, not a covered case.

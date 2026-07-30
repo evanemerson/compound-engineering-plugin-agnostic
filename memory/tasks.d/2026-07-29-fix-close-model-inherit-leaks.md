@@ -5,9 +5,16 @@
 - [ ] P2 — plugins/cepa/skills/file-todos/SKILL.md — add `dispatch_models`
   Run Metadata field so a dropped model override is observable (finding #4,
   judgment: spec-surface change)
-- [ ] P2 — plugins/cepa/skills/autonomy/SKILL.md — state the dispatch-model
+- [x] P2 — plugins/cepa/skills/autonomy/SKILL.md — state the dispatch-model
   policy once as a cited contract; review.md/task.md/lfg.md/adversarial-
   reviewer note cite it instead of restating (finding #5, judgment)
+  — DONE 2026-07-29 in PR #26 (1.15.0): `cepa:autonomy` §9, six subsections
+  (§9a constructs, §9b tiers, §9c ladder, §9d mode-conditional, §9e
+  companions, §9f enforcement). Scope was seven sites, not the four this
+  line names — PR #25 added three while closing finding #6. PR #26's own
+  review then caught CLAUDE.md restating §9a/§9f verbatim, i.e. this
+  finding's defect reproduced in the document announcing its fix; corrected
+  in the same PR.
 - [x] P3 — plugins/cepa/commands/compound.md:44-56 — pin the 5-agent
   fan-out to sonnet or document its exclusion; same for plan-review persona
   dispatch (operator policy: personas run at session model — currently

@@ -157,9 +157,8 @@ orchestrator performs ALL file writes, deletions, consolidation merges, and
 metadata edits centrally — subagents never write.
 
 **Dispatch each with an explicit `model: sonnet` override** — every
-investigation and replacement subagent. A generic subagent has no
-frontmatter to fall back on, so an omitted override runs it at the
-invoking session's tier.
+investigation and replacement subagent, at the routine tier per autonomy
+§9c; §9a is why the override lives here rather than in frontmatter.
 
 ## Phase 2: Document-Set Analysis
 

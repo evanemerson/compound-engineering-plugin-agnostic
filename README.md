@@ -70,7 +70,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 |---|---|
 | `compound-docs` | Solution document format (with mandatory Detection sections for review agents), 8-category taxonomy, plan-solution bidirectional linking, CONCEPTS.md vocabulary-map format |
 | `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
-| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety within and across runs, idempotency), verification evidence, safe auto-apply, residual durability, trunk resolution |
+| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety within and across runs, idempotency), verification evidence, safe auto-apply, residual durability, trunk resolution, dispatch-model declaration (§9 — the tier ladder every subagent dispatch cites) |
 | `implementation-units` | Canonical plan-task format: `### U<N>.` units with stable IDs, per-unit test scenarios, verification split, plan-warranted gate |
 | `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
 | `pr-feedback` | The PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, and the vendored gh scripts |
