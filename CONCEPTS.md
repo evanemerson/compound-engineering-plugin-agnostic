@@ -129,7 +129,28 @@ defers, and pass no override when it names one. A blanket override across a
 list of targets is the mirror image of a missing pin — it silently replaces
 a deliberate upstream choice with the caller's default.
 
+## Policy authoring
+
+### Restatement drift
+A cross-cutting policy or fact written out in prose at multiple call sites
+instead of stated once in the artifact that owns it and cited elsewhere. The
+copies diverge, because each site's author supplies the rationale visible from
+that site; and a fix scoped to whichever copy got reported leaves the
+duplication that produced it live to generate the next one.
+
+Distinguished from an *instantiation*, where the copy must be physically
+adjacent to what it governs — a guard next to the untrusted input it guards
+cannot be replaced by a pointer. The test is whether the copy has to be there
+for the mechanism to work, or is only there to save the reader a hop.
+
+### Decorative citation
+A citation placed alongside a restatement of the cited content rather than in
+place of it. It satisfies a citation-presence check while leaving the
+duplicated text — and so the drift — intact, which makes it harder to catch
+than a bare restatement.
+
 ## Flagged ambiguities
 
 - "Detection" and "Prevention" had been used loosely for any recurrence guidance — these are distinct: Prevention is rules for humans and process; Detection is machine-checkable signals for automated reviewers.
+- Duplicated policy prose had been treated as uniformly a defect — it is not: a clause that must sit adjacent to the content it governs (an untrusted-data guard at a relay point) is an instantiation to audit for completeness, not a restatement to consolidate into a citation.
 - An unset model tier on a dispatch had been read as a neutral default — it is not: it resolves to the invoking session's tier, which makes cost a property of the operator's session rather than of the task.
