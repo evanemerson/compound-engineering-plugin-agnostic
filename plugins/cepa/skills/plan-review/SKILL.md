@@ -68,15 +68,18 @@ never be indistinguishable from a clean pass).
 
 Personas are **reference prompts, not registered agents**: the
 orchestrator dispatches generic subagents seeded with
-`references/subagent-template.md` plus the persona file, **each with an
-explicit `model: opus` override**. A generic subagent has no frontmatter to
-fall back on, so an omitted override runs it at the invoking session's
-tier. This pin is a floor as well as a ceiling — below opus it deliberately
-raises the panel's tier, because a plan is the cheapest place to catch a
-wrong answer, and above opus it stops an unattended panel from escalating.
-Changing the value takes a recorded rationale; removing it does not.
-Every invoker of this skill carries the same pin. A failed persona
-degrades to a noted coverage gap, never a blocked run.
+`references/subagent-template.md` plus the persona file.
+<!-- model-pin: mode-conditional -->
+The dispatch tier is mode-conditional per `cepa:autonomy` §9c — **an
+explicit `model: opus` override on an interactive run, `model: sonnet` when
+the run is headless** (`mode:headless`, or dispatched by sweep or lfg).
+Interactively a human asked for this panel and is watching it run once, and a
+plan is the cheapest place to catch a wrong answer; headless it replicates per
+run with nobody watching, so the routine tier applies. Never omit the
+override: a generic subagent has no frontmatter to fall back on (§9a).
+Every invoker of this skill carries the same conditional — see §9d for why
+this is two literals and a marker rather than a session-relative ceiling.
+A failed persona degrades to a noted coverage gap, never a blocked run.
 
 ## Confidence Anchors
 

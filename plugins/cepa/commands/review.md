@@ -344,9 +344,10 @@ Launch agents in parallel. For each active agent listed in `cepa.local.md`, disp
 - `prompt`: Include the full diff and instruct the agent to perform its review
 - **no model override** — every agent in this plugin pins its tier in its
   own frontmatter (`model: sonnet` across the roster, `model: opus` for
-  `adversarial-reviewer`), and a Task-call override would stomp that
-  deliberate pin. Companions from other plugins are the exception; they
-  follow the check-then-override rule below.
+  `adversarial-reviewer`), and per autonomy §9a a Task-call override beats
+  frontmatter and would stomp that deliberate pin. Companions from other
+  plugins are the exception; they follow §9e's check-then-override rule,
+  restated below only for the dispatch step that applies it.
 
 **Research agents (run first, feed context to review agents):**
 - `learnings-researcher` — Search `docs/solutions/` and `CLAUDE.md` for relevant past learnings
@@ -465,21 +466,12 @@ indistinguishable from a clean pass.
 These cover angles the cepa agents intentionally don't, so they're part of the
 default rotation when active in `cepa.local.md`. Dispatch via the Task tool
 using the bare name; the runtime resolves which plugin owns each.
-**Companion dispatch model rule — check each companion's frontmatter
-`model:` field before dispatch.** If it is absent or `inherit`, pass an
-explicit `model: sonnet` override on the Task call; if it pins a specific
-model, pass NO override — the pin is the upstream author's deliberate
-choice (as of pr-review-toolkit today: `code-simplifier` pins `opus`; the
-other four ship `inherit`). Unoverridden `inherit` rides the session model,
-which on an Opus- or Fable-tier session silently multiplies review cost;
-the sonnet override puts inherit-shipping companions on the same tier as
-the cepa review agents, whose own frontmatter already pins a model
-(`sonnet` across the roster; `opus` for `adversarial-reviewer`) and who
-therefore need no override. An agent whose frontmatter has NO `model:`
-field at all is a defect — file it as a finding, never let it silently
-inherit. Re-verify the upstream frontmatter facts whenever the
-pr-review-toolkit plugin is updated; this rule is only correct while they
-hold.
+**Companion dispatch model rule — apply autonomy §9e:** check each
+companion's frontmatter `model:` field before dispatch, pass an explicit
+`model: sonnet` override when it is absent or `inherit`, and pass NO
+override when it pins a specific model. As of pr-review-toolkit today,
+`code-simplifier` pins `opus` and the other four ship `inherit` — re-verify
+that by reading their frontmatter whenever the plugin is updated, per §9a.
 - `silent-failure-hunter` — Silent error swallowing, inadequate error handling
 - `pr-test-analyzer` — Test coverage gaps, missing behavioral tests
 - `comment-analyzer` — Comment accuracy, comment rot, WHAT-vs-WHY hygiene
@@ -510,9 +502,9 @@ domains (no ORM edges, no view↔template edges) and its silence there
 reads as false absence of coupling.
 
 Launch ALL active agents in parallel (use multiple Task tool calls in a
-single message), each carrying its tier by the two rules above: this
-plugin's agents pin `model: sonnet` (or `model: opus`) in frontmatter and
-take no override; companions take the check-then-override rule.
+single message), each carrying its tier per autonomy §9: this plugin's
+agents pin `model: sonnet` (or `model: opus`) in frontmatter and take no
+override (§9a); companions take the check-then-override rule (§9e).
 
 **Integration Dispatch (optional):** when `cepa.local.md` has an
 `## Integrations` section AND the named skill is installed (skip silently

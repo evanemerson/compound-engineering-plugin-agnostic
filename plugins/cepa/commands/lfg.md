@@ -149,10 +149,11 @@ command is unavailable, the fallback must replicate its contract, not just
 its dispatch: run the `cepa:plan-review` skill's FULL persona selection —
 always-on plus every signal-matched conditional persona, recording each
 non-dispatch with its reason — dispatch the selected personas as generic
-subagents **each with an explicit `model: opus` override** (a generic
-subagent has no frontmatter to fall back on, so an omitted override runs it
-at the invoking session's tier; the pin is a floor as well as a ceiling —
-see the `cepa:plan-review` skill, which this fallback must not drift from),
+subagents **each with an explicit `model: sonnet` override**: this path is
+always headless, so it takes the headless literal of the mode-conditional
+tier outright rather than branching on a token whose value it already knows
+(`cepa:autonomy` §9c-9d, and the `cepa:plan-review` skill, which this
+fallback must not drift from),
 run the learnings-researcher step,
 synthesize per that skill,
 and **write the findings file to `todos/` in the `cepa:file-todos`
@@ -228,9 +229,8 @@ pipeline's contract.
   Files set as the starting point, then checked against the contention
   list (file overlap is necessary, not sufficient). Merge in dependency
   order per §2's integration rules. Dispatch each unit subagent with an
-  explicit `model: sonnet` override — builders otherwise inherit the
-  session model, and Step 4's review loop catches routine-unit mistakes
-  at sonnet prices.
+  explicit `model: sonnet` override (autonomy §9c — builders are routine
+  work, and Step 4's review loop catches unit mistakes at sonnet prices).
 - Test-first per task where the plan specifies tests; commit per task.
 - A blocked task gets recorded (autonomy §5) and skipped; the run continues
   with the remaining tasks.

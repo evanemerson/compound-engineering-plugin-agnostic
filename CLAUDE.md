@@ -63,35 +63,42 @@ live, and `check-model-pins.sh` found a fifth site (the plan-review skill)
 that the sweep missed — then found four more in `review.md` the moment its
 trigger set was widened.
 
-Any PR touching a dispatch is not done until both hold:
-- **Registered agent** (`plugins/cepa/agents/**/*.md`): frontmatter
-  declares `model:`, and the value is never `inherit`.
-- **Generic subagent** (Task call seeded from a prompt template, no
-  registered agent type): the dispatch instruction itself carries the
-  `model:` override, because there is no frontmatter to fall back on. When
-  a skill defines the dispatch shape, pin it in the skill AND at every
-  invoker — a copied fallback that drifts from its original is how
-  `lfg.md` Step 2.6 stayed unpinned after `plan-review.md` was fixed.
+**The policy itself lives in `cepa:autonomy` §9** (1.15.0) — the two
+constructs and where each declares its tier (§9a), the sanctioned tiers and
+why `fable`/`inherit` are excluded (§9b), the tier ladder (§9c),
+mode-conditional declarations (§9d), third-party companions (§9e). Cite it;
+do not restate it here or anywhere else. Restating is what produced this
+rule's own history: seven longhand copies with two divergent rationales, one
+of which asserted a frontmatter fact its own PR had just falsified.
 
-Run `bash plugins/cepa/scripts/check-model-pins.sh` before merge — CI runs
-it on every PR. Zero MISS **and** zero WARN are required; both fail the
-run, because a warning channel that can never fail is not enforcement.
-Close a genuine prose match with `<!-- model-pin: prose -->` on its line,
-so the exemption is reviewable in the diff rather than a judgement that
-left no trace. Note `main` is not branch-protected today, so a red check
-does not physically block a merge — treat it as blocking anyway, or turn
-on protection. **Never blanket-apply an override across a list of dispatch
-targets** — a dispatch-call `model` beats frontmatter, so it silently
-stomps whichever target ships a deliberate pin. Check each target first;
-PR #24's first cut would have downgraded `code-simplifier`'s upstream
-`opus` this way. Verify any prose claim about another file's declared
-model by reading that file in the same change — every factual error in
-that PR was an unread-frontmatter assertion.
+What a PR in **this** repo must still do:
+
+- Run `bash plugins/cepa/scripts/check-model-pins.sh` before merge — CI runs
+  it on every PR. Zero MISS **and** zero WARN are required; both fail the
+  run, because a warning channel that can never fail is not enforcement.
+  Note `main` is not branch-protected today, so a red check does not
+  physically block a merge — treat it as blocking anyway, or turn on
+  protection.
+- Close a genuine prose match with `<!-- model-pin: prose -->` on its line,
+  so the exemption is reviewable in the diff rather than a judgement that
+  left no trace. A tier that branches on invocation mode carries
+  `<!-- model-pin: mode-conditional -->` and states **both** literals — leg 3
+  fails a block that has lost one, because leg 2 is satisfied by either.
+- **Never blanket-apply an override across a list of dispatch targets** (§9a)
+  — PR #24's first cut would have downgraded `code-simplifier`'s upstream
+  `opus` this way. Verify any prose claim about another file's declared model
+  by reading that file in the same change; every factual error in that PR was
+  an unread-frontmatter assertion.
+- Never widen the checker's trigger set and a dispatch site in the same
+  commit without re-running it — widening the regex is what exposed the four
+  live sites in `review.md`.
 
 This is the third sibling of a class this file already documents
 (allowed-tools mismatch shipped twice on 2026-07-10; hardcoded counts three
 times across #6/#7/#8): a fix scoped to the reported instance leaves the
-rest of the construct live.
+rest of the construct live. 1.15.0 closed the *documentation* half of the
+same class — the rule had been fixed at each site it was reported at while
+the duplication that let the sites diverge stayed live.
 
 ## Conventions
 

@@ -8,8 +8,13 @@
 #   so an unrecognized tier is a MISS even though a key exists.
 #   Leg 2: dispatch instructions in command and skill bodies carry a pin
 #   nearby, or an explicit prose-suppression marker.
+#   Leg 3: a dispatch declared mode-conditional (autonomy §9d) carries BOTH
+#   of its branch tiers. Leg 2 is satisfied by any ONE sanctioned tier, so
+#   deleting the headless branch of an interactive/headless pair would
+#   otherwise pass clean — the silent-regression class this repo keeps
+#   shipping.
 #
-# Both legs fail the run. A warning channel that can never fail is not
+# All three legs fail the run. A warning channel that can never fail is not
 # enforcement — so leg 2's escape hatch is an explicit, diff-reviewable
 # marker on the line that needs it:
 #
@@ -32,6 +37,11 @@ info() { printf 'INFO %s\n' "$1"; }
 # reserved for work a person opted into, never for automatic dispatch.
 ALLOWED_TIERS='sonnet opus haiku'
 SUPPRESS_MARKER='model-pin: prose'
+# A dispatch whose tier branches on invocation mode (autonomy §9d) declares
+# both literals. The marker is what makes that structure checkable; without
+# it, leg 3 has no way to tell "one tier, correctly" from "two tiers, one
+# since deleted".
+MODECOND_MARKER='model-pin: mode-conditional'
 # Block scoping replaces the old fixed-line window; see block_range().
 
 misses=0
@@ -151,6 +161,29 @@ scan_body() {
   done <<< "$hits"
 }
 
+# --- Leg 3: mode-conditional dispatches declare both branches --------------
+# Reports the tiers it DID find, so a failure names the surviving branch
+# instead of only the missing one — the message has to be actionable without
+# reopening the diff.
+scan_conditional() {
+  local f="$1" ln hits range scope found n
+  hits=$(grep -nF "$MODECOND_MARKER" "$f" 2>/dev/null) || return 0
+  [ -n "$hits" ] || return 0
+
+  while IFS= read -r line; do
+    ln=${line%%:*}
+    range=$(block_range "$f" "$ln")
+    scope=$(sed -n "${range% *},${range#* }p" "$f")
+    found=$(printf '%s' "$scope" | grep -oE "$PIN_RE" |
+      sed 's/^model:[[:space:]]*//; s/^`//' |
+      tr '[:upper:]' '[:lower:]' | sort -u | tr '\n' ' ')
+    found=${found% }
+    n=$(printf '%s\n' $found | grep -c .)
+    [ "$n" -ge 2 ] && continue
+    printf '%s\t%s\n' "$ln" "${found:-none}"
+  done <<< "$hits"
+}
+
 for d in plugins/cepa/commands plugins/cepa/skills; do
   [ -d "$d" ] || continue
   while IFS= read -r f; do
@@ -164,6 +197,12 @@ for d in plugins/cepa/commands plugins/cepa/skills; do
       warn "model-pin: ${f}:${hit} — dispatch instruction with no pin in its block or the next (pin it, or mark the line <!-- ${SUPPRESS_MARKER} -->)"
       warns=$((warns + 1))
     done < <(scan_body "$f")
+
+    while IFS=$'\t' read -r cln ctiers; do
+      [ -n "$cln" ] || continue
+      miss "model-pin: ${f}:${cln} — declared ${MODECOND_MARKER} but only one branch tier is present (found: ${ctiers}); a conditional dispatch states both literals (autonomy §9d)"
+      misses=$((misses + 1))
+    done < <(scan_conditional "$f")
   done < <(find -L "$d" -name '*.md' -type f 2>/dev/null | sort)
 done
 
