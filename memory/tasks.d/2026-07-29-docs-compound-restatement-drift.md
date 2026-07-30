@@ -34,19 +34,21 @@ diff, so both are recorded here rather than fixed silently.
   adjacent checker does is a restatement in a different language from its
   subject, so it is never re-read when the behavior changes.
 
-### Checked and clean (recorded so a future run does not re-derive it)
+### Checked and clean (each claim located and dated, so it can be re-checked rather than trusted)
 
 - §5 residual-sink and `slug(x)` rules: ~40 `§5` citations, 5 `slug(x)` uses,
   all pointers to the one definition. No restatement.
 - `cepa:file-todos` format: cited as "the single canonical spec" everywhere.
 - autonomy §7 untrusted-data clause: written out longhand in 6 non-owner
-  files with differing wording — **correct by design**, not drift. CLAUDE.md
-  requires the clause *at the relay point*; a citation cannot guard the read.
-  The live risk there is *coverage* drift (does each instantiation still carry
-  every clause §7 now requires, incl. declarative exemption claims?), which is
-  a completeness audit, not a consolidation. Converting these to citations
-  would break the guard — the doc's Detection section carries a signal against
-  exactly that mistake.
+  files with differing wording — an instantiation, not drift, because
+  CLAUDE.md requires the clause *at the relay point* and a citation cannot
+  guard the read. Converting these to citations would break the guard; the
+  solution doc's Detection section carries a signal against exactly that
+  mistake. **Verified 2026-07-30 against `previous-comments-reviewer.md:32-40`
+  and `sweep.md:47-57` — re-verify if either file's §7 clause changes.** The
+  live risk is *coverage* drift (does each instantiation still carry every
+  clause §7 now requires, incl. declarative exemption claims?): a completeness
+  audit, not a consolidation, and not yet mechanised.
 - The "indistinguishable from a clean pass" idiom (~10 files): a design idiom
   applied locally to a different mechanism each time, not one fact copied.
 

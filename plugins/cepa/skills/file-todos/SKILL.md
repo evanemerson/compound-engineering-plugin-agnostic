@@ -152,7 +152,16 @@ summary:
   skipped: 2
   applied: 3    # Auto-applied fixes (tests passed)
   deferred: 2   # Filed as residual work (memory/tasks.d/ shard + PR body)
+  completed: 0  # ready/deferred findings since fixed and verified
 ```
+
+**The state counters must sum to `total`**, as must `p1 + p2 + p3`. An
+omitted counter reads as zero (a freshly written file carries only
+`pending`), but every `status` value in the lifecycle above has one available
+— `completed` included, so a `deferred → completed` write-back has somewhere
+to land. A transition with no counter forces the writer to choose between an
+unbalanced block and an invented field, and different runs choose
+differently.
 
 ## Run Metadata (optional frontmatter fields)
 
