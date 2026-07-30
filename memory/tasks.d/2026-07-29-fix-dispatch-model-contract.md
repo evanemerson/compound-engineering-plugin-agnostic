@@ -15,14 +15,15 @@
   are cost governance with no gating semantics; only §9d ties tier to autonomy
   state. Natural split into a `cepa:dispatch-tiers` skill if cohesion becomes
   a problem (finding #16, judgment: trade-off chosen, not defaulted)
-- [ ] P3 — **compound candidate**: no docs/solutions/ doc covers the
+- [x] P3 — **compound candidate**: no docs/solutions/ doc covers the
   restatement-drift meta-pattern — *a cross-cutting policy stated in prose at
   N call sites will diverge; state it once in the skill that owns it and
   require every site to cite, never restate*. Flagged on two consecutive PRs
   (080933 #5, 091538 #6) before centralizing, and PR #26's own consolidating
   commit restated §9a/§9f anyway (finding #1) — strong evidence for the doc.
   Run `/cepa:compound` after this merges so Detection can catch the shape
-  (finding #17)
+  (finding #17) — **done 2026-07-30, PR #27** (`docs/compound-restatement-drift`);
+  finding #17 in `todos/review-2026-07-29-215819.md` is now `status: completed`
 - [ ] P3 — plugins/cepa/scripts/check-model-pins.sh — deferred finding #11
   (relocate this repo-self-check to root `scripts/`) was not bundled although
   PR #26 opened the file again; third touch now on record, strengthening the

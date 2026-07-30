@@ -5,9 +5,9 @@ name: model-pins
 # failure mode documented in
 # docs/solutions/logic-errors/unpinned-subagent-dispatches-inherit-the-session-model.md
 #
-# The check is read-only and takes seconds. Leg 1 (agent frontmatter) fails
-# the build; Leg 2 (dispatch instructions in prose) is heuristic and only
-# warns, so a false positive never blocks a merge.
+# The check is read-only and takes seconds. Its pass condition is defined by
+# `cepa:autonomy` §9f — read it there rather than inferring it from this
+# comment or from any one leg's output verb.
 #
 # Security: this workflow interpolates NO event data (no ${{ github.event.* }})
 # into any run: step, so there is no injection surface. Keep it that way — if
