@@ -705,7 +705,9 @@ the last time someone read them.
 
 ### 9f. Enforcement
 
-`bash plugins/cepa/scripts/check-model-pins.sh` — CI runs it on every PR.
+`bash scripts/check-model-pins.sh` — CI runs it on every PR. It is a
+self-check of the plugin *source repo* and is not shipped to consumers, so a
+vendored copy lives wherever that repo keeps its own tooling.
 **Zero MISS and zero WARN are both required**, because a warning channel that
 can never fail is not enforcement. Close a genuine prose match (documentation
 about pins, not a live dispatch) with `<!-- model-pin: prose -->` on its line,

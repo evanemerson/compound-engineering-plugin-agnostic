@@ -32,4 +32,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check model pins
-        run: bash plugins/cepa/scripts/check-model-pins.sh
+        run: bash scripts/check-model-pins.sh
