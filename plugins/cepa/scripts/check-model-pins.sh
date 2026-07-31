@@ -309,29 +309,132 @@ for d in "${SCAN_DIRS[@]}"; do
   done < <(find -L "$d" -name '*.md' -type f 2>/dev/null | sort)
 done
 
-# --- Leg 4: §9 citations resolve --------------------------------------------
-# §9 is cited by sub-letter from ~10 files. Nothing verified that a cited
-# §9c still names the thing the citing file assumes, so a future reorder or
-# insert in autonomy/SKILL.md would silently invalidate the citations that
-# make the consolidation work — the same silent-drift shape as the
-# allowed-tools and hardcoded-count classes. Cheap structural check: every
-# cited sub-letter must have a matching heading.
-AUTONOMY='plugins/cepa/skills/autonomy/SKILL.md'
-if [ -r "$AUTONOMY" ]; then
-  cited=$(grep -rhoE '§9[a-z]' --include='*.md' --include='*.sh' \
-    plugins CLAUDE.md README.md 2>/dev/null | sort -u)
-  for c in $cited; do
-    letter=${c#§9}
-    if ! grep -qE "^### 9${letter}\." "$AUTONOMY"; then
-      miss "model-pin: §9${letter} is cited but autonomy/SKILL.md has no '### 9${letter}.' heading — a citation that resolves to nothing"
-      misses=$((misses + 1))
-    fi
-  done
-  info "§9 citations checked: $(printf '%s\n' $cited | grep -c .)"
-else
-  miss "model-pin: ${AUTONOMY} unreadable — §9 citation targets unverifiable"
+# --- Leg 4: §N<letter> citations resolve ------------------------------------
+# Cross-cutting policy is cited by sub-letter from ~10 files. Nothing verified
+# that a cited §9c still names the thing the citing file assumes, so a future
+# reorder or insert in the owning skill would silently invalidate the
+# citations that make the consolidation work — the same silent-drift shape as
+# the allowed-tools and hardcoded-count classes.
+#
+# SCOPE — read this before widening it. Leg 4 checks that a citation RESOLVES
+# to a heading. It never judges whether text NEAR a citation restates the
+# cited rule. That distinction is load-bearing: the six `cepa:autonomy` §7
+# untrusted-data clauses are required INSTANTIATIONS, colocated with the
+# content they guard, not restatements — a leg that flagged them would push an
+# author to delete a guard to quiet CI. Bare `§N` anchors (§7 among them) are
+# outside this leg by construction: only `§N<letter>` is matched. Widening to
+# bare `§N` is a deliberate decision, not a tidy-up; it requires excluding §7
+# by NUMBER and saying why, inline.
+#
+# Ownership is RESOLVED, not assumed. The anchor->skill index is built from
+# every skill's own headings, so a second skill introducing lettered sections
+# is covered with no edit here. An earlier cut hardcoded autonomy/SKILL.md,
+# which made the check a property of one file's path.
+#
+# Leg 4's STATED LIMITS, recorded rather than left to look covered:
+#   - Ambiguity. If two skills ever define the same lettered anchor, an
+#     UNQUALIFIED citation is genuinely unresolvable, and this leg accepts it
+#     as long as some skill defines it. Zero instances today — only
+#     autonomy/SKILL.md defines any lettered heading. Resolving it needs a
+#     per-citation owner declaration (the `policy-owner` marker), not a
+#     heuristic.
+#   - A qualifier not adjacent to its anchor ("as autonomy describes in its
+#     §9c section") reads as unqualified, downgrading a wrong-owner MISS to a
+#     pass. No live instance of that shape.
+CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
+# `.yml` is in the include list because the workflow cites §9f. Roots alone
+# are a silent no-op — a root whose files match no --include is scanned as
+# thoroughly as a root that does not exist.
+declare -A ANCHOR_OWNERS
+declare -A SKILL_NAMES
+skill_files=0
+while IFS= read -r sk; do
+  [ -r "$sk" ] || continue
+  skill_files=$((skill_files + 1))
+  sname=$(basename "$(dirname "$sk")")
+  SKILL_NAMES["$sname"]=1
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    ANCHOR_OWNERS["$a"]="${ANCHOR_OWNERS["$a"]:-} $sname"
+  done < <(grep -oE '^### [0-9]+[a-z]\.' "$sk" 2>/dev/null |
+    sed 's/^### //; s/\.$//')
+done < <(find -L plugins -path '*/skills/*/SKILL.md' -type f 2>/dev/null | sort)
+
+if [ "$skill_files" -eq 0 ]; then
+  miss "model-pin: no plugins/*/skills/*/SKILL.md found — §N<letter> citation targets unverifiable"
   misses=$((misses + 1))
 fi
+
+# One preceding token is captured so a citation can NAME its owner. The token
+# is only treated as a qualifier when it matches a real skill name (below);
+# ordinary prose sits directly before an anchor constantly ("per §9a", "the
+# §2b", "tier §9c") and treating those as owner claims would MISS dozens of
+# clean citations. The charset here is the qualifier's only bound, so it is
+# also its sanitization: no spaces, no leading dash, no path separators.
+cite_raw=$(grep -rhoE '(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[a-z](-[0-9]*[a-z])*' \
+  --include='*.md' --include='*.sh' --include='*.yml' \
+  $CITE_ROOTS 2>/dev/null | sort -u)
+
+cite_pairs=''
+while IFS= read -r m; do
+  [ -n "$m" ] || continue
+  qual=${m%%§*}
+  rest=${m#*§}
+  # Strip backticks, whitespace and a trailing/leading separator, then drop a
+  # `<plugin>:` prefix (`cepa:autonomy` -> `autonomy`).
+  qual=$(printf '%s' "$qual" | tr -d '`' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  case "$qual" in -*) qual='' ;; esac
+  qual=${qual##*:}
+  # Expand a hyphen-joined range (§9c-9d) into independent anchors. Without
+  # this the second half of every range is verified by nothing — and one such
+  # range lives in this script's own leg-3 message.
+  first_num=''
+  IFS='-' read -r -a parts <<< "$rest"
+  for p in "${parts[@]}"; do
+    [ -n "$p" ] || continue
+    case "$p" in
+      [0-9]*[a-z]) first_num=$(printf '%s' "$p" | sed 's/[a-z]*$//') ;;
+      [a-z]) p="${first_num}${p}" ;;
+      *) continue ;;
+    esac
+    cite_pairs="${cite_pairs}${qual}	${p}"$'\n'
+  done
+done <<< "$cite_raw"
+
+cite_pairs=$(printf '%s' "$cite_pairs" | grep -v '^$' | sort -u)
+cite_total=$(printf '%s\n' "$cite_pairs" | grep -c . || true)
+
+# A citation set of zero is the one way this leg passes without checking
+# anything — a wrong root, a renamed directory, or an --include that matches
+# no file all look identical to "fully compliant". Leg 1 guards its own zero
+# for the same reason.
+if [ "$cite_total" -eq 0 ] && [ "$skill_files" -gt 0 ]; then
+  miss "model-pin: leg 4 found no §N<letter> citations anywhere in ${CITE_ROOTS} — a scan that matches nothing is not a pass"
+  misses=$((misses + 1))
+fi
+
+while IFS=$'\t' read -r q a; do
+  [ -n "${a:-}" ] || continue
+  owners="${ANCHOR_OWNERS["$a"]:-}"
+  if [ -n "$q" ] && [ -n "${SKILL_NAMES["$q"]:-}" ]; then
+    # Qualified: the citation names its owner, so check THAT skill.
+    case " $owners " in
+      *" $q "*) : ;;
+      *)
+        miss "model-pin: §${a} is cited as \`${q}\` §${a} but ${q}/SKILL.md has no '### ${a}.' heading — a citation that resolves to nothing"
+        misses=$((misses + 1)) ;;
+    esac
+  else
+    # Unqualified: any skill defining the anchor resolves it (see the
+    # ambiguity limit above).
+    if [ -z "$owners" ]; then
+      miss "model-pin: §${a} is cited but no plugins/*/skills/*/SKILL.md has a '### ${a}.' heading — a citation that resolves to nothing"
+      misses=$((misses + 1))
+    fi
+  fi
+done <<< "$cite_pairs"
+
+info "§N<letter> citations checked: ${cite_total} distinct (qualifier, anchor) pairs across $(printf '%s\n' $CITE_ROOTS | grep -c .) roots; ${#ANCHOR_OWNERS[@]} anchors defined by ${skill_files} skill files"
 
 # --- verdict ---------------------------------------------------------------
 echo "-- ${misses} MISS, ${warns} WARN --"

@@ -728,6 +728,8 @@ it is:
 |---|---|
 | Whether a mode-conditional pair matches the tier §9c's ladder mandates (`interactive=haiku headless=haiku` passes) | needs a path→expected-tier table in the script — the hardcoded-coupling class that has drifted three times here |
 | Third-party companion frontmatter (§9e) | lives outside this repo; leg 1 cannot see an installed plugin's cache |
+| Which skill owns an *unqualified* `§N<letter>` citation when two skills define the same anchor (leg 4) | genuinely unresolvable from the citation alone; needs a per-citation owner declaration, not a heuristic. Zero instances today — only this file defines lettered anchors |
+| Whether text *near* a citation restates the cited rule (leg 4 checks resolution only) | a leg that flagged restatement would also flag §7's required relay-point instantiations, and its cheapest remedy would be deleting a guard |
 | Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
 
 Each is a human obligation on review, not a covered case.
