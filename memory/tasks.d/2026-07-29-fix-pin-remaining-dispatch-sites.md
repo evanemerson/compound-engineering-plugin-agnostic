@@ -2,12 +2,12 @@
 
 ## 2026-07-29 — /cepa:review pr-25 (todos/review-2026-07-29-091538.md)
 
-- [ ] P3 — plugins/cepa/scripts/check-model-pins.sh:1-30 — a repo-self-check
+- [x] P3 — **CLOSED in PR fix/cite-trunk-ladder-once (1.16.0)** — moved to scripts/check-model-pins.sh at the repo root; all three live readers updated in the same commit. Originally: plugins/cepa/scripts/check-model-pins.sh:1-30 — a repo-self-check
   ships inside the distributed plugin next to consumer-facing tools; move to
   the root `scripts/` and update the CLAUDE.md rule + workflow path
   (finding #11, judgment: placement — cheaper to do together with the
   `/cepa:setup` item below)
-- [ ] P3 — .github/workflows/model-pins.yml:33 — `actions/checkout@v4` is a
+- [x] P3 — **PARTIALLY CLOSED in PR fix/cite-trunk-ladder-once (1.16.0)** — SHA pin landed (11d5960a… # v4.4.0, verified upstream) with a bump rule in the file; the renovate/dependabot half was DECLINED and refiled as an open residual in memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md. Originally: .github/workflows/model-pins.yml:33 — `actions/checkout@v4` is a
   mutable tag in the repo's first workflow, which every future one will copy;
   pin to a full commit SHA verified upstream + add a bump rule
   (finding #12, judgment: confidence 55, SHA must be verified not recalled)
