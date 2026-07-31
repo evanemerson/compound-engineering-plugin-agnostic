@@ -49,5 +49,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Controls run FIRST, deliberately. They assert that the checker still
+      # responds the way its record says it does; a checker whose controls are
+      # red is not evidence of anything, so a green "Check model pins" below a
+      # red controls step would be the misleading half of the log. Ordering
+      # makes the dependency visible. See `cepa:autonomy` §9f.
+      - name: Check model-pin checker controls
+        run: bash scripts/check-model-pins-controls.sh
       - name: Check model pins
         run: bash scripts/check-model-pins.sh
