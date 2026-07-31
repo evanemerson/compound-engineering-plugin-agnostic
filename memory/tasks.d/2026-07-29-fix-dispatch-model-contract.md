@@ -24,7 +24,9 @@
   Run `/cepa:compound` after this merges so Detection can catch the shape
   (finding #17) — **done 2026-07-30, PR #27** (`docs/compound-restatement-drift`);
   finding #17 in `todos/review-2026-07-29-215819.md` is now `status: completed`
-- [ ] P3 — plugins/cepa/scripts/check-model-pins.sh — deferred finding #11
+- [x] P3 — **CLOSED in PR fix/cite-trunk-ladder-once (1.16.0)** — the checker
+  now lives at scripts/check-model-pins.sh. Originally:
+  plugins/cepa/scripts/check-model-pins.sh — deferred finding #11
   (relocate this repo-self-check to root `scripts/`) was not bundled although
   PR #26 opened the file again; third touch now on record, strengthening the
   case for doing #10 + #11 next (finding #18)

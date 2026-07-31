@@ -79,12 +79,10 @@ Enforcement mechanics — the zero-MISS/zero-WARN gate, the `prose` and
 verify-by-reading rule, and what the checker deliberately does **not**
 cover — are **§9f and §9a**. Read them there. The only thing this repo adds:
 
-- Run `bash scripts/check-model-pins.sh` before merge. It is a repo
-  self-check, not a shipped tool — it lives at the repo root alongside
-  `scripts/setup.sh`, never under `plugins/`, where it would be dead weight
-  in every consumer install. `main` is
-  not branch-protected today, so a red check does not physically block a
-  merge — treat it as blocking anyway, or turn on protection.
+- Run `bash scripts/check-model-pins.sh` before merge (it lives at the repo
+  root with the repo's other tooling, not under `plugins/` — §9f says why).
+  `main` is not branch-protected today, so a red check does not physically
+  block a merge — treat it as blocking anyway, or turn on protection.
 
 This is the third sibling of a class this file already documents
 (allowed-tools mismatch shipped twice on 2026-07-10; hardcoded counts three

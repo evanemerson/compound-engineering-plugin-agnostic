@@ -705,9 +705,12 @@ the last time someone read them.
 
 ### 9f. Enforcement
 
-`bash scripts/check-model-pins.sh` — CI runs it on every PR. It is a
-self-check of the plugin *source repo* and is not shipped to consumers, so a
-vendored copy lives wherever that repo keeps its own tooling.
+`bash scripts/check-model-pins.sh` — CI runs it on every PR. **It is a
+self-check of the cepa source repo and is not shipped to consumers**: it is
+hard-wired to the plugin-source layout (leg 1 discovers `plugins/*/agents`,
+leg 4 indexes `plugins/*/skills/*/SKILL.md`) and exits immediately anywhere
+else. There is no portable consumer equivalent today, and a consumer repo
+enforcing §9 does so by review.
 **Zero MISS and zero WARN are both required**, because a warning channel that
 can never fail is not enforcement. Close a genuine prose match (documentation
 about pins, not a live dispatch) with `<!-- model-pin: prose -->` on its line,
@@ -720,8 +723,7 @@ at that site and is never the fix.
 commit without re-running it.** Widening leg 2's regex is what exposed four
 live dispatch sites that both a manual sweep and the checker's first cut had
 missed — a detection change and the thing it detects, landing together, hide
-each other. This applies wherever this script is vendored, not just to its
-home repo.
+each other.
 
 **What the checker does NOT cover**, so nobody reads a green run as more than
 it is:
@@ -732,6 +734,7 @@ it is:
 | Third-party companion frontmatter (§9e) | lives outside this repo; leg 1 cannot see an installed plugin's cache |
 | Which skill owns an *unqualified* `§N<letter>` citation when two skills define the same anchor (leg 4) | genuinely unresolvable from the citation alone; needs a per-citation owner declaration, not a heuristic. Zero instances today — only this file defines lettered anchors |
 | Whether text *near* a citation restates the cited rule (leg 4 checks resolution only) | a leg that flagged restatement would also flag §7's required relay-point instantiations, and its cheapest remedy would be deleting a guard |
+| An example anchor written in prose with a literal section sign (leg 4 has no `prose` hatch — it scans whole roots, with no line context to mark) | leg 4 reads a citation set, not annotated lines; documentation must describe such examples in words instead |
 | Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
 
 Each is a human obligation on review, not a covered case.

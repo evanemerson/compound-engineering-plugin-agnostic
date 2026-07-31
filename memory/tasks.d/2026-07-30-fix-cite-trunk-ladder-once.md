@@ -34,6 +34,29 @@ findings #11 and #12 (#12 partially — see below).
   manual? (plan-review finding #7, confidence 100 on the record-integrity
   half.)
 
+- [ ] P3 — `docs/solutions/` — **"a closure claim in prose is not the
+  `status:` field a consumer parses" is now a four-occurrence pattern with no
+  solution doc.** PR #27 shipped it (`todos/review-2026-07-30-075218.md`
+  finding #1); plan review flagged the risk against this PR
+  (`todos/review-2026-07-30-234123.md` finding #10); this run hit a live
+  near-miss (`applied_in:` added to #11/#12 without flipping `status:`); and
+  the counter cross-check then found a fourth, pre-existing instance in
+  `todos/review-2026-07-29-215819.md` whose fields were wrong while the sum
+  was right. The existing `durable-record-promises-need-a-named-sink-in-every-phase.md`
+  covers a *missing* sink, not this shape — sink exists, claim made,
+  machine-parsed field never updated. Handed to `/cepa:compound` as a backfill
+  candidate (review round 1, finding #14, confidence 70).
+
+- [ ] P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
+  asymmetry.** Those two `find` calls omit `-L` while the ones at 143, 309 and
+  361 include it, so a symlinked plugin directory is indexed for skills by leg
+  4 but skipped entirely by legs 1-3 — the exact "a symlink silently skipped
+  is a file nobody checked" reasoning the script's own comment gives for using
+  `-L`. **Deferred because** adding it widens leg 1's and leg 2's discovery
+  set, which is a trigger-set change, and §9f forbids widening a trigger set
+  alongside other changes without a dedicated re-run. Its own change (review
+  round 1, finding #16, confidence 60).
+
 - [ ] P3 — `docs/plans/` plan shape — **no structural check that a PR's
   `Closes:` claim actually landed as `status:`/`applied_in:`.** U5's stated
   tests checked counter arithmetic and struck checkboxes; neither would catch
@@ -54,9 +77,15 @@ findings #11 and #12 (#12 partially — see below).
 - `check-model-pins.sh` leg 4 generalized: anchor→owner index built from every
   skill's own headings (no hardcoded `autonomy/SKILL.md`), qualifier capture
   bounded by the real skill-name set plus an identifier charset, hyphen-range
-  expansion (`§9c-9d`), `.github`/`scripts` roots with `--include='*.yml'`,
-  and a zero-citation guard. Four negative controls observed failing before
-  revert.
+  expansion (`§9c-9d`), `.github`/`scripts` roots with `--include='*.yml'`.
+  **The first cut of this had two silent-pass holes** that review round 1
+  proved with reproductions — a tab delimiter that dropped every unqualified
+  citation (all 7 anchors this repo defines), and discarded grep exit codes
+  that let a vanished root pass clean while reporting all five. Both fixed;
+  see `todos/review-2026-07-31-000750.md` findings 1 and 2. The control suite
+  went from 4 controls (all in the one reachable shape) to 16 covering
+  unqualified, qualified, anchor-form, root-accounting, NUL and empty-index
+  cases, plus 3 prose-regression controls.
 - The checker moved to `scripts/check-model-pins.sh`; all three live readers
   updated in the same commit. No stub at the old path — deliberate, reasoned
   in the commit body.
@@ -64,9 +93,12 @@ findings #11 and #12 (#12 partially — see below).
 ### Checked and clean
 
 - **The six `cepa:autonomy` §7 relay-point clauses are untouched.** Verified
-  2026-07-30 against the run's own diff (`git diff` touches none of the ten
-  files carrying them) and against leg-4 output, which mentions `§7` zero
-  times. This is a dated observation, not a standing exemption — re-verify if
+  2026-07-30 at line level, not file level — the file-level version of this
+  test is false here: `plugins/cepa/commands/review.md` carries three relay
+  clauses (lines 70, 72, 86) *and* is touched by this diff. Its only hunk is
+  `@@ -172,16 +172,8 @@`, which overlaps none of them; the same holds for
+  every other clause-bearing file. Also verified against leg-4 output, which
+  mentions `§7` zero times. This is a dated observation, not a standing exemption — re-verify if
   leg 4's citation pattern ever gains bare-`§N` coverage, which is exactly
   what the first deferred item above proposes.
 - Counts rule not triggered: no file added, removed, or renamed under
