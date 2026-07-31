@@ -47,6 +47,37 @@ findings #11 and #12 (#12 partially — see below).
   machine-parsed field never updated. Handed to `/cepa:compound` as a backfill
   candidate (review round 1, finding #14, confidence 70).
 
+- [ ] P3 — `scripts/check-model-pins.sh` leg 4 — **a line-wrapped qualifier
+  silently downgrades a wrong-owner MISS to a pass.** `grep` is line-based, and
+  this repo hard-wraps at ~76 columns, so reflow routinely separates an owner
+  token from its anchor; the citation then takes the permissive unqualified
+  branch. Two live instances were found and **reflowed onto one line** as the
+  interim remedy, and the limit is now recorded in §9f — but the underlying
+  hole is open: the next reflow reintroduces it silently. **Deferred because**
+  the fix (collect citations from a line-joined view) changes what counts as
+  one citation, which §9f requires land alone with its own re-run (review round
+  2, finding #3, confidence 100).
+
+- [ ] P3 — `scripts/check-model-pins.sh` leg 4 — **a symlinked FILE inside a
+  scan root is read by leg 2 and skipped by leg 4.** `grep -r` follows symlinks
+  only when named on the command line, not during recursion; legs 1-3 use
+  `find -L`. Proven: one planted file carrying both a broken citation and an
+  unpinned dispatch produced a leg-2 WARN and leg-4 silence, while the INFO line
+  still read "5 of 5 roots". Fix is `grep -R`. **Deferred because** it widens
+  the traversal set — same §9f reason as the item below, and the natural move is
+  one "`-L`/`-R` symmetry" change closing both (review round 2, finding #9,
+  confidence 100).
+
+- [ ] P3 — **land the leg-4 control cases as a runnable artifact**
+  (`scripts/check-model-pins-controls.sh`: plant each case, assert the expected
+  MISS text, revert). The 23 cases are recorded above as explicit case bodies,
+  which closes the "category names hid it" gap — but they are still executed by
+  hand. **Deferred because** adding a test harness to a repo with no test suite
+  is a scope decision outside this PR. It is the highest-value follow-on this PR
+  produced: the defect class it prevents — a control suite validating only the
+  branch it happens to exercise — bit twice inside this PR alone, in rounds 1
+  and 2 (review round 2, finding #10, confidence 90).
+
 - [ ] P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
   asymmetry.** Those two `find` calls omit `-L` while the ones at 143, 309 and
   361 include it, so a symlinked plugin directory is indexed for skills by leg
@@ -83,9 +114,38 @@ findings #11 and #12 (#12 partially — see below).
   citation (all 7 anchors this repo defines), and discarded grep exit codes
   that let a vanished root pass clean while reporting all five. Both fixed;
   see `todos/review-2026-07-31-000750.md` findings 1 and 2. The control suite
-  went from 4 controls (all in the one reachable shape) to 16 covering
-  unqualified, qualified, anchor-form, root-accounting, NUL and empty-index
-  cases, plus 3 prose-regression controls.
+  went from 4 controls (all in the one reachable shape) to the explicit list
+  below. Recorded as case bodies, not category names: "qualified" and
+  "unqualified" were both *believed* covered in round 1, and round 2 then
+  showed "qualified" was covered in only one of its two realizable shapes.
+
+  Leg-4 control cases — each planted, observed failing, then reverted. Every
+  one must produce exactly one MISS unless noted:
+
+  1.  line-initial unqualified — `§9q applies here.`
+  2.  parenthesized — `This rule (§9q) applies.`
+  3.  quoted — `This rule "§9q" applies.`
+  4.  em-dashed — `This rule — §9q — applies.`
+  5.  leading-dash token — `See -x §9q here.`
+  6.  word qualifier (control for 1-5) — `See see §9q here.`
+  7.  wrong owner, lowercase — `` `grounding` §9c ``
+  8.  wrong owner, capitalized — `` `Grounding` §9c ``
+  9.  correct owner — `` `cepa:autonomy` §9c `` → 0 MISS
+  10. wrong owner split across a line break → **0 MISS today** (recorded
+      limit, §9f); the two live instances were reflowed instead
+  11. multi-letter anchor — `autonomy §9qz`
+  12. uppercase anchor — `autonomy §9Q`
+  13. range second endpoint — `autonomy §9c-9q`
+  14. triple range — `autonomy §9c-9d-9q`
+  15. hyphenated English after an anchor — `the §9c-style ladder` → 0 MISS
+  16. missing root — rename `.github` away
+  17. root present, include set matches nothing — rename `.yml` to `.txt`
+  18. root present with files but zero citations — reword `README.md`'s only
+      citation → 0 MISS (a root may legitimately cite nothing)
+  19. NUL byte in `CLAUDE.md` alongside a broken citation
+  20. empty anchor index — a `SKILL.md` with no lettered `###` heading →
+      MISSes every citation and prints `0 anchors defined`, never crashes
+  21-23. prose regression, all → 0 MISS — `per §9a`, `the §2b`, `tier §9c`
 - The checker moved to `scripts/check-model-pins.sh`; all three live readers
   updated in the same commit. No stub at the old path — deliberate, reasoned
   in the commit body.

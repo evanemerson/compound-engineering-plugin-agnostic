@@ -34,13 +34,17 @@
 #   belonging to an unrelated neighbouring block counted toward the pair.
 #   Counting tokens in prose cannot express "these two, in this direction."
 #
-# All three legs fail the run. A warning channel that can never fail is not
+#   Leg 4: every section citation of the form (section-sign, number, letter)
+#   resolves to a heading in the skill that owns it. Scope and stated limits
+#   live in autonomy §9f — read them there.
+#
+# All four legs fail the run. A warning channel that can never fail is not
 # enforcement — so leg 2's escape hatch is an explicit, diff-reviewable
 # marker on the line that needs it:
 #
 #     <!-- model-pin: prose -->
 #
-# Why two legs: registered agents make an omission greppable in
+# Why legs 1 and 2 differ: registered agents make an omission greppable in
 # frontmatter; generic subagents (a Task call seeded from a prompt
 # template, no registered agent type) have no frontmatter to fall back on,
 # so their pin lives in prose and only a heuristic can find it. See
@@ -334,11 +338,19 @@ CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
 # a two-letter anchor to its first letter, so a typo'd anchor validates against
 # the wrong heading.
 #
+# The range tail is `-[0-9]+[A-Za-z]+`, NUMBERED on both sides. An unnumbered
+# tail swallowed ordinary hyphenated English: an anchor followed by a hyphen
+# and a plain word (as in "the ...9c-style ladder") parsed as a range whose
+# second endpoint was that word, inventing an anchor that resolves to nothing
+# and failing the build on innocent prose. So the convention this enforces is
+# that ranges are written fully numbered; a range whose tail omits the number
+# checks only its first anchor.
+#
 # NOTE for anyone documenting this leg: it has no prose-suppression hatch (legs
 # 2 and 3 do). Every root is scanned whole, so an example anchor written with a
 # literal section sign becomes a real citation and MISSes. Describe such
 # examples in words. Recorded in autonomy §9f.
-CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]+(-[0-9]*[A-Za-z]+)*'
+CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'
 declare -A ANCHOR_OWNERS
 declare -A SKILL_NAMES
 skill_files=0
@@ -353,8 +365,8 @@ while IFS= read -r sk; do
     [ -n "${ANCHOR_OWNERS["$a"]:-}" ] || anchor_count=$((anchor_count + 1))
     ANCHOR_OWNERS["$a"]="${ANCHOR_OWNERS["$a"]:-} $sname"
   done < <(sed $'1s/^\xEF\xBB\xBF//; s/\r$//' "$sk" 2>/dev/null |
-    grep -oE '^### [0-9]+[A-Za-z]+\.' | sed 's/^### //; s/\.$//' |
-    tr '[:upper:]' '[:lower:]')
+    grep -aoE '^### [0-9]+[A-Za-z]+\.' 2>/dev/null |
+    sed 's/^### //; s/\.$//' | tr '[:upper:]' '[:lower:]')
 done < <(find -L plugins -path '*/skills/*/SKILL.md' -type f 2>/dev/null | sort)
 
 if [ "$skill_files" -eq 0 ]; then
@@ -379,16 +391,28 @@ for r in $CITE_ROOTS; do
     misses=$((misses + 1)); continue
   fi
   rout=$(grep -rahoE "$CITE_RE" \
-    --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' \
-    "$r" 2>/dev/null)
+    --include='*.md' --include='*.markdown' --include='*.sh' \
+    --include='*.yml' --include='*.yaml' "$r" 2>/dev/null)
   rrc=$?
   if [ "$rrc" -gt 1 ]; then
     miss "model-pin: leg 4 grep failed on root '${r}' (exit ${rrc}) — an unreadable root is not a pass"
     misses=$((misses + 1)); continue
   fi
   if [ "$rrc" -eq 1 ]; then
-    miss "model-pin: leg 4 root '${r}' yielded no §N<letter> citation — a root that matches nothing is not a pass"
-    misses=$((misses + 1)); continue
+    # Zero MATCHES is legitimate — a root whose prose cites no lettered section
+    # today is fine, and `README.md` and `.github` each hold exactly one
+    # citation, so asserting matches turned any copy edit into a red build
+    # whose cheapest remedy was deleting the root. Assert instead that files
+    # were READ: that is the actual hazard (a renamed directory, or an
+    # --include set matching nothing there). Total-zero stays covered by the
+    # `checked` guard below.
+    rfiles=$(grep -ralE '' \
+      --include='*.md' --include='*.markdown' --include='*.sh' \
+      --include='*.yml' --include='*.yaml' "$r" 2>/dev/null | grep -c .)
+    if [ "$rfiles" -eq 0 ]; then
+      miss "model-pin: leg 4 root '${r}' holds no file matching the --include set — nothing was scanned there"
+      misses=$((misses + 1)); continue
+    fi
   fi
   roots_scanned=$((roots_scanned + 1))
   cite_raw="${cite_raw}${rout}"$'\n'

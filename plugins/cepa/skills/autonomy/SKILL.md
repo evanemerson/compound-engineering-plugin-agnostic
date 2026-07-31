@@ -734,6 +734,7 @@ it is:
 | Third-party companion frontmatter (§9e) | lives outside this repo; leg 1 cannot see an installed plugin's cache |
 | Which skill owns an *unqualified* `§N<letter>` citation when two skills define the same anchor (leg 4) | genuinely unresolvable from the citation alone; needs a per-citation owner declaration, not a heuristic. Zero instances today — only this file defines lettered anchors |
 | Whether text *near* a citation restates the cited rule (leg 4 checks resolution only) | a leg that flagged restatement would also flag §7's required relay-point instantiations, and its cheapest remedy would be deleting a guard |
+| A qualifier separated from its anchor by a line break (leg 4 matches within one line, because grep is line-based) | the citation falls through to the permissive unqualified branch, so a wrong-owner citation passes clean. Reflowing the citation onto one line restores the owner check; two live instances were found and reflowed on 2026-07-31 |
 | An example anchor written in prose with a literal section sign (leg 4 has no `prose` hatch — it scans whole roots, with no line context to mark) | leg 4 reads a citation set, not annotated lines; documentation must describe such examples in words instead |
 | Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
 

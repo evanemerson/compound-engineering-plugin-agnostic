@@ -90,8 +90,9 @@ type), seeded with `references/subagent-template.md` + the persona file +
 the document content + the slots.
 <!-- model-pin: mode-conditional interactive=opus headless=sonnet -->
 The tier follows the mode resolved above — including this command's own
-fail-safe, which resolves to headless even with no token (`cepa:autonomy`
-§9c-9d, and the `cepa:plan-review` skill): **`model: opus` on an interactive
+fail-safe, which resolves to headless even with no token
+(`cepa:autonomy` §9c-9d, and the `cepa:plan-review` skill):
+**`model: opus` on an interactive
 run, `model: sonnet` on a headless one.** Personas are
 read-only. All dispatch in parallel; a failed persona is a named coverage
 gap in the findings file, never a blocked run. Record non-dispatched conditional personas with the
