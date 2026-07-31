@@ -149,6 +149,18 @@ place of it. It satisfies a citation-presence check while leaving the
 duplicated text — and so the drift — intact, which makes it harder to catch
 than a bare restatement.
 
+## Verification authoring
+
+### Control case
+A negative-control suite entry written as its own explicit input and expected
+outcome, rather than filed under a category label. Grouping controls by
+category name hides that every control under it may reach the same code
+branch, so the suite reports the category as covered while the branch it never
+took stays dark. A control proves the branch it exercises, not the case it
+names.
+
+*Avoid:* category-named control, control category.
+
 ## Flagged ambiguities
 
 - "Detection" and "Prevention" had been used loosely for any recurrence guidance — these are distinct: Prevention is rules for humans and process; Detection is machine-checkable signals for automated reviewers.
