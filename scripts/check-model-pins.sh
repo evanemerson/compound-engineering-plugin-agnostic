@@ -34,13 +34,17 @@
 #   belonging to an unrelated neighbouring block counted toward the pair.
 #   Counting tokens in prose cannot express "these two, in this direction."
 #
-# All three legs fail the run. A warning channel that can never fail is not
+#   Leg 4: every section citation of the form (section-sign, number, letter)
+#   resolves to a heading in the skill that owns it. Scope and stated limits
+#   live in autonomy §9f — read them there.
+#
+# All four legs fail the run. A warning channel that can never fail is not
 # enforcement — so leg 2's escape hatch is an explicit, diff-reviewable
 # marker on the line that needs it:
 #
 #     <!-- model-pin: prose -->
 #
-# Why two legs: registered agents make an omission greppable in
+# Why legs 1 and 2 differ: registered agents make an omission greppable in
 # frontmatter; generic subagents (a Task call seeded from a prompt
 # template, no registered agent type) have no frontmatter to fall back on,
 # so their pin lives in prose and only a heuristic can find it. See
@@ -56,6 +60,27 @@ info() { printf 'INFO %s\n' "$1"; }
 # spend at the invoking session's tier. So is `fable` — the top tier is
 # reserved for work a person opted into, never for automatic dispatch.
 ALLOWED_TIERS='sonnet opus haiku'
+# The markdown extension set, declared ONCE. There are four file-selection
+# sites — leg 1's discovery, legs 2-3's discovery, and leg 4's citation scan
+# and coverage probe — and `find` and `grep` want different syntax for the
+# same fact. Round 2 widened three of the four with `*.markdown` and left
+# legs 2-3 on `*.md`, which made a `.markdown` file readable by leg 4 and
+# invisible to the legs that check dispatch pins: an inverted
+# mode-conditional pair in one shipped as `0 MISS, 0 WARN`. That is the
+# construct-vs-instance class CLAUDE.md documents, and this script had
+# already been bitten once by an unscanned-file hole (see the leg 2-3 scan
+# roots comment). Derive both forms here so a future widening cannot land at
+# three sites out of four.
+MD_EXTS='md markdown'
+find_name_args=()
+grep_include_args=()
+for _e in $MD_EXTS; do
+  [ "${#find_name_args[@]}" -eq 0 ] || find_name_args+=(-o)
+  find_name_args+=(-name "*.${_e}")
+  grep_include_args+=("--include=*.${_e}")
+done
+# Leg 4 additionally reads shell and workflow files; markdown is shared.
+CITE_INCLUDES=("${grep_include_args[@]}" --include='*.sh' --include='*.yml' --include='*.yaml')
 SUPPRESS_MARKER='model-pin: prose'
 # A dispatch whose tier branches on invocation mode (autonomy §9d) declares
 # both literals IN the marker:
@@ -140,7 +165,7 @@ while IFS= read -r f; do
         misses=$((misses + 1))
       fi ;;
   esac
-done < <(find -L "${AGENT_DIRS[@]}" \( -name '*.md' -o -name '*.markdown' \) -type f 2>/dev/null | sort)
+done < <(find -L "${AGENT_DIRS[@]}" \( "${find_name_args[@]}" \) -type f 2>/dev/null | sort)
 
 if [ "$agent_count" -eq 0 ]; then
   miss "model-pin: agent directories exist but hold no agent definitions — check the path and extensions before trusting this run"
@@ -306,32 +331,182 @@ for d in "${SCAN_DIRS[@]}"; do
       esac
       misses=$((misses + 1))
     done < <(scan_conditional "$f")
-  done < <(find -L "$d" -name '*.md' -type f 2>/dev/null | sort)
+  done < <(find -L "$d" \( "${find_name_args[@]}" \) -type f 2>/dev/null | sort)
 done
 
-# --- Leg 4: §9 citations resolve --------------------------------------------
-# §9 is cited by sub-letter from ~10 files. Nothing verified that a cited
-# §9c still names the thing the citing file assumes, so a future reorder or
-# insert in autonomy/SKILL.md would silently invalidate the citations that
-# make the consolidation work — the same silent-drift shape as the
-# allowed-tools and hardcoded-count classes. Cheap structural check: every
-# cited sub-letter must have a matching heading.
-AUTONOMY='plugins/cepa/skills/autonomy/SKILL.md'
-if [ -r "$AUTONOMY" ]; then
-  cited=$(grep -rhoE '§9[a-z]' --include='*.md' --include='*.sh' \
-    plugins CLAUDE.md README.md 2>/dev/null | sort -u)
-  for c in $cited; do
-    letter=${c#§9}
-    if ! grep -qE "^### 9${letter}\." "$AUTONOMY"; then
-      miss "model-pin: §9${letter} is cited but autonomy/SKILL.md has no '### 9${letter}.' heading — a citation that resolves to nothing"
-      misses=$((misses + 1))
-    fi
-  done
-  info "§9 citations checked: $(printf '%s\n' $cited | grep -c .)"
-else
-  miss "model-pin: ${AUTONOMY} unreadable — §9 citation targets unverifiable"
+# --- Leg 4: §N<letter> citations resolve ------------------------------------
+# Cross-cutting policy is cited by sub-letter from ~10 files. Nothing verified
+# that a cited §9c still names the thing the citing file assumes, so a future
+# reorder or insert in the owning skill would silently invalidate the
+# citations that make the consolidation work — the same silent-drift shape as
+# the allowed-tools and hardcoded-count classes.
+#
+# SCOPE and STATED LIMITS live in `cepa:autonomy` §9f's does-NOT-cover table —
+# read them there, not here. The one fact that belongs at this site because it
+# constrains the CODE below: leg 4 checks that a citation RESOLVES to a
+# heading, and matches only `§N<letter>`. Bare `§N` (§7 among them) is out of
+# scope by construction. Widening to bare `§N` is a deliberate decision, not a
+# tidy-up: §7's relay-point clauses are required instantiations, so a widened
+# leg must exclude §7 by NUMBER and say why, inline.
+#
+# Ownership is RESOLVED, not assumed. The anchor->skill index is built from
+# every skill's own headings, so a second skill introducing lettered sections
+# is covered with no edit here. An earlier cut hardcoded autonomy/SKILL.md,
+# which made the check a property of one file's path.
+CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
+# Anchors and qualifiers are matched case-insensitively and lowercased before
+# lookup. `[A-Za-z]+` not `[a-z]`: a single-letter class makes grep -o truncate
+# a two-letter anchor to its first letter, so a typo'd anchor validates against
+# the wrong heading.
+#
+# The range tail is `-[0-9]+[A-Za-z]+`, NUMBERED on both sides. An unnumbered
+# tail swallowed ordinary hyphenated English: an anchor followed by a hyphen
+# and a plain word (as in "the ...9c-style ladder") parsed as a range whose
+# second endpoint was that word, inventing an anchor that resolves to nothing
+# and failing the build on innocent prose. So the convention this enforces is
+# that ranges are written fully numbered; a range whose tail omits the number
+# checks only its first anchor.
+#
+# NOTE for anyone documenting this leg: it has no prose-suppression hatch (legs
+# 2 and 3 do). Every root is scanned whole, so an example anchor written with a
+# literal section sign becomes a real citation and MISSes. Describe such
+# examples in words. Recorded in autonomy §9f.
+CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'
+declare -A ANCHOR_OWNERS
+declare -A SKILL_NAMES
+skill_files=0
+anchor_count=0
+while IFS= read -r sk; do
+  [ -r "$sk" ] || continue
+  skill_files=$((skill_files + 1))
+  sname=$(basename "$(dirname "$sk")" | tr '[:upper:]' '[:lower:]')
+  SKILL_NAMES["$sname"]=1
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    [ -n "${ANCHOR_OWNERS["$a"]:-}" ] || anchor_count=$((anchor_count + 1))
+    ANCHOR_OWNERS["$a"]="${ANCHOR_OWNERS["$a"]:-} $sname"
+  done < <(sed $'1s/^\xEF\xBB\xBF//; s/\r$//' "$sk" 2>/dev/null |
+    grep -aoE '^### [0-9]+[A-Za-z]+\.' 2>/dev/null |
+    sed 's/^### //; s/\.$//' | tr '[:upper:]' '[:lower:]')
+done < <(find -L plugins -path '*/skills/*/SKILL.md' -type f 2>/dev/null | sort)
+
+if [ "$skill_files" -eq 0 ]; then
+  miss "model-pin: no plugins/*/skills/*/SKILL.md found — §N<letter> citation targets unverifiable"
   misses=$((misses + 1))
 fi
+
+# Scan PER ROOT, and account for every one. A single `grep -r` over all roots
+# returns matches from the survivors and exits 2 when one is missing — so
+# renaming a root away left the run at 0 MISS while the INFO line still
+# reported the configured count. Three distinct outcomes, none collapsible:
+# missing root, grep error (exit >1), and a root that matched nothing.
+# `-a` keeps grep reading a file containing a NUL byte; without it GNU grep
+# calls the file binary, prints nothing to stdout, and exits 0 — every
+# citation in it reads as absent. Leg 2 carries the same guard, but it scans
+# only plugins/*, so the four roots added here were covered by nothing.
+cite_raw=''
+roots_scanned=0
+for r in $CITE_ROOTS; do
+  if [ ! -e "$r" ]; then
+    miss "model-pin: leg 4 citation root '${r}' does not exist — coverage shrank silently"
+    misses=$((misses + 1)); continue
+  fi
+  rout=$(grep -rahoE "$CITE_RE" "${CITE_INCLUDES[@]}" "$r" 2>/dev/null)
+  rrc=$?
+  if [ "$rrc" -gt 1 ]; then
+    miss "model-pin: leg 4 grep failed on root '${r}' (exit ${rrc}) — an unreadable root is not a pass"
+    misses=$((misses + 1)); continue
+  fi
+  if [ "$rrc" -eq 1 ]; then
+    # Zero MATCHES is legitimate — a root whose prose cites no lettered section
+    # today is fine, and `README.md` and `.github` each hold exactly one
+    # citation, so asserting matches turned any copy edit into a red build
+    # whose cheapest remedy was deleting the root. Assert instead that files
+    # were READ: that is the actual hazard (a renamed directory, or an
+    # --include set matching nothing there). Total-zero stays covered by the
+    # `checked` guard below.
+    rfiles=$(grep -ralE '' "${CITE_INCLUDES[@]}" "$r" 2>/dev/null | grep -c .)
+    if [ "$rfiles" -eq 0 ]; then
+      miss "model-pin: leg 4 root '${r}' holds no file matching the --include set — nothing was scanned there"
+      misses=$((misses + 1)); continue
+    fi
+  fi
+  roots_scanned=$((roots_scanned + 1))
+  cite_raw="${cite_raw}${rout}"$'\n'
+done
+cite_raw=$(printf '%s' "$cite_raw" | grep -v '^$' | sort -u)
+
+# One preceding token is captured so a citation can NAME its owner. It counts
+# as a qualifier only when it matches a real skill name (below); ordinary prose
+# sits directly before an anchor constantly ("per §9a", "the §2b", "tier §9c")
+# and treating those as owner claims would MISS dozens of clean citations. The
+# charset is the qualifier's only bound, so it is also its sanitization: no
+# spaces, no leading dash, no path separators.
+cite_pairs=''
+while IFS= read -r m; do
+  [ -n "$m" ] || continue
+  qual=${m%%§*}
+  rest=$(printf '%s' "${m#*§}" | tr '[:upper:]' '[:lower:]')
+  qual=$(printf '%s' "$qual" | tr -d '`' |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+  case "$qual" in -*) qual='' ;; esac
+  qual=${qual##*:}
+  # Expand a hyphen-joined range (§9c-9d) into independent anchors. Without
+  # this the second half of every range is verified by nothing — and one such
+  # range lives in this script's own leg-3 message.
+  first_num=''
+  IFS='-' read -r -a parts <<< "$rest"
+  for p in "${parts[@]}"; do
+    [ -n "$p" ] || continue
+    case "$p" in
+      [0-9]*[a-z]) first_num=$(printf '%s' "$p" | sed 's/[a-z]*$//') ;;
+      [a-z]*) p="${first_num}${p}" ;;
+      *) continue ;;
+    esac
+    # `|` and NOT a tab: tab is IFS whitespace, so `read` collapses a leading
+    # empty field and an UNQUALIFIED citation ("(§9c", line-initial "§9c")
+    # arrives with the anchor in the qualifier slot and an empty anchor —
+    # which the loop below then skips. That silently dropped every unqualified
+    # citation in the repo, including CLAUDE.md's own §9a-§9f block. The
+    # qualifier charset cannot contain `|`.
+    cite_pairs="${cite_pairs}${qual}|${p}"$'\n'
+  done
+done <<< "$cite_raw"
+
+cite_pairs=$(printf '%s' "$cite_pairs" | grep -v '^$' | sort -u)
+
+checked=0
+while IFS='|' read -r q a; do
+  [ -n "${a:-}" ] || continue
+  checked=$((checked + 1))
+  owners="${ANCHOR_OWNERS["$a"]:-}"
+  if [ -n "$q" ] && [ -n "${SKILL_NAMES["$q"]:-}" ]; then
+    # Qualified: the citation names its owner, so check THAT skill.
+    case " $owners " in
+      *" $q "*) : ;;
+      *)
+        miss "model-pin: §${a} is cited as \`${q}\` §${a} but ${q}/SKILL.md has no '### ${a}.' heading — a citation that resolves to nothing"
+        misses=$((misses + 1)) ;;
+    esac
+  else
+    # Unqualified: any skill defining the anchor resolves it (autonomy §9f
+    # records the ambiguity this accepts).
+    if [ -z "$owners" ]; then
+      miss "model-pin: §${a} is cited but no plugins/*/skills/*/SKILL.md has a '### ${a}.' heading — a citation that resolves to nothing"
+      misses=$((misses + 1))
+    fi
+  fi
+done <<< "$cite_pairs"
+
+# Counted from rows that actually reached the check, never from the raw match
+# set — an INFO line that counts rows nothing looked at is how a coverage hole
+# reports as coverage.
+if [ "$checked" -eq 0 ] && [ "$skill_files" -gt 0 ]; then
+  miss "model-pin: leg 4 checked no §N<letter> citation — a scan that verifies nothing is not a pass"
+  misses=$((misses + 1))
+fi
+
+info "§N<letter> citations checked: ${checked} distinct (qualifier, anchor) pairs across ${roots_scanned} of $(printf '%s\n' $CITE_ROOTS | grep -c .) roots; ${anchor_count} anchors defined by ${skill_files} skill files"
 
 # --- verdict ---------------------------------------------------------------
 echo "-- ${misses} MISS, ${warns} WARN --"

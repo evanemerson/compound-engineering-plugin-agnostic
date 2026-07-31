@@ -13,7 +13,7 @@ Both were found by the compound sub-agents and then re-verified directly
 against the files, not relayed. Neither is in scope for a compound run's own
 diff, so both are recorded here rather than fixed silently.
 
-- [ ] P2 — `plugins/cepa/commands/review.md:172-179` restates the whole §8
+- [x] P2 — **CLOSED in PR fix/cite-trunk-ladder-once (1.16.0)** — `plugins/cepa/commands/review.md:172-179` restated the whole §8
   four-rung trunk ladder **and** its normalization rule, then closes the same
   paragraph with *"§8 is the single definition — do not restate the ladder
   here."* The prohibition and its violation are one paragraph. Three more

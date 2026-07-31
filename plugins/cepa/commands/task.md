@@ -112,11 +112,9 @@ Check for:
 - Untracked files that look important (not in .gitignore)
 - Unpushed commits on any branch
 - Current branch assessment (on the resolved trunk = good, on a feature
-  branch = warn). Resolve the trunk per `cepa:autonomy` §8 — `trunk:` in
-  `cepa.local.md`, then `gh repo view`, then `git symbolic-ref`, then `main`
-  — and report which rung answered. Never assume `main`: on a repo whose
-  work lands on `dev`, this check would warn on the correct branch and pass
-  on the wrong one.
+  branch = warn). Resolve the trunk per `cepa:autonomy` §8 and report which
+  rung answered. Never assume `main`: on a repo whose work lands on `dev`,
+  this check would warn on the correct branch and pass on the wrong one.
 
 ### 1.3 Present Combined Status Report
 

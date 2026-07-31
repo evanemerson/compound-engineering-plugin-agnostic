@@ -33,10 +33,9 @@ Before spawning agents, collect the raw materials:
 1. Review the current conversation for the problem that was solved
 2. Run `git log --oneline -20` to see recent commits related to this work
 3. Run `git diff <trunk>...HEAD` to see the full set of changes — resolve
-   `<trunk>` per `cepa:autonomy` §8 (`trunk:` in `cepa.local.md`, then
-   `gh repo view`, then `git symbolic-ref`, then `main`). On a repo whose
-   work lands on `dev`, `main...HEAD` diffs against a deploy branch and
-   sweeps unrelated commits into the solution doc.
+   `<trunk>` per `cepa:autonomy` §8. On a repo whose work lands on `dev`,
+   `main...HEAD` diffs against a deploy branch and sweeps unrelated commits
+   into the solution doc.
 4. If a plan file path is known (from the conversation), note it for plan-solution linking
 
 ## Step 2: Spawn 5 Parallel Sub-Agents

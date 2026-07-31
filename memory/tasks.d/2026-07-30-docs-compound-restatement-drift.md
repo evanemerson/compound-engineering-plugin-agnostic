@@ -35,7 +35,7 @@ summary spec). The four below were deferred by human decision — all
   Strike the CLAUDE.md known-latent-instance note once done (review finding
   #3, confidence 78).
 
-- [ ] P2 — `plugins/cepa/commands/review.md:172-179` restates the whole §8
+- [x] P2 — **CLOSED in PR fix/cite-trunk-ladder-once (1.16.0)** — `plugins/cepa/commands/review.md:172-179` restated the whole §8
   four-rung trunk ladder **and** its normalization rule, then closes the same
   paragraph with *"§8 is the single definition — do not restate the ladder
   here."* Three further sites append an abbreviated rung list to a §8

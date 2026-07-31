@@ -705,7 +705,12 @@ the last time someone read them.
 
 ### 9f. Enforcement
 
-`bash plugins/cepa/scripts/check-model-pins.sh` — CI runs it on every PR.
+`bash scripts/check-model-pins.sh` — CI runs it on every PR. **It is a
+self-check of the cepa source repo and is not shipped to consumers**: it is
+hard-wired to the plugin-source layout (leg 1 discovers `plugins/*/agents`,
+leg 4 indexes `plugins/*/skills/*/SKILL.md`) and exits immediately anywhere
+else. There is no portable consumer equivalent today, and a consumer repo
+enforcing §9 does so by review.
 **Zero MISS and zero WARN are both required**, because a warning channel that
 can never fail is not enforcement. Close a genuine prose match (documentation
 about pins, not a live dispatch) with `<!-- model-pin: prose -->` on its line,
@@ -718,8 +723,7 @@ at that site and is never the fix.
 commit without re-running it.** Widening leg 2's regex is what exposed four
 live dispatch sites that both a manual sweep and the checker's first cut had
 missed — a detection change and the thing it detects, landing together, hide
-each other. This applies wherever this script is vendored, not just to its
-home repo.
+each other.
 
 **What the checker does NOT cover**, so nobody reads a green run as more than
 it is:
@@ -728,6 +732,10 @@ it is:
 |---|---|
 | Whether a mode-conditional pair matches the tier §9c's ladder mandates (`interactive=haiku headless=haiku` passes) | needs a path→expected-tier table in the script — the hardcoded-coupling class that has drifted three times here |
 | Third-party companion frontmatter (§9e) | lives outside this repo; leg 1 cannot see an installed plugin's cache |
+| Which skill owns an *unqualified* `§N<letter>` citation when two skills define the same anchor (leg 4) | genuinely unresolvable from the citation alone; needs a per-citation owner declaration, not a heuristic. Zero instances today — only this file defines lettered anchors |
+| Whether text *near* a citation restates the cited rule (leg 4 checks resolution only) | a leg that flagged restatement would also flag §7's required relay-point instantiations, and its cheapest remedy would be deleting a guard |
+| A citation whose owner name is **not the token immediately before the anchor** — separated by a line break (grep is line-based) or by an intervening word (`in the \`cepa:autonomy\` contract (§2b)`) | leg 4 captures exactly one preceding token, so the citation falls through to the permissive unqualified branch and a wrong-owner citation passes clean. Reflow fixes the line-break shape only — two such instances were found and reflowed on 2026-07-31; the intervening-word shape needs the owner name moved adjacent to the anchor, and is live in `README.md` today |
+| An example anchor written in prose with a literal section sign (leg 4 has no `prose` hatch — it scans whole roots, with no line context to mark) | leg 4 reads a citation set, not annotated lines; documentation must describe such examples in words instead |
 | Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
 
 Each is a human obligation on review, not a covered case.
