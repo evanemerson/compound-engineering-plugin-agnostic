@@ -84,10 +84,7 @@ cover — are **§9f and §9a**. Read them there. The only thing this repo adds:
   `main` is not branch-protected today, so a red check does not physically
   block a merge — treat it as blocking anyway, or turn on protection.
 - When you change the checker, run `bash scripts/check-model-pins-controls.sh`
-  too — it is the reason to believe the checker still works (§9f). A change
-  that makes a control go red is either a defect or a deliberate behavior
-  change; a deliberate one updates the case body in the same commit, never
-  deletes the case.
+  too — §9f owns what it is and how to treat a red control.
 
 This is the third sibling of a class this file already documents
 (allowed-tools mismatch shipped twice on 2026-07-10; hardcoded counts three

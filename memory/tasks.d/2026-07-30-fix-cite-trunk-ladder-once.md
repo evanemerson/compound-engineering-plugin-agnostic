@@ -71,28 +71,41 @@ findings #11 and #12 (#12 partially — see below).
 - [x] ~~P3 — **land the leg-4 control cases as a runnable artifact**
   (`scripts/check-model-pins-controls.sh`: plant each case, assert the expected
   MISS text, revert).~~ **Shipped 2026-07-31** on
-  `chore/model-pin-control-harness` — 26 cases (the 24 recorded here, with
-  case 10 split into its two realizable shapes 10a/10b, plus four leg-1/2/3
-  regressions that had the same hand-run gap). Two departures from the recipe
-  above, both deliberate:
+  `chore/model-pin-control-harness` — **46 cases**, reconciling as: the 24
+  recorded here (+1 body, since case 10 splits into its two realizable shapes
+  10a/10b) + 5 further leg-4 cases + 16 covering legs 1-3, which had the same
+  hand-run gap. Verify against `--list`, not against this sentence: the first
+  cut of this PR claimed "26 cases (the 24 recorded here...)" while silently
+  omitting recorded cases 21-23, and the arithmetic in that claim did not
+  close (24+1+4=29, not 26). Three review agents caught it independently. Two
+  departures from the recipe above, both deliberate:
   - **Fixture copy, not plant-and-revert.** Cases are planted into a
     throwaway copy of the tracked tree under `$TMPDIR`, built from
     `git ls-files` so it carries working-tree content. Reverting inside the
     live tree makes `revert` the step most likely to be what broke, and an
     interrupted run would leave a planted defect in a tracked file.
-  - **Every case asserts message text, not just a count.** A count-only case
-    passes when the checker MISSes for an unrelated reason.
+  - **Every non-zero-MISS case asserts message text, not just a count**, and
+    every case asserts the checker's **exit code**. A count-only case passes
+    when the checker MISSes for an unrelated reason; a case that ignores the
+    exit code passes on a checker mutated to `exit 0`, which is a permanently
+    green CI with a perfectly correct-looking log.
 
-  Verified by mutation, which is the only evidence that matters here: five
-  faithful single-line-diff mutants of the checker were built and the suite
-  run against each. Round 1's tab delimiter → cases 1-5 and 19 red (and case
-  6 **green**, which is the point — its row carries a non-empty qualifier, so
-  it survives the field collapse; a suite of only case-6 shapes is what let
-  the defect ship). Round 2's unnumbered range tail → case 15 red. Round 3's
-  `*.md`-only discovery → case 24 red. Root-existence check deleted → case 16
-  red. Leg-3 inversion check deleted → L3b red. **Under the round-1 mutant the
-  checker's own baseline stayed at 0 MISS** — the baseline gate cannot catch
-  it; only the cases can.
+  Verified by mutation, which is the only evidence that matters here — 20
+  single-line-diff mutants, each built with a build-time assertion that its
+  literal matched exactly once (a mutation that silently fails to apply
+  manufactures a fake survivor; that happened once during this work and was
+  caught only by diffing). Round 1's tab delimiter → cases 1-5 and 19 red,
+  case 6 **green** — the point, since its row carries a non-empty qualifier
+  and survives the field collapse; a suite of only case-6 shapes is what let
+  the defect ship. **Under that mutant the checker's own baseline stayed at
+  0 MISS** — the baseline gate cannot catch it; only the cases can.
+
+  The first cut of this harness had 26 cases and **12 material mutants
+  survived it**, because 22 of the 26 targeted leg 4's citation parser — the
+  region the recorded case list was transcribed from. Coverage concentrated
+  where the examples came from is the same defect as coverage concentrated in
+  one branch, one grain coarser, and it is the reason `cepa:autonomy` §9f now
+  requires each control to name the mutant it kills.
 
 - [ ] P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
   asymmetry.** Those two `find` calls omit `-L` while the ones at 143, 309 and
