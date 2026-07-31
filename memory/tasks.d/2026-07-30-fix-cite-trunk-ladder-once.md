@@ -68,15 +68,44 @@ findings #11 and #12 (#12 partially — see below).
   one "`-L`/`-R` symmetry" change closing both (review round 2, finding #9,
   confidence 100).
 
-- [ ] P3 — **land the leg-4 control cases as a runnable artifact**
+- [x] ~~P3 — **land the leg-4 control cases as a runnable artifact**
   (`scripts/check-model-pins-controls.sh`: plant each case, assert the expected
-  MISS text, revert). The 23 cases are recorded above as explicit case bodies,
-  which closes the "category names hid it" gap — but they are still executed by
-  hand. **Deferred because** adding a test harness to a repo with no test suite
-  is a scope decision outside this PR. It is the highest-value follow-on this PR
-  produced: the defect class it prevents — a control suite validating only the
-  branch it happens to exercise — bit twice inside this PR alone, in rounds 1
-  and 2 (review round 2, finding #10, confidence 90).
+  MISS text, revert).~~ **Shipped 2026-07-31** on
+  `chore/model-pin-control-harness` — **46 cases**, reconciling as: the 24
+  recorded here (+1 body, since case 10 splits into its two realizable shapes
+  10a/10b) + 5 further leg-4 cases + 16 covering legs 1-3, which had the same
+  hand-run gap. Verify against `--list`, not against this sentence: the first
+  cut of this PR claimed "26 cases (the 24 recorded here...)" while silently
+  omitting recorded cases 21-23, and the arithmetic in that claim did not
+  close (24+1+4=29, not 26). Three review agents caught it independently. Two
+  departures from the recipe above, both deliberate:
+  - **Fixture copy, not plant-and-revert.** Cases are planted into a
+    throwaway copy of the tracked tree under `$TMPDIR`, built from
+    `git ls-files` so it carries working-tree content. Reverting inside the
+    live tree makes `revert` the step most likely to be what broke, and an
+    interrupted run would leave a planted defect in a tracked file.
+  - **Every non-zero-MISS case asserts message text, not just a count**, and
+    every case asserts the checker's **exit code**. A count-only case passes
+    when the checker MISSes for an unrelated reason; a case that ignores the
+    exit code passes on a checker mutated to `exit 0`, which is a permanently
+    green CI with a perfectly correct-looking log.
+
+  Verified by mutation, which is the only evidence that matters here — 20
+  single-line-diff mutants, each built with a build-time assertion that its
+  literal matched exactly once (a mutation that silently fails to apply
+  manufactures a fake survivor; that happened once during this work and was
+  caught only by diffing). Round 1's tab delimiter → cases 1-5 and 19 red,
+  case 6 **green** — the point, since its row carries a non-empty qualifier
+  and survives the field collapse; a suite of only case-6 shapes is what let
+  the defect ship. **Under that mutant the checker's own baseline stayed at
+  0 MISS** — the baseline gate cannot catch it; only the cases can.
+
+  The first cut of this harness had 26 cases and **12 material mutants
+  survived it**, because 22 of the 26 targeted leg 4's citation parser — the
+  region the recorded case list was transcribed from. Coverage concentrated
+  where the examples came from is the same defect as coverage concentrated in
+  one branch, one grain coarser, and it is the reason `cepa:autonomy` §9f now
+  requires each control to name the mutant it kills.
 
 - [ ] P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
   asymmetry.** Those two `find` calls omit `-L` while the ones at 143, 309 and

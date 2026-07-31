@@ -49,5 +49,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Policy check first, controls second with `if: always()`. Both always
+      # run, so neither hides the other. Controls-first was tried and inverted
+      # the diagnostic on the common case: the controls build a fixture from
+      # the tree, so a genuinely unpinned dispatch in a PR trips their BASELINE
+      # gate, and the red step is then named after the harness while the step
+      # named after the policy is skipped entirely. See `cepa:autonomy` §9f.
       - name: Check model pins
         run: bash scripts/check-model-pins.sh
+      - name: Check model-pin checker controls
+        if: always()
+        run: bash scripts/check-model-pins-controls.sh

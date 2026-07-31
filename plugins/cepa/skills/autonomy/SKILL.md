@@ -719,6 +719,27 @@ no trace. The same marker is the only sanctioned way to exempt a leg-3 match;
 deleting a `mode-conditional` marker to quiet the checker disables the check
 at that site and is never the fix.
 
+**The checker is itself covered by controls.**
+`bash scripts/check-model-pins-controls.sh` plants a defect into a throwaway
+copy of the tree, asserts the checker's response to it — counts, exit code
+and message text — and discards the copy; it never touches the working tree.
+CI runs it alongside the checker, each step reporting independently.
+
+**Every control must kill a named mutant** — a single-line change to the
+checker that makes it materially weaker. A case no mutant needs is
+decoration, and a suite whose cases cluster in the region its examples came
+from reports coverage it does not have: the first cut carried 26 cases and 12
+material single-line mutants survived it, because 22 of the 26 targeted one
+leg. Cases expecting zero MISSes are the false-positive guards, and they are
+the only ones that can kill a loosened predicate.
+
+**A control that goes red is either a defect or a deliberate behavior
+change.** A deliberate one updates the case body in the same commit; deleting
+the case is never the fix, and dropping one silently is how a suite comes to
+claim coverage it lost. Two cases deliberately pin a limit from the table
+below rather than correct behavior — they go red when that limit is closed,
+which is the signal to update them, not to remove them.
+
 **Never widen the checker's trigger set and add a dispatch site in the same
 commit without re-running it.** Widening leg 2's regex is what exposed four
 live dispatch sites that both a manual sweep and the checker's first cut had

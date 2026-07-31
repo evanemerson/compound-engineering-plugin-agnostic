@@ -83,6 +83,8 @@ cover — are **§9f and §9a**. Read them there. The only thing this repo adds:
   root with the repo's other tooling, not under `plugins/` — §9f says why).
   `main` is not branch-protected today, so a red check does not physically
   block a merge — treat it as blocking anyway, or turn on protection.
+- When you change the checker, run `bash scripts/check-model-pins-controls.sh`
+  too — §9f owns what it is and how to treat a red control.
 
 This is the third sibling of a class this file already documents
 (allowed-tools mismatch shipped twice on 2026-07-10; hardcoded counts three
