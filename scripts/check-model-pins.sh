@@ -60,6 +60,27 @@ info() { printf 'INFO %s\n' "$1"; }
 # spend at the invoking session's tier. So is `fable` — the top tier is
 # reserved for work a person opted into, never for automatic dispatch.
 ALLOWED_TIERS='sonnet opus haiku'
+# The markdown extension set, declared ONCE. There are four file-selection
+# sites — leg 1's discovery, legs 2-3's discovery, and leg 4's citation scan
+# and coverage probe — and `find` and `grep` want different syntax for the
+# same fact. Round 2 widened three of the four with `*.markdown` and left
+# legs 2-3 on `*.md`, which made a `.markdown` file readable by leg 4 and
+# invisible to the legs that check dispatch pins: an inverted
+# mode-conditional pair in one shipped as `0 MISS, 0 WARN`. That is the
+# construct-vs-instance class CLAUDE.md documents, and this script had
+# already been bitten once by an unscanned-file hole (see the leg 2-3 scan
+# roots comment). Derive both forms here so a future widening cannot land at
+# three sites out of four.
+MD_EXTS='md markdown'
+find_name_args=()
+grep_include_args=()
+for _e in $MD_EXTS; do
+  [ "${#find_name_args[@]}" -eq 0 ] || find_name_args+=(-o)
+  find_name_args+=(-name "*.${_e}")
+  grep_include_args+=("--include=*.${_e}")
+done
+# Leg 4 additionally reads shell and workflow files; markdown is shared.
+CITE_INCLUDES=("${grep_include_args[@]}" --include='*.sh' --include='*.yml' --include='*.yaml')
 SUPPRESS_MARKER='model-pin: prose'
 # A dispatch whose tier branches on invocation mode (autonomy §9d) declares
 # both literals IN the marker:
@@ -144,7 +165,7 @@ while IFS= read -r f; do
         misses=$((misses + 1))
       fi ;;
   esac
-done < <(find -L "${AGENT_DIRS[@]}" \( -name '*.md' -o -name '*.markdown' \) -type f 2>/dev/null | sort)
+done < <(find -L "${AGENT_DIRS[@]}" \( "${find_name_args[@]}" \) -type f 2>/dev/null | sort)
 
 if [ "$agent_count" -eq 0 ]; then
   miss "model-pin: agent directories exist but hold no agent definitions — check the path and extensions before trusting this run"
@@ -310,7 +331,7 @@ for d in "${SCAN_DIRS[@]}"; do
       esac
       misses=$((misses + 1))
     done < <(scan_conditional "$f")
-  done < <(find -L "$d" -name '*.md' -type f 2>/dev/null | sort)
+  done < <(find -L "$d" \( "${find_name_args[@]}" \) -type f 2>/dev/null | sort)
 done
 
 # --- Leg 4: §N<letter> citations resolve ------------------------------------
@@ -390,9 +411,7 @@ for r in $CITE_ROOTS; do
     miss "model-pin: leg 4 citation root '${r}' does not exist — coverage shrank silently"
     misses=$((misses + 1)); continue
   fi
-  rout=$(grep -rahoE "$CITE_RE" \
-    --include='*.md' --include='*.markdown' --include='*.sh' \
-    --include='*.yml' --include='*.yaml' "$r" 2>/dev/null)
+  rout=$(grep -rahoE "$CITE_RE" "${CITE_INCLUDES[@]}" "$r" 2>/dev/null)
   rrc=$?
   if [ "$rrc" -gt 1 ]; then
     miss "model-pin: leg 4 grep failed on root '${r}' (exit ${rrc}) — an unreadable root is not a pass"
@@ -406,9 +425,7 @@ for r in $CITE_ROOTS; do
     # were READ: that is the actual hazard (a renamed directory, or an
     # --include set matching nothing there). Total-zero stays covered by the
     # `checked` guard below.
-    rfiles=$(grep -ralE '' \
-      --include='*.md' --include='*.markdown' --include='*.sh' \
-      --include='*.yml' --include='*.yaml' "$r" 2>/dev/null | grep -c .)
+    rfiles=$(grep -ralE '' "${CITE_INCLUDES[@]}" "$r" 2>/dev/null | grep -c .)
     if [ "$rfiles" -eq 0 ]; then
       miss "model-pin: leg 4 root '${r}' holds no file matching the --include set — nothing was scanned there"
       misses=$((misses + 1)); continue

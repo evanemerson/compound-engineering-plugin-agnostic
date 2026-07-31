@@ -131,8 +131,13 @@ findings #11 and #12 (#12 partially — see below).
   7.  wrong owner, lowercase — `` `grounding` §9c ``
   8.  wrong owner, capitalized — `` `Grounding` §9c ``
   9.  correct owner — `` `cepa:autonomy` §9c `` → 0 MISS
-  10. wrong owner split across a line break → **0 MISS today** (recorded
-      limit, §9f); the two live instances were reflowed instead
+  10. wrong owner whose owner name is not the token immediately before the
+      anchor — split across a line break, OR separated by an intervening word
+      (`in the \`cepa:autonomy\` contract (§2b)`) → **0 MISS today** (recorded
+      limit, §9f). The two line-break instances were reflowed; the
+      intervening-word shape is live in `README.md`
+  24. identical content in `foo.md` and `foo.markdown` → identical output
+      (all four file-selection sites derive from one extension declaration)
   11. multi-letter anchor — `autonomy §9qz`
   12. uppercase anchor — `autonomy §9Q`
   13. range second endpoint — `autonomy §9c-9q`
