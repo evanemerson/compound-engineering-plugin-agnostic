@@ -12,6 +12,24 @@ name: model-pins
 # Security: this workflow interpolates NO event data (no ${{ github.event.* }})
 # into any run: step, so there is no injection surface. Keep it that way — if
 # a future step needs event data, pass it through env: with quoting.
+#
+# Action pinning: every third-party action is pinned to a FULL 40-char commit
+# SHA with a trailing `# vX.Y.Z` naming the tag that SHA was resolved from. A
+# version tag is mutable — `v4` is repointed by its publisher — so a tag pin
+# grants every future publisher push write access to this job.
+#
+# To bump: re-resolve the SHA from upstream and replace BOTH the SHA and the
+# comment together —
+#
+#     gh api repos/actions/checkout/git/refs/tags/v4.5.0 --jq .object.sha
+#
+# Never edit the comment alone (it then lies about which commit runs), and
+# never restore a bare tag. There is deliberately no dependabot/renovate
+# config: `main` is unprotected here, so an unattended bot opening PRs against
+# it is a larger decision than this file should make on its own. That leaves
+# bumping manual and therefore easy to forget — a pinned-but-stale action is
+# the accepted trade against a mutable-tag supply chain, and the follow-on is
+# tracked in memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md.
 
 # Deliberately NOT path-filtered. A filter buys nothing here (the check
 # takes seconds) and costs correctness twice: a PR that moves agent
@@ -30,6 +48,6 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Check model pins
         run: bash scripts/check-model-pins.sh
