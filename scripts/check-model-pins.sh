@@ -115,7 +115,7 @@ echo "== cepa model-pin check: $(pwd) =="
 
 # Agent directories are discovered, not hardcoded: a plugin split or a
 # rename must surface as a changed count, never as a quiet zero.
-mapfile -t AGENT_DIRS < <(find plugins -type d -name agents 2>/dev/null | sort)
+mapfile -t AGENT_DIRS < <(find -L plugins -type d -name agents 2>/dev/null | sort)
 if [ "${#AGENT_DIRS[@]}" -eq 0 ]; then
   miss "no plugins/*/agents directory found — run from the plugin source repo root"
   echo "-- 1 MISS, 0 WARN --"
@@ -293,7 +293,7 @@ scan_conditional() {
 # and read as full compliance — verified by dropping one into
 # agents/review/adversarial-reviewer.md and getting 0 MISS, 0 WARN. Scan all
 # markdown under every plugin instead, for leg 1's stated reason.
-mapfile -t SCAN_DIRS < <(find plugins -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+mapfile -t SCAN_DIRS < <(find -L plugins -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 if [ "${#SCAN_DIRS[@]}" -eq 0 ]; then
   miss "model-pin: no plugins/* directory to scan for dispatch prose"
   misses=$((misses + 1))
@@ -354,6 +354,29 @@ done
 # is covered with no edit here. An earlier cut hardcoded autonomy/SKILL.md,
 # which made the check a property of one file's path.
 CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
+
+# --- filesystem-loop probe (guards every leg's traversal) -------------------
+# Every traversal here follows symlinks (`find -L`, `grep -R`), because a
+# symlink silently skipped is a file nobody checked. That makes a filesystem
+# LOOP reachable — and GNU find and grep both handle one the same way: warn on
+# STDERR, skip the cyclic branch, exit 0. Every traversal in this script sends
+# stderr to /dev/null, so without this probe a loop would silently truncate
+# coverage: the exact failure the symlink-following exists to prevent,
+# reintroduced by it.
+#
+# Probed ONCE for the whole construct rather than at each of the seven
+# traversal sites — the site-by-site version of this rule is what left four of
+# those seven asymmetric in the first place. CITE_ROOTS contains `plugins`, so
+# it covers what all four legs walk.
+#
+# Broken symlinks are deliberately NOT flagged: `-type f` is false for them and
+# there is no content to check.
+loop_warn=$(find -L $CITE_ROOTS -type d 2>&1 >/dev/null | grep -i 'loop' | head -1)
+if [ -n "$loop_warn" ]; then
+  miss "model-pin: filesystem loop under a scan root — traversal is silently truncated there (${loop_warn})"
+  misses=$((misses + 1))
+fi
+
 # Anchors and qualifiers are matched case-insensitively and lowercased before
 # lookup. `[A-Za-z]+` not `[a-z]`: a single-letter class makes grep -o truncate
 # a two-letter anchor to its first letter, so a typo'd anchor validates against
@@ -411,7 +434,7 @@ for r in $CITE_ROOTS; do
     miss "model-pin: leg 4 citation root '${r}' does not exist — coverage shrank silently"
     misses=$((misses + 1)); continue
   fi
-  rout=$(grep -rahoE "$CITE_RE" "${CITE_INCLUDES[@]}" "$r" 2>/dev/null)
+  rout=$(grep -RahoE "$CITE_RE" "${CITE_INCLUDES[@]}" "$r" 2>/dev/null)
   rrc=$?
   if [ "$rrc" -gt 1 ]; then
     miss "model-pin: leg 4 grep failed on root '${r}' (exit ${rrc}) — an unreadable root is not a pass"
@@ -425,7 +448,7 @@ for r in $CITE_ROOTS; do
     # were READ: that is the actual hazard (a renamed directory, or an
     # --include set matching nothing there). Total-zero stays covered by the
     # `checked` guard below.
-    rfiles=$(grep -ralE '' "${CITE_INCLUDES[@]}" "$r" 2>/dev/null | grep -c .)
+    rfiles=$(grep -RalE '' "${CITE_INCLUDES[@]}" "$r" 2>/dev/null | grep -c .)
     if [ "$rfiles" -eq 0 ]; then
       miss "model-pin: leg 4 root '${r}' holds no file matching the --include set — nothing was scanned there"
       misses=$((misses + 1)); continue

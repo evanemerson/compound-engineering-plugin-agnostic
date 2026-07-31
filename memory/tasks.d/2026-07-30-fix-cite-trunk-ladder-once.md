@@ -58,7 +58,7 @@ findings #11 and #12 (#12 partially — see below).
   one citation, which §9f requires land alone with its own re-run (review round
   2, finding #3, confidence 100).
 
-- [ ] P3 — `scripts/check-model-pins.sh` leg 4 — **a symlinked FILE inside a
+- [x] ~~P3 — `scripts/check-model-pins.sh` leg 4 — **a symlinked FILE inside a
   scan root is read by leg 2 and skipped by leg 4.** `grep -r` follows symlinks
   only when named on the command line, not during recursion; legs 1-3 use
   `find -L`. Proven: one planted file carrying both a broken citation and an
@@ -66,7 +66,9 @@ findings #11 and #12 (#12 partially — see below).
   still read "5 of 5 roots". Fix is `grep -R`. **Deferred because** it widens
   the traversal set — same §9f reason as the item below, and the natural move is
   one "`-L`/`-R` symmetry" change closing both (review round 2, finding #9,
-  confidence 100).
+  confidence 100).~~ **Shipped 2026-07-31** on
+  `fix/checker-symlink-traversal-symmetry`, together with the `-L` item below —
+  the single change both were deferred toward. Pinned by control case 30.
 
 - [x] ~~P3 — **land the leg-4 control cases as a runnable artifact**
   (`scripts/check-model-pins-controls.sh`: plant each case, assert the expected
@@ -107,7 +109,7 @@ findings #11 and #12 (#12 partially — see below).
   one branch, one grain coarser, and it is the reason `cepa:autonomy` §9f now
   requires each control to name the mutant it kills.
 
-- [ ] P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
+- [x] ~~P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
   asymmetry.** Those two `find` calls omit `-L` while the ones at 143, 309 and
   361 include it, so a symlinked plugin directory is indexed for skills by leg
   4 but skipped entirely by legs 1-3 — the exact "a symlink silently skipped
@@ -115,7 +117,15 @@ findings #11 and #12 (#12 partially — see below).
   `-L`. **Deferred because** adding it widens leg 1's and leg 2's discovery
   set, which is a trigger-set change, and §9f forbids widening a trigger set
   alongside other changes without a dedicated re-run. Its own change (review
-  round 1, finding #16, confidence 60).
+  round 1, finding #16, confidence 60).~~ **Shipped 2026-07-31** on
+  `fix/checker-symlink-traversal-symmetry`, alone as §9f requires, with its
+  own re-run. Both `find` calls gained `-L`; pinned by control cases L1e and
+  L2i. The widening also created a **new** hazard the residual did not
+  anticipate — a filesystem loop becomes reachable, and GNU find and grep both
+  warn on **stderr**, which every traversal in the checker discards — so the
+  change also added a one-per-construct loop probe (case 31). Line numbers in
+  this item are pre-1.16.0 and no longer resolve; the sites are the two
+  `mapfile ... find` discoveries.
 
 - [ ] P3 — `docs/plans/` plan shape — **no structural check that a PR's
   `Closes:` claim actually landed as `status:`/`applied_in:`.** U5's stated
