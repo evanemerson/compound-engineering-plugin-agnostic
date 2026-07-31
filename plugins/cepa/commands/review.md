@@ -169,22 +169,14 @@ Identify what to review:
 trunk changes in a time window (default 7 days) rather than a PR or
 branch diff:
 
-**Resolve the trunk first**, by the `cepa:autonomy` §8 ladder — `trunk:`
-under `## Conventions` in `cepa.local.md`, then
-`gh repo view --json defaultBranchRef`, then
-`git symbolic-ref --short refs/remotes/origin/HEAD`, then `main` — including
-its normalization rule (strip a leading `origin/`; reject anything not
-matching `^[A-Za-z0-9._/-]+$`). Record which rung answered; a resolution that
-reached the `main` last resort is reported as such, never silently. §8 is the
-single definition — do not restate the ladder here, and do not hardcode
-`main`, which is wrong on any repo using `master`/`trunk`/`develop`/`dev`.
+**Resolve the trunk first**, per the `cepa:autonomy` §8 ladder, and record
+which rung answered.
 
-Two §8 details bite hardest on this path. `git symbolic-ref` is unusable as a
-primary — `refs/remotes/origin/HEAD` is unset in most clones, and spot-checked
-across four real repos it failed on all four. And an unnormalized rung-3
-answer (`origin/main`) becomes `origin/origin/main` below and turns the
-findings push into `git push origin HEAD:refs/heads/origin/main` — a junk
-branch instead of trunk.
+Why §8 bites hardest on this path: this is the one review scope that
+**pushes**. A rung-3 answer that reaches the push unnormalized turns it into
+`git push origin HEAD:refs/heads/origin/main` — a junk branch instead of
+trunk. Rung 3 is worth distrusting here specifically: spot-checked across
+four real repos, it failed on all four.
 
 **Precondition — review from a clean trunk checkout, without requiring one.**
 The scope below is ref-based, but review agents read whole files from the

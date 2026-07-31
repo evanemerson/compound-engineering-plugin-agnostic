@@ -83,9 +83,8 @@ state). Resolve results without prompting:
   The stash MUST appear in the final report's Git state changes line
   (autonomy §6) with the exact `git stash pop` command — a stash the report
   never mentions is lost user work. Never discard changes (always-gated).
-- **Not on trunk:** resolve the trunk per autonomy §8 (`cepa.local.md`
-  `trunk:` → `gh repo view` → `git symbolic-ref` → `main`) and report which
-  rung answered — never assume `main`. If the current branch matches the
+- **Not on trunk:** resolve the trunk per autonomy §8 and report which rung
+  answered — never assume `main`. If the current branch matches the
   requested work, continue on it; otherwise
   `git checkout <trunk> && git pull origin <trunk>`, then branch.
 - **Branch name:** construct it from the task description automatically
