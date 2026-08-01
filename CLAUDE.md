@@ -85,6 +85,8 @@ cover — are **§9f and §9a**. Read them there. The only thing this repo adds:
   block a merge — treat it as blocking anyway, or turn on protection.
 - When you change the checker, run `bash scripts/check-model-pins-controls.sh`
   too — §9f owns what it is and how to treat a red control.
+- `bash scripts/run-mutation-sweep.sh` sweeps the controls themselves. Weekly
+  in CI and on demand, never a merge gate — §9f owns it.
 
 This is the third sibling of a class this file already documents
 (allowed-tools mismatch shipped twice on 2026-07-10; hardcoded counts three

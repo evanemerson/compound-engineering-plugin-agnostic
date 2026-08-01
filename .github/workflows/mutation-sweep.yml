@@ -1,0 +1,111 @@
+name: mutation-sweep
+
+# Sabotages scripts/check-model-pins.sh ~60 ways and confirms the control
+# suite notices. A sabotage nobody catches is a hole in the controls. What a
+# green sweep does and does not prove is stated in the sweep's own report
+# header and in `cepa:autonomy` §9f — read it there.
+#
+# DELIBERATELY NOT A PR CHECK, and deliberately not path-filtered either —
+# it is not a gate at all. The control suite can only develop holes when the
+# checker or the controls change, which is rare, so a per-PR run would mostly
+# re-prove the previous answer. Everything a per-PR fast path needed (a
+# hand-maintained mutant-to-control mapping, subset plumbing, a timing gate)
+# was cost paid only to make that redundant run affordable, and the mapping
+# was a second list to keep in sync whose staleness the design could not
+# detect. This is the opposite trade from model-pins.yml next door, and both
+# are deliberate: that job is a seconds-long gate on every PR, this one is a
+# weekly audit of that gate's evidence.
+#
+# Security: this workflow interpolates NO event data (no github.event fields,
+# no inputs) into any run: step. The GITHUB_* variables read below are runner
+# ENVIRONMENT, which is the sanctioned way to get that data in. Keep it that
+# way — if a future step needs event data, pass it through env: with quoting.
+# There are no secrets: here and none should be added; the sweep reads the repo
+# and writes one issue.
+#
+# Action pinning: pinned to a FULL 40-char commit SHA with a trailing comment
+# naming the tag it was resolved from, matching model-pins.yml. A version tag
+# is mutable, so a tag pin grants every future publisher push write access to
+# this job. This SHA and model-pins.yml's are the same on purpose — bump both
+# together or neither.
+#
+# A WEEKLY JOB NEEDS AN OBSERVER. A `schedule:` failure on the default branch
+# produces no PR check and no notification, so on failure this opens or updates
+# a single issue naming the failing mutants and their outcomes. Without it the
+# sweep is a green light nobody is looking at.
+#
+# `schedule:` also has a silent off-switch: GitHub disables scheduled workflows
+# after 60 days of repository inactivity, and scheduled runs fire only on the
+# default branch. Use the workflow_dispatch button if a week goes by with no
+# run recorded.
+on:
+  schedule:
+    # Weekly, Monday early UTC. An off-the-hour minute: GitHub delays cron jobs
+    # scheduled on the hour under load.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    # Each mutant costs one full control-suite run. Measured end to end on the
+    # first full local run: 63 mutants in 42 min, ~40s each — slower than the
+    # control suite's own 30.1s because each mutant also pays a tree copy and a
+    # restore. Hosted runners are slower again at what dominates this workload
+    # (full-tree copies, thousands of process spawns), so this bound is roughly
+    # 3x the local measurement rather than a target. It has NOT yet been
+    # measured on a hosted runner; the first workflow_dispatch run is what
+    # calibrates it, tracked in memory/tasks.d/.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The classifier decides what every mutant result MEANS, so it is
+      # verified before it is trusted — and it is cheap, so a broken one fails
+      # in seconds instead of two hours later.
+      - name: Mutation sweep classifier selftest
+        run: bash scripts/run-mutation-sweep.sh --selftest
+
+      - name: Mutation sweep
+        run: |
+          set -o pipefail
+          bash scripts/run-mutation-sweep.sh 2>&1 | tee sweep.log
+
+      # `failure()` and not `always()`: this step exists to make a red run
+      # visible, and an issue opened on a green run is noise that trains the
+      # reader to ignore the channel. It also fires when an EARLIER step failed
+      # (a broken classifier, a failed checkout), which is correct — those are
+      # the runs most likely to go unnoticed.
+      - name: Open or update the failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SWEEP_ISSUE_TITLE: mutation sweep is failing
+        run: |
+          {
+            printf 'The weekly model-pin mutation sweep failed.\n\n'
+            printf 'Run: %s/%s/actions/runs/%s\n\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            if [ -r sweep.log ]; then
+              printf 'Failing mutants:\n\n```\n'
+              grep -E '^(SURVIVED-UNDECLARED|CAUGHT-DECLARED|BASELINE-DIRTY|ANCHOR-MISSING|HARNESS-ERROR) ' \
+                sweep.log || printf '(none named — the run died before classifying)\n'
+              printf '```\n\n<details><summary>full report</summary>\n\n```\n'
+              tail -c 40000 sweep.log
+              printf '\n```\n</details>\n'
+            else
+              printf 'No sweep output: the run failed before the sweep step.\n'
+            fi
+          } > issue-body.md
+          num=$(gh issue list --state open --search "in:title mutation sweep is failing" \
+                  --json number,title \
+                  --jq 'first(.[] | select(.title == env.SWEEP_ISSUE_TITLE) | .number)')
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body-file issue-body.md
+          else
+            gh issue create --title "$SWEEP_ISSUE_TITLE" --body-file issue-body.md
+          fi

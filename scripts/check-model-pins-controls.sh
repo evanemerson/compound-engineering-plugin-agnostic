@@ -363,6 +363,16 @@ EOF
 # cannot hold a NUL, so grepping for one is grepping for the empty pattern.
 has_nul() { [ "$(tr -d '\000' < "$1" | wc -c)" -ne "$(wc -c < "$1")" ]; }
 
+# Every file under a directory that leg 4 would scan, by its extension set.
+# Cases 17 and 36 assert something about a whole ROOT, so they need all of
+# them: a case that neutralizes one file BY NAME stops being that case the
+# moment a sibling is added, and its failure mode is a clean PASS.
+scannable_in() {  # scannable_in <dir> [extra find predicates...]
+  local dir="$1"; shift
+  find "$dir" -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.sh' \
+    -o -name '*.yml' -o -name '*.yaml' \) "$@" 2>/dev/null
+}
+
 plant() {
   local id="$1" d="$2" f before
   case "$id" in
@@ -389,7 +399,19 @@ ${SS}9c." ;;
     23) say "$d" "The rule is tier ${SS}9c here." ;;
 
     16) mv "$d/.github" "$d/.github-gone" ;;
-    17) mv "$d/.github/workflows/model-pins.yml" "$d/.github/workflows/model-pins.txt" ;;
+    # 17 and 36 neutralize a whole ROOT, so they must act on EVERY scannable
+    # file under it rather than on `model-pins.yml` by name. Adding a second
+    # workflow file left `.github` still scannable and the expected MISS never
+    # appeared: both cases degraded into second copies of the baseline while
+    # still reporting PASS. Reproduced when mutation-sweep.yml landed —
+    # `2/2 passed` became `FAIL 17` / `FAIL 36`. Assert the plant landed in
+    # both directions (something was there; nothing scannable is left), so a
+    # future extension added to CITE_EXTS and not to scannable_in() shows up
+    # as a failed plant rather than as a quiet pass.
+    17) [ -n "$(scannable_in "$d/.github")" ] || return 1
+        while IFS= read -r p; do mv "$p" "$p.txt" || return 1; done < <(scannable_in "$d/.github")
+        [ -z "$(scannable_in "$d/.github")" ] || return 1
+        : ;;
     # A sed that matches nothing exits 0. Assert the plant actually landed:
     # README.md's lettered citations must exist before and be gone after, or
     # this case silently degrades into a second copy of the baseline.
@@ -448,8 +470,9 @@ ${SS}9c." ;;
     35) mkdir -p "$d/scripts/zzloopdir"
         ln -s ../zzloopdir "$d/scripts/zzloopdir/self"
         [ -d "$d/scripts/zzloopdir/self/self" ] || return 1 ;;
-    36) : > "$d/.github/workflows/model-pins.yml"
-        [ -s "$d/.github/workflows/model-pins.yml" ] && return 1
+    36) [ -n "$(scannable_in "$d/.github")" ] || return 1
+        while IFS= read -r p; do : > "$p" || return 1; done < <(scannable_in "$d/.github")
+        [ -z "$(scannable_in "$d/.github" -size +0c)" ] || return 1
         : ;;
     L1f) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzp1" "$d/plugins/zzp2"
         printf -- '---\nname: zzl1f\nmodel: inherit\n---\n\n# zzl1f\n' \
