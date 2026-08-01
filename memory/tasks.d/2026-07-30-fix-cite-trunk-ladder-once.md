@@ -58,7 +58,7 @@ findings #11 and #12 (#12 partially — see below).
   one citation, which §9f requires land alone with its own re-run (review round
   2, finding #3, confidence 100).
 
-- [ ] P3 — `scripts/check-model-pins.sh` leg 4 — **a symlinked FILE inside a
+- [x] ~~P3 — `scripts/check-model-pins.sh` leg 4 — **a symlinked FILE inside a
   scan root is read by leg 2 and skipped by leg 4.** `grep -r` follows symlinks
   only when named on the command line, not during recursion; legs 1-3 use
   `find -L`. Proven: one planted file carrying both a broken citation and an
@@ -66,7 +66,20 @@ findings #11 and #12 (#12 partially — see below).
   still read "5 of 5 roots". Fix is `grep -R`. **Deferred because** it widens
   the traversal set — same §9f reason as the item below, and the natural move is
   one "`-L`/`-R` symmetry" change closing both (review round 2, finding #9,
-  confidence 100).
+  confidence 100).~~ **Shipped 2026-07-31** on
+  `fix/checker-symlink-traversal-symmetry`, together with the `-L` item below —
+  the single change both were deferred toward. Pinned by control case 30.
+
+  **The struck text's own prescription — "Fix is `grep -R`" — was WRONG and
+  did not ship.** `grep -R` opens whatever a symlink points at with no
+  file-type check, so a tracked symlink to `/dev/zero` or a writerless FIFO
+  blocks it forever; on a `pull_request` workflow with no timeout that is one
+  file pinning a runner for hours. Reproduced, and reproduced that plain
+  `grep -r` returns immediately on the same fixture. What shipped instead is
+  `find -L … -type f` discovery — the link is resolved and the TARGET's type
+  tested, so a symlinked regular file is still read while devices, FIFOs and
+  sockets are excluded by construction. Left uncorrected, this line would have
+  handed the hang to the next reader who mined this file for the fix.
 
 - [x] ~~P3 — **land the leg-4 control cases as a runnable artifact**
   (`scripts/check-model-pins-controls.sh`: plant each case, assert the expected
@@ -107,7 +120,7 @@ findings #11 and #12 (#12 partially — see below).
   one branch, one grain coarser, and it is the reason `cepa:autonomy` §9f now
   requires each control to name the mutant it kills.
 
-- [ ] P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
+- [x] ~~P3 — `scripts/check-model-pins.sh:93,271` — **pre-existing `-L`
   asymmetry.** Those two `find` calls omit `-L` while the ones at 143, 309 and
   361 include it, so a symlinked plugin directory is indexed for skills by leg
   4 but skipped entirely by legs 1-3 — the exact "a symlink silently skipped
@@ -115,7 +128,22 @@ findings #11 and #12 (#12 partially — see below).
   `-L`. **Deferred because** adding it widens leg 1's and leg 2's discovery
   set, which is a trigger-set change, and §9f forbids widening a trigger set
   alongside other changes without a dedicated re-run. Its own change (review
-  round 1, finding #16, confidence 60).
+  round 1, finding #16, confidence 60).~~ **Shipped 2026-07-31** on
+  `fix/checker-symlink-traversal-symmetry`, alone as §9f requires, with its
+  own re-run. Both `find` calls gained `-L`; pinned by control cases L1e and
+  L2i. Line numbers in this item are pre-1.16.0 and no longer resolve; the
+  sites are the two `mapfile ... find` discoveries.
+
+  The widening created a hazard the residual did not anticipate: following
+  symlinks makes a filesystem loop reachable, and every traversal in the
+  checker discarded find's stderr. The first fix was a probe that grepped that
+  stderr for the word "loop" — **which review then showed was the wrong
+  shape**: it missed permission errors and ELOOP chains, and reported
+  "filesystem loop" for any unreadable path merely NAMED `ralph-loop`. What
+  shipped is general: every traversal now goes through one helper that reads
+  find's exit status and stderr, and non-empty stderr is a MISS. Keying on
+  emptiness rather than on message text costs nothing and is locale-proof.
+  Pinned by cases 31, 33 and 35.
 
 - [ ] P3 — `docs/plans/` plan shape — **no structural check that a PR's
   `Closes:` claim actually landed as `status:`/`applied_in:`.** U5's stated

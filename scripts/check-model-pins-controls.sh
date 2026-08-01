@@ -208,9 +208,9 @@ reg 23 'prose regression — a word before a real anchor (tier)' 0 0 '' '^MISS '
 reg 16 'citation root removed' 1 0 \
   "leg 4 citation root '\\.github' does not exist" '' \
   'kills: removal of the root-existence check, which let a vanished root pass at 0 MISS'
-reg 17 'root present, include set matches nothing' 1 0 \
-  "leg 4 root '\\.github' holds no file matching the --include set" '' \
-  'kills: removal of the file-coverage probe'
+reg 17 'root present, no file of a scannable extension' 1 0 \
+  "leg 4 root '\\.github' holds no non-empty scannable file" '' \
+  'kills: removal of the file-coverage probe (case 36 covers its zero-byte half)'
 reg 18 'root present with files but zero citations' 0 0 '' '^MISS ' \
   'false-positive guard: a root may legitimately cite nothing (a copy edit must not fail the build)'
 reg 19 'NUL byte in a leg-4 scanned file' 1 0 "$UNQUAL_9Q" '' \
@@ -225,6 +225,28 @@ reg 28 'broken citation in a .yml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping --include=*.yml, which would make the workflow files unscanned'
 reg 29 'no citations anywhere' '+' 0 'checked no .* citation' '' \
   'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass'
+reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" '' \
+  'kills: grep -R reverted to -r — grep follows symlinks named on the command line but NOT during recursion'
+reg 31 'a filesystem cycle under `plugins` is reported' 1 0 \
+  'discovery failed .*File system loop detected' '' \
+  'kills: dropping the stderr/exit-status check from leg 1 discovery — find skips a cycle, warns on stderr, and exits 1'
+reg 35 'a filesystem cycle under `scripts` is reported' 1 0 \
+  "leg 4 discovery failed on root 'scripts' .*File system loop detected" '' \
+  'kills: checking traversal status for only SOME roots — case 31 lives under plugins, so leg 4 per-root coverage needs its own case'
+reg 33 'an unreadable SUBTREE under a citation root is reported' 1 0 \
+  "leg 4 discovery failed on root 'scripts' .*Permission denied" '' \
+  'kills: discarding find exit status/stderr — a partial walk returns a truncated non-empty list and reports full coverage'
+reg 34 'an unreadable FILE in a citation root is reported' 1 0 \
+  'leg 4 read failed on root' '' \
+  'kills: removal of the grep exit>1 branch, which is also the only guard against an ARG_MAX exec failure'
+reg 36 'a root whose only scannable files are empty is reported' 1 0 \
+  "leg 4 root '\\.github' holds no non-empty scannable file" '' \
+  'kills: counting listed files instead of readable content — a truncating merge leaves a root that scans nothing'
+# Runs under a SHORT timeout (see CASE_TIMEOUT): the regression this guards is
+# a HANG, not a wrong answer, so the failure has to be bounded or the suite
+# hangs with it.
+reg 32 'a symlink to a character device does not hang the scan' 0 0 '' '^MISS ' \
+  'kills: leg 4 reverting to `grep -R` over raw paths — it opens whatever a symlink points at, with no type check, and blocks forever on /dev/zero or a writerless FIFO'
 
 # --- Leg 4 vs legs 2-3: extension parity (the round-3 class) ----------------
 reg 24 'identical content in .md and .markdown behaves identically' 2 1 \
@@ -243,7 +265,13 @@ reg L1c 'agent directories exist but hold no definitions' 1 0 \
   'kills: removal of the agent_count==0 guard — a discovery that finds nothing is not a pass'
 reg L1d 'a SYMLINKED agent definition is still checked' 1 0 \
   'is not a sanctioned tier' '' \
-  'kills: dropping -L from leg 1 discovery — an unfollowed symlink is a file nobody checked'
+  'kills: dropping -L from leg 1 file discovery — an unfollowed symlink is a file nobody checked'
+reg L1e 'a SYMLINKED agents/ directory is still discovered' 1 0 \
+  'is not a sanctioned tier' '' \
+  'kills: dropping -L from leg 1 AGENT_DIRS discovery — every definition in that directory goes unchecked'
+reg L1f 'one definition reachable through two symlinked agents/ dirs is checked once' 1 0 \
+  'is not a sanctioned tier' '' \
+  'kills: removal of resolved-path dedup — -L makes the same file reachable twice, inflating the coverage counter and double-reporting one defect'
 
 # --- Leg 2: dispatch instructions in prose ---------------------------------
 reg L2 'dispatch instruction with no pin in its block' 0 1 \
@@ -268,6 +296,9 @@ reg L2g 'the prose-suppression marker works' 0 0 '' '^WARN ' \
   'false-positive guard: documentation of a dispatch must be closable without deleting it'
 reg L2h 'a correctly pinned dispatch is silent' 0 0 '' '^WARN ' \
   'false-positive guard: leg 2 must not warn on the thing it is asking for'
+reg L2i 'a SYMLINKED plugin directory is still scanned' 0 1 \
+  'dispatch instruction with no pin' '' \
+  'kills: dropping -L from legs 2-3 SCAN_DIRS discovery — a whole plugin scanned by nothing'
 
 # --- Leg 3: mode-conditional pairs -----------------------------------------
 reg L3a 'mode-conditional with the headless branch deleted' 1 0 \
@@ -390,6 +421,52 @@ ${SS}9c." ;;
           -exec sed -i "s/${SS}/S-/g" {} +
         sed -i "s/${SS}/S-/g" "$d/CLAUDE.md" "$d/README.md" ;;
 
+    # The target sits at the fixture root, which is NOT a citation root, so the
+    # symlink under scripts/ is the only path by which leg 4 can reach it.
+    30) printf 'The rule is %s9q here.\n' "$SS" > "$d/zzcite-target.md"
+        ln -s ../zzcite-target.md "$d/scripts/zzcite-link.sh"
+        [ -L "$d/scripts/zzcite-link.sh" ] || return 1
+        [ -r "$d/scripts/zzcite-link.sh" ] || return 1 ;;
+    # A CONTAINED two-node cycle, holding no files. A loop pointing at the tree
+    # root also works but is a bad control: `find` detects the cycle only on the
+    # second descent, so one full extra pass happens first and legs 2-3 re-scan
+    # the whole repo through the link — dozens of WARNs from unrelated prose.
+    # The case would then pass on the flood rather than on the probe.
+    31) mkdir -p "$d/plugins/zzloopdir"
+        ln -s ../zzloopdir "$d/plugins/zzloopdir/self"
+        [ -L "$d/plugins/zzloopdir/self" ] || return 1
+        [ -d "$d/plugins/zzloopdir/self/self" ] || return 1 ;;
+    33) mkdir -p "$d/scripts/zzsub"
+        printf '#!/bin/sh\n' > "$d/scripts/zzsub/z.sh"
+        chmod 000 "$d/scripts/zzsub"
+        [ -r "$d/scripts/zzsub" ] && return 1
+        : ;;
+    34) printf '#!/bin/sh\n' > "$d/scripts/zzunread.sh"
+        chmod 000 "$d/scripts/zzunread.sh"
+        [ -r "$d/scripts/zzunread.sh" ] && return 1
+        : ;;
+    35) mkdir -p "$d/scripts/zzloopdir"
+        ln -s ../zzloopdir "$d/scripts/zzloopdir/self"
+        [ -d "$d/scripts/zzloopdir/self/self" ] || return 1 ;;
+    36) : > "$d/.github/workflows/model-pins.yml"
+        [ -s "$d/.github/workflows/model-pins.yml" ] && return 1
+        : ;;
+    L1f) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzp1" "$d/plugins/zzp2"
+        printf -- '---\nname: zzl1f\nmodel: inherit\n---\n\n# zzl1f\n' \
+          > "$d/plugins/zzsrc/zzl1f.md"
+        ln -s ../zzsrc "$d/plugins/zzp1/agents"
+        ln -s ../zzsrc "$d/plugins/zzp2/agents"
+        [ -d "$d/plugins/zzp1/agents" ] && [ -d "$d/plugins/zzp2/agents" ] || return 1
+        : ;;
+    # /dev/zero, not a FIFO: both hang `grep -R` identically, and a character
+    # device needs no cleanup and cannot leave a blocked writer behind. The
+    # file is named `.sh` so it is inside leg 4's extension set — the point is
+    # that the extension matches and the TYPE does not.
+    32) [ -c /dev/zero ] || return 1
+        ln -s /dev/zero "$d/scripts/zzdev.sh"
+        [ -L "$d/scripts/zzdev.sh" ] || return 1
+        [ -c "$d/scripts/zzdev.sh" ] || return 1 ;;
+
     24) write_zzcontrol "$d" md ;;
     24b) write_zzcontrol "$d" markdown ;;
 
@@ -411,6 +488,25 @@ ${SS}9c." ;;
         ln -s ../zzl1d-target.md "$d/plugins/cepa/agents/zzl1d.md"
         [ -L "$d/plugins/cepa/agents/zzl1d.md" ] || return 1
         [ -r "$d/plugins/cepa/agents/zzl1d.md" ] || return 1 ;;
+    # The `agents` entry itself is the symlink, so leg 1's DIRECTORY discovery
+    # has to follow it before any file discovery gets a chance.
+    L1e) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzplug"
+        printf -- '---\nname: zzl1e\nmodel: inherit\n---\n\n# zzl1e\n' \
+          > "$d/plugins/zzsrc/zzl1e.md"
+        ln -s ../zzsrc "$d/plugins/zzplug/agents"
+        [ -L "$d/plugins/zzplug/agents" ] || return 1
+        [ -d "$d/plugins/zzplug/agents" ] || return 1 ;;
+    # The plugin directory itself is the symlink — and its target lives OUTSIDE
+    # `plugins/`, so nothing else can reach the file.
+    L2i) mkdir -p "$d/zzplugsrc/commands"
+        cat > "$d/zzplugsrc/commands/zzl2i.md" <<'EOF'
+# zzl2i
+
+Dispatch each reviewer as a generic subagent.
+EOF
+        ln -s ../zzplugsrc "$d/plugins/zzplugin"
+        [ -L "$d/plugins/zzplugin" ] || return 1
+        [ -d "$d/plugins/zzplugin" ] || return 1 ;;
 
     L2) cat > "$d/plugins/cepa/commands/zzl2.md" <<'EOF'
 # zzl2
@@ -512,6 +608,9 @@ cleanup() {
   [ "$KEEP" -eq 1 ] && { printf 'fixtures kept at %s\n' "$TMPROOT"; return; }
   # A failed cleanup used to be silent, so a leaked full-tree copy per run
   # accumulated with nothing to notice it.
+  # Cases 33/34 plant unreadable paths; rm cannot descend into a mode-000
+  # directory, so restore traversal bits first or every run leaks a full tree.
+  chmod -R u+rwX "$TMPROOT" 2>/dev/null
   rm -rf "$TMPROOT" 2>/dev/null || printf 'WARN: fixture leaked at %s\n' "$TMPROOT" >&2
 }
 trap cleanup EXIT INT TERM
@@ -570,11 +669,15 @@ if find "$PRISTINE" -type l -print -quit | grep -q .; then
   exit 2
 fi
 
+# Per-case bound. A case whose regression is a HANG rather than a wrong answer
+# has to fail fast, or the suite hangs with the defect it is testing for.
+case_timeout() { case "$1" in 32) printf 20 ;; *) printf 120 ;; esac; }
+
 CHK_OUT=''; CHK_RC=0; CHK_MISS=''; CHK_WARN=''
-run_checker() {
+run_checker() {  # run_checker <dir> [timeout_seconds]
   # Bounded: a hung checker would otherwise hang the suite and the CI job
   # until the job timeout, with no diagnostic.
-  CHK_OUT=$(cd "$1" && timeout 300 bash "$CHECKER" 2>&1)
+  CHK_OUT=$(cd "$1" && timeout "${2:-120}" bash "$CHECKER" 2>&1)
   CHK_RC=$?
   local verdict
   verdict=$(printf '%s\n' "$CHK_OUT" | grep -oE '^-- [0-9]+ MISS, [0-9]+ WARN --$' | tail -1)
@@ -661,7 +764,7 @@ run_one() {
   cp -a "$PRISTINE" "$dir" || { fail_case "$i" 'could not copy fixture'; return; }
   plant "$id" "$dir" || { fail_case "$i" 'plant step failed or landed as a no-op'; return; }
 
-  if ! run_checker "$dir"; then
+  if ! run_checker "$dir" "$(case_timeout "$id")"; then
     fail_case "$i" 'checker printed no "-- N MISS, M WARN --" verdict line'
     return
   fi
@@ -697,7 +800,7 @@ run_one() {
     a=$(printf '%s\n' "$CHK_OUT" | norm_case24)
     cp -a "$PRISTINE" "$alt" || { fail_case "$i" 'could not copy fixture'; return; }
     plant 24b "$alt" || { fail_case "$i" 'plant step failed (.markdown)'; return; }
-    if ! run_checker "$alt"; then
+    if ! run_checker "$alt" "$(case_timeout "$id")"; then
       fail_case "$i" '.markdown run printed no verdict line'
       return
     fi

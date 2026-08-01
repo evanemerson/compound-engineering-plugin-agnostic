@@ -47,6 +47,13 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Both checks finish in seconds. The bound exists because this job reads
+    # files reachable from an untrusted PR branch, and the default is 360
+    # minutes: a read that blocks (a symlinked device or FIFO — see leg 4's
+    # root loop) would otherwise hold a runner for six hours per push. The
+    # script excludes non-regular files by construction; this is the backstop
+    # for the case that guard is ever weakened.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Policy check first, controls second with `if: always()`. Both always
