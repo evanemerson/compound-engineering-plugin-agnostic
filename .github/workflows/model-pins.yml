@@ -43,6 +43,13 @@ on:
 
 permissions:
   contents: read
+  # For the freshness step only, which reads this repo's own workflow-run
+  # history. Run metadata is not a secret — it is visible to anyone who can
+  # read the repo — so granting it on `pull_request` (where a fork gets a
+  # read-only token) widens nothing that matters. Nothing here writes, and the
+  # step interpolates no event data: the token arrives through `env:` and
+  # `$GITHUB_REPOSITORY` is runner environment, not an expression.
+  actions: read
 
 jobs:
   check:
@@ -67,3 +74,52 @@ jobs:
       - name: Check model-pin checker controls
         if: always()
         run: bash scripts/check-model-pins-controls.sh
+
+      # GitHub disables a `schedule:` workflow after 60 days of repository
+      # inactivity. The disable is SILENT: no run, no notification, no failed
+      # check. The mutation sweep simply stops, its evidence ages out, and
+      # every green run of the two steps above keeps reporting that the
+      # controls are covered — which is the one-layer-up version of exactly
+      # what the sweep exists to catch. So it gets a detector rather than a
+      # comment asking a human to notice an absence.
+      #
+      # It lives HERE, on push/pull_request, and NOT in a second scheduled
+      # workflow: a scheduled heartbeat shares the failure mode it would be
+      # watching for — the same 60-day rule disables both, and the detector
+      # goes quiet together with the thing it detects. A push-triggered check
+      # cannot fire during the silence, and that limit is the honest one: it
+      # reports at the next push, which is the first moment anyone is present
+      # to act on it.
+      #
+      # WARNS, never fails. Sweep freshness is not a property of the PR being
+      # reviewed, and failing unrelated PRs is how a signal gets routed around.
+      # A rename of the sweep workflow lands in the unverified branch below, so
+      # it surfaces as a warning rather than as a quiet pass. The sweep's
+      # cadence and why it is not a PR gate are `cepa:autonomy` §9f.
+      - name: Mutation sweep freshness
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Two missed weekly cycles plus slack. Tight enough that a disable is
+          # noticed inside a fortnight, loose enough that one skipped run is not
+          # a warning.
+          STALE_AFTER_DAYS: 16
+        run: |
+          set -o pipefail
+          if ! out=$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/mutation-sweep.yml/runs?per_page=1" \
+                --jq '.workflow_runs[0].created_at // ""' 2>&1); then
+            printf '::warning::mutation sweep freshness UNVERIFIED (%s) — a renamed or deleted sweep workflow reaches this branch too\n' "$out"
+            exit 0
+          fi
+          if [ -z "$out" ]; then
+            printf '::warning::the mutation sweep has never produced a run. Dispatch it once — that also calibrates its timeout-minutes, which is still an unmeasured 3x of a local figure\n'
+            exit 0
+          fi
+          age=$(( ( $(date -u +%s) - $(date -u -d "$out" +%s) ) / 86400 ))
+          if [ "$age" -gt "$STALE_AFTER_DAYS" ]; then
+            printf '::warning::the mutation sweep last ran %s days ago (%s), past its %s-day bound. A weekly schedule that stops producing runs is what a 60-day inactivity disable looks like — re-enable it in the Actions tab, or dispatch it\n' \
+              "$age" "$out" "$STALE_AFTER_DAYS"
+          else
+            printf 'mutation sweep last ran %s days ago (%s)\n' "$age" "$out"
+          fi
