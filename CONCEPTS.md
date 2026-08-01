@@ -161,8 +161,44 @@ names.
 
 *Avoid:* category-named control, control category.
 
+### Silent pass
+A verification run that reports clean because a failure earlier in the run left
+it with nothing to check, rather than because it checked everything and found
+nothing wrong.
+
+The two are indistinguishable in the output unless the run separates "found no
+problems" from "examined no inputs", so a traversal that could not complete is
+never a pass. The failure mode is self-flattering — it reads as the tool
+working — which is why it survives review that a crash would not.
+
+### Stated limit
+A gap in what a verification tool checks that is recorded openly in the tool
+itself, rather than closed with a check that only looks complete.
+
+A limit earns this treatment when no available fixture can exercise the
+branch in question: the honest record is worth more than a control contrived
+to appear to cover it, because the contrived control makes the gap
+unfindable. Stating the limit keeps "not checked, documented" distinguishable
+from "not checked, silently".
+
+## Fix authoring
+
+### One-layer-down regression
+A fix that removes the reported instance of a defect while re-committing the
+same class of defect in the logic it touches, so the class resurfaces in a new
+form instead of being closed.
+
+Distinguished from a plain regression in that each step is a genuine partial
+improvement, which is what lets the sequence continue unnoticed. The common
+generator is modelling a fix on neighbouring call sites: consistency copies
+whatever those neighbours also fail to do, and when the site being changed is
+the correct outlier, symmetry propagates the omission instead of the fix.
+
+*Avoid:* recursive fix bug, self-reintroducing fix.
+
 ## Flagged ambiguities
 
 - "Detection" and "Prevention" had been used loosely for any recurrence guidance — these are distinct: Prevention is rules for humans and process; Detection is machine-checkable signals for automated reviewers.
 - Duplicated policy prose had been treated as uniformly a defect — it is not: a clause that must sit adjacent to the content it governs (an untrusted-data guard at a relay point) is an instantiation to audit for completeness, not a restatement to consolidate into a citation.
 - An unset model tier on a dispatch had been read as a neutral default — it is not: it resolves to the invoking session's tier, which makes cost a property of the operator's session rather than of the task.
+- Consistency between sibling call sites had been treated as self-evidently good — it is not: when the site being changed is the correct outlier, matching its neighbours adopts their omission, so the direction of the levelling has to be established before the change, not after.
