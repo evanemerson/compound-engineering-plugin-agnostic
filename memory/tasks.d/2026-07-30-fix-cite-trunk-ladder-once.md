@@ -70,6 +70,17 @@ findings #11 and #12 (#12 partially — see below).
   `fix/checker-symlink-traversal-symmetry`, together with the `-L` item below —
   the single change both were deferred toward. Pinned by control case 30.
 
+  **The struck text's own prescription — "Fix is `grep -R`" — was WRONG and
+  did not ship.** `grep -R` opens whatever a symlink points at with no
+  file-type check, so a tracked symlink to `/dev/zero` or a writerless FIFO
+  blocks it forever; on a `pull_request` workflow with no timeout that is one
+  file pinning a runner for hours. Reproduced, and reproduced that plain
+  `grep -r` returns immediately on the same fixture. What shipped instead is
+  `find -L … -type f` discovery — the link is resolved and the TARGET's type
+  tested, so a symlinked regular file is still read while devices, FIFOs and
+  sockets are excluded by construction. Left uncorrected, this line would have
+  handed the hang to the next reader who mined this file for the fix.
+
 - [x] ~~P3 — **land the leg-4 control cases as a runnable artifact**
   (`scripts/check-model-pins-controls.sh`: plant each case, assert the expected
   MISS text, revert).~~ **Shipped 2026-07-31** on
@@ -120,12 +131,19 @@ findings #11 and #12 (#12 partially — see below).
   round 1, finding #16, confidence 60).~~ **Shipped 2026-07-31** on
   `fix/checker-symlink-traversal-symmetry`, alone as §9f requires, with its
   own re-run. Both `find` calls gained `-L`; pinned by control cases L1e and
-  L2i. The widening also created a **new** hazard the residual did not
-  anticipate — a filesystem loop becomes reachable, and GNU find and grep both
-  warn on **stderr**, which every traversal in the checker discards — so the
-  change also added a one-per-construct loop probe (case 31). Line numbers in
-  this item are pre-1.16.0 and no longer resolve; the sites are the two
-  `mapfile ... find` discoveries.
+  L2i. Line numbers in this item are pre-1.16.0 and no longer resolve; the
+  sites are the two `mapfile ... find` discoveries.
+
+  The widening created a hazard the residual did not anticipate: following
+  symlinks makes a filesystem loop reachable, and every traversal in the
+  checker discarded find's stderr. The first fix was a probe that grepped that
+  stderr for the word "loop" — **which review then showed was the wrong
+  shape**: it missed permission errors and ELOOP chains, and reported
+  "filesystem loop" for any unreadable path merely NAMED `ralph-loop`. What
+  shipped is general: every traversal now goes through one helper that reads
+  find's exit status and stderr, and non-empty stderr is a MISS. Keying on
+  emptiness rather than on message text costs nothing and is locale-proof.
+  Pinned by cases 31, 33 and 35.
 
 - [ ] P3 — `docs/plans/` plan shape — **no structural check that a PR's
   `Closes:` claim actually landed as `status:`/`applied_in:`.** U5's stated

@@ -56,6 +56,80 @@ miss() { printf 'MISS %s\n' "$1"; }
 warn() { printf 'WARN %s\n' "$1"; }
 info() { printf 'INFO %s\n' "$1"; }
 
+# Diagnostics in a stable language. The traversal rule below keys on stderr
+# being NON-EMPTY, not on its wording, so detection does not depend on this —
+# but the message we quote should read the same everywhere.
+export LC_ALL=C
+
+# --- traversal ---------------------------------------------------------------
+# EVERY file discovery in this script goes through here, and the reason is a
+# regression this function exists to make impossible.
+#
+# `find` in a process substitution — `while read < <(find ...)` — throws away
+# BOTH the exit status and stderr. When find can walk only part of a tree it
+# prints `Permission denied`, skips that branch, exits 1, and returns a
+# TRUNCATED but non-empty list. Every caller then sees a plausible file list
+# and reports full coverage. Leg 4 used to be immune by accident: it walked
+# with `grep -r`, whose exit 2 the code checked. Rewriting leg 4 to use `find`
+# for symmetry with legs 1-3 adopted their blind spot instead, and an
+# unreadable subtree holding an unpinned agent went from `1 MISS` to
+# `0 MISS, 0 WARN — 5 of 5 roots`: the exact signature of the original leg-4
+# defect, reintroduced by the fix for it.
+#
+# So: a traversal that could not complete is never a pass. Non-empty stderr is
+# the predicate, which is strictly stronger than matching diagnostic text — it
+# covers permission errors, symlink cycles, ELOOP chains, and anything else
+# find learns to complain about, in any locale. This replaced a probe that
+# grepped find's stderr for the word "loop": it missed permission errors and
+# ELOOP entirely, and reported "filesystem loop" for any unreadable path whose
+# NAME contained "loop".
+#
+# STATED LIMIT — the two halves of the predicate are not individually pinned
+# by any control, and cannot be. Measured: every failure a FIXTURE can produce
+# (permission denied, cycle, missing root) sets a non-zero exit AND writes
+# stderr, so a control that removes either half still passes. Both are kept
+# anyway, for the failures a fixture cannot stage: death by signal sets the
+# status with no diagnostic, and a future find could warn at exit 0. Recorded
+# here rather than left looking covered — this is the same "a control suite
+# proves only the branch it exercises" shape the controls file is about, one
+# level down.
+TRAVERSE_FILES=()
+TRAVERSE_ERR=''
+traverse() {  # traverse <find args...> -> TRAVERSE_FILES[]; 1 and TRAVERSE_ERR on failure
+  local _out _err _rc _f
+  TRAVERSE_FILES=()
+  TRAVERSE_ERR=''
+  _out=$(mktemp) || { TRAVERSE_ERR='could not create a temp file'; return 1; }
+  _err=$(mktemp) || { rm -f "$_out"; TRAVERSE_ERR='could not create a temp file'; return 1; }
+  find "$@" -print0 >"$_out" 2>"$_err"
+  _rc=$?
+  if [ "$_rc" -ne 0 ] || [ -s "$_err" ]; then
+    TRAVERSE_ERR="find exit ${_rc}: $(head -1 "$_err")"
+    rm -f "$_out" "$_err"
+    return 1
+  fi
+  while IFS= read -r -d '' _f; do TRAVERSE_FILES+=("$_f"); done < "$_out"
+  rm -f "$_out" "$_err"
+  return 0
+}
+
+# Directory discovery deduplicates by RESOLVED path. With `-L`, a symlinked
+# `agents/` makes the same definitions reachable twice, which inflated
+# `agent definitions checked` — an INFO line the control suite treats as
+# coverage evidence. An inflated denominator is how a real coverage drop reads
+# as normal.
+dedup_resolved() {  # dedup_resolved <path...> -> TRAVERSE_FILES[] unique by realpath
+  local -A _seen=()
+  local _p _r _uniq=()
+  for _p in "$@"; do
+    _r=$(readlink -f -- "$_p" 2>/dev/null) || _r="$_p"
+    [ -n "${_seen[$_r]:-}" ] && continue
+    _seen[$_r]=1
+    _uniq+=("$_p")
+  done
+  TRAVERSE_FILES=("${_uniq[@]+"${_uniq[@]}"}")
+}
+
 # The sanctioned tiers. `inherit` is deliberately absent: it is a choice to
 # spend at the invoking session's tier. So is `fable` — the top tier is
 # reserved for work a person opted into, never for automatic dispatch.
@@ -115,7 +189,13 @@ echo "== cepa model-pin check: $(pwd) =="
 
 # Agent directories are discovered, not hardcoded: a plugin split or a
 # rename must surface as a changed count, never as a quiet zero.
-mapfile -t AGENT_DIRS < <(find -L plugins -type d -name agents 2>/dev/null | sort)
+if ! traverse -L plugins -type d -name agents; then
+  miss "model-pin: agent-directory discovery failed (${TRAVERSE_ERR}) — a tree that could not be walked is not a pass"
+  echo "-- 1 MISS, 0 WARN --"
+  exit 1
+fi
+dedup_resolved "${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}"
+mapfile -t AGENT_DIRS < <(printf '%s\n' "${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}" | grep -v '^$' | sort)
 if [ "${#AGENT_DIRS[@]}" -eq 0 ]; then
   miss "no plugins/*/agents directory found — run from the plugin source repo root"
   echo "-- 1 MISS, 0 WARN --"
@@ -127,6 +207,11 @@ info "agent directories: ${AGENT_DIRS[*]}"
 # -L follows symlinked definitions; a symlink silently skipped is a file
 # nobody checked. Both markdown extensions are matched for the same reason.
 agent_count=0
+if ! traverse -L "${AGENT_DIRS[@]}" \( "${find_name_args[@]}" \) -type f; then
+  miss "model-pin: leg 1 discovery failed (${TRAVERSE_ERR}) — a tree that could not be walked is not a pass"
+  misses=$((misses + 1))
+fi
+LEG1_FILES=("${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}")
 while IFS= read -r f; do
   agent_count=$((agent_count + 1))
 
@@ -165,7 +250,7 @@ while IFS= read -r f; do
         misses=$((misses + 1))
       fi ;;
   esac
-done < <(find -L "${AGENT_DIRS[@]}" \( "${find_name_args[@]}" \) -type f 2>/dev/null | sort)
+done < <(printf '%s\n' "${LEG1_FILES[@]+"${LEG1_FILES[@]}"}" | grep -v '^$' | sort)
 
 if [ "$agent_count" -eq 0 ]; then
   miss "model-pin: agent directories exist but hold no agent definitions — check the path and extensions before trusting this run"
@@ -293,15 +378,25 @@ scan_conditional() {
 # and read as full compliance — verified by dropping one into
 # agents/review/adversarial-reviewer.md and getting 0 MISS, 0 WARN. Scan all
 # markdown under every plugin instead, for leg 1's stated reason.
-mapfile -t SCAN_DIRS < <(find -L plugins -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+if ! traverse -L plugins -mindepth 1 -maxdepth 1 -type d; then
+  miss "model-pin: legs 2-3 discovery failed (${TRAVERSE_ERR}) — a tree that could not be walked is not a pass"
+  misses=$((misses + 1))
+fi
+dedup_resolved "${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}"
+mapfile -t SCAN_DIRS < <(printf '%s\n' "${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}" | grep -v '^$' | sort)
 if [ "${#SCAN_DIRS[@]}" -eq 0 ]; then
   miss "model-pin: no plugins/* directory to scan for dispatch prose"
   misses=$((misses + 1))
 fi
 info "prose scan roots: ${SCAN_DIRS[*]:-none}"
 
-for d in "${SCAN_DIRS[@]}"; do
+for d in "${SCAN_DIRS[@]+"${SCAN_DIRS[@]}"}"; do
   [ -d "$d" ] || continue
+  if ! traverse -L "$d" \( "${find_name_args[@]}" \) -type f; then
+    miss "model-pin: legs 2-3 discovery failed under '${d}' (${TRAVERSE_ERR}) — a tree that could not be walked is not a pass"
+    misses=$((misses + 1)); continue
+  fi
+  DIR_FILES=("${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}")
   while IFS= read -r f; do
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
@@ -331,7 +426,7 @@ for d in "${SCAN_DIRS[@]}"; do
       esac
       misses=$((misses + 1))
     done < <(scan_conditional "$f")
-  done < <(find -L "$d" \( "${find_name_args[@]}" \) -type f 2>/dev/null | sort)
+  done < <(printf '%s\n' "${DIR_FILES[@]+"${DIR_FILES[@]}"}" | grep -v '^$' | sort)
 done
 
 # --- Leg 4: §N<letter> citations resolve ------------------------------------
@@ -355,37 +450,6 @@ done
 # which made the check a property of one file's path.
 CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
 
-# --- filesystem-loop probe -------------------------------------------------
-# SCOPE, stated narrowly on purpose: this reports DIRECTORY CYCLES, and
-# nothing else. Every traversal here follows symlinks (`find -L`), because a
-# symlink silently skipped is a file nobody checked. That makes a cycle
-# reachable, and GNU find handles one by warning on STDERR, skipping the
-# cyclic branch, and exiting 0 — while every traversal in this script sends
-# stderr to /dev/null. So a cycle would silently truncate coverage: the exact
-# failure symlink-following exists to prevent, reintroduced by it.
-#
-# What it does NOT do, so a green run is not read as more than it is:
-#   - it does not bound or preempt the other traversals; it is a separate,
-#     later `find`, so it reports a cycle rather than preventing one
-#   - it is not a hang guard. Devices, FIFOs and sockets are excluded by
-#     `-type f` at every read site instead — see leg 4's root loop
-#   - it matches one English substring of a diagnostic that coreutils does not
-#     promise as an interface, so a translated locale would defeat it. The
-#     script sets no locale; CI runs C.UTF-8
-#
-# Probed ONCE for the construct rather than at each traversal site — the
-# site-by-site version of this rule is what left four sites asymmetric in the
-# first place. CITE_ROOTS contains `plugins`, so it covers what all four legs
-# walk.
-#
-# Broken symlinks are deliberately NOT flagged: `-type f` is false for them and
-# there is no content to check.
-loop_warn=$(find -L $CITE_ROOTS -type d 2>&1 >/dev/null | grep -i 'loop' | head -1)
-if [ -n "$loop_warn" ]; then
-  miss "model-pin: filesystem loop under a scan root — traversal is silently truncated there (${loop_warn})"
-  misses=$((misses + 1))
-fi
-
 # Anchors and qualifiers are matched case-insensitively and lowercased before
 # lookup. `[A-Za-z]+` not `[a-z]`: a single-letter class makes grep -o truncate
 # a two-letter anchor to its first letter, so a typo'd anchor validates against
@@ -408,6 +472,11 @@ declare -A ANCHOR_OWNERS
 declare -A SKILL_NAMES
 skill_files=0
 anchor_count=0
+if ! traverse -L plugins -path '*/skills/*/SKILL.md' -type f; then
+  miss "model-pin: skill-index discovery failed (${TRAVERSE_ERR}) — a tree that could not be walked is not a pass"
+  misses=$((misses + 1))
+fi
+SKILL_FILES=("${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}")
 while IFS= read -r sk; do
   [ -r "$sk" ] || continue
   skill_files=$((skill_files + 1))
@@ -420,7 +489,7 @@ while IFS= read -r sk; do
   done < <(sed $'1s/^\xEF\xBB\xBF//; s/\r$//' "$sk" 2>/dev/null |
     grep -aoE '^### [0-9]+[A-Za-z]+\.' 2>/dev/null |
     sed 's/^### //; s/\.$//' | tr '[:upper:]' '[:lower:]')
-done < <(find -L plugins -path '*/skills/*/SKILL.md' -type f 2>/dev/null | sort)
+done < <(printf '%s\n' "${SKILL_FILES[@]+"${SKILL_FILES[@]}"}" | grep -v '^$' | sort)
 
 if [ "$skill_files" -eq 0 ]; then
   miss "model-pin: no plugins/*/skills/*/SKILL.md found — §N<letter> citation targets unverifiable"
@@ -467,11 +536,23 @@ for r in $CITE_ROOTS; do
     miss "model-pin: leg 4 citation root '${r}' does not exist — coverage shrank silently"
     misses=$((misses + 1)); continue
   fi
-  rfilelist=()
-  while IFS= read -r -d '' _f; do rfilelist+=("$_f"); done < <(
-    find -L "$r" \( "${cite_find_name_args[@]}" \) -type f -print0 2>/dev/null)
-  if [ "${#rfilelist[@]}" -eq 0 ]; then
-    miss "model-pin: leg 4 root '${r}' holds no scannable file (${CITE_EXTS// /, }) — nothing was scanned there"
+  if ! traverse -L "$r" \( "${cite_find_name_args[@]}" \) -type f; then
+    miss "model-pin: leg 4 discovery failed on root '${r}' (${TRAVERSE_ERR}) — a subtree that could not be walked is not a pass"
+    misses=$((misses + 1)); continue
+  fi
+  rfilelist=("${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}")
+  # A non-empty list is not the same as something to read. Zero files means a
+  # renamed directory or a stale extension set; zero BYTES across all of them
+  # means the same thing with extra steps. The guard is also what keeps `grep`
+  # from being called with no file operands, which makes it read STDIN — under
+  # CI that is /dev/null, so the root would report as scanned having scanned
+  # nothing.
+  rbytes=0
+  for _cf in "${rfilelist[@]+"${rfilelist[@]}"}"; do
+    [ -s "$_cf" ] && { rbytes=1; break; }
+  done
+  if [ "${#rfilelist[@]}" -eq 0 ] || [ "$rbytes" -eq 0 ]; then
+    miss "model-pin: leg 4 root '${r}' holds no non-empty scannable file (${CITE_EXTS// /, }) — nothing was scanned there"
     misses=$((misses + 1)); continue
   fi
   # `--` so a file named like an option is a path. The list is bounded by the

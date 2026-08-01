@@ -209,8 +209,8 @@ reg 16 'citation root removed' 1 0 \
   "leg 4 citation root '\\.github' does not exist" '' \
   'kills: removal of the root-existence check, which let a vanished root pass at 0 MISS'
 reg 17 'root present, no file of a scannable extension' 1 0 \
-  "leg 4 root '\\.github' holds no scannable file" '' \
-  'kills: removal of the file-coverage probe'
+  "leg 4 root '\\.github' holds no non-empty scannable file" '' \
+  'kills: removal of the file-coverage probe (case 36 covers its zero-byte half)'
 reg 18 'root present with files but zero citations' 0 0 '' '^MISS ' \
   'false-positive guard: a root may legitimately cite nothing (a copy edit must not fail the build)'
 reg 19 'NUL byte in a leg-4 scanned file' 1 0 "$UNQUAL_9Q" '' \
@@ -227,8 +227,21 @@ reg 29 'no citations anywhere' '+' 0 'checked no .* citation' '' \
   'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass'
 reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" '' \
   'kills: grep -R reverted to -r — grep follows symlinks named on the command line but NOT during recursion'
-reg 31 'a filesystem loop under a scan root is reported' 1 0 'filesystem loop under a scan root' '' \
-  'kills: removal of the loop probe — find and grep skip a cycle and warn on stderr, which every traversal discards'
+reg 31 'a filesystem cycle under `plugins` is reported' 1 0 \
+  'discovery failed .*File system loop detected' '' \
+  'kills: dropping the stderr/exit-status check from leg 1 discovery — find skips a cycle, warns on stderr, and exits 1'
+reg 35 'a filesystem cycle under `scripts` is reported' 1 0 \
+  "leg 4 discovery failed on root 'scripts' .*File system loop detected" '' \
+  'kills: checking traversal status for only SOME roots — case 31 lives under plugins, so leg 4 per-root coverage needs its own case'
+reg 33 'an unreadable SUBTREE under a citation root is reported' 1 0 \
+  "leg 4 discovery failed on root 'scripts' .*Permission denied" '' \
+  'kills: discarding find exit status/stderr — a partial walk returns a truncated non-empty list and reports full coverage'
+reg 34 'an unreadable FILE in a citation root is reported' 1 0 \
+  'leg 4 read failed on root' '' \
+  'kills: removal of the grep exit>1 branch, which is also the only guard against an ARG_MAX exec failure'
+reg 36 'a root whose only scannable files are empty is reported' 1 0 \
+  "leg 4 root '\\.github' holds no non-empty scannable file" '' \
+  'kills: counting listed files instead of readable content — a truncating merge leaves a root that scans nothing'
 # Runs under a SHORT timeout (see CASE_TIMEOUT): the regression this guards is
 # a HANG, not a wrong answer, so the failure has to be bounded or the suite
 # hangs with it.
@@ -256,6 +269,9 @@ reg L1d 'a SYMLINKED agent definition is still checked' 1 0 \
 reg L1e 'a SYMLINKED agents/ directory is still discovered' 1 0 \
   'is not a sanctioned tier' '' \
   'kills: dropping -L from leg 1 AGENT_DIRS discovery — every definition in that directory goes unchecked'
+reg L1f 'one definition reachable through two symlinked agents/ dirs is checked once' 1 0 \
+  'is not a sanctioned tier' '' \
+  'kills: removal of resolved-path dedup — -L makes the same file reachable twice, inflating the coverage counter and double-reporting one defect'
 
 # --- Leg 2: dispatch instructions in prose ---------------------------------
 reg L2 'dispatch instruction with no pin in its block' 0 1 \
@@ -420,6 +436,28 @@ ${SS}9c." ;;
         ln -s ../zzloopdir "$d/plugins/zzloopdir/self"
         [ -L "$d/plugins/zzloopdir/self" ] || return 1
         [ -d "$d/plugins/zzloopdir/self/self" ] || return 1 ;;
+    33) mkdir -p "$d/scripts/zzsub"
+        printf '#!/bin/sh\n' > "$d/scripts/zzsub/z.sh"
+        chmod 000 "$d/scripts/zzsub"
+        [ -r "$d/scripts/zzsub" ] && return 1
+        : ;;
+    34) printf '#!/bin/sh\n' > "$d/scripts/zzunread.sh"
+        chmod 000 "$d/scripts/zzunread.sh"
+        [ -r "$d/scripts/zzunread.sh" ] && return 1
+        : ;;
+    35) mkdir -p "$d/scripts/zzloopdir"
+        ln -s ../zzloopdir "$d/scripts/zzloopdir/self"
+        [ -d "$d/scripts/zzloopdir/self/self" ] || return 1 ;;
+    36) : > "$d/.github/workflows/model-pins.yml"
+        [ -s "$d/.github/workflows/model-pins.yml" ] && return 1
+        : ;;
+    L1f) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzp1" "$d/plugins/zzp2"
+        printf -- '---\nname: zzl1f\nmodel: inherit\n---\n\n# zzl1f\n' \
+          > "$d/plugins/zzsrc/zzl1f.md"
+        ln -s ../zzsrc "$d/plugins/zzp1/agents"
+        ln -s ../zzsrc "$d/plugins/zzp2/agents"
+        [ -d "$d/plugins/zzp1/agents" ] && [ -d "$d/plugins/zzp2/agents" ] || return 1
+        : ;;
     # /dev/zero, not a FIFO: both hang `grep -R` identically, and a character
     # device needs no cleanup and cannot leave a blocked writer behind. The
     # file is named `.sh` so it is inside leg 4's extension set — the point is
@@ -570,6 +608,9 @@ cleanup() {
   [ "$KEEP" -eq 1 ] && { printf 'fixtures kept at %s\n' "$TMPROOT"; return; }
   # A failed cleanup used to be silent, so a leaked full-tree copy per run
   # accumulated with nothing to notice it.
+  # Cases 33/34 plant unreadable paths; rm cannot descend into a mode-000
+  # directory, so restore traversal bits first or every run leaks a full tree.
+  chmod -R u+rwX "$TMPROOT" 2>/dev/null
   rm -rf "$TMPROOT" 2>/dev/null || printf 'WARN: fixture leaked at %s\n' "$TMPROOT" >&2
 }
 trap cleanup EXIT INT TERM
