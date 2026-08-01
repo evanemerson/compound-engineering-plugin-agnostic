@@ -248,19 +248,21 @@ mut l2-nul "$CHK" \
   "  if false; then" \
   'kills: the legs 2-3 NUL probe — one NUL byte makes GNU grep report no matches at exit 0, so every dispatch in the file reads as absent. Expected killer: L2f.'
 
-mut l2-grep-binary "$CHK" \
+survivor l2-grep-binary "$CHK" \
   "hits=\$(grep -naE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)" \
   "hits=\$(grep -nE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)" \
-  'kills: -a on the leg 2 scanning grep. Only observable once the NUL probe above is also gone, so L2f cannot reach it — a control-suite ordering dependency, not coverage.'
+  scripts/check-model-pins.sh:311 \
+  'declared survivor: -a is observable only on a file GNU grep calls binary, and under LC_ALL=C only a NUL does that — which the NUL probe two lines above refuses first. Measured on grep 3.11: 0x80/0xFF/0x01/0x1B with no NUL matches identically with and without -a.'
 
-mut l2-grep-rc "$CHK" \
+survivor l2-grep-rc "$CHK" \
   "  hits=\$(grep -naE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)
   grc=\$?
   if [ \"\$grc\" -gt 1 ]; then printf 'UNREADABLE\n'; return; fi" \
   "  hits=\$(grep -naE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)
   grc=\$?
   if [ \"\$grc\" -gt 9 ]; then printf 'UNREADABLE\n'; return; fi" \
-  'kills: distinguishing grep exit 1 (no matches) from a read error in leg 2. Nothing plants an unreadable file under plugins/ — 33 and 34 plant under scripts/.'
+  scripts/check-model-pins.sh:311 \
+  'declared survivor: leg 2 readability probe reads the whole file first, so this arm never sees an unreadable one. Control L2j plants exactly that fixture and stays GREEN under this mutant while leg 3 identical arm dies to L3f — leg 3 has no probe. The redundancy runs both ways, so neither guard is individually observable.'
 
 mut l2-block-lo "$CHK" \
   "      lo=1; for (i=n-1; i>=1; i--) if (blank[i]) { lo=i+1; break }" \
@@ -425,10 +427,11 @@ mut l4-range-split "$CHK" \
   "  IFS='-' read -r -a parts <<< \"\${rest%%-*}\"" \
   'kills: range expansion past the first hyphen — the second and third endpoints of a range are verified by nothing. Expected killers: 13, 14.'
 
-mut l4-range-inherit "$CHK" \
+survivor l4-range-inherit "$CHK" \
   "      [a-z]*) p=\"\${first_num}\${p}\" ;;" \
   "      [a-z]*) continue ;;" \
-  'kills: inheriting the section NUMBER into a bare-letter range endpoint, so the endpoint is dropped instead of checked. Expected killers: 13, 14.'
+  scripts/check-model-pins.sh:614 \
+  'declared survivor: the arm is unreachable from CITE_RE, which numbers both sides of every hyphen, so no part arriving here can start with a letter. Instrumented and measured at zero firings over this repo entire citation set. Kept as the correct handling for a widened range tail; a control becomes possible the day that widening lands.'
 
 mut l4-qualified-branch "$CHK" \
   "  if [ -n \"\$q\" ] && [ -n \"\${SKILL_NAMES[\"\$q\"]:-}\" ]; then" \

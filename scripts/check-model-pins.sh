@@ -307,6 +307,25 @@ scan_body() {
 
   # grep exit 1 is "no matches"; anything higher is an error we must not
   # read as a clean file.
+  #
+  # STATED LIMIT — neither guard on the grep below (`-a`, and the exit>1 arm)
+  # is reachable by any fixture, because the two probes above run first and
+  # both read the whole file. A mode-000 file is refused by the readability
+  # probe; a file holding a NUL is refused by the NUL probe; and under the
+  # LC_ALL=C this script exports, a NUL is the ONLY thing that makes GNU grep
+  # call a file binary — measured on grep 3.11, where a file carrying
+  # 0x80/0xFF/0x01/0x1B and no NUL matches identically with and without `-a`.
+  # What is left for these two is a file that becomes unreadable BETWEEN a
+  # probe and this line, which no fixture can stage. Both are kept anyway: the
+  # guards are redundant in BOTH directions (delete the readability probe and
+  # the exit>1 arm catches the same file), and a guard that is shadowed today
+  # is the one that matters the day the thing shadowing it moves.
+  #
+  # Leg 3 has no probe of its own, so its identical exit>1 arm IS reachable —
+  # control L3f covers it, and the mutation sweep kills leg 3's arm while
+  # leaving this one standing. That asymmetry is the measurement behind the
+  # comment in scan_conditional: leg 3 must not lean on leg 2 reaching an
+  # unreadable file first.
   hits=$(grep -naE "$DISPATCH_RE" "$f" 2>/dev/null)
   grc=$?
   if [ "$grc" -gt 1 ]; then printf 'UNREADABLE\n'; return; fi
@@ -592,6 +611,14 @@ while IFS= read -r m; do
     [ -n "$p" ] || continue
     case "$p" in
       [0-9]*[a-z]) first_num=$(printf '%s' "$p" | sed 's/[a-z]*$//') ;;
+      # STATED LIMIT — this bare-letter arm is unreachable from CITE_RE, which
+      # requires digits on BOTH sides of every hyphen, so every part arriving
+      # here begins with a digit. Verified by instrumenting the arm and running
+      # the checker over this repo: zero firings across every citation it
+      # found. It is kept because it is the correct handling the moment the
+      # range tail is widened to accept a bare `-d`, and a widening that had to
+      # invent this logic at the same time is precisely how the round-2
+      # extension hole happened. No control can reach it until then.
       [a-z]*) p="${first_num}${p}" ;;
       *) continue ;;
     esac

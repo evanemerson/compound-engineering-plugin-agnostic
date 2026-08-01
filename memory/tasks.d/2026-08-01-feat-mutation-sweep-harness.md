@@ -55,7 +55,21 @@ mutant; and `read_file`'s `;` made its own failure guard dead code. Two were
 reproduced empirically before being fixed. Building a detector for a class does
 not exempt the detector from the class.
 
-- [ ] P1 — **the observer channel ships saturated.** The sweep exits 1 on its
+- [x] **RESOLVED 2026-08-01 — option (b): land the fixes first.** The operator
+  chose to close the gaps before merging rather than add a tracked known-gaps
+  list, on the ground that (a) buys a third survivor category that would want
+  deleting a week later, while two categories both meaning "expected" is the
+  ambiguity §9f's no-relabel rule exists to prevent. The tension the plan
+  raised ("a detection change and the thing it detects must not hide each
+  other") was discharged by DISCIPLINE rather than by sequencing: the exit-3
+  change landed first, and `run-mutation-sweep.sh` and `registry.sh` were then
+  byte-identical across the control commit, so every flip is attributable to a
+  control. The two can only hide each other if both move.
+  Consequence, accepted: the 21 fixes landed on `feat/mutation-sweep-harness`
+  itself rather than a fresh branch, and the merge plus the timeout
+  calibration moved to the end of the work.
+
+- [ ] ~~P1 — **the observer channel ships saturated.**~~ The sweep exits 1 on its
   first full run, so the weekly job is red from day one and its issue carries
   21 known items before it carries a new one. The workflow's own comment
   justifies `failure()` over `always()` because "an issue opened on a green run
@@ -72,14 +86,34 @@ not exempt the detector from the class.
   and the thing it detects must not hide each other" rule argues against.
   (review finding #25, confidence 90.)
 
-- [ ] P2 — **the `schedule:` off-switch is documented but not detected.**
+- [x] **RESOLVED 2026-08-01 — detector in the PR gate, not a second schedule.**
+  A scheduled heartbeat shares the failure mode it would be watching for: the
+  same 60-day inactivity rule disables both, so the detector goes quiet
+  together with the thing it detects. The check lives in `model-pins.yml`
+  (push + pull_request), reads the sweep workflow's own run history through
+  `actions: read`, and WARNS — freshness is not a property of the PR under
+  review, and failing unrelated PRs is how a signal gets routed around. Stated
+  limit: it cannot fire DURING the silence, only at the next push, which is
+  the first moment anyone is present to act. A renamed or deleted sweep
+  workflow lands in the UNVERIFIED branch, so it warns rather than passing
+  quietly.
+
+- [ ] ~~P2 — **the `schedule:` off-switch is documented but not detected.**~~
   GitHub disables scheduled workflows after 60 days of repository inactivity;
   the only mitigation is a comment telling a human to notice an absent run.
   This is the one-layer-up version of what the sweep solves. Right-sized fix is
   a judgment call: a second cheap workflow asserting "mutation-sweep completed
   within ~9 days", or an external dead-man's switch. (finding #26, confidence 90.)
 
-- [ ] P3 — **a filtered run that passes exits 0.** `--mutants X` prints the
+- [x] **RESOLVED 2026-08-01 — `exit 3`, with `--partial-ok`.** Taken despite
+  the plan having sanctioned the banner specifically: prose in the middle of a
+  report is invisible to `set -e` and to every caller reading `$?`, so a
+  subset run was green by construction. Exit 3 rather than folding into 1,
+  because a subset that found nothing is not a finding and a caller that
+  cannot tell those apart learns to ignore both. The weekly workflow never
+  filters, so CI is unaffected.
+
+- [ ] ~~P3 — **a filtered run that passes exits 0.**~~ `--mutants X` prints the
   PARTIAL banner and exits 0; the banner is prose in the middle of a report CI
   consumes. Any future step running a subset is green by construction — and a
   per-PR fast path is explicitly discussed and rejected in both headers, which
@@ -87,57 +121,99 @@ not exempt the detector from the class.
   `--partial-ok`; deferred because the plan sanctioned the banner specifically
   and the exit code affects any caller. (finding #27, confidence 90.)
 
-- [ ] P3 — **`scannable_in` is still a second source of truth for
-  `CITE_EXTS`.** Reduced from four copies to two and now documented accurately,
-  but not derived. Sourcing the checker's variable couples the files in the
-  other direction; the isolation may be worth the duplication.
-  (finding #28, confidence 62.)
+- [x] **RESOLVED 2026-08-01 — keep the isolation, and it is the mechanism, not
+  the debt.** `ext-cite-yaml` sabotages `CITE_EXTS` in the CHECKER. Had
+  `scannable_in()` derived its list from there, the sabotage would propagate
+  into the control, the control would agree with it, and the mutant would be
+  uncatchable BY CONSTRUCTION. The second copy is what makes divergence
+  detectable. Closing `ext-cite-yaml` with control 37 is the proof.
+  (finding #28, confidence 62 — closed against the sweep, not against the
+  argument.)
 
 ### Open
 
-- [ ] P2 — **21 of 63 mutants are `SURVIVED-UNDECLARED`: real gaps in the
-  control suite.** The sweep exits 1 on its first full run, so the weekly job
-  is red from day one and its failure-issue channel carries 21 known items
-  before it carries a new one. Per the plan these are residuals, not additions
-  to this branch (a detection change and the thing it detects must not hide
-  each other), and per §9f they must not be relabelled as declared survivors —
-  a declared survivor cites a *recorded stated limit*, and open work is not
-  one. **The list, by construct:**
+- [x] **RESOLVED 2026-08-01 — 18 closed by controls, 3 were never gaps.**
+  18 new controls now cover 18 of the 21; each was verified individually by
+  re-running the sweep for its own mutant and watching
+  `SURVIVED-UNDECLARED -> CAUGHT`. `l1-nomodel-count` is covered twice (L1i and
+  L1j), which is why 18 controls close 18 mutants and not 18-for-18 by name.
 
-  | Mutant | Construct with no control behind it |
-  |---|---|
-  | `ext-cite-yaml` | leg 4's `.yaml` extension — case 28 uses `.yml` only |
-  | `tier-fable` | `fable` admitted to the leg-1 tier set (L3c only reaches `tier_rank`) |
-  | `l1-unreadable` | leg 1's per-file readability guard — 33/34 plant under `scripts/` |
-  | `l1-bom` | BOM/CRLF normalization before frontmatter parsing |
-  | `l1-awk-nofm` | the no-frontmatter-at-all guard |
-  | `l1-awk-close` | the frontmatter closing-delimiter exit |
-  | `l1-value-comment` | inline-comment stripping in a `model:` value |
-  | `l1-value-lowercase` | lowercasing the leg-1 value (case 8 is leg 4) |
-  | `l1-tier-exact` | `grep -qx` — the value becomes a substring pattern |
-  | `l1-nomodel-count` | the miss COUNT for a missing `model:` key |
-  | `l2-grep-binary` | `-a` on leg 2's scanning grep (unreachable while the NUL probe stands) |
-  | `l2-grep-rc` | leg 2's grep read-error arm — nothing plants an unreadable file under `plugins/` |
-  | `l3-grep-rc` | leg 3's own read-error arm |
-  | `l3-marker-boundary` | the left word boundary on `interactive=` |
-  | `l4-index-anchored` | the `^` anchor when building the heading index |
-  | `l4-index-bom` | BOM/CRLF normalization when building the heading index |
-  | `l4-index-lowercase` | lowercasing the INDEX side of the anchor lookup (case 12 is the citation side) |
-  | `l4-skillfiles-zero` | the zero-SKILL.md guard |
-  | `l4-qual-dash` | leading-dash qualifier blanking (case 5 kills the round-1 delimiter defect instead) |
-  | `l4-range-inherit` | inheriting the section number into a bare-letter range endpoint |
-  | `v-miss-prefix` | the `MISS ` line prefix — counts and exit code are unchanged |
+  **THREE OF THE 21 WERE NOT HOLES IN THE CONTROLS.** They are unreachable by
+  any fixture, measured rather than argued, and are now `survivor()` entries
+  against `STATED LIMIT` text recorded at their sites:
+
+  | Mutant | Why no control can exist | Limit |
+  |---|---|---|
+  | `l2-grep-binary` | `-a` is observable only on a file GNU grep calls binary; under the `LC_ALL=C` the checker exports, only a NUL does that, and the NUL probe two lines above refuses the file first. Measured on grep 3.11: `0x80/0xFF/0x01/0x1B` with no NUL matches identically with and without `-a` | `check-model-pins.sh:311` |
+  | `l2-grep-rc` | leg 2's readability probe reads the whole file before this arm runs. Control L2j plants exactly that fixture and stays GREEN under the mutant, while leg 3's identical arm dies to L3f — leg 3 has no probe. The guards are redundant in both directions, so neither is individually observable | `check-model-pins.sh:311` |
+  | `l4-range-inherit` | the bare-letter arm is unreachable from `CITE_RE`, which numbers both sides of every hyphen. Instrumented and measured at **zero firings** across every citation in this repo | `check-model-pins.sh:614` |
+
+  This is the distinction §9f's no-relabel rule turns on, and it was applied in
+  the direction the rule intends: a declared survivor cites a limit, and open
+  work is not one — but a construct **no fixture can reach** is a limit, not
+  open work, and the existing `t-rc-half`/`t-err-half` pair is the same shape
+  ("kept for the failures a fixture cannot stage"). The evidence is a
+  measurement at each site, not a judgement.
+
+  `l2-grep-rc` is the one that had to be *discovered*: it was written up as a
+  real gap, a control was built for it, and the control passed under the
+  mutant. The fixture is kept — L2j is now the only case covering leg 2's
+  readability probe, a construct **no mutant sabotages**, which is §9f's
+  stated ceiling ("a construct nobody thought to sabotage reports as covered")
+  showing up in the registry rather than in the suite.
+
+  **The original list, by construct:**
+
+  | Mutant | Construct that had no control behind it | Now |
+  |---|---|---|
+  | `ext-cite-yaml` | leg 4's `.yaml` extension — case 28 uses `.yml` only | 37 |
+  | `tier-fable` | `fable` admitted to the leg-1 tier set (L3c only reaches `tier_rank`) | L1p |
+  | `l1-unreadable` | leg 1's per-file readability guard — 33/34 plant under `scripts/` | L1g |
+  | `l1-bom` | BOM/CRLF normalization before frontmatter parsing | L1h |
+  | `l1-awk-nofm` | the no-frontmatter-at-all guard | L1i |
+  | `l1-awk-close` | the frontmatter closing-delimiter exit | L1j |
+  | `l1-value-comment` | inline-comment stripping in a `model:` value | L1k |
+  | `l1-value-lowercase` | lowercasing the leg-1 value (case 8 is leg 4) | L1m |
+  | `l1-tier-exact` | `grep -qx` — the value becomes a substring pattern | L1n |
+  | `l1-nomodel-count` | the miss COUNT for a missing `model:` key | L1i + L1j |
+  | `l2-grep-binary` | `-a` on leg 2's scanning grep (unreachable while the NUL probe stands) | **declared** |
+  | `l2-grep-rc` | leg 2's grep read-error arm — nothing plants an unreadable file under `plugins/` | **declared** |
+  | `l3-grep-rc` | leg 3's own read-error arm | L3f |
+  | `l3-marker-boundary` | the left word boundary on `interactive=` | L3g |
+  | `l4-index-anchored` | the `^` anchor when building the heading index | 40 |
+  | `l4-index-bom` | BOM/CRLF normalization when building the heading index | 41 |
+  | `l4-index-lowercase` | lowercasing the INDEX side of the anchor lookup (case 12 is the citation side) | 42 |
+  | `l4-skillfiles-zero` | the zero-SKILL.md guard | 38 |
+  | `l4-qual-dash` | leading-dash qualifier blanking (case 5 kills the round-1 delimiter defect instead) | 39 |
+  | `l4-range-inherit` | inheriting the section number into a bare-letter range endpoint | **declared** |
+  | `v-miss-prefix` | the `MISS ` line prefix — counts and exit code are unchanged | V1 |
 
   Note the shape: **11 of 21 are leg 1 or the shared frontmatter/value
   sanitizers**, which is the mirror image of the first control-suite cut
   putting 22 of 26 cases on leg 4. The construct-based enumeration found what
   incident-based authoring could not.
 
-- [ ] P3 — **`timeout-minutes: 120` is unmeasured on a hosted runner.** Local
-  end-to-end: 63 mutants in 42 min (~40s each — the control suite's own 30.1s
-  plus a tree copy and restore per mutant). The bound is ~3x the local figure.
-  U3's verify item is one `workflow_dispatch` run measured on CI before the
-  number is trusted; it cannot run until the workflow is on the default branch.
+- [ ] P2 — **the timeout bound is now measured against a LARGER suite.** The
+  control suite went 57 → 75 cases, and its own runtime 30.1s → 40.3s, so the
+  local sweep moves from ~42 min to ~50. The declared bounds (job 180, step
+  150) still hold locally with margin, but they remain ~3x an unvalidated
+  LOCAL figure and the margin just shrank by a fifth. The one
+  `workflow_dispatch` run that calibrates them is still owed, and it is now
+  the *first* thing to do after merge rather than a nice-to-have — a suite
+  that grows every time a gap is closed will reach the bound eventually, and
+  the failure mode is a CANCELLED job, which `failure()` does not catch.
+  (The workflow's own comment already anticipates this: "Recalibrate whenever
+  the registry grows materially." The registry did not grow; the suite each
+  mutant runs did, which is the same arithmetic from the other side.)
+
+- [ ] P3 — **the registry has no mutant for leg 2's readability probe.**
+  Discovered by building L2j: the probe is the construct that actually catches
+  an unreadable file in leg 2, and nothing sabotages it. Adding one would not
+  help — the exit>1 arm backs the probe up, so a probe-only mutant survives
+  too, and the pair would become a fourth and fifth declared survivor of the
+  `t-rc-half` shape. Recorded rather than fixed: the honest description is
+  that leg 2 has THREE redundant guards of which only the NUL check is
+  individually observable, and §9f's ceiling paragraph is where that lives.
 
 - [ ] P3 — **nothing machine-checks that a `SURVIVOR` declaration is
   *honest*.** The driver verifies the cited `<file>:<line>` still carries the
