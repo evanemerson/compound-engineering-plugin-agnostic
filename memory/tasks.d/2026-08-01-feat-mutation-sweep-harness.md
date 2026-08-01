@@ -44,6 +44,55 @@ controls 17/36 fix that adding a second workflow file required.
   survivor that starts being caught is a FAIL" given a name so it can be
   printed and selftested.
 
+### From the 2026-08-01 six-agent review (`todos/review-2026-08-01-123412.md`)
+
+28 findings — 8 P1, 11 P2, 9 P3; 24 applied in `6fff3ca`, 4 deferred below.
+**Three of the P1s were self-inflicted instances of the defect class this
+harness exists to catch**, which is the durable lesson of this branch: the
+`tee sweep.log` collision meant the workflow could never have completed a run;
+a control that could not be SET UP was credited as a control that CAUGHT the
+mutant; and `read_file`'s `;` made its own failure guard dead code. Two were
+reproduced empirically before being fixed. Building a detector for a class does
+not exempt the detector from the class.
+
+- [ ] P1 — **the observer channel ships saturated.** The sweep exits 1 on its
+  first full run, so the weekly job is red from day one and its issue carries
+  21 known items before it carries a new one. The workflow's own comment
+  justifies `failure()` over `always()` because "an issue opened on a green run
+  is noise that trains the reader to ignore the channel" — a channel that is
+  red every week does the same thing faster. Week N+1's 22nd survivor arrives
+  as one row inside a comment that has read "the same 21" for months.
+  **Needs an operator decision.** §9f forbids relabelling a real gap as a
+  declared survivor (that cites a *recorded stated limit*, and open work is not
+  one). A third category — a tracked known-gaps list the driver subtracts, so a
+  red run means something NEW — is the adversarial reviewer's proposal; unlike
+  the mutant→control mapping the plan killed, its staleness is detectable (a
+  listed gap that starts being caught can be reported). The alternative is to
+  land the 21 fixes first so day one is green, which the "a detection change
+  and the thing it detects must not hide each other" rule argues against.
+  (review finding #25, confidence 90.)
+
+- [ ] P2 — **the `schedule:` off-switch is documented but not detected.**
+  GitHub disables scheduled workflows after 60 days of repository inactivity;
+  the only mitigation is a comment telling a human to notice an absent run.
+  This is the one-layer-up version of what the sweep solves. Right-sized fix is
+  a judgment call: a second cheap workflow asserting "mutation-sweep completed
+  within ~9 days", or an external dead-man's switch. (finding #26, confidence 90.)
+
+- [ ] P3 — **a filtered run that passes exits 0.** `--mutants X` prints the
+  PARTIAL banner and exits 0; the banner is prose in the middle of a report CI
+  consumes. Any future step running a subset is green by construction — and a
+  per-PR fast path is explicitly discussed and rejected in both headers, which
+  is exactly the pressure that produces one later. Proposed `exit 3` unless
+  `--partial-ok`; deferred because the plan sanctioned the banner specifically
+  and the exit code affects any caller. (finding #27, confidence 90.)
+
+- [ ] P3 — **`scannable_in` is still a second source of truth for
+  `CITE_EXTS`.** Reduced from four copies to two and now documented accurately,
+  but not derived. Sourcing the checker's variable couples the files in the
+  other direction; the isolation may be worth the duplication.
+  (finding #28, confidence 62.)
+
 ### Open
 
 - [ ] P2 — **21 of 63 mutants are `SURVIVED-UNDECLARED`: real gaps in the
