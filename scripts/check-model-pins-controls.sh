@@ -363,14 +363,47 @@ EOF
 # cannot hold a NUL, so grepping for one is grepping for the empty pattern.
 has_nul() { [ "$(tr -d '\000' < "$1" | wc -c)" -ne "$(wc -c < "$1")" ]; }
 
-# Every file under a directory that leg 4 would scan, by its extension set.
-# Cases 17 and 36 assert something about a whole ROOT, so they need all of
-# them: a case that neutralizes one file BY NAME stops being that case the
-# moment a sibling is added, and its failure mode is a clean PASS.
-scannable_in() {  # scannable_in <dir> [extra find predicates...]
-  local dir="$1"; shift
-  find "$dir" -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.sh' \
-    -o -name '*.yml' -o -name '*.yaml' \) "$@" 2>/dev/null
+# Every file under one or more directories that leg 4 would scan, by its
+# extension set. Cases 17, 29 and 36 all assert something about whole ROOTS, so
+# they need all of them: a case that neutralizes one file BY NAME stops being
+# that case the moment a sibling is added, and its failure mode is a clean PASS.
+#
+# `-L` mirrors leg 4's own discovery idiom (`find -L ... -type f`). Without it,
+# a symlinked `.yml` under a root is invisible here while the checker still
+# reads it — so a post-plant assertion would pass while the root stayed
+# covered, and the case would go red for a reason that has nothing to do with
+# the checker.
+#
+# THE EXTENSION LIST IS A SECOND COPY of `CITE_EXTS` in check-model-pins.sh:525
+# (`$MD_EXTS sh yml yaml`), and it is not derived from it. What actually
+# happens when they diverge, stated correctly because the previous wording here
+# claimed a mechanism the code does not have: an extension added to CITE_EXTS
+# and not here does NOT fail the plant — this helper simply cannot see such a
+# file, so the post-assertion passes and `plant` returns 0. It surfaces one
+# step later as a failed CASE (the root stays covered, so 17/36's expected MISS
+# never appears), and only when a file of that extension exists under the root
+# at the time. Red either way, never a quiet pass — but the failure names the
+# case, not the divergence, so keep this list in step with CITE_EXTS by hand.
+scannable_in() {  # scannable_in <dir>... ; extra find predicates after a `--`
+  local dirs=() pred=()
+  while [ $# -gt 0 ]; do
+    case "$1" in --) shift; pred=("$@"); break ;; *) dirs+=("$1") ;; esac
+    shift
+  done
+  find -L "${dirs[@]}" -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.sh' \
+    -o -name '*.yml' -o -name '*.yaml' \) "${pred[@]+"${pred[@]}"}" 2>/dev/null
+}
+
+# `scannable_in` sends find's stderr to /dev/null and is read through `$(...)`,
+# so a missing or unreadable directory yields empty output at a NON-ZERO exit —
+# byte-identical to "the plant worked, nothing scannable is left". A
+# post-assertion that only tests emptiness therefore reads a broken fixture as a
+# successful plant, which is the documented signal these two cases were rewritten
+# to escape in the first place. Capture the status and require BOTH.
+scannable_gone() {  # scannable_gone <dir>... ; extra find predicates after a `--`
+  local left rc
+  left=$(scannable_in "$@"); rc=$?
+  [ "$rc" -eq 0 ] && [ -z "$left" ]
 }
 
 plant() {
@@ -410,7 +443,7 @@ ${SS}9c." ;;
     # as a failed plant rather than as a quiet pass.
     17) [ -n "$(scannable_in "$d/.github")" ] || return 1
         while IFS= read -r p; do mv "$p" "$p.txt" || return 1; done < <(scannable_in "$d/.github")
-        [ -z "$(scannable_in "$d/.github")" ] || return 1
+        scannable_gone "$d/.github" || return 1
         : ;;
     # A sed that matches nothing exits 0. Assert the plant actually landed:
     # README.md's lettered citations must exist before and be gone after, or
@@ -438,9 +471,11 @@ ${SS}9c." ;;
     # to check at all.
     29) before=$(grep -rc "$SS" "$d/README.md" || true)
         [ "${before:-0}" -gt 0 ] || return 1
-        find "$d/plugins" "$d/.github" "$d/scripts" -type f \
-          \( -name '*.md' -o -name '*.markdown' -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' \) \
-          -exec sed -i "s/${SS}/S-/g" {} +
+        # Routed through scannable_in so the extension set lives in ONE place
+        # in this file. A private fourth copy here was missed by the same diff
+        # that added the helper — the duplicated-literal signal, live.
+        while IFS= read -r p; do sed -i "s/${SS}/S-/g" "$p" || return 1
+        done < <(scannable_in "$d/plugins" "$d/.github" "$d/scripts")
         sed -i "s/${SS}/S-/g" "$d/CLAUDE.md" "$d/README.md" ;;
 
     # The target sits at the fixture root, which is NOT a citation root, so the
@@ -472,7 +507,7 @@ ${SS}9c." ;;
         [ -d "$d/scripts/zzloopdir/self/self" ] || return 1 ;;
     36) [ -n "$(scannable_in "$d/.github")" ] || return 1
         while IFS= read -r p; do : > "$p" || return 1; done < <(scannable_in "$d/.github")
-        [ -z "$(scannable_in "$d/.github" -size +0c)" ] || return 1
+        scannable_gone "$d/.github" -- -size +0c || return 1
         : ;;
     L1f) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzp1" "$d/plugins/zzp2"
         printf -- '---\nname: zzl1f\nmodel: inherit\n---\n\n# zzl1f\n' \
@@ -732,6 +767,11 @@ expected_rc() {  # expected_rc <expect_misses> <expect_warns>
 # ---------------------------------------------------------------------------
 printf '== control suite for %s ==\n' "$CHECKER"
 if ! run_checker "$PRISTINE" || [ "$CHK_MISS" != 0 ] || [ "$CHK_WARN" != 0 ] || [ "$CHK_RC" -ne 0 ]; then
+  # BASELINE-ABORT is a machine token PARSED BY scripts/run-mutation-sweep.sh.
+  # It precedes the prose deliberately: the sweep used to grep this sentence,
+  # so an ordinary copy edit here would have made a re-anchorable mutant report
+  # as a broken environment. Change the token only together with that parser.
+  printf 'BASELINE-ABORT dirty\n'
   printf 'FATAL: baseline is not clean — every case expectation is a delta from it,\n'
   printf '       so a dirty baseline makes the whole suite meaningless.\n'
   printf '       If the lines below name files in this repo, they are REAL policy\n'
@@ -749,6 +789,7 @@ printf '%s\n' "$CHK_OUT" | grep -qE 'citations checked: [1-9]'         || baseli
 printf '%s\n' "$CHK_OUT" | grep -qE '[1-9][0-9]* anchors defined by [1-9]' || baseline_bad="${baseline_bad}anchors/skills "
 printf '%s\n' "$CHK_OUT" | grep -qE 'across ([1-9][0-9]*) of \1 roots'  || baseline_bad="${baseline_bad}roots-scanned "
 if [ -n "$baseline_bad" ]; then
+  printf 'BASELINE-ABORT zero-coverage\n'
   printf 'FATAL: baseline reports zero coverage in: %s\n' "$baseline_bad"
   printf '       A clean run over nothing is not a clean run.\n\n'
   printf '%s\n' "$CHK_OUT"
@@ -759,8 +800,9 @@ printf 'baseline: 0 MISS, 0 WARN, exit 0; %s tracked files; coverage counters no
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
-passed=0; failed=0; ran=0
+passed=0; failed=0; ran=0; errored=0
 FAILED_IDS=''
+ERRORED_IDS=''
 
 selected() {
   [ -z "$ONLY" ] && return 0
@@ -779,13 +821,33 @@ fail_case() {  # fail_case <index> <reason>
   FAILED_IDS="${FAILED_IDS}${IDS[$i]} "
 }
 
+# A case that could not be SET UP is not a case that failed its assertion, and
+# the two must not share a token. `FAIL  <id>` is parsed by
+# scripts/run-mutation-sweep.sh as "a control went red", i.e. as a mutant kill;
+# a fixture copy or a plant that no-ops means the control never ran at all.
+# Reproduced before this split: simulating one ENOSPC fixture copy flipped a
+# genuinely-surviving mutant from SURVIVED-UNDECLARED/exit 1 to CAUGHT/exit 0 —
+# an environment failure re-entering as a verdict, which is exactly what
+# `cepa:autonomy` §9f's HARNESS-ERROR row exists to forbid.
+#
+# PARSED BY scripts/run-mutation-sweep.sh — the `ERROR  ` prefix and the
+# `-- N setup errors --` line below are a machine contract, not prose. Change
+# them only together with that file's classifier.
+error_case() {  # error_case <index> <reason>
+  local i="$1"
+  printf 'ERROR %-4s %s\n' "${IDS[$i]}" "${TITLES[$i]}"
+  printf '        setup failed, so this control never ran: %s\n' "$2"
+  errored=$((errored + 1))
+  ERRORED_IDS="${ERRORED_IDS}${IDS[$i]} "
+}
+
 run_one() {
   local i="$1" id="${IDS[$1]}" title="${TITLES[$1]}" exp_rc
   local dir="$TMPROOT/case-$id"
   ran=$((ran + 1))
 
-  cp -a "$PRISTINE" "$dir" || { fail_case "$i" 'could not copy fixture'; return; }
-  plant "$id" "$dir" || { fail_case "$i" 'plant step failed or landed as a no-op'; return; }
+  cp -a "$PRISTINE" "$dir" || { error_case "$i" 'could not copy fixture'; return; }
+  plant "$id" "$dir" || { error_case "$i" 'plant step failed or landed as a no-op'; return; }
 
   if ! run_checker "$dir" "$(case_timeout "$id")"; then
     fail_case "$i" 'checker printed no "-- N MISS, M WARN --" verdict line'
@@ -821,8 +883,8 @@ run_one() {
   if [ "$id" = 24 ]; then
     local alt="$TMPROOT/case-24-markdown" a b
     a=$(printf '%s\n' "$CHK_OUT" | norm_case24)
-    cp -a "$PRISTINE" "$alt" || { fail_case "$i" 'could not copy fixture'; return; }
-    plant 24b "$alt" || { fail_case "$i" 'plant step failed (.markdown)'; return; }
+    cp -a "$PRISTINE" "$alt" || { error_case "$i" 'could not copy fixture'; return; }
+    plant 24b "$alt" || { error_case "$i" 'plant step failed (.markdown)'; return; }
     if ! run_checker "$alt" "$(case_timeout "$id")"; then
       fail_case "$i" '.markdown run printed no verdict line'
       return
@@ -858,7 +920,19 @@ if [ -n "$ONLY" ]; then
   printf '\n** PARTIAL RUN — only %s ran; %d of %d controls were not exercised **\n' \
     "$ONLY" "$(( ${#IDS[@]} - ran ))" "${#IDS[@]}"
 fi
+# Emitted BEFORE the trailer and on every run, zero included, so a consumer can
+# tell "no setup errors" from "this suite is too old to report them". A control
+# that could not be set up is not evidence about the checker in either
+# direction, so it is never folded into passed/failed.
+printf '\n-- %d setup errors --\n' "$errored"
+if [ "$errored" -gt 0 ]; then
+  printf 'ERROR: %d control(s) could not be set up, so this run is not evidence about\n' "$errored"
+  printf '       the checker. Errored: %s\n' "$ERRORED_IDS"
+fi
 printf '\n-- %d/%d controls passed --\n' "$passed" "$ran"
+if [ "$errored" -gt 0 ]; then
+  exit 1
+fi
 if [ "$failed" -gt 0 ]; then
   printf 'FAIL: the checker no longer behaves the way its record claims. Failed: %s\n' "$FAILED_IDS"
   exit 1

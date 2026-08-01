@@ -5,16 +5,11 @@ name: mutation-sweep
 # green sweep does and does not prove is stated in the sweep's own report
 # header and in `cepa:autonomy` §9f — read it there.
 #
-# DELIBERATELY NOT A PR CHECK, and deliberately not path-filtered either —
-# it is not a gate at all. The control suite can only develop holes when the
-# checker or the controls change, which is rare, so a per-PR run would mostly
-# re-prove the previous answer. Everything a per-PR fast path needed (a
-# hand-maintained mutant-to-control mapping, subset plumbing, a timing gate)
-# was cost paid only to make that redundant run affordable, and the mapping
-# was a second list to keep in sync whose staleness the design could not
-# detect. This is the opposite trade from model-pins.yml next door, and both
-# are deliberate: that job is a seconds-long gate on every PR, this one is a
-# weekly audit of that gate's evidence.
+# Deliberately not a PR check and not path-filtered — it is not a gate at all.
+# `cepa:autonomy` §9f owns why; do not restate it here. What is local to this
+# file: the trade is the opposite of model-pins.yml next door, which is a
+# seconds-long gate on every PR, where this is a weekly audit of that gate's
+# evidence.
 #
 # Security: this workflow interpolates NO event data (no github.event fields,
 # no inputs) into any run: step. The GITHUB_* variables read below are runner
@@ -38,6 +33,16 @@ name: mutation-sweep
 # after 60 days of repository inactivity, and scheduled runs fire only on the
 # default branch. Use the workflow_dispatch button if a week goes by with no
 # run recorded.
+# One sweep at a time. Both triggers can fire together — the header below
+# invites pressing the dispatch button when a week goes by with no run, and a
+# run can take over an hour — and the failure step does read-then-act on a
+# single shared issue with no lock, so two concurrent runs can each see no open
+# issue and each create one. `cancel-in-progress: false` on purpose: killing an
+# hour-long sweep because someone pressed the button is worse than queueing.
+concurrency:
+  group: mutation-sweep
+  cancel-in-progress: false
+
 on:
   schedule:
     # Weekly, Monday early UTC. An off-the-hour minute: GitHub delays cron jobs
@@ -52,15 +57,18 @@ permissions:
 jobs:
   sweep:
     runs-on: ubuntu-latest
-    # Each mutant costs one full control-suite run. Measured end to end on the
-    # first full local run: 63 mutants in 42 min, ~40s each — slower than the
-    # control suite's own 30.1s because each mutant also pays a tree copy and a
-    # restore. Hosted runners are slower again at what dominates this workload
-    # (full-tree copies, thousands of process spawns), so this bound is roughly
-    # 3x the local measurement rather than a target. It has NOT yet been
-    # measured on a hosted runner; the first workflow_dispatch run is what
-    # calibrates it, tracked in memory/tasks.d/.
-    timeout-minutes: 120
+    # Each mutant costs one full control-suite run — measured locally at ~40s
+    # each, the control suite's own ~30s plus a tree copy and a restore. The
+    # registry's size is deliberately not restated here: it changes, and a
+    # stale count next to a timeout is how the budget silently stops matching
+    # the work. Recalibrate whenever the registry grows materially.
+    #
+    # The JOB bound must exceed the sweep step's, and the step bound is what
+    # should trip first: a job that hits its own limit is CANCELLED, and a
+    # cancelled job's steps do not run — including the observer below. Not yet
+    # measured on a hosted runner; the first workflow_dispatch run calibrates
+    # both, tracked in memory/tasks.d/.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -70,42 +78,69 @@ jobs:
       - name: Mutation sweep classifier selftest
         run: bash scripts/run-mutation-sweep.sh --selftest
 
+      # `$RUNNER_TEMP`, never the workspace. `run:` steps execute in
+      # $GITHUB_WORKSPACE, which IS the checkout — so `tee sweep.log` created an
+      # untracked file in the repo root before the sweep reached its own
+      # quiescence gate, and the gate then refused to run under CI on a dirty
+      # tree. Reproduced: `FATAL: the tree is dirty under CI ... ?? sweep.log`,
+      # exit 2, zero mutants, every week. `--allow-dirty` is NOT the fix — it
+      # would make the run pass while its header printed
+      # `LOCAL (dirty at ...) — not a gate result`, i.e. the weekly audit
+      # announcing that it is not an audit. Nor is a .gitignore entry: an ignore
+      # rule at the repo root would also hide a genuinely mutated checker.
       - name: Mutation sweep
+        timeout-minutes: 150
         run: |
           set -o pipefail
-          bash scripts/run-mutation-sweep.sh 2>&1 | tee sweep.log
+          bash scripts/run-mutation-sweep.sh 2>&1 | tee "$RUNNER_TEMP/sweep.log"
 
-      # `failure()` and not `always()`: this step exists to make a red run
-      # visible, and an issue opened on a green run is noise that trains the
-      # reader to ignore the channel. It also fires when an EARLIER step failed
-      # (a broken classifier, a failed checkout), which is correct — those are
-      # the runs most likely to go unnoticed.
+      # Not `always()` — an issue opened on a green run is noise that trains the
+      # reader to ignore the channel. But `failure()` alone is not enough:
+      # a job that exceeds `timeout-minutes` is CANCELLED, not failed, so
+      # `failure()` stays false and the observer is skipped. That turns the one
+      # outcome most worth knowing about — the sweep did not finish — into the
+      # quietest, on a `schedule:` trigger that produces no PR check and no
+      # notification. `cancelled()` covers the timeout and a manual cancel.
       - name: Open or update the failure issue
-        if: failure()
+        if: failure() || cancelled()
         env:
           GH_TOKEN: ${{ github.token }}
           SWEEP_ISSUE_TITLE: mutation sweep is failing
         run: |
+          log="$RUNNER_TEMP/sweep.log"
+          body="$RUNNER_TEMP/issue-body.md"
           {
-            printf 'The weekly model-pin mutation sweep failed.\n\n'
+            printf 'The weekly model-pin mutation sweep did not pass.\n\n'
             printf 'Run: %s/%s/actions/runs/%s\n\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-            if [ -r sweep.log ]; then
+            if [ -r "$log" ]; then
               printf 'Failing mutants:\n\n```\n'
+              # No-match states only that there is nothing to name. It used to
+              # assert one specific cause ("died before classifying"), which is
+              # also the branch taken by a zero-mutant run, a mid-run tree
+              # change, and a timeout — an issue body confidently naming the
+              # wrong reason.
               grep -E '^(SURVIVED-UNDECLARED|CAUGHT-DECLARED|BASELINE-DIRTY|ANCHOR-MISSING|HARNESS-ERROR) ' \
-                sweep.log || printf '(none named — the run died before classifying)\n'
+                "$log" || printf '(no classified outcomes — see the full report below for the cause)\n'
               printf '```\n\n<details><summary>full report</summary>\n\n```\n'
-              tail -c 40000 sweep.log
+              tail -c 40000 "$log"
               printf '\n```\n</details>\n'
             else
-              printf 'No sweep output: the run failed before the sweep step.\n'
+              printf 'No sweep output: the run ended before the sweep step produced a log\n'
+              printf '(cancelled, timed out, or failed in an earlier step).\n'
             fi
-          } > issue-body.md
-          num=$(gh issue list --state open --search "in:title mutation sweep is failing" \
-                  --json number,title \
-                  --jq 'first(.[] | select(.title == env.SWEEP_ISSUE_TITLE) | .number)')
+          } > "$body"
+          # Plain list, NOT `--search`: `--search` reads GitHub's separately
+          # maintained, eventually-consistent search index, so an issue this
+          # workflow created minutes ago can be invisible to the next run and a
+          # duplicate gets opened. The plain list reads current state.
+          num=$(gh issue list --state open --limit 100 --json number,title \
+                  --jq 'first(.[] | select(.title == env.SWEEP_ISSUE_TITLE) | .number)') || {
+            printf 'FATAL: could not query issues — this sweep failure has no observer.\n' >&2
+            exit 1
+          }
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body-file issue-body.md
+            gh issue comment "$num" --body-file "$body"
           else
-            gh issue create --title "$SWEEP_ISSUE_TITLE" --body-file issue-body.md
+            gh issue create --title "$SWEEP_ISSUE_TITLE" --body-file "$body"
           fi

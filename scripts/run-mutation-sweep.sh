@@ -7,16 +7,12 @@
 #   THIS                                 sabotages the checker and confirms the
 #                                        CONTROLS notice
 #
-# A sabotage nobody catches is a hole in the controls. Weekly and on demand,
-# never a PR gate: the control suite can only develop holes when the checker or
-# the controls change, so a per-PR run mostly re-proves the previous answer.
+# A sabotage nobody catches is a hole in the controls.
 #
-# WHAT A GREEN SWEEP MEANS, AND WHAT IT DOES NOT. Green means every ENUMERATED
-# mutant was killed. That is not coverage of the checker: the enumeration is
-# hand-authored and inherits the authoring bias scripts/mutants/registry.sh
-# guards against. It also cannot see a control that is itself wrong — a mutant
-# killed by a bad control still reports CAUGHT. That is the ceiling on what any
-# mutation sweep over this suite can prove.
+# `cepa:autonomy` §9f owns the policy: the cadence and why this is never a PR
+# gate, the outcome vocabulary, the re-anchoring rule, and what a green sweep
+# does NOT prove. Read it there rather than here — the operator-facing summary
+# printed by every run is below, in the report header.
 #
 # HOW IT REACHES THE MUTATED CHECKER. The repo is copied INCLUDING .git to a
 # temp dir, mutants are applied to the copy's checker, and the control harness
@@ -81,10 +77,16 @@ CONTROLS_REL='scripts/check-model-pins-controls.sh'
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
-# Sourcing the registry means running this branch's shell code, before any
-# mutant is applied. In CI the containment is the ephemeral runner and a
-# read-only token; locally there is none, so reading the registry diff first is
-# the rule. Accepted as the cost of a reviewable, `reg`-shaped registry.
+# Sourcing the registry runs this branch's shell code, in this process, BEFORE
+# any validation below — the checks that follow read the arrays a well-behaved
+# registry declares; they cannot constrain arbitrary top-level statements.
+# The containment is the ephemeral runner and nothing else: the workflow's
+# GITHUB_TOKEN carries `issues: write`, and token scope bounds what `gh` can do,
+# not what a shell process can. So a hostile registry has the runner's full
+# access, including the checked-out tree this script otherwise never writes.
+# Locally there is no containment at all. Read the registry diff before running
+# this, and never `workflow_dispatch` it against an unreviewed ref. Accepted as
+# the cost of a reviewable, `reg`-shaped registry.
 # shellcheck source=scripts/mutants/registry.sh
 . "$REGISTRY"
 
@@ -174,6 +176,7 @@ if [ "$LIST_ONLY" -eq 1 ]; then
     else
       printf '%-22s %-30s\n' "${MUT_IDS[$i]}" "${MUT_TARGET[$i]}"
     fi
+    printf '    %s\n' "${MUT_WHY[$i]}"
     i=$((i + 1))
   done
   printf -- '-- %d mutants registered --\n' "${#MUT_IDS[@]}"
@@ -188,7 +191,11 @@ fi
 # means it would apply somewhere its `why` does not describe.
 read_file() {  # read_file <path>  (preserves trailing newlines)
   local c
-  c=$(cat -- "$1"; printf X) || return 1
+  # `&&`, not `;`. With `;` the substitution takes printf's status, which never
+  # fails, so this returned SUCCESS with an empty body on an unreadable file —
+  # making the caller's guard dead code and reporting an environment failure as
+  # ANCHOR-MISSING, whose message tells the operator to edit a correct registry.
+  c=$(cat -- "$1" && printf X) || return 1
   printf '%s' "${c%X}"
 }
 
@@ -223,20 +230,38 @@ classify_transcript() {  # classify_transcript <transcript>
   local out="$1" trailer failed
   CLASS=''; CLASS_DETAIL=''
 
+  # A control that could not be SET UP is checked FIRST, before the trailer —
+  # the harness still prints its trailer after a setup error, so a
+  # trailer-branch-first classifier read "the fixture copy failed" as "a
+  # control went red", i.e. as a kill. Reproduced: simulating one ENOSPC copy
+  # flipped a genuinely-surviving mutant to CAUGHT/exit 0. With 21 undeclared
+  # survivors on the books, two environmentally-failing controls would have
+  # turned the whole recorded backlog green in one run.
+  if printf '%s\n' "$out" | grep -q '^ERROR '; then
+    CLASS='HARNESS-ERROR'
+    CLASS_DETAIL="a control could not be set up, so it never ran — not a kill: $(printf '%s\n' "$out" | grep -E '^-- [0-9]+ setup errors --$' | tail -1)"
+    return
+  fi
+
+  # Machine tokens, not prose. These used to grep the harness's English FATAL
+  # sentences, duplicated verbatim with no marker at either end — so an
+  # ordinary copy edit there would have reported a re-anchorable mutant as a
+  # broken environment and stopped the run.
+  if printf '%s\n' "$out" | grep -q '^BASELINE-ABORT dirty$'; then
+    CLASS='BASELINE-DIRTY'
+    CLASS_DETAIL='the mutated checker does not report 0 MISS / 0 WARN on the clean tree, so the harness aborted before running any control'
+    return
+  fi
+  if printf '%s\n' "$out" | grep -q '^BASELINE-ABORT zero-coverage$'; then
+    CLASS='BASELINE-DIRTY'
+    CLASS_DETAIL='the mutated checker reported zero coverage in at least one counter, so the harness aborted before running any control'
+    return
+  fi
+
   trailer=$(printf '%s\n' "$out" | grep -oE -- '^-- [0-9]+/[0-9]+ controls passed --$' | tail -1)
   if [ -z "$trailer" ]; then
-    if printf '%s\n' "$out" | grep -q 'FATAL: baseline is not clean'; then
-      CLASS='BASELINE-DIRTY'
-      CLASS_DETAIL='the mutated checker does not report 0 MISS / 0 WARN on the clean tree, so the harness aborted before running any control'
-      return
-    fi
-    if printf '%s\n' "$out" | grep -q 'FATAL: baseline reports zero coverage'; then
-      CLASS='BASELINE-DIRTY'
-      CLASS_DETAIL='the mutated checker reported zero coverage in at least one counter, so the harness aborted before running any control'
-      return
-    fi
     CLASS='HARNESS-ERROR'
-    CLASS_DETAIL=$(printf '%s\n' "$out" | grep -m1 -E '^(FATAL|WARN)' || printf 'no trailer and no FATAL line')
+    CLASS_DETAIL=$(printf '%s\n' "$out" | grep -m1 -E '^(FATAL|WARN)' || printf 'no trailer, no BASELINE-ABORT token, no FATAL line (empty or truncated transcript)')
     return
   fi
 
@@ -300,13 +325,41 @@ FAIL  L1   agent frontmatter names an unsanctioned tier
 FAIL: the checker no longer behaves the way its record claims. Failed: L1 '
 
   BASE='== control suite for /tmp/x/scripts/check-model-pins.sh ==
+BASELINE-ABORT dirty
 FATAL: baseline is not clean — every case expectation is a delta from it,
        so a dirty baseline makes the whole suite meaningless.
        got: 3 MISS, 0 WARN, exit 1'
 
   ZEROCOV='== control suite for /tmp/x/scripts/check-model-pins.sh ==
+BASELINE-ABORT zero-coverage
 FATAL: baseline reports zero coverage in: citations
        A clean run over nothing is not a clean run.'
+
+  # A setup failure PLUS a trailer. This is the shape that reproduced as a
+  # false CAUGHT: the harness still prints its trailer after a control fails to
+  # copy its fixture or plant its defect.
+  SETUPERR='baseline: 0 MISS, 0 WARN, exit 0; 96 tracked files; coverage counters non-zero
+
+PASS  1    line-initial unqualified citation
+ERROR L3e  a correctly ordered pair is silent
+        setup failed, so this control never ran: could not copy fixture
+
+-- 1 setup errors --
+
+-- 56/57 controls passed --'
+
+  # A setup error alongside a genuine kill still is not a kill: the run is not
+  # evidence about the mutant in either direction.
+  SETUPERR_MIXED='PASS  1    line-initial unqualified citation
+FAIL  L1   agent frontmatter names an unsanctioned tier
+ERROR 17   root present, no file of a scannable extension
+        setup failed, so this control never ran: plant step failed or landed as a no-op
+
+-- 1 setup errors --
+
+-- 55/57 controls passed --'
+
+  EMPTY=''
 
   BROKEN='== control suite for /tmp/x/scripts/check-model-pins.sh ==
 FATAL: fixture is incomplete — 90 of 96 tracked files materialized'
@@ -324,6 +377,10 @@ FATAL: no controls ran (--only matched nothing?) — a suite that asserts nothin
   st 'zero-coverage baseline aborts the same way'         BASELINE-DIRTY      0 0 "$ZEROCOV"
   st 'a fixture failure is not a finding'                 HARNESS-ERROR       0 0 "$BROKEN"
   st 'no controls ran is not a finding'                   HARNESS-ERROR       0 0 "$NOCASES"
+  st 'a setup error is never a CAUGHT, trailer or not'    HARNESS-ERROR       0 0 "$SETUPERR"
+  st 'a setup error outranks a real FAIL in the same run' HARNESS-ERROR       0 0 "$SETUPERR_MIXED"
+  st 'a setup error on a declared survivor still errors'  HARNESS-ERROR       0 1 "$SETUPERR"
+  st 'an empty transcript is not a finding'               HARNESS-ERROR       0 0 "$EMPTY"
 
   # ANCHOR-MISSING is decided before the harness runs, so it is exercised
   # against the substitution primitives rather than a transcript.
@@ -331,6 +388,17 @@ FATAL: no controls ran (--only matched nothing?) — a suite that asserts nothin
   printf 'alpha\nbeta\nalpha\n' > "$st_tmp"
   st_body=$(read_file "$st_tmp")
   rm -f "$st_tmp"
+
+  # read_file must REPORT a failure. It used to return success with an empty
+  # body on an unreadable path, which made its caller's guard dead code and
+  # turned an environment failure into an ANCHOR-MISSING finding.
+  if read_file /nonexistent/definitely-not-here >/dev/null 2>&1; then
+    printf 'FAIL  read_file reports success on an unreadable path\n'
+    st_fail=$((st_fail + 1))
+  else
+    printf 'PASS  read_file reports failure on an unreadable path\n'
+    st_pass=$((st_pass + 1))
+  fi
   for probe in 'zeta 0' 'beta 1' 'alpha 2'; do
     set -- $probe
     got=$(count_occurrences st_body "$1")
@@ -355,8 +423,39 @@ fi
 # and train the operator to read past the banner. What actually corrupted a run
 # was writes landing DURING it — a mid-run change is re-checked at exit and is
 # fatal; a tree that was merely dirty at the start is not.
-START_STATUS=$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)
-HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || printf 'unknown')
+# `git status --porcelain` emits a status code and a path, NEVER content — so
+# for a file that was ALREADY modified at start, further edits leave the line
+# byte-identical and the end-of-run comparison sees nothing. That is exactly
+# the mid-edit-on-the-checker case this gate was built for. So hash the
+# registered targets too: they are the only files whose mid-run drift changes
+# what the results mean.
+target_digest() {
+  local seen=' ' t
+  local i=0
+  while [ "$i" -lt "${#MUT_TARGET[@]}" ]; do
+    t="${MUT_TARGET[$i]}"
+    case "$seen" in *" $t "*) ;; *)
+      seen="${seen}${t} "
+      printf '%s ' "$t"
+      git -C "$REPO_ROOT" hash-object -- "$t" 2>/dev/null || printf 'UNREADABLE'
+      printf '\n' ;;
+    esac
+    i=$((i + 1))
+  done
+}
+
+# A failing `git status` prints nothing and exits non-zero — read as an empty
+# status, that asserted "clean tree — gate result" about a tree nobody
+# inspected (dubious ownership, a held index.lock, a corrupt index all land
+# here). Quiescence that cannot be READ is not quiescence.
+START_STATUS=$(git -C "$REPO_ROOT" status --porcelain) || {
+  printf 'FATAL: could not read the tree status, so quiescence is unverifiable and no\n' >&2
+  printf '       result from this run could be called a gate result.\n' >&2
+  exit 2
+}
+START_DIGEST=$(target_digest)
+HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse --short HEAD) || {
+  printf 'FATAL: could not resolve HEAD\n' >&2; exit 2; }
 DIRTY=0; [ -n "$START_STATUS" ] && DIRTY=1
 
 if [ "$DIRTY" -eq 1 ] && [ -n "${CI:-}" ] && [ "$ALLOW_DIRTY" -eq 0 ]; then
@@ -387,9 +486,28 @@ case "$WORK_REAL/" in
     exit 2 ;;
 esac
 
+# Every nested `mktemp` — including the control harness's own fixture root,
+# created 63 times — lands inside $WORK, so the single outer cleanup covers it
+# and a leak is reported rather than stranded in the operator's /tmp with
+# mode-000 directories the harness plants for cases 33/34.
+export TMPDIR="$WORK"
+
 COPY="$WORK/repo"
 mkdir -p "$COPY"
-cp -a "$REPO_ROOT/." "$COPY/" || { printf 'FATAL: could not copy the tree\n' >&2; exit 2; }
+# `.git` PLUS TRACKED CONTENT ONLY — deliberately not `cp -a "$REPO_ROOT/."`.
+# A whole-directory copy also took untracked, gitignored files out of the repo:
+# `.env.local` (mode 0600, holds MCP_ACCESS_KEY), `cepa.local.md`, and `docs/`.
+# They would sit in TMPDIR for the length of the run, indefinitely under
+# `--keep`, and a failed cleanup reports only `WARN: work tree leaked` inside an
+# otherwise green report. The harness needs none of it: it resolves its root
+# with `git rev-parse` and builds its fixture from `git ls-files`, so `.git`
+# plus tracked working-tree content is exactly sufficient — the same reasoning
+# the sibling harness states for its own `git ls-files` fixture.
+cp -a "$REPO_ROOT/.git" "$COPY/.git" || {
+  printf 'FATAL: could not copy .git\n' >&2; exit 2; }
+( cd "$REPO_ROOT" && git ls-files -z | tar --null -cf - -T - ) \
+  | ( cd "$COPY" && tar -xf - ) || {
+  printf 'FATAL: could not materialize tracked content in the copy\n' >&2; exit 2; }
 
 # A `.git` FILE (a linked worktree or submodule) points back at the ORIGINAL
 # gitdir, so the harness inside the copy would resolve its root — and build its
@@ -438,13 +556,18 @@ printf '\n'
 ran=0; ok=0; bad=0
 BAD_LINES=''
 
-record() {  # record <id> <outcome> <ok> <detail>
+record() {  # record <id> <outcome> <ok> <detail> <why>
+  printf '%-16s %-20s %s\n' "$2" "$1" "$4"
   if [ "$3" -eq 1 ]; then
-    printf '%-16s %-20s %s\n' "$2" "$1" "$4"
     ok=$((ok + 1))
   else
-    printf '%-16s %-20s %s\n' "$2" "$1" "$4"
+    # The reason is printed AT THE FAILURE SITE, not left in a registry entry
+    # the reader has to go find — the same rule the control harness applies to
+    # its own `why` field, which this file had validated as non-empty and then
+    # never shown to anyone.
+    [ -n "${5:-}" ] && printf '                 %s\n' "$5"
     BAD_LINES="${BAD_LINES}  ${2} ${1} — ${4}"$'\n'
+    [ -n "${5:-}" ] && BAD_LINES="${BAD_LINES}      ${5}"$'\n'
     bad=$((bad + 1))
   fi
 }
@@ -459,31 +582,48 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   declared=0; [ -n "${MUT_LIMIT[$i]}" ] && declared=1
 
   body=$(read_file "$target") || {
-    record "$id" 'HARNESS-ERROR' 0 "could not read ${MUT_TARGET[$i]} in the copy"
-    i=$((i + 1)); continue
+    printf 'FATAL: could not read %s in the copy — an environment failure, never a\n' "${MUT_TARGET[$i]}" >&2
+    printf '       finding about mutant %s. Stopping.\n' "$id" >&2
+    exit 2
   }
 
   n=$(count_occurrences body "${MUT_OLD[$i]}")
   if [ "$n" -ne 1 ]; then
     record "$id" 'ANCHOR-MISSING' 0 \
-      "'old' occurs ${n} times in ${MUT_TARGET[$i]} (want exactly 1) — re-anchor this mutant to the construct it targets; deleting it is never the fix"
+      "'old' occurs ${n} times in ${MUT_TARGET[$i]} (want exactly 1) — re-anchor this mutant to the construct it targets; deleting it is never the fix" \
+      "${MUT_WHY[$i]}"
     i=$((i + 1)); continue
   fi
 
-  printf '%s' "${body/"${MUT_OLD[$i]}"/"${MUT_NEW[$i]}"}" > "$target" || {
-    record "$id" 'HARNESS-ERROR' 0 'could not write the mutated target'
-    i=$((i + 1)); continue
-  }
+  # Written to a sibling and moved into place. `>` truncates on open, so a
+  # write that failed partway (ENOSPC) left a TRUNCATED checker and the old
+  # code recorded-and-continued without restoring — every later mutant then ran
+  # against a corrupted file and was reported as ANCHOR-MISSING or
+  # BASELINE-DIRTY, both of which tell the operator to re-anchor a registry
+  # that is correct. Fatal here, matching the restore path below and the
+  # HARNESS-ERROR contract in autonomy 9f.
+  if ! printf '%s' "${body/"${MUT_OLD[$i]}"/"${MUT_NEW[$i]}"}" > "$target.mut" \
+     || ! mv -f "$target.mut" "$target"; then
+    rm -f "$target.mut"
+    printf 'FATAL: could not write the mutated %s. Stopping rather than continuing\n' "${MUT_TARGET[$i]}" >&2
+    printf '       against a target whose contents are now unknown.\n' >&2
+    exit 2
+  fi
 
-  out=$( cd "$COPY" && bash "$CONTROLS_REL" 2>&1 )
+  # Bounded per mutant. The harness bounds each CHECKER invocation at 120s
+  # across ~59 controls, so one pathological mutant's worst case is ~2 hours —
+  # the whole CI budget, spent before any other mutant runs.
+  out=$( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" 2>&1 )
 
   # Restore before classifying, so an error in classification cannot leave the
   # next mutant running against two mutations at once.
-  printf '%s' "$body" > "$target" || {
+  if ! printf '%s' "$body" > "$target.mut" || ! mv -f "$target.mut" "$target" \
+     || [ "$(read_file "$target")" != "$body" ]; then
+    rm -f "$target.mut"
     printf 'FATAL: could not restore %s in the copy — every later result would be about\n' "${MUT_TARGET[$i]}" >&2
     printf '       two mutations at once. Stopping.\n' >&2
     exit 2
-  }
+  fi
 
   classify_transcript "$out"
   if [ "$CLASS" = 'HARNESS-ERROR' ]; then
@@ -494,7 +634,7 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
     exit 2
   fi
   resolve_outcome "$CLASS" "$declared"
-  record "$id" "$OUTCOME" "$OUTCOME_OK" "$CLASS_DETAIL"
+  record "$id" "$OUTCOME" "$OUTCOME_OK" "$CLASS_DETAIL" "${MUT_WHY[$i]}"
   i=$((i + 1))
 done
 
@@ -516,8 +656,9 @@ if [ -n "$MUTANTS" ]; then
     "$MUTANTS" "$(( ${#MUT_IDS[@]} - ran ))" "${#MUT_IDS[@]}"
 fi
 
-END_STATUS=$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)
-if [ "$END_STATUS" != "$START_STATUS" ]; then
+END_STATUS=$(git -C "$REPO_ROOT" status --porcelain) || END_STATUS='<unreadable>'
+END_DIGEST=$(target_digest)
+if [ "$END_STATUS" != "$START_STATUS" ] || [ "$END_DIGEST" != "$START_DIGEST" ]; then
   printf 'INVALID — tree changed mid-run. Every result above is about a snapshot that no\n'
   printf 'longer describes the tree. Re-run on a quiescent tree.\n'
   exit 1

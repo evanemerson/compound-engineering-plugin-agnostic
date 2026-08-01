@@ -9,8 +9,14 @@ previous-comments-reviewer.
 
 ### Deferred
 
-- [ ] P3 — `scripts/mutants/` — **the mutant set is not a committed
-  artifact.** 20 single-line mutants were built with build-time assertions,
+- [x] P3 — *(struck 2026-08-01: `scripts/mutants/registry.sh` +
+  `scripts/run-mutation-sweep.sh`. This is the ORIGINAL copy of the item; the
+  descendant copy in
+  `memory/tasks.d/2026-07-31-fix-checker-symlink-traversal-symmetry.md` was
+  struck in the same commit. Carrying an item forward duplicates it, so
+  striking only the descendant leaves a plain `memory/tasks.d/*.md` checkbox
+  scan still reporting it open.)* `scripts/mutants/` — **the mutant set is not
+  a committed artifact.** 20 single-line mutants were built with build-time assertions,
   run against the suite, and discarded. `cepa:autonomy` §9f now requires each
   control to name the mutant it kills, which makes the mapping *readable*;
   committing the patches with a driver would make it *executable*.

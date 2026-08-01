@@ -4,50 +4,36 @@
 # SOURCED by scripts/run-mutation-sweep.sh. Not executable on its own.
 #
 # WHAT A MUTANT IS. A declarative <target, old, new> substitution against a
-# COPY of the checker. Never a .patch: a patch carries context lines, so every
-# one rots on any edit to check-model-pins.sh — and the sweep exists to be run
-# precisely when that file changes. A mutant whose anchor text is gone fails
-# loudly as ANCHOR-MISSING instead of applying nowhere.
+# COPY of the checker, with a build-time assertion that `old` occurs EXACTLY
+# ONCE in its target. `cepa:autonomy` §9f owns the rest — why substitutions and
+# not .patch files, why a mutant must be silent on the clean tree, what each
+# outcome means, and the re-anchoring rule for an ANCHOR-MISSING entry. Read it
+# there; this header used to restate all four and is the reason the repo's
+# cite-once rule keeps having to be relearned.
 #
-# `old` must occur EXACTLY ONCE in the target. The driver asserts it.
+# The two facts that have to live HERE, because they constrain what you type
+# below rather than describing policy:
 #
-# THE AUTHORING RULE: A MUTANT MUST BE SILENT ON THE CLEAN TREE.
-# The control harness runs a baseline gate before its runner loop and aborts
-# if the mutated checker's verdict on the repo's own content is not
-# 0 MISS / 0 WARN. A mutant that BREAKS the checker outright therefore runs
-# zero controls, teaches nothing about the controls, and reports
-# BASELINE-DIRTY — which is a FAIL, meaning "re-anchor this to the silent
-# version of the same construct". The interesting mutation of any construct is
-# the one that BLINDS a predicate while leaving the clean-tree verdict intact,
-# because that is exactly the shape a real regression has. A loud mutation is
-# caught by the model-pins job itself and is not what this sweep measures.
+#   1. `old` must match exactly once, so anchor on enough surrounding text to
+#      be unique. The driver refuses the run otherwise.
+#   2. A mutant must not change the checker's verdict on the CLEAN tree, or the
+#      control harness aborts at its baseline gate and the mutant proves
+#      nothing (§9f: BASELINE-DIRTY). In practice: blind a predicate, do not
+#      break the script.
 #
-# HOW THIS IS ENUMERATED. By CONSTRUCT, not by incident history. The first
-# control-suite cut put 22 of 26 cases on leg 4 because that is where the
-# incidents came from, and 12 material mutants outside that region survived.
-# Mutant authoring has the same bias, so the sections below walk the checker's
-# constructs in source order — shared helpers, then each leg individually,
-# then the verdict path — and every one gets at least one entry. There is no
-# target count; reproducing a fixed number would mean the enumeration was done
-# by incident history after all.
+# HOW THIS IS ENUMERATED. By CONSTRUCT, in source order — shared helpers, then
+# each leg individually, then the verdict path — and never by incident history,
+# which is what put 22 of 26 cases of the first control-suite cut on one leg
+# while 12 material mutants elsewhere survived. There is no target count.
 #
 # The set deliberately includes LOOSENING mutants (widen a predicate so it
 # accepts what it should reject). Only a zero-MISS/zero-WARN false-positive
-# guard can kill one, and that region of the control suite has the least
-# prose to author from.
+# guard can kill one, and that region of the control suite has the least prose
+# to author from.
 #
-# RETIRING A MUTANT. An ANCHOR-MISSING mutant is RE-ANCHORED to the construct
-# it targeted. Retiring one requires naming the construct that is no longer
-# mutable. Deleting it to green the build is never the fix — that is how a
-# suite comes to claim coverage it lost.
-#
-# THE MAPPING TO CONTROLS IS PROSE, AND DELIBERATELY UNENFORCED. `why` names
-# the control expected to kill the mutant the same way the control suite's own
-# `why` field names the mutant it kills: in words, checked by nobody. A
-# machine-checked link was drafted and removed — it was the thing a per-PR
-# fast path needed, it is a second list to keep in sync, and its staleness is
-# undetectable by the design that carries it. This is a stated limit, not an
-# oversight. Read what a `mut` claims; do not trust it.
+# THE MAPPING TO CONTROLS IS PROSE AND UNENFORCED (§9f). `why` names the
+# control expected to kill the mutant, checked by nobody. Read what a `mut`
+# claims; do not trust it.
 #
 # The section sign is built at runtime, never written literally. `scripts` is
 # one of leg 4's citation roots, `.sh` is in its scanned extension set, and it
