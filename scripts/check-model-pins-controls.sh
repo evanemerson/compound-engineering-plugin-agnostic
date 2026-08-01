@@ -125,7 +125,9 @@ reg() {
   EXP_RE+=("$5"); FORBID_RE+=("$6"); WHY+=("$7")
 }
 
-UNQUAL_9Q="${SS}9q is cited but no .* has a '### 9q\\.' heading"
+# Unqualified misses: <anchor> cited, defined by no skill at all.
+unqual_miss() { printf "%s%s is cited but no .* has a '### %s\\.' heading" "$SS" "$1" "$1"; }
+UNQUAL_9Q=$(unqual_miss 9q)
 # Qualified misses: <anchor> cited as `<owner>` but that skill has no heading.
 qual_miss() { printf "%s%s is cited as .%s. %s%s but %s/SKILL\\.md has no '### %s\\.' heading" \
   "$SS" "$2" "$1" "$SS" "$2" "$1" "$2"; }
@@ -157,6 +159,14 @@ reg 5 'leading-dash token before the anchor' 1 0 "$UNQUAL_9Q" '' \
   'kills: removal of the leading-dash blanking (qualifier sanitization)'
 reg 6 'plain word qualifier — control for cases 1-5' 1 0 "$UNQUAL_9Q" '' \
   'isolates the empty qualifier field as the cause: this one SURVIVES the round-1 mutant'
+# Case 5 plants `-x`, which is not a skill name with OR without the dash
+# blanking, so it takes the unqualified branch either way and cannot see the
+# sanitization go. Reaching the qualified branch needs a dash attached to a
+# REAL owner in the repo's dominant `cepa:<skill>` style, because the `##*:`
+# prefix strip runs AFTER the blanking: drop the blanking and `-cepa:grounding`
+# becomes `grounding`, a skill that does not own the anchor.
+reg 39 'a dash-attached qualifier is not an owner claim' 0 0 '' '^MISS ' \
+  'kills: the leading-dash blanking in qualifier sanitization, which case 5 exercises but cannot kill'
 
 reg 7 'wrong owner, lowercase' 1 0 "$(qual_miss grounding 9c)" '' \
   'kills: removal of the owners membership test in the qualified branch'
@@ -223,6 +233,8 @@ reg 27 'broken citation under the `scripts` root' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping `scripts` from CITE_ROOTS — the root the runtime-built section sign exists for'
 reg 28 'broken citation in a .yml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping --include=*.yml, which would make the workflow files unscanned'
+reg 37 'broken citation in a .yaml under `.github`' 1 0 "$UNQUAL_9Q" '' \
+  'kills: dropping `yaml` from CITE_EXTS. Case 28 plants a .yml and nothing planted a .yaml, so half of leg 4 own extension set had no case behind it'
 reg 29 'no citations anywhere' '+' 0 'checked no .* citation' '' \
   'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass'
 reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" '' \
@@ -248,6 +260,25 @@ reg 36 'a root whose only scannable files are empty is reported' 1 0 \
 reg 32 'a symlink to a character device does not hang the scan' 0 0 '' '^MISS ' \
   'kills: leg 4 reverting to `grep -R` over raw paths — it opens whatever a symlink points at, with no type check, and blocks forever on /dev/zero or a writerless FIFO'
 
+# --- Leg 4: the anchor INDEX ------------------------------------------------
+# The lookup has two sides and they are separate constructs. Everything above
+# tests the CITATION side; these test the side that builds ANCHOR_OWNERS from
+# each skill's own headings. The sweep found all four of these surviving at
+# once, which is what a whole untested side of a comparison looks like.
+reg 38 'no SKILL.md anywhere' '+' 0 \
+  'no plugins/\*/skills/\*/SKILL\.md found' '' \
+  'kills: the zero-skill-files guard. Case 20 blanks the HEADINGS and keeps the files, so skill_files stays non-zero there and this guard never runs'
+reg 40 'a mid-line heading mention does not define an anchor' 1 0 \
+  "$(unqual_miss 9zz)" '' \
+  'kills: the ^ anchor on the heading index (LOOSENING) — prose that MENTIONS a heading would define it, so a citation resolves against prose instead of against a section'
+# A BOM is only observable on line 1, so this fixture puts the heading there.
+# Prepending one to a real SKILL.md is invisible to this construct: line 1 is
+# the frontmatter delimiter and the headings are further down.
+reg 41 'a BOM before a line-1 heading still defines its anchor' 0 0 '' '^MISS ' \
+  'kills: the BOM/CRLF normalization when building the index — a BOM-led skill file would define no anchors, so every citation into it MISSes'
+reg 42 'heading letters are matched case-insensitively' 0 0 '' '^MISS ' \
+  'kills: the lowercasing on the INDEX side. Case 12 lowercases the CITATION side and passes either way — two sides, two constructs'
+
 # --- Leg 4 vs legs 2-3: extension parity (the round-3 class) ----------------
 reg 24 'identical content in .md and .markdown behaves identically' 2 1 \
   'zzcontrol' '' \
@@ -272,6 +303,46 @@ reg L1e 'a SYMLINKED agents/ directory is still discovered' 1 0 \
 reg L1f 'one definition reachable through two symlinked agents/ dirs is checked once' 1 0 \
   'is not a sanctioned tier' '' \
   'kills: removal of resolved-path dedup — -L makes the same file reachable twice, inflating the coverage counter and double-reporting one defect'
+
+# The leg-1 constructs the first cut never reached. The mutation sweep found
+# them by enumerating leg 1 and the shared frontmatter sanitizers construct by
+# construct: 11 of its 21 undeclared survivors lived here, the mirror image of
+# the first control cut putting 22 of its 26 cases on leg 4.
+#
+# NOTE THE COUNTS. An agent definition is also ordinary markdown under
+# `plugins/`, so legs 2-3 read it and leg 4 scans it for citations. A mode-000
+# definition therefore produces FOUR misses — leg 1's readability guard, leg 2's
+# and leg 3's own read-error arms, and leg 4's per-root grep exiting 2 — and a
+# mode-000 file under `commands/` produces three. That coupling is a property of
+# the checker, not of these fixtures: no location under `plugins/` is visible to
+# leg 1 and invisible to the others. The count is asserted as what the checker
+# actually does, and the EXP_RE is what pins each case to the leg it is about.
+reg L1g 'an UNREADABLE agent definition is refused by leg 1' 4 0 \
+  'unreadable \(a file that cannot be checked is not a pass\)' '' \
+  'kills: leg 1 per-file readability guard. With it gone the file falls through to the parser, reads as having no model: key, and reports the SAME count under a different defect — only the message separates them'
+# The BOM is the load-bearing half, measured rather than assumed: `\r` is in
+# [[:space:]] under LC_ALL=C, so a CRLF frontmatter still satisfies the awk
+# `^---[[:space:]]*$` test and its trailing \r is stripped by the value sed
+# anyway. CRLF alone cannot fail this construct. Both are planted because the
+# normalization covers both; only the BOM can go red.
+reg L1h 'a UTF-8 BOM before the frontmatter still reads as pinned' 0 0 '' '^MISS ' \
+  'kills: the BOM/CRLF normalization before leg 1 frontmatter parsing — a BOM makes line 1 fail the ^--- test, so a correctly pinned file reports as unpinned'
+reg L1i 'a file with NO frontmatter is not pinned by a model: line in its body' 1 0 \
+  'no model: key in frontmatter' '' \
+  'kills: the awk no-frontmatter guard (LOOSENING) — prose would satisfy leg 1. Also pins the miss COUNT for this branch, which prints its message either way'
+reg L1j 'a model: line AFTER the frontmatter closes is not a pin' 1 0 \
+  'no model: key in frontmatter' '' \
+  'kills: the closing-delimiter exit (LOOSENING) — a tier named in the body would satisfy leg 1. Also pins the miss COUNT for this branch'
+reg L1k 'an inline comment after the tier does not break the pin' 0 0 '' '^MISS ' \
+  'kills: inline-comment stripping in the leg 1 value — `model: sonnet  # note` would stop reading as a pin'
+reg L1m 'a capitalized tier value still reads as a pin' 0 0 '' '^MISS ' \
+  'kills: the lowercasing of the leg 1 VALUE. Case 8 lowercases a leg 4 qualifier, which is a different construct and passes either way'
+reg L1n 'a truncated tier is not a tier' 1 0 \
+  'model: son is not a sanctioned tier' '' \
+  'kills: grep -qx -> grep -q (LOOSENING), which makes the value a substring PATTERN so `son` validates against sonnet'
+reg L1p 'the top tier is not sanctioned for automatic dispatch' 1 0 \
+  'model: fable is not a sanctioned tier' '' \
+  'kills: admitting fable to ALLOWED_TIERS. L3c plants fable in a mode-conditional marker, where tier_rank rejects it independently — so leg 1 had no fable plant behind it'
 
 # --- Leg 2: dispatch instructions in prose ---------------------------------
 reg L2 'dispatch instruction with no pin in its block' 0 1 \
@@ -299,6 +370,9 @@ reg L2h 'a correctly pinned dispatch is silent' 0 0 '' '^WARN ' \
 reg L2i 'a SYMLINKED plugin directory is still scanned' 0 1 \
   'dispatch instruction with no pin' '' \
   'kills: dropping -L from legs 2-3 SCAN_DIRS discovery — a whole plugin scanned by nothing'
+reg L2j 'an UNREADABLE file under a scanned plugin is refused by leg 2' 3 0 \
+  'unreadable during leg 2 scan' '' \
+  'kills: leg 2 grep read-error arm, which separates exit 1 (no matches) from exit 2 (could not read). Cases 33 and 34 plant unreadable paths under scripts/, which legs 2-3 never read'
 
 # --- Leg 3: mode-conditional pairs -----------------------------------------
 reg L3a 'mode-conditional with the headless branch deleted' 1 0 \
@@ -315,6 +389,26 @@ reg L3d 'inverted pair (sonnet/opus)' 1 0 \
   'kills: a corrupted TIER_RANK table; L3b alone passes if sonnet and opus are ranked equal'
 reg L3e 'a correctly ordered pair is silent' 0 0 '' '^MISS ' \
   'false-positive guard: leg 3 must not reject the shape it is asking for'
+# A SECOND case over the same fixture shape as L2j, deliberately, not a second
+# assertion bolted onto it. The checker's own comment says leg 3 must not lean
+# on leg 2 catching an unreadable file first, because that is loop order rather
+# than a guarantee — so the two read-error arms are two constructs, and each
+# needs a case that names the leg in its expected message.
+reg L3f 'the same unreadable file is refused by leg 3 on its own' 3 0 \
+  'unreadable during leg 3 scan' '' \
+  'kills: leg 3 own read-error arm — with it gone, leg 3 is silent on a file it could not read whenever leg 2 happens to be silent too'
+reg L3g 'a run-on token does not satisfy the interactive= branch' 1 0 \
+  'must name both branches' '' \
+  'kills: the left word boundary on interactive= (LOOSENING). `noninteractive=opus headless=sonnet` would otherwise declare the attended branch and pass as a well-ordered pair'
+
+# --- The verdict and exit path ----------------------------------------------
+# Counts and exit status are asserted by every case above. The line PREFIX is
+# not: a checker that renamed `MISS ` to `Miss ` would keep every count, every
+# exit code and every message body intact, and only the machine-readable half
+# of its output would be gone. So one case anchors the prefix explicitly.
+reg V1 'findings are prefixed with the MISS token' 1 0 \
+  "^MISS model-pin: ${SS}9q is cited but" '' \
+  'kills: a change to the MISS line prefix — invisible to counts, to the exit code and to every message assertion in this file, which all match on the body'
 
 if [ "$LIST_ONLY" -eq 1 ]; then
   i=0
@@ -509,6 +603,34 @@ ${SS}9c." ;;
         while IFS= read -r p; do : > "$p" || return 1; done < <(scannable_in "$d/.github")
         scannable_gone "$d/.github" -- -size +0c || return 1
         : ;;
+
+    37) printf '# zzcite\n# The rule is %s9q here.\n' "$SS" > "$d/.github/zzcite.yaml" ;;
+    38) [ -n "$(find "$d/plugins" -path '*/skills/*/SKILL.md' -type f)" ] || return 1
+        find "$d/plugins" -path '*/skills/*/SKILL.md' -type f -delete
+        [ -z "$(find "$d/plugins" -path '*/skills/*/SKILL.md' -type f)" ] || return 1
+        : ;;
+    39) say "$d" "See -cepa:grounding ${SS}9c here." ;;
+    # The mention must NOT be at the start of a line, or the clean checker
+    # defines the anchor too and the case degrades into a second baseline.
+    40) printf 'Prose that mentions the heading ### 9zz. must not define it.\n' \
+          >> "$d/plugins/cepa/skills/autonomy/SKILL.md"
+        grep -q '^### 9zz\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
+        say "$d" "The rule is ${SS}9zz here." ;;
+    # The heading is on LINE 1 because that is the only line a BOM can reach.
+    # A printf that silently dropped the BOM would leave a working skill file
+    # behind and this case would pass forever, so the bytes are asserted.
+    41) mkdir -p "$d/plugins/cepa/skills/zzskillbom"
+        printf '\xEF\xBB\xBF### 9zy. Control heading\n\nBody.\n' \
+          > "$d/plugins/cepa/skills/zzskillbom/SKILL.md"
+        head -c 3 "$d/plugins/cepa/skills/zzskillbom/SKILL.md" | od -An -tx1 \
+          | grep -q 'ef bb bf' || return 1
+        say "$d" "The rule is ${SS}9zy here." ;;
+    42) mkdir -p "$d/plugins/cepa/skills/zzskillup"
+        printf '### 9ZQ. Control heading\n\nBody.\n' \
+          > "$d/plugins/cepa/skills/zzskillup/SKILL.md"
+        grep -q '^### 9ZQ\.' "$d/plugins/cepa/skills/zzskillup/SKILL.md" || return 1
+        say "$d" "The rule is ${SS}9zq here." ;;
+    V1) say "$d" "${SS}9q applies here." ;;
     L1f) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzp1" "$d/plugins/zzp2"
         printf -- '---\nname: zzl1f\nmodel: inherit\n---\n\n# zzl1f\n' \
           > "$d/plugins/zzsrc/zzl1f.md"
@@ -554,6 +676,34 @@ ${SS}9c." ;;
         ln -s ../zzsrc "$d/plugins/zzplug/agents"
         [ -L "$d/plugins/zzplug/agents" ] || return 1
         [ -d "$d/plugins/zzplug/agents" ] || return 1 ;;
+
+    # mode 000, so leg 1's readability guard is the construct under test. The
+    # same file is unreadable to legs 2, 3 and 4 as well — see this case's
+    # `reg` note for why the expected count is four and not one.
+    L1g) printf -- '---\nname: zzl1g\nmodel: sonnet\n---\n\n# zzl1g\n' \
+           > "$d/plugins/cepa/agents/zzl1g.md"
+        chmod 000 "$d/plugins/cepa/agents/zzl1g.md"
+        [ -r "$d/plugins/cepa/agents/zzl1g.md" ] && return 1
+        : ;;
+    # A printf that silently failed to emit the BOM would leave an ordinary
+    # pinned file behind — a second copy of the baseline, reporting PASS
+    # forever. Assert the bytes landed.
+    L1h) printf '\xEF\xBB\xBF---\r\nname: zzl1h\r\nmodel: sonnet\r\n---\r\n\r\n# zzl1h\r\n' \
+           > "$d/plugins/cepa/agents/zzl1h.md"
+        head -c 3 "$d/plugins/cepa/agents/zzl1h.md" | od -An -tx1 | grep -q 'ef bb bf' || return 1
+        : ;;
+    L1i) printf '# zzl1i\n\nThis definition has no frontmatter at all.\n\nmodel: sonnet\n' \
+           > "$d/plugins/cepa/agents/zzl1i.md" ;;
+    L1j) printf -- '---\nname: zzl1j\ndescription: control fixture\n---\n\n# zzl1j\n\nmodel: sonnet\n' \
+           > "$d/plugins/cepa/agents/zzl1j.md" ;;
+    L1k) printf -- '---\nname: zzl1k\nmodel: sonnet  # deliberate, per the ladder\n---\n\n# zzl1k\n' \
+           > "$d/plugins/cepa/agents/zzl1k.md" ;;
+    L1m) printf -- '---\nname: zzl1m\nmodel: Sonnet\n---\n\n# zzl1m\n' \
+           > "$d/plugins/cepa/agents/zzl1m.md" ;;
+    L1n) printf -- '---\nname: zzl1n\nmodel: son\n---\n\n# zzl1n\n' \
+           > "$d/plugins/cepa/agents/zzl1n.md" ;;
+    L1p) printf -- '---\nname: zzl1p\nmodel: fable\n---\n\n# zzl1p\n' \
+           > "$d/plugins/cepa/agents/zzl1p.md" ;;
     # The plugin directory itself is the symlink — and its target lives OUTSIDE
     # `plugins/`, so nothing else can reach the file.
     L2i) mkdir -p "$d/zzplugsrc/commands"
@@ -653,6 +803,25 @@ EOF
            > "$d/plugins/cepa/commands/zzl3d.md" ;;
     L3e) printf '# zzl3e\n\n<!-- model-pin: mode-conditional interactive=opus headless=sonnet -->\n' \
            > "$d/plugins/cepa/commands/zzl3e.md" ;;
+
+    # L2j and L3f plant the SAME shape under two names on purpose: legs 2 and 3
+    # each own a read-error arm, and a single fixture asserting both messages
+    # would go green the moment either leg started leaning on the other.
+    L2j) printf '# zzl2j\n\nNothing in this file can be read.\n' \
+           > "$d/plugins/cepa/commands/zzl2j.md"
+        chmod 000 "$d/plugins/cepa/commands/zzl2j.md"
+        [ -r "$d/plugins/cepa/commands/zzl2j.md" ] && return 1
+        : ;;
+    L3f) printf '# zzl3f\n\nNothing in this file can be read.\n' \
+           > "$d/plugins/cepa/commands/zzl3f.md"
+        chmod 000 "$d/plugins/cepa/commands/zzl3f.md"
+        [ -r "$d/plugins/cepa/commands/zzl3f.md" ] && return 1
+        : ;;
+    # `noninteractive=` runs straight into the key leg 3 looks for. With the
+    # left word boundary gone it reads as a well-ordered opus/sonnet pair and
+    # the whole marker passes; with it, the interactive branch is MISSING.
+    L3g) printf '# zzl3g\n\n<!-- model-pin: mode-conditional noninteractive=opus headless=sonnet -->\n' \
+           > "$d/plugins/cepa/commands/zzl3g.md" ;;
 
     *) printf 'no plant recipe for case %s\n' "$id" >&2; return 1 ;;
   esac
