@@ -14,6 +14,11 @@ doc in `docs/plans/` nor a scope-pinning issue — so premise scrutiny was on.
 
 28 findings (14 P1, 11 P2, 3 P3). 9 applied to the plan, 19 pending triage.
 
+> **Status of everything in this section is SUPERSEDED by the triage section at
+> the bottom of this file.** The lists below are the review-time snapshot and are
+> kept as evidence; 8 were subsequently fixed and 5 skipped. Do not read their
+> checkboxes as current — the triage section is authoritative for what is open.
+
 ### The headline: the plan's central mechanism does not work as written
 
 Three independent personas reproduced it. The controls harness runs a **baseline
@@ -38,7 +43,7 @@ verification artifact reporting success because it checked nothing. Recorded her
 because the pattern held for a fourth time in this thread, at design stage rather
 than at implementation.
 
-### Deferred — the two contradictions block U2/U3 as designed
+### At review time — the two contradictions block U2/U3 as designed
 
 - [ ] **P1 — how the driver reaches the mutated checker is undecided.**
   `CEPA_PIN_CHECKER` is the harness's purpose-built mutation hook and is
@@ -59,7 +64,7 @@ than at implementation.
   the fast path rather than removing it. This is the one decision that changes
   what gets built. (finding #7)
 
-### Deferred — correctness of the mechanism (P1)
+### At review time — correctness of the mechanism (P1)
 
 - [ ] Adding `mutation-sweep.yml` **breaks controls 17 and 36** on the first
   commit: both neutralize `model-pins.yml` by name, so a second workflow file
@@ -82,7 +87,7 @@ than at implementation.
   unmergeable the moment the harness works. Proposed `SURVIVED-KNOWN-GAP`, valid
   only with a residual-shard reference. (finding #14)
 
-### Deferred — scope, cost, record-keeping (P2/P3)
+### At review time — scope, cost, record-keeping (P2/P3)
 
 - [ ] "§9f already requires every control to name the mutant it kills, so the
   mapping is half-written already" is **measured wrong**: 49 of 57 controls name a
@@ -152,3 +157,89 @@ reconciliation was exactly finding 18's fix. Marked `applied` rather than left
 The self-review also caught three inconsistencies the autofix itself introduced
 or left behind: a `### D3. Five outcomes` heading above a six-row table, and two
 surviving hardcoded `30`s in D1 and Risks.
+
+---
+
+## 2026-08-01 — `/cepa:triage` of the above (batch mode)
+
+19 pending findings; **zero auto-apply eligible** (18 `judgment`, and the one
+`mechanical` sat at confidence 50). Operator decisions: 8 fixed, 6 deferred,
+5 skipped. Findings file now has 0 pending.
+
+### The decision that mattered: finding 7 — the per-PR fast path was dropped
+
+Approved. The plan's first draft built a fast path so the sweep could run on every
+PR: each mutant declaring which control should kill it, so only that control runs.
+Everything expensive in the design existed to serve it — the hand-maintained
+mutant→control mapping, `--only` plumbing, a `CAUGHT-BY-OTHER` state, and a
+measured-timing gate on the CI trigger.
+
+The reasoning for dropping it: **the control suite can only develop holes when the
+checker or the controls change**, which is rare, so a per-PR run mostly re-proves
+the previous answer. The mapping was also a second list requiring sync with the
+controls — a drift generator whose staleness the design itself could not detect
+for up to a week. Roughly a third of the design deleted.
+
+The sweep is now `schedule:` weekly + `workflow_dispatch`. No PR trigger, no gate.
+This also leaves `model-pins.yml`'s "Deliberately NOT path-filtered" rationale
+untouched rather than contradicted by an opposite convention two files away.
+
+**Operator context that drove it:** stated philosophy is preventing unnecessary
+bloat and drift. Recorded because it is the standing tiebreaker for this repo, not
+a one-off preference — when a design's cost exists to serve a redundant run,
+delete the run.
+
+### Superseded by that decision
+
+Findings 3 and 4 were auto-applied during the review run (comma-joining `expect`;
+`SURVIVOR` bypassing `--only`) and are recorded `applied`, but the construct they
+fixed no longer exists. Their evidence stands as why the fast path was fragile
+enough to question. Findings 11, 14, 16, 25, 27 were skipped and removed for the
+same reason — all artifacts of the fast path.
+
+### Fixed in the plan (findings 7, 8, 10, 17, 19, 22, 24, 28)
+
+- Adding any second workflow file **breaks controls 17 and 36** — both neutralize
+  `model-pins.yml` by name. Replant both on every scannable file under `.github`
+  in the same commit. (Reproduced: `2/2 passed` → `FAIL 17` / `FAIL 36`.)
+- Mutation confinement stated: `mktemp -d` outside the repo, `trap EXIT INT TERM`,
+  `target` must resolve inside the copy after `readlink -f`. An interrupted run
+  must never leave a weakened checker in the working tree.
+- `scripts` is a leg-4 citation root with no prose-suppression hatch — the new
+  `.sh` files construct any section sign at runtime.
+- The weekly job opens/updates a GitHub issue on failure (`permissions: issues:
+  write`). A `schedule:` failure produces no PR check and no notification, and
+  weekly is now the only run.
+- D5 split into two states: **dirty at start** → `LOCAL — not a gate result`, runs
+  normally; **changed during the run** → `INVALID`, non-zero exit. The original
+  blanket refusal would have branded every useful local run invalid, training the
+  operator to read past the banner — the exact misread the gate exists to prevent.
+- Re-anchoring rule: an `ANCHOR-MISSING` mutant is re-anchored; retiring one
+  requires naming the construct that is no longer mutable. Deleting it to green
+  the build is never the fix.
+- Out-of-scope now names the solution doc by path.
+
+### Deferred — build-time detail, nothing to decide until the code is written
+
+- [ ] **#2 (P1) — how the driver reaches the mutated checker. Must be answered
+  before U2 is written.** `CEPA_PIN_CHECKER` is the harness's purpose-built hook
+  and is hard-refused whenever `CI` is set; a bare file copy is not a git work
+  tree (root via `git rev-parse`, fixture from `git ls-files`), so it exits 2.
+  Options: clone including `.git` / `git worktree add` with the hook unset, or use
+  the hook and add a narrow `CEPA_MUTATION_SWEEP=1` exemption to the CI guard.
+- [ ] #12 — nothing machine-checks a `SURVIVOR` declaration beyond D4's
+  stated-limit reference; relabelling a real gap as expected is a one-word diff.
+- [ ] #13 — the classifier's own coverage beyond U2's per-outcome fixtures.
+- [ ] #20 — whether the workflow header rules belong in prose or a shared include.
+- [ ] #21 — whether the registry should be data rather than sourced shell.
+- [ ] #23 — exact wording of §9f's gap-table row.
+
+### Still open: whether to build this at all
+
+Recorded because it was raised and consciously not taken. This is a fourth-order
+artifact — a sweep guarding controls guarding a checker guarding a prose policy —
+and the zero-surface option is to write down why the mutant set isn't committed
+and stop. The operator chose to build the reduced version, on the grounds that the
+mutant set has been rebuilt and discarded three times and committing it once ends
+that loop. The counter-argument, if the checker stabilizes: layer 4 would then be
+guarding something that stopped moving.
