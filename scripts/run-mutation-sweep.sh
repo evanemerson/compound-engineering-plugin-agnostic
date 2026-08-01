@@ -39,9 +39,14 @@
 # Usage:
 #   scripts/run-mutation-sweep.sh                 run every mutant
 #   scripts/run-mutation-sweep.sh --mutants a,b   run a subset (PARTIAL)
+#   scripts/run-mutation-sweep.sh --partial-ok    let a subset run exit 0
 #   scripts/run-mutation-sweep.sh --list          list the registry, run nothing
 #   scripts/run-mutation-sweep.sh --selftest      exercise the classifier
 #   scripts/run-mutation-sweep.sh --allow-dirty   permit a dirty tree under CI
+#
+# Exit: 0 a complete run with no findings   1 a finding, or a run that
+#       asserted nothing   2 usage or environment   3 a FILTERED run that found
+#       nothing (see the verdict section, and --partial-ok)
 set -uo pipefail
 
 SS=$'\302\247'   # built, never written literally: see registry.sh's header
@@ -51,6 +56,7 @@ LIST_ONLY=0
 SELFTEST=0
 ALLOW_DIRTY=0
 KEEP=0
+PARTIAL_OK=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -61,8 +67,9 @@ while [ $# -gt 0 ]; do
     --list) LIST_ONLY=1 ;;
     --selftest) SELFTEST=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --partial-ok) PARTIAL_OK=1 ;;
     --keep) KEEP=1 ;;
-    -h|--help) sed -n '1,50p' "$0"; exit 0 ;;
+    -h|--help) sed -n '1,55p' "$0"; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
   shift
@@ -681,5 +688,25 @@ if [ "$bad" -gt 0 ]; then
   printf 'checker in the same change — a detection change and the thing it detects must\n'
   printf 'not hide each other.\n'
   exit 1
+fi
+
+# A filtered run that found nothing exits 3, NOT 0. The banner above already
+# says PARTIAL in prose, and prose in the middle of a report is invisible to
+# `set -e` and to every caller that reads `$?` — so a subset run was green by
+# construction, which is the one thing a subset must never be. Exit 3 rather
+# than folding it into 1: a subset that found nothing is not a finding, and a
+# caller that cannot tell those apart learns to ignore both.
+#
+# `--partial-ok` is for the operator who genuinely wants a subset's pass to be
+# a pass — verifying one mutant by hand while adding the control that kills it.
+# It is never how a gate calls this. §9f is why that distinction is load-
+# bearing here: the sweep is deliberately not a PR check, so a per-PR fast path
+# built on `--mutants` is the standing pressure, and this exit code is what
+# stops one from being green before it is right.
+if [ -n "$MUTANTS" ] && [ "$PARTIAL_OK" -eq 0 ]; then
+  printf '\nFiltered run: %d of %d mutants were never exercised, so this is not a sweep\n' \
+    "$(( ${#MUT_IDS[@]} - ran ))" "${#MUT_IDS[@]}"
+  printf 'result. Exiting 3 — pass --partial-ok if a subset pass is what you wanted.\n'
+  exit 3
 fi
 exit 0
