@@ -60,27 +60,27 @@ info() { printf 'INFO %s\n' "$1"; }
 # spend at the invoking session's tier. So is `fable` — the top tier is
 # reserved for work a person opted into, never for automatic dispatch.
 ALLOWED_TIERS='sonnet opus haiku'
-# The markdown extension set, declared ONCE. There are four file-selection
-# sites — leg 1's discovery, legs 2-3's discovery, and leg 4's citation scan
-# and coverage probe — and `find` and `grep` want different syntax for the
-# same fact. Round 2 widened three of the four with `*.markdown` and left
-# legs 2-3 on `*.md`, which made a `.markdown` file readable by leg 4 and
-# invisible to the legs that check dispatch pins: an inverted
+# The markdown extension set, declared ONCE, and consumed by every
+# file-selection site. Round 2 widened three of four sites with `*.markdown`
+# and left legs 2-3 on `*.md`, which made a `.markdown` file readable by leg 4
+# and invisible to the legs that check dispatch pins: an inverted
 # mode-conditional pair in one shipped as `0 MISS, 0 WARN`. That is the
-# construct-vs-instance class CLAUDE.md documents, and this script had
-# already been bitten once by an unscanned-file hole (see the leg 2-3 scan
-# roots comment). Derive both forms here so a future widening cannot land at
-# three sites out of four.
+# construct-vs-instance class CLAUDE.md documents, and this script had already
+# been bitten once by an unscanned-file hole (see the leg 2-3 scan roots
+# comment). Declare it here so a future widening cannot land at three sites
+# out of four.
+#
+# Every site now selects files the same way — `find -L ... -type f` — so there
+# is one syntax, not two. Leg 4 used `grep --include` until it turned out that
+# `grep -R` opens whatever a symlink points at with no type check; see leg 4's
+# root loop for why that is a hang, not a preference. Leg 4 extends this set
+# with `sh yml yaml` at its own site.
 MD_EXTS='md markdown'
 find_name_args=()
-grep_include_args=()
 for _e in $MD_EXTS; do
   [ "${#find_name_args[@]}" -eq 0 ] || find_name_args+=(-o)
   find_name_args+=(-name "*.${_e}")
-  grep_include_args+=("--include=*.${_e}")
 done
-# Leg 4 additionally reads shell and workflow files; markdown is shared.
-CITE_INCLUDES=("${grep_include_args[@]}" --include='*.sh' --include='*.yml' --include='*.yaml')
 SUPPRESS_MARKER='model-pin: prose'
 # A dispatch whose tier branches on invocation mode (autonomy §9d) declares
 # both literals IN the marker:
@@ -355,19 +355,28 @@ done
 # which made the check a property of one file's path.
 CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
 
-# --- filesystem-loop probe (guards every leg's traversal) -------------------
-# Every traversal here follows symlinks (`find -L`, `grep -R`), because a
-# symlink silently skipped is a file nobody checked. That makes a filesystem
-# LOOP reachable — and GNU find and grep both handle one the same way: warn on
-# STDERR, skip the cyclic branch, exit 0. Every traversal in this script sends
-# stderr to /dev/null, so without this probe a loop would silently truncate
-# coverage: the exact failure the symlink-following exists to prevent,
-# reintroduced by it.
+# --- filesystem-loop probe -------------------------------------------------
+# SCOPE, stated narrowly on purpose: this reports DIRECTORY CYCLES, and
+# nothing else. Every traversal here follows symlinks (`find -L`), because a
+# symlink silently skipped is a file nobody checked. That makes a cycle
+# reachable, and GNU find handles one by warning on STDERR, skipping the
+# cyclic branch, and exiting 0 — while every traversal in this script sends
+# stderr to /dev/null. So a cycle would silently truncate coverage: the exact
+# failure symlink-following exists to prevent, reintroduced by it.
 #
-# Probed ONCE for the whole construct rather than at each of the seven
-# traversal sites — the site-by-site version of this rule is what left four of
-# those seven asymmetric in the first place. CITE_ROOTS contains `plugins`, so
-# it covers what all four legs walk.
+# What it does NOT do, so a green run is not read as more than it is:
+#   - it does not bound or preempt the other traversals; it is a separate,
+#     later `find`, so it reports a cycle rather than preventing one
+#   - it is not a hang guard. Devices, FIFOs and sockets are excluded by
+#     `-type f` at every read site instead — see leg 4's root loop
+#   - it matches one English substring of a diagnostic that coreutils does not
+#     promise as an interface, so a translated locale would defeat it. The
+#     script sets no locale; CI runs C.UTF-8
+#
+# Probed ONCE for the construct rather than at each traversal site — the
+# site-by-site version of this rule is what left four sites asymmetric in the
+# first place. CITE_ROOTS contains `plugins`, so it covers what all four legs
+# walk.
 #
 # Broken symlinks are deliberately NOT flagged: `-type f` is false for them and
 # there is no content to check.
@@ -418,15 +427,39 @@ if [ "$skill_files" -eq 0 ]; then
   misses=$((misses + 1))
 fi
 
-# Scan PER ROOT, and account for every one. A single `grep -r` over all roots
-# returns matches from the survivors and exits 2 when one is missing — so
-# renaming a root away left the run at 0 MISS while the INFO line still
-# reported the configured count. Three distinct outcomes, none collapsible:
-# missing root, grep error (exit >1), and a root that matched nothing.
+# Scan PER ROOT, and account for every one. A single scan over all roots
+# returns matches from the survivors and hides a missing one — renaming a root
+# away left the run at 0 MISS while the INFO line still reported the
+# configured count. Three distinct outcomes, none collapsible: missing root,
+# read error, and a root holding no scannable file.
+#
+# DISCOVERY IS `find -L ... -type f`, THE SAME IDIOM LEGS 1-3 USE, and that
+# symmetry is load-bearing rather than tidiness. The obvious way to make leg 4
+# follow symlinks is `grep -R`, and it is wrong: `grep -R` opens whatever a
+# symlink points at, with no file-type check. A tracked symlink to `/dev/zero`
+# or to a FIFO with no writer makes it block forever — verified, and verified
+# that plain `grep -r` and `find -L -type f` both return immediately on the
+# same fixture. This workflow runs on `pull_request`, so one file in one
+# branch would have pinned a runner until the job timeout. `find -type f`
+# resolves the link and tests the TARGET, so a symlinked regular file is still
+# read (the point of the change) while devices, FIFOs and sockets are excluded
+# by construction.
+#
+# The file list is also the coverage probe: zero MATCHES in a root is
+# legitimate (a root whose prose cites no lettered section is fine, and
+# asserting otherwise turned a copy edit into a red build), but zero FILES
+# means nothing was scanned there, which is the real hazard.
+#
 # `-a` keeps grep reading a file containing a NUL byte; without it GNU grep
 # calls the file binary, prints nothing to stdout, and exits 0 — every
-# citation in it reads as absent. Leg 2 carries the same guard, but it scans
-# only plugins/*, so the four roots added here were covered by nothing.
+# citation in it reads as absent.
+CITE_EXTS="$MD_EXTS sh yml yaml"
+cite_find_name_args=()
+for _e in $CITE_EXTS; do
+  [ "${#cite_find_name_args[@]}" -eq 0 ] || cite_find_name_args+=(-o)
+  cite_find_name_args+=(-name "*.${_e}")
+done
+
 cite_raw=''
 roots_scanned=0
 for r in $CITE_ROOTS; do
@@ -434,25 +467,20 @@ for r in $CITE_ROOTS; do
     miss "model-pin: leg 4 citation root '${r}' does not exist — coverage shrank silently"
     misses=$((misses + 1)); continue
   fi
-  rout=$(grep -RahoE "$CITE_RE" "${CITE_INCLUDES[@]}" "$r" 2>/dev/null)
-  rrc=$?
-  if [ "$rrc" -gt 1 ]; then
-    miss "model-pin: leg 4 grep failed on root '${r}' (exit ${rrc}) — an unreadable root is not a pass"
+  rfilelist=()
+  while IFS= read -r -d '' _f; do rfilelist+=("$_f"); done < <(
+    find -L "$r" \( "${cite_find_name_args[@]}" \) -type f -print0 2>/dev/null)
+  if [ "${#rfilelist[@]}" -eq 0 ]; then
+    miss "model-pin: leg 4 root '${r}' holds no scannable file (${CITE_EXTS// /, }) — nothing was scanned there"
     misses=$((misses + 1)); continue
   fi
-  if [ "$rrc" -eq 1 ]; then
-    # Zero MATCHES is legitimate — a root whose prose cites no lettered section
-    # today is fine, and `README.md` and `.github` each hold exactly one
-    # citation, so asserting matches turned any copy edit into a red build
-    # whose cheapest remedy was deleting the root. Assert instead that files
-    # were READ: that is the actual hazard (a renamed directory, or an
-    # --include set matching nothing there). Total-zero stays covered by the
-    # `checked` guard below.
-    rfiles=$(grep -RalE '' "${CITE_INCLUDES[@]}" "$r" 2>/dev/null | grep -c .)
-    if [ "$rfiles" -eq 0 ]; then
-      miss "model-pin: leg 4 root '${r}' holds no file matching the --include set — nothing was scanned there"
-      misses=$((misses + 1)); continue
-    fi
+  # `--` so a file named like an option is a path. The list is bounded by the
+  # repo (this checker is source-repo-only), so ARG_MAX is not in play.
+  rout=$(grep -ahoE "$CITE_RE" -- "${rfilelist[@]}" 2>/dev/null)
+  rrc=$?
+  if [ "$rrc" -gt 1 ]; then
+    miss "model-pin: leg 4 read failed on root '${r}' (exit ${rrc}) — an unreadable root is not a pass"
+    misses=$((misses + 1)); continue
   fi
   roots_scanned=$((roots_scanned + 1))
   cite_raw="${cite_raw}${rout}"$'\n'

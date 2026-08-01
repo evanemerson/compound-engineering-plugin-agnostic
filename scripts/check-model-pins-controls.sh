@@ -208,8 +208,8 @@ reg 23 'prose regression — a word before a real anchor (tier)' 0 0 '' '^MISS '
 reg 16 'citation root removed' 1 0 \
   "leg 4 citation root '\\.github' does not exist" '' \
   'kills: removal of the root-existence check, which let a vanished root pass at 0 MISS'
-reg 17 'root present, include set matches nothing' 1 0 \
-  "leg 4 root '\\.github' holds no file matching the --include set" '' \
+reg 17 'root present, no file of a scannable extension' 1 0 \
+  "leg 4 root '\\.github' holds no scannable file" '' \
   'kills: removal of the file-coverage probe'
 reg 18 'root present with files but zero citations' 0 0 '' '^MISS ' \
   'false-positive guard: a root may legitimately cite nothing (a copy edit must not fail the build)'
@@ -229,6 +229,11 @@ reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" 
   'kills: grep -R reverted to -r — grep follows symlinks named on the command line but NOT during recursion'
 reg 31 'a filesystem loop under a scan root is reported' 1 0 'filesystem loop under a scan root' '' \
   'kills: removal of the loop probe — find and grep skip a cycle and warn on stderr, which every traversal discards'
+# Runs under a SHORT timeout (see CASE_TIMEOUT): the regression this guards is
+# a HANG, not a wrong answer, so the failure has to be bounded or the suite
+# hangs with it.
+reg 32 'a symlink to a character device does not hang the scan' 0 0 '' '^MISS ' \
+  'kills: leg 4 reverting to `grep -R` over raw paths — it opens whatever a symlink points at, with no type check, and blocks forever on /dev/zero or a writerless FIFO'
 
 # --- Leg 4 vs legs 2-3: extension parity (the round-3 class) ----------------
 reg 24 'identical content in .md and .markdown behaves identically' 2 1 \
@@ -415,6 +420,14 @@ ${SS}9c." ;;
         ln -s ../zzloopdir "$d/plugins/zzloopdir/self"
         [ -L "$d/plugins/zzloopdir/self" ] || return 1
         [ -d "$d/plugins/zzloopdir/self/self" ] || return 1 ;;
+    # /dev/zero, not a FIFO: both hang `grep -R` identically, and a character
+    # device needs no cleanup and cannot leave a blocked writer behind. The
+    # file is named `.sh` so it is inside leg 4's extension set — the point is
+    # that the extension matches and the TYPE does not.
+    32) [ -c /dev/zero ] || return 1
+        ln -s /dev/zero "$d/scripts/zzdev.sh"
+        [ -L "$d/scripts/zzdev.sh" ] || return 1
+        [ -c "$d/scripts/zzdev.sh" ] || return 1 ;;
 
     24) write_zzcontrol "$d" md ;;
     24b) write_zzcontrol "$d" markdown ;;
@@ -615,11 +628,15 @@ if find "$PRISTINE" -type l -print -quit | grep -q .; then
   exit 2
 fi
 
+# Per-case bound. A case whose regression is a HANG rather than a wrong answer
+# has to fail fast, or the suite hangs with the defect it is testing for.
+case_timeout() { case "$1" in 32) printf 20 ;; *) printf 120 ;; esac; }
+
 CHK_OUT=''; CHK_RC=0; CHK_MISS=''; CHK_WARN=''
-run_checker() {
+run_checker() {  # run_checker <dir> [timeout_seconds]
   # Bounded: a hung checker would otherwise hang the suite and the CI job
   # until the job timeout, with no diagnostic.
-  CHK_OUT=$(cd "$1" && timeout 300 bash "$CHECKER" 2>&1)
+  CHK_OUT=$(cd "$1" && timeout "${2:-120}" bash "$CHECKER" 2>&1)
   CHK_RC=$?
   local verdict
   verdict=$(printf '%s\n' "$CHK_OUT" | grep -oE '^-- [0-9]+ MISS, [0-9]+ WARN --$' | tail -1)
@@ -706,7 +723,7 @@ run_one() {
   cp -a "$PRISTINE" "$dir" || { fail_case "$i" 'could not copy fixture'; return; }
   plant "$id" "$dir" || { fail_case "$i" 'plant step failed or landed as a no-op'; return; }
 
-  if ! run_checker "$dir"; then
+  if ! run_checker "$dir" "$(case_timeout "$id")"; then
     fail_case "$i" 'checker printed no "-- N MISS, M WARN --" verdict line'
     return
   fi
@@ -742,7 +759,7 @@ run_one() {
     a=$(printf '%s\n' "$CHK_OUT" | norm_case24)
     cp -a "$PRISTINE" "$alt" || { fail_case "$i" 'could not copy fixture'; return; }
     plant 24b "$alt" || { fail_case "$i" 'plant step failed (.markdown)'; return; }
-    if ! run_checker "$alt"; then
+    if ! run_checker "$alt" "$(case_timeout "$id")"; then
       fail_case "$i" '.markdown run printed no verdict line'
       return
     fi
