@@ -106,10 +106,21 @@ jobs:
           STALE_AFTER_DAYS: 16
         run: |
           set -o pipefail
+          # stderr to a file, not 2>&1: on a 404 `gh` writes the API's JSON
+          # body to STDOUT, so merging them put a raw blob inside the warning
+          # annotation. Observed on the first hosted run of this step.
           if ! out=$(gh api \
                 "repos/$GITHUB_REPOSITORY/actions/workflows/mutation-sweep.yml/runs?per_page=1" \
-                --jq '.workflow_runs[0].created_at // ""' 2>&1); then
-            printf '::warning::mutation sweep freshness UNVERIFIED (%s) — a renamed or deleted sweep workflow reaches this branch too\n' "$out"
+                --jq '.workflow_runs[0].created_at // ""' 2>"$RUNNER_TEMP/gh.err"); then
+            reason=$(head -1 "$RUNNER_TEMP/gh.err")
+            # A 404 means no workflow of that NAME is registered, which the
+            # Actions API only does once the file reaches the default branch.
+            # Two causes, one status: expected while the sweep is still on a
+            # branch, and a rename or deletion afterwards. Both warn, because
+            # the second is the one this step exists to catch and neither can
+            # be told from the other here.
+            printf '::warning::mutation sweep freshness UNVERIFIED: %s. A 404 means no workflow of that name is registered — expected until it reaches the default branch, and a rename or a deletion after that\n' \
+              "${reason:-no reason reported}"
             exit 0
           fi
           if [ -z "$out" ]; then
