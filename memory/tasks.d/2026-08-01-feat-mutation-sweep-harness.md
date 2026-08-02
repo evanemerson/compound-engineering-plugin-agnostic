@@ -252,3 +252,61 @@ undeclared survivors, 0 baseline-dirty, 0 anchor-missing, exit 0.** 42m41s for
 taking option (b).
 
 Before: 40 CAUGHT / 2 SURVIVED-DECLARED / 21 SURVIVED-UNDECLARED, exit 1.
+
+### From the 2026-08-01 second review (`todos/review-2026-08-01-201705.md`)
+
+20 findings — 1 P1, 8 P2, 11 P3; 11 applied in `c4fcd42`, 9 deferred below.
+**The P1 was in the freshness detector**, the component built to catch a
+silent off-switch, and it was a silent-pass path of its own; a second finding
+was a control whose post-plant assertion was vacuously true. Both reproduced
+before being fixed. Third round on this branch where the detector fell to the
+class it detects.
+
+**New lesson, and it belongs to the freeze:** freezing `run-mutation-sweep.sh`
+and `registry.sh` across the control commit is what makes each
+`SURVIVED-UNDECLARED -> CAUGHT` flip attributable to a control — and it is
+also what left 16 `why` fields describing a world the same PR had ended, two
+of them naming a killer whose own comment in that PR says it cannot do the
+job. The discipline that made the evidence trustworthy made the record wrong.
+The missing step is a reconcile pass after the unfreeze, not a weaker freeze.
+
+- [ ] P2 — **the nested per-mutant timeout cannot reach a hung checker.** GNU
+  `timeout` without `--foreground` puts its child in a new process group, so
+  the sweep's outer `timeout -k 30 900` never signals the controls suite's own
+  nested `timeout 120 bash "$CHECKER"`. Verified empirically: the grandchild
+  survives as an orphan, the child's TERM trap never fires, and because the
+  orphan holds the pipe the outer `$( )` reads, one mutant's worst case is
+  ~1050s not 930s. Never a false CAUGHT (no trailer -> `HARNESS-ERROR` ->
+  exit 2), and **latent** — no registered mutant targets the construct case 32
+  guards. Needs a design call: `-k` on the inner timeout, `--foreground`,
+  process-group-aware killing, or accept and record. (finding #12, conf 85.)
+
+- [ ] P3 — **the STATED LIMIT guard binds to a line, not to content.** With
+  the target-file check applied, a survivor must cite its own target — but
+  `l2-grep-binary` and `l2-grep-rc` both cite `:311`, whose two claims sit on
+  separate lines, so deleting either leaves both declarations green with half
+  their rationale gone. Refines the already-open "nothing machine-checks that a
+  SURVIVOR declaration is honest". (finding #13, conf 80.)
+
+- [ ] P3 — **`exit 3` and the detector's `UNVERIFIED` have no rule in §9f.**
+  §9f's outcome table is per-mutant with no exit-code row; the freshness
+  detector, its 16-day bound and its stated limit live only in a YAML comment.
+  Both fail safe today. Note the collision: §9 says "for a caller's gate,
+  UNVERIFIED counts as MISSING", while this step's UNVERIFIED exits 0 by
+  design — same word, different constructs, and that is exactly what wants
+  saying once rather than twice. (finding #14, conf 75.)
+
+- [ ] P3 — **leg 2's readability probe is sabotaged by no mutant** (see the
+  earlier entry; the second review corroborates it and adds that a probe-only
+  mutant would survive too, because the `exit>1` arm backs it up — a fourth
+  and fifth declared survivor of the `t-rc-half` shape rather than coverage).
+  (finding #20, conf 85.)
+
+- [ ] P3 — four smaller deferrals, all judgment: `gh issue list --limit 100`
+  can miss the tracking issue and open a duplicate (#15); the INVALID message
+  says the tree changed but not what changed (#16); per-mutant cost is
+  I/O-bound so the 42m41s local figure may understate a hosted runner, which
+  folds into the calibration item above (#17); and the "bound external text
+  before display" and "a branch reachable by N causes must not name one" rules
+  are applied at the sites review found, not audited across both workflows
+  (#18, #19).
