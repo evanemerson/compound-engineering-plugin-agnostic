@@ -125,7 +125,9 @@ reg() {
   EXP_RE+=("$5"); FORBID_RE+=("$6"); WHY+=("$7")
 }
 
-UNQUAL_9Q="${SS}9q is cited but no .* has a '### 9q\\.' heading"
+# Unqualified misses: <anchor> cited, defined by no skill at all.
+unqual_miss() { printf "%s%s is cited but no .* has a '### %s\\.' heading" "$SS" "$1" "$1"; }
+UNQUAL_9Q=$(unqual_miss 9q)
 # Qualified misses: <anchor> cited as `<owner>` but that skill has no heading.
 qual_miss() { printf "%s%s is cited as .%s. %s%s but %s/SKILL\\.md has no '### %s\\.' heading" \
   "$SS" "$2" "$1" "$SS" "$2" "$1" "$2"; }
@@ -157,6 +159,14 @@ reg 5 'leading-dash token before the anchor' 1 0 "$UNQUAL_9Q" '' \
   'kills: removal of the leading-dash blanking (qualifier sanitization)'
 reg 6 'plain word qualifier — control for cases 1-5' 1 0 "$UNQUAL_9Q" '' \
   'isolates the empty qualifier field as the cause: this one SURVIVES the round-1 mutant'
+# Case 5 plants `-x`, which is not a skill name with OR without the dash
+# blanking, so it takes the unqualified branch either way and cannot see the
+# sanitization go. Reaching the qualified branch needs a dash attached to a
+# REAL owner in the repo's dominant `cepa:<skill>` style, because the `##*:`
+# prefix strip runs AFTER the blanking: drop the blanking and `-cepa:grounding`
+# becomes `grounding`, a skill that does not own the anchor.
+reg 39 'a dash-attached qualifier is not an owner claim' 0 0 '' '^MISS ' \
+  'kills: the leading-dash blanking in qualifier sanitization, which case 5 exercises but cannot kill'
 
 reg 7 'wrong owner, lowercase' 1 0 "$(qual_miss grounding 9c)" '' \
   'kills: removal of the owners membership test in the qualified branch'
@@ -223,6 +233,8 @@ reg 27 'broken citation under the `scripts` root' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping `scripts` from CITE_ROOTS — the root the runtime-built section sign exists for'
 reg 28 'broken citation in a .yml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping --include=*.yml, which would make the workflow files unscanned'
+reg 37 'broken citation in a .yaml under `.github`' 1 0 "$UNQUAL_9Q" '' \
+  'kills: dropping `yaml` from CITE_EXTS. Case 28 plants a .yml and nothing planted a .yaml, so half of leg 4 own extension set had no case behind it'
 reg 29 'no citations anywhere' '+' 0 'checked no .* citation' '' \
   'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass'
 reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" '' \
@@ -248,6 +260,25 @@ reg 36 'a root whose only scannable files are empty is reported' 1 0 \
 reg 32 'a symlink to a character device does not hang the scan' 0 0 '' '^MISS ' \
   'kills: leg 4 reverting to `grep -R` over raw paths — it opens whatever a symlink points at, with no type check, and blocks forever on /dev/zero or a writerless FIFO'
 
+# --- Leg 4: the anchor INDEX ------------------------------------------------
+# The lookup has two sides and they are separate constructs. Everything above
+# tests the CITATION side; these test the side that builds ANCHOR_OWNERS from
+# each skill's own headings. The sweep found all four of these surviving at
+# once, which is what a whole untested side of a comparison looks like.
+reg 38 'no SKILL.md anywhere' '+' 0 \
+  'no plugins/\*/skills/\*/SKILL\.md found' '' \
+  'kills: the zero-skill-files guard. Case 20 blanks the HEADINGS and keeps the files, so skill_files stays non-zero there and this guard never runs'
+reg 40 'a mid-line heading mention does not define an anchor' 1 0 \
+  "$(unqual_miss 9zz)" '' \
+  'kills: the ^ anchor on the heading index (LOOSENING) — prose that MENTIONS a heading would define it, so a citation resolves against prose instead of against a section'
+# A BOM is only observable on line 1, so this fixture puts the heading there.
+# Prepending one to a real SKILL.md is invisible to this construct: line 1 is
+# the frontmatter delimiter and the headings are further down.
+reg 41 'a BOM before a line-1 heading still defines its anchor' 0 0 '' '^MISS ' \
+  'kills: the BOM/CRLF normalization when building the index — a BOM-led skill file would define no anchors, so every citation into it MISSes'
+reg 42 'heading letters are matched case-insensitively' 0 0 '' '^MISS ' \
+  'kills: the lowercasing on the INDEX side. Case 12 lowercases the CITATION side and passes either way — two sides, two constructs'
+
 # --- Leg 4 vs legs 2-3: extension parity (the round-3 class) ----------------
 reg 24 'identical content in .md and .markdown behaves identically' 2 1 \
   'zzcontrol' '' \
@@ -272,6 +303,46 @@ reg L1e 'a SYMLINKED agents/ directory is still discovered' 1 0 \
 reg L1f 'one definition reachable through two symlinked agents/ dirs is checked once' 1 0 \
   'is not a sanctioned tier' '' \
   'kills: removal of resolved-path dedup — -L makes the same file reachable twice, inflating the coverage counter and double-reporting one defect'
+
+# The leg-1 constructs the first cut never reached. The mutation sweep found
+# them by enumerating leg 1 and the shared frontmatter sanitizers construct by
+# construct: 11 of its 21 undeclared survivors lived here, the mirror image of
+# the first control cut putting 22 of its 26 cases on leg 4.
+#
+# NOTE THE COUNTS. An agent definition is also ordinary markdown under
+# `plugins/`, so legs 2-3 read it and leg 4 scans it for citations. A mode-000
+# definition therefore produces FOUR misses — leg 1's readability guard, leg 2's
+# and leg 3's own read-error arms, and leg 4's per-root grep exiting 2 — and a
+# mode-000 file under `commands/` produces three. That coupling is a property of
+# the checker, not of these fixtures: no location under `plugins/` is visible to
+# leg 1 and invisible to the others. The count is asserted as what the checker
+# actually does, and the EXP_RE is what pins each case to the leg it is about.
+reg L1g 'an UNREADABLE agent definition is refused by leg 1' 4 0 \
+  'unreadable \(a file that cannot be checked is not a pass\)' '' \
+  'kills: leg 1 per-file readability guard. With it gone the file falls through to the parser, reads as having no model: key, and reports the SAME count under a different defect — only the message separates them'
+# The BOM is the load-bearing half, measured rather than assumed: `\r` is in
+# [[:space:]] under LC_ALL=C, so a CRLF frontmatter still satisfies the awk
+# `^---[[:space:]]*$` test and its trailing \r is stripped by the value sed
+# anyway. CRLF alone cannot fail this construct. Both are planted because the
+# normalization covers both; only the BOM can go red.
+reg L1h 'a UTF-8 BOM before the frontmatter still reads as pinned' 0 0 '' '^MISS ' \
+  'kills: the BOM/CRLF normalization before leg 1 frontmatter parsing — a BOM makes line 1 fail the ^--- test, so a correctly pinned file reports as unpinned'
+reg L1i 'a file with NO frontmatter is not pinned by a model: line in its body' 1 0 \
+  'no model: key in frontmatter' '' \
+  'kills: the awk no-frontmatter guard (LOOSENING) — prose would satisfy leg 1. Also pins the miss COUNT for this branch, which prints its message either way'
+reg L1j 'a model: line AFTER the frontmatter closes is not a pin' 1 0 \
+  'no model: key in frontmatter' '' \
+  'kills: the closing-delimiter exit (LOOSENING) — a tier named in the body would satisfy leg 1. Also pins the miss COUNT for this branch'
+reg L1k 'an inline comment after the tier does not break the pin' 0 0 '' '^MISS ' \
+  'kills: inline-comment stripping in the leg 1 value — `model: sonnet  # note` would stop reading as a pin'
+reg L1m 'a capitalized tier value still reads as a pin' 0 0 '' '^MISS ' \
+  'kills: the lowercasing of the leg 1 VALUE. Case 8 lowercases a leg 4 qualifier, which is a different construct and passes either way'
+reg L1n 'a truncated tier is not a tier' 1 0 \
+  'model: son is not a sanctioned tier' '' \
+  'kills: grep -qx -> grep -q (LOOSENING), which makes the value a substring PATTERN so `son` validates against sonnet'
+reg L1p 'the top tier is not sanctioned for automatic dispatch' 1 0 \
+  'model: fable is not a sanctioned tier' '' \
+  'kills: admitting fable to ALLOWED_TIERS. L3c plants fable in a mode-conditional marker, where tier_rank rejects it independently — so leg 1 had no fable plant behind it'
 
 # --- Leg 2: dispatch instructions in prose ---------------------------------
 reg L2 'dispatch instruction with no pin in its block' 0 1 \
@@ -299,6 +370,17 @@ reg L2h 'a correctly pinned dispatch is silent' 0 0 '' '^WARN ' \
 reg L2i 'a SYMLINKED plugin directory is still scanned' 0 1 \
   'dispatch instruction with no pin' '' \
   'kills: dropping -L from legs 2-3 SCAN_DIRS discovery — a whole plugin scanned by nothing'
+# This case kills NO registered mutant, and that is the finding it records.
+# It was written to kill leg 2 grep read-error arm; the sweep then showed it
+# staying GREEN under that mutant, because leg 2 readability probe reads the
+# whole file first and refuses it before the arm runs. The arm is now a
+# declared survivor (see the STATED LIMIT at check-model-pins.sh:311). What
+# this fixture actually covers is that probe — a construct NOTHING in the
+# registry sabotages. Kept for exactly that reason: it is the only case
+# standing behind it, and editing leg 2 read-error arm will not move it.
+reg L2j 'an UNREADABLE file under a scanned plugin is refused by leg 2' 3 0 \
+  'unreadable during leg 2 scan' '' \
+  'covers leg 2 readability probe, which no mutant sabotages — NOT a kill for the grep read-error arm, which is a declared survivor. L3f is the sibling that does kill a live mutant, because leg 3 has no probe'
 
 # --- Leg 3: mode-conditional pairs -----------------------------------------
 reg L3a 'mode-conditional with the headless branch deleted' 1 0 \
@@ -315,6 +397,26 @@ reg L3d 'inverted pair (sonnet/opus)' 1 0 \
   'kills: a corrupted TIER_RANK table; L3b alone passes if sonnet and opus are ranked equal'
 reg L3e 'a correctly ordered pair is silent' 0 0 '' '^MISS ' \
   'false-positive guard: leg 3 must not reject the shape it is asking for'
+# A SECOND case over the same fixture shape as L2j, deliberately, not a second
+# assertion bolted onto it. The checker's own comment says leg 3 must not lean
+# on leg 2 catching an unreadable file first, because that is loop order rather
+# than a guarantee — so the two read-error arms are two constructs, and each
+# needs a case that names the leg in its expected message.
+reg L3f 'the same unreadable file is refused by leg 3 on its own' 3 0 \
+  'unreadable during leg 3 scan' '' \
+  'kills: leg 3 own read-error arm — with it gone, leg 3 is silent on a file it could not read whenever leg 2 happens to be silent too'
+reg L3g 'a run-on token does not satisfy the interactive= branch' 1 0 \
+  'must name both branches' '' \
+  'kills: the left word boundary on interactive= (LOOSENING). `noninteractive=opus headless=sonnet` would otherwise declare the attended branch and pass as a well-ordered pair'
+
+# --- The verdict and exit path ----------------------------------------------
+# Counts and exit status are asserted by every case above. The line PREFIX is
+# not: a checker that renamed `MISS ` to `Miss ` would keep every count, every
+# exit code and every message body intact, and only the machine-readable half
+# of its output would be gone. So one case anchors the prefix explicitly.
+reg V1 'findings are prefixed with the MISS token' 1 0 \
+  "^MISS model-pin: ${SS}9q is cited but" '' \
+  'kills: a change to the MISS line prefix — invisible to counts, to the exit code and to every message assertion in this file, which all match on the body'
 
 if [ "$LIST_ONLY" -eq 1 ]; then
   i=0
@@ -363,6 +465,49 @@ EOF
 # cannot hold a NUL, so grepping for one is grepping for the empty pattern.
 has_nul() { [ "$(tr -d '\000' < "$1" | wc -c)" -ne "$(wc -c < "$1")" ]; }
 
+# Every file under one or more directories that leg 4 would scan, by its
+# extension set. Cases 17, 29 and 36 all assert something about whole ROOTS, so
+# they need all of them: a case that neutralizes one file BY NAME stops being
+# that case the moment a sibling is added, and its failure mode is a clean PASS.
+#
+# `-L` mirrors leg 4's own discovery idiom (`find -L ... -type f`). Without it,
+# a symlinked `.yml` under a root is invisible here while the checker still
+# reads it — so a post-plant assertion would pass while the root stayed
+# covered, and the case would go red for a reason that has nothing to do with
+# the checker.
+#
+# THE EXTENSION LIST IS A SECOND COPY of `CITE_EXTS` in check-model-pins.sh:525
+# (`$MD_EXTS sh yml yaml`), and it is not derived from it. What actually
+# happens when they diverge, stated correctly because the previous wording here
+# claimed a mechanism the code does not have: an extension added to CITE_EXTS
+# and not here does NOT fail the plant — this helper simply cannot see such a
+# file, so the post-assertion passes and `plant` returns 0. It surfaces one
+# step later as a failed CASE (the root stays covered, so 17/36's expected MISS
+# never appears), and only when a file of that extension exists under the root
+# at the time. Red either way, never a quiet pass — but the failure names the
+# case, not the divergence, so keep this list in step with CITE_EXTS by hand.
+scannable_in() {  # scannable_in <dir>... ; extra find predicates after a `--`
+  local dirs=() pred=()
+  while [ $# -gt 0 ]; do
+    case "$1" in --) shift; pred=("$@"); break ;; *) dirs+=("$1") ;; esac
+    shift
+  done
+  find -L "${dirs[@]}" -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.sh' \
+    -o -name '*.yml' -o -name '*.yaml' \) "${pred[@]+"${pred[@]}"}" 2>/dev/null
+}
+
+# `scannable_in` sends find's stderr to /dev/null and is read through `$(...)`,
+# so a missing or unreadable directory yields empty output at a NON-ZERO exit —
+# byte-identical to "the plant worked, nothing scannable is left". A
+# post-assertion that only tests emptiness therefore reads a broken fixture as a
+# successful plant, which is the documented signal these two cases were rewritten
+# to escape in the first place. Capture the status and require BOTH.
+scannable_gone() {  # scannable_gone <dir>... ; extra find predicates after a `--`
+  local left rc
+  left=$(scannable_in "$@"); rc=$?
+  [ "$rc" -eq 0 ] && [ -z "$left" ]
+}
+
 plant() {
   local id="$1" d="$2" f before
   case "$id" in
@@ -389,7 +534,19 @@ ${SS}9c." ;;
     23) say "$d" "The rule is tier ${SS}9c here." ;;
 
     16) mv "$d/.github" "$d/.github-gone" ;;
-    17) mv "$d/.github/workflows/model-pins.yml" "$d/.github/workflows/model-pins.txt" ;;
+    # 17 and 36 neutralize a whole ROOT, so they must act on EVERY scannable
+    # file under it rather than on `model-pins.yml` by name. Adding a second
+    # workflow file left `.github` still scannable and the expected MISS never
+    # appeared: both cases degraded into second copies of the baseline while
+    # still reporting PASS. Reproduced when mutation-sweep.yml landed —
+    # `2/2 passed` became `FAIL 17` / `FAIL 36`. Assert the plant landed in
+    # both directions (something was there; nothing scannable is left), so a
+    # future extension added to CITE_EXTS and not to scannable_in() shows up
+    # as a failed plant rather than as a quiet pass.
+    17) [ -n "$(scannable_in "$d/.github")" ] || return 1
+        while IFS= read -r p; do mv "$p" "$p.txt" || return 1; done < <(scannable_in "$d/.github")
+        scannable_gone "$d/.github" || return 1
+        : ;;
     # A sed that matches nothing exits 0. Assert the plant actually landed:
     # README.md's lettered citations must exist before and be gone after, or
     # this case silently degrades into a second copy of the baseline.
@@ -416,9 +573,11 @@ ${SS}9c." ;;
     # to check at all.
     29) before=$(grep -rc "$SS" "$d/README.md" || true)
         [ "${before:-0}" -gt 0 ] || return 1
-        find "$d/plugins" "$d/.github" "$d/scripts" -type f \
-          \( -name '*.md' -o -name '*.markdown' -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' \) \
-          -exec sed -i "s/${SS}/S-/g" {} +
+        # Routed through scannable_in so the extension set lives in ONE place
+        # in this file. A private fourth copy here was missed by the same diff
+        # that added the helper — the duplicated-literal signal, live.
+        while IFS= read -r p; do sed -i "s/${SS}/S-/g" "$p" || return 1
+        done < <(scannable_in "$d/plugins" "$d/.github" "$d/scripts")
         sed -i "s/${SS}/S-/g" "$d/CLAUDE.md" "$d/README.md" ;;
 
     # The target sits at the fixture root, which is NOT a citation root, so the
@@ -448,9 +607,49 @@ ${SS}9c." ;;
     35) mkdir -p "$d/scripts/zzloopdir"
         ln -s ../zzloopdir "$d/scripts/zzloopdir/self"
         [ -d "$d/scripts/zzloopdir/self/self" ] || return 1 ;;
-    36) : > "$d/.github/workflows/model-pins.yml"
-        [ -s "$d/.github/workflows/model-pins.yml" ] && return 1
+    36) [ -n "$(scannable_in "$d/.github")" ] || return 1
+        while IFS= read -r p; do : > "$p" || return 1; done < <(scannable_in "$d/.github")
+        scannable_gone "$d/.github" -- -size +0c || return 1
         : ;;
+
+    37) printf '# zzcite\n# The rule is %s9q here.\n' "$SS" > "$d/.github/zzcite.yaml" ;;
+    38) [ -n "$(find "$d/plugins" -path '*/skills/*/SKILL.md' -type f)" ] || return 1
+        find "$d/plugins" -path '*/skills/*/SKILL.md' -type f -delete
+        [ -z "$(find "$d/plugins" -path '*/skills/*/SKILL.md' -type f)" ] || return 1
+        : ;;
+    39) say "$d" "See -cepa:grounding ${SS}9c here." ;;
+    # The mention must NOT be at the start of a line, or the clean checker
+    # defines the anchor too and the case degrades into a second baseline.
+    #
+    # BOTH assertions are needed, and the positive one is the load-bearing
+    # half. Asserting only the negative — "the line did not land at column 0" —
+    # is VACUOUSLY TRUE when nothing landed at all: redirect the append at a
+    # path that cannot be written and the case still printed PASS, because the
+    # 1 MISS it expects comes from `say` rather than from the distinguishing
+    # fixture. Reproduced. That is this file's own rule 3, in the one shape it
+    # does not cover in so many words: a plant whose expected count survives
+    # its own no-op.
+    40) printf 'Prose that mentions the heading ### 9zz. must not define it.\n' \
+          >> "$d/plugins/cepa/skills/autonomy/SKILL.md"
+        grep -q 'mentions the heading ### 9zz\.' \
+          "$d/plugins/cepa/skills/autonomy/SKILL.md" || return 1
+        grep -q '^### 9zz\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
+        say "$d" "The rule is ${SS}9zz here." ;;
+    # The heading is on LINE 1 because that is the only line a BOM can reach.
+    # A printf that silently dropped the BOM would leave a working skill file
+    # behind and this case would pass forever, so the bytes are asserted.
+    41) mkdir -p "$d/plugins/cepa/skills/zzskillbom"
+        printf '\xEF\xBB\xBF### 9zy. Control heading\n\nBody.\n' \
+          > "$d/plugins/cepa/skills/zzskillbom/SKILL.md"
+        head -c 3 "$d/plugins/cepa/skills/zzskillbom/SKILL.md" | od -An -tx1 \
+          | grep -q 'ef bb bf' || return 1
+        say "$d" "The rule is ${SS}9zy here." ;;
+    42) mkdir -p "$d/plugins/cepa/skills/zzskillup"
+        printf '### 9ZQ. Control heading\n\nBody.\n' \
+          > "$d/plugins/cepa/skills/zzskillup/SKILL.md"
+        grep -q '^### 9ZQ\.' "$d/plugins/cepa/skills/zzskillup/SKILL.md" || return 1
+        say "$d" "The rule is ${SS}9zq here." ;;
+    V1) say "$d" "${SS}9q applies here." ;;
     L1f) mkdir -p "$d/plugins/zzsrc" "$d/plugins/zzp1" "$d/plugins/zzp2"
         printf -- '---\nname: zzl1f\nmodel: inherit\n---\n\n# zzl1f\n' \
           > "$d/plugins/zzsrc/zzl1f.md"
@@ -496,6 +695,34 @@ ${SS}9c." ;;
         ln -s ../zzsrc "$d/plugins/zzplug/agents"
         [ -L "$d/plugins/zzplug/agents" ] || return 1
         [ -d "$d/plugins/zzplug/agents" ] || return 1 ;;
+
+    # mode 000, so leg 1's readability guard is the construct under test. The
+    # same file is unreadable to legs 2, 3 and 4 as well — see this case's
+    # `reg` note for why the expected count is four and not one.
+    L1g) printf -- '---\nname: zzl1g\nmodel: sonnet\n---\n\n# zzl1g\n' \
+           > "$d/plugins/cepa/agents/zzl1g.md"
+        chmod 000 "$d/plugins/cepa/agents/zzl1g.md"
+        [ -r "$d/plugins/cepa/agents/zzl1g.md" ] && return 1
+        : ;;
+    # A printf that silently failed to emit the BOM would leave an ordinary
+    # pinned file behind — a second copy of the baseline, reporting PASS
+    # forever. Assert the bytes landed.
+    L1h) printf '\xEF\xBB\xBF---\r\nname: zzl1h\r\nmodel: sonnet\r\n---\r\n\r\n# zzl1h\r\n' \
+           > "$d/plugins/cepa/agents/zzl1h.md"
+        head -c 3 "$d/plugins/cepa/agents/zzl1h.md" | od -An -tx1 | grep -q 'ef bb bf' || return 1
+        : ;;
+    L1i) printf '# zzl1i\n\nThis definition has no frontmatter at all.\n\nmodel: sonnet\n' \
+           > "$d/plugins/cepa/agents/zzl1i.md" ;;
+    L1j) printf -- '---\nname: zzl1j\ndescription: control fixture\n---\n\n# zzl1j\n\nmodel: sonnet\n' \
+           > "$d/plugins/cepa/agents/zzl1j.md" ;;
+    L1k) printf -- '---\nname: zzl1k\nmodel: sonnet  # deliberate, per the ladder\n---\n\n# zzl1k\n' \
+           > "$d/plugins/cepa/agents/zzl1k.md" ;;
+    L1m) printf -- '---\nname: zzl1m\nmodel: Sonnet\n---\n\n# zzl1m\n' \
+           > "$d/plugins/cepa/agents/zzl1m.md" ;;
+    L1n) printf -- '---\nname: zzl1n\nmodel: son\n---\n\n# zzl1n\n' \
+           > "$d/plugins/cepa/agents/zzl1n.md" ;;
+    L1p) printf -- '---\nname: zzl1p\nmodel: fable\n---\n\n# zzl1p\n' \
+           > "$d/plugins/cepa/agents/zzl1p.md" ;;
     # The plugin directory itself is the symlink — and its target lives OUTSIDE
     # `plugins/`, so nothing else can reach the file.
     L2i) mkdir -p "$d/zzplugsrc/commands"
@@ -595,6 +822,32 @@ EOF
            > "$d/plugins/cepa/commands/zzl3d.md" ;;
     L3e) printf '# zzl3e\n\n<!-- model-pin: mode-conditional interactive=opus headless=sonnet -->\n' \
            > "$d/plugins/cepa/commands/zzl3e.md" ;;
+
+    # L2j and L3f plant the SAME shape under two names on purpose: legs 2 and 3
+    # report an unreadable file through separate constructs, and each case
+    # names the leg it is about in its expected message. (An earlier note here
+    # claimed a single combined case "would go green the moment either leg
+    # started leaning on the other" — that is wrong, and measurably so: a
+    # combined case asserting both messages would fail on the count as well as
+    # on the regex. The split is redundant rather than stronger. Kept because
+    # two named messages diagnose faster than one, and corrected here because
+    # an unmeasured claim sitting beside measured ones is how the next reader
+    # learns the wrong lesson.)
+    L2j) printf '# zzl2j\n\nNothing in this file can be read.\n' \
+           > "$d/plugins/cepa/commands/zzl2j.md"
+        chmod 000 "$d/plugins/cepa/commands/zzl2j.md"
+        [ -r "$d/plugins/cepa/commands/zzl2j.md" ] && return 1
+        : ;;
+    L3f) printf '# zzl3f\n\nNothing in this file can be read.\n' \
+           > "$d/plugins/cepa/commands/zzl3f.md"
+        chmod 000 "$d/plugins/cepa/commands/zzl3f.md"
+        [ -r "$d/plugins/cepa/commands/zzl3f.md" ] && return 1
+        : ;;
+    # `noninteractive=` runs straight into the key leg 3 looks for. With the
+    # left word boundary gone it reads as a well-ordered opus/sonnet pair and
+    # the whole marker passes; with it, the interactive branch is MISSING.
+    L3g) printf '# zzl3g\n\n<!-- model-pin: mode-conditional noninteractive=opus headless=sonnet -->\n' \
+           > "$d/plugins/cepa/commands/zzl3g.md" ;;
 
     *) printf 'no plant recipe for case %s\n' "$id" >&2; return 1 ;;
   esac
@@ -709,6 +962,11 @@ expected_rc() {  # expected_rc <expect_misses> <expect_warns>
 # ---------------------------------------------------------------------------
 printf '== control suite for %s ==\n' "$CHECKER"
 if ! run_checker "$PRISTINE" || [ "$CHK_MISS" != 0 ] || [ "$CHK_WARN" != 0 ] || [ "$CHK_RC" -ne 0 ]; then
+  # BASELINE-ABORT is a machine token PARSED BY scripts/run-mutation-sweep.sh.
+  # It precedes the prose deliberately: the sweep used to grep this sentence,
+  # so an ordinary copy edit here would have made a re-anchorable mutant report
+  # as a broken environment. Change the token only together with that parser.
+  printf 'BASELINE-ABORT dirty\n'
   printf 'FATAL: baseline is not clean — every case expectation is a delta from it,\n'
   printf '       so a dirty baseline makes the whole suite meaningless.\n'
   printf '       If the lines below name files in this repo, they are REAL policy\n'
@@ -726,6 +984,7 @@ printf '%s\n' "$CHK_OUT" | grep -qE 'citations checked: [1-9]'         || baseli
 printf '%s\n' "$CHK_OUT" | grep -qE '[1-9][0-9]* anchors defined by [1-9]' || baseline_bad="${baseline_bad}anchors/skills "
 printf '%s\n' "$CHK_OUT" | grep -qE 'across ([1-9][0-9]*) of \1 roots'  || baseline_bad="${baseline_bad}roots-scanned "
 if [ -n "$baseline_bad" ]; then
+  printf 'BASELINE-ABORT zero-coverage\n'
   printf 'FATAL: baseline reports zero coverage in: %s\n' "$baseline_bad"
   printf '       A clean run over nothing is not a clean run.\n\n'
   printf '%s\n' "$CHK_OUT"
@@ -736,8 +995,9 @@ printf 'baseline: 0 MISS, 0 WARN, exit 0; %s tracked files; coverage counters no
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
-passed=0; failed=0; ran=0
+passed=0; failed=0; ran=0; errored=0
 FAILED_IDS=''
+ERRORED_IDS=''
 
 selected() {
   [ -z "$ONLY" ] && return 0
@@ -756,13 +1016,37 @@ fail_case() {  # fail_case <index> <reason>
   FAILED_IDS="${FAILED_IDS}${IDS[$i]} "
 }
 
+# A case that could not be SET UP is not a case that failed its assertion, and
+# the two must not share a token. `FAIL  <id>` is parsed by
+# scripts/run-mutation-sweep.sh as "a control went red", i.e. as a mutant kill;
+# a fixture copy or a plant that no-ops means the control never ran at all.
+# Reproduced before this split: simulating one ENOSPC fixture copy flipped a
+# genuinely-surviving mutant from SURVIVED-UNDECLARED/exit 1 to CAUGHT/exit 0 —
+# an environment failure re-entering as a verdict, which is exactly what
+# `cepa:autonomy` §9f's HARNESS-ERROR row exists to forbid.
+#
+# PARSED BY scripts/run-mutation-sweep.sh — the `ERROR  ` prefix and the
+# `-- N setup errors --` line below are a machine contract, not prose. Change
+# them only together with that file's classifier.
+error_case() {  # error_case <index> <reason>
+  local i="$1"
+  printf 'ERROR %-4s %s\n' "${IDS[$i]}" "${TITLES[$i]}"
+  printf '        setup failed, so this control never ran: %s\n' "$2"
+  errored=$((errored + 1))
+  ERRORED_IDS="${ERRORED_IDS}${IDS[$i]} "
+}
+
 run_one() {
   local i="$1" id="${IDS[$1]}" title="${TITLES[$1]}" exp_rc
   local dir="$TMPROOT/case-$id"
   ran=$((ran + 1))
 
-  cp -a "$PRISTINE" "$dir" || { fail_case "$i" 'could not copy fixture'; return; }
-  plant "$id" "$dir" || { fail_case "$i" 'plant step failed or landed as a no-op'; return; }
+  cp -a "$PRISTINE" "$dir" || { error_case "$i" 'could not copy fixture'; return; }
+  # "returned non-zero" is the whole claim this can make. A plant that no-ops
+  # SILENTLY is caught only by its own post-plant assertion, which is why every
+  # arm that can no-op carries one — the message used to say "or landed as a
+  # no-op", which promised a detection the mechanism does not perform.
+  plant "$id" "$dir" || { error_case "$i" 'plant step returned non-zero'; return; }
 
   if ! run_checker "$dir" "$(case_timeout "$id")"; then
     fail_case "$i" 'checker printed no "-- N MISS, M WARN --" verdict line'
@@ -798,8 +1082,8 @@ run_one() {
   if [ "$id" = 24 ]; then
     local alt="$TMPROOT/case-24-markdown" a b
     a=$(printf '%s\n' "$CHK_OUT" | norm_case24)
-    cp -a "$PRISTINE" "$alt" || { fail_case "$i" 'could not copy fixture'; return; }
-    plant 24b "$alt" || { fail_case "$i" 'plant step failed (.markdown)'; return; }
+    cp -a "$PRISTINE" "$alt" || { error_case "$i" 'could not copy fixture'; return; }
+    plant 24b "$alt" || { error_case "$i" 'plant step failed (.markdown)'; return; }
     if ! run_checker "$alt" "$(case_timeout "$id")"; then
       fail_case "$i" '.markdown run printed no verdict line'
       return
@@ -835,7 +1119,19 @@ if [ -n "$ONLY" ]; then
   printf '\n** PARTIAL RUN — only %s ran; %d of %d controls were not exercised **\n' \
     "$ONLY" "$(( ${#IDS[@]} - ran ))" "${#IDS[@]}"
 fi
+# Emitted BEFORE the trailer and on every run, zero included, so a consumer can
+# tell "no setup errors" from "this suite is too old to report them". A control
+# that could not be set up is not evidence about the checker in either
+# direction, so it is never folded into passed/failed.
+printf '\n-- %d setup errors --\n' "$errored"
+if [ "$errored" -gt 0 ]; then
+  printf 'ERROR: %d control(s) could not be set up, so this run is not evidence about\n' "$errored"
+  printf '       the checker. Errored: %s\n' "$ERRORED_IDS"
+fi
 printf '\n-- %d/%d controls passed --\n' "$passed" "$ran"
+if [ "$errored" -gt 0 ]; then
+  exit 1
+fi
 if [ "$failed" -gt 0 ]; then
   printf 'FAIL: the checker no longer behaves the way its record claims. Failed: %s\n' "$FAILED_IDS"
   exit 1

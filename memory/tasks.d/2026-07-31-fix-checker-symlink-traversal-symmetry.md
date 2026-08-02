@@ -8,7 +8,13 @@ adversarial-reviewer, silent-failure-hunter, previous-comments-reviewer.
 
 ### Deferred
 
-- [ ] P3 — `scripts/check-model-pins.sh` `traverse()` — **neither half of the
+**All three struck 2026-08-01 by the mutation sweep harness (PR for
+`feat/mutation-sweep-harness`).** Named by content rather than ordinal: the
+first is now a *declared* survivor pair rather than an open question, the
+second is built as D5's two-state quiescence check, and the third is the
+committed mutant set itself.
+
+- [x] P3 — `scripts/check-model-pins.sh` `traverse()` — **neither half of the
   traversal predicate is individually pinned, and no fixture can pin them.**
   Measured, not assumed: every failure a fixture can stage (permission denied,
   symlink cycle, missing root) sets a non-zero exit **and** writes stderr, so a
@@ -19,7 +25,7 @@ adversarial-reviewer, silent-failure-hunter, previous-comments-reviewer.
   with a contrived control. This is the control suite's own "proves only the
   branch it exercises" shape, one level down. (finding #11, confidence 100.)
 
-- [ ] P3 — **the mutation sweep is only valid against a quiescent tree, and
+- [x] P3 — **the mutation sweep is only valid against a quiescent tree, and
   nothing enforces or records that.** Observed live this session: a sweep run
   while the session was committing and two review agents were working reported
   40 spurious failures for a mutant that, re-run in isolation, is caught by
@@ -30,7 +36,7 @@ adversarial-reviewer, silent-failure-hunter, previous-comments-reviewer.
   self-evident. Not built because the sweep itself is still ad-hoc — see the
   item below. (finding #12, confidence 100.)
 
-- [ ] P3 — `scripts/mutants/` — **the mutant set is still not a committed
+- [x] P3 — `scripts/mutants/` — **the mutant set is still not a committed
   artifact.** Third PR in a row. 30 mutants were built this round with
   build-time assertions and discarded; the evidence is verifiable only by
   hand-rebuilding them. `cepa:autonomy` §9f's name-the-mutant rule keeps the

@@ -41,6 +41,9 @@ on:
   push:
     branches: [main]
 
+# The `check` job inherits this and needs nothing more. `actions: read` is
+# granted at JOB scope in `sweep-freshness` instead of here — see that job for
+# why a credential must not share a job with PR-authored scripts.
 permissions:
   contents: read
 
@@ -67,3 +70,99 @@ jobs:
       - name: Check model-pin checker controls
         if: always()
         run: bash scripts/check-model-pins-controls.sh
+
+  # GitHub disables a `schedule:` workflow after 60 days of repository
+  # inactivity. The disable is SILENT: no run, no notification, no failed
+  # check. The mutation sweep simply stops, its evidence ages out, and every
+  # green run of the `check` job above keeps reporting that the controls are
+  # covered — the one-layer-up version of exactly what the sweep exists to
+  # catch. So it gets a detector rather than a comment asking a human to
+  # notice an absence.
+  #
+  # It lives on push/pull_request, NOT in a second scheduled workflow: a
+  # scheduled heartbeat shares the failure mode it would be watching for —
+  # the same 60-day rule disables both, and the detector goes quiet together
+  # with the thing it detects. A push-triggered check cannot fire during the
+  # silence, and that limit is the honest one: it reports at the next push,
+  # the first moment anyone is present to act on it.
+  #
+  # ITS OWN JOB, and that is a security boundary, not tidiness. The `check`
+  # job runs `bash scripts/*.sh` FROM THE PR HEAD — attacker-authored on a
+  # fork PR. A step in that job holding `GH_TOKEN` is reachable by an earlier
+  # step: `$GITHUB_PATH` is written by one step and prepended to `PATH` for
+  # every later step in the SAME job, so a PR that appends a `gh` shim to it
+  # receives the token in that shim's environment. The exposure is bounded
+  # today (a fork `pull_request` token is read-only regardless of the
+  # `permissions:` block), but the bound is GitHub's, not ours, and a later
+  # widening — or a switch to `pull_request_target` — would land on a design
+  # that had assumed the question settled. A separate job shares no PATH, no
+  # filesystem, and no checkout: it needs none of the repo, only the API.
+  #
+  # WARNS, never fails. Sweep freshness is not a property of the PR being
+  # reviewed, and failing unrelated PRs is how a signal gets routed around.
+  # Every failure path below exits 0 explicitly AFTER emitting a warning —
+  # there is deliberately no silent fall-through, because a detector that
+  # cannot tell "fresh" from "did not parse" is the exact defect it exists to
+  # catch. The sweep's cadence and why it is not a PR gate are
+  # `cepa:autonomy` §9f.
+  sweep-freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Read-only workflow-run metadata, and nothing else — no `contents`,
+      # because this job never checks the repo out.
+      actions: read
+    steps:
+      - name: Mutation sweep freshness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Two missed weekly cycles plus slack. Tight enough that a disable is
+          # noticed inside a fortnight, loose enough that one skipped run is not
+          # a warning.
+          STALE_AFTER_DAYS: 16
+        run: |
+          set -o pipefail
+          # `status=success`, not merely the newest run. A sweep that fails its
+          # classifier selftest, or is CANCELLED by timeout-minutes — the
+          # outcome mutation-sweep.yml calls the one most worth knowing about —
+          # still creates a run record and still refreshes `created_at`. Keying
+          # on the newest run of ANY conclusion would print "last ran 2 days
+          # ago" on every PR while the sweep had verified nothing for months:
+          # a freshness detector reporting liveness instead of evidence.
+          #
+          # stderr to a file, not 2>&1: on a 404 `gh` writes the API's JSON
+          # body to STDOUT, so merging them put a raw blob inside the warning
+          # annotation. Observed on the first hosted run of this step.
+          if ! out=$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/mutation-sweep.yml/runs?status=success&per_page=1" \
+                --jq '.workflow_runs[0].created_at // ""' 2>"$RUNNER_TEMP/gh.err"); then
+            reason=$(head -c 300 "$RUNNER_TEMP/gh.err" | head -1)
+            # This branch is entered on ANY gh failure — 404, 403, rate limit,
+            # network, missing binary — so it leads with the actual stderr and
+            # offers the 404 reading as the likeliest, never as the diagnosis.
+            printf '::warning::mutation sweep freshness UNVERIFIED: %s. If that is a 404, no workflow of that name is registered — expected until it reaches the default branch, and a rename or a deletion after that\n' \
+              "${reason:-no reason reported}"
+            exit 0
+          fi
+          if [ -z "$out" ]; then
+            printf '::warning::the mutation sweep has no SUCCESSFUL run on record — it has either never run, or never passed. Dispatch it once; that also calibrates its timeout-minutes, which is still an unmeasured 3x of a local figure\n'
+            exit 0
+          fi
+          # Parsed into a variable and gated, NOT inlined into the arithmetic.
+          # Inlined, an unparseable timestamp leaves `age` empty, `[ "" -gt N ]`
+          # errors, an `if` reads that error as false, and control falls to the
+          # reassuring else-branch: no annotation, exit 0, "last ran  days ago"
+          # with a blank number. `set -e` does not abort on an arithmetic error
+          # inside an assignment, so nothing else catches it either. Reproduced
+          # under GitHub's own `bash -e` shell before this guard existed.
+          if ! ts=$(date -u -d "$out" +%s 2>/dev/null) || [ -z "$ts" ]; then
+            printf '::warning::mutation sweep freshness UNVERIFIED: could not parse the run timestamp %s\n' "$out"
+            exit 0
+          fi
+          age=$(( ( $(date -u +%s) - ts ) / 86400 ))
+          if [ "$age" -gt "$STALE_AFTER_DAYS" ]; then
+            printf '::warning::the last SUCCESSFUL mutation sweep was %s days ago (%s), past its %s-day bound. A weekly schedule that stops producing passing runs is what a 60-day inactivity disable looks like — re-enable it in the Actions tab, or dispatch it\n' \
+              "$age" "$out" "$STALE_AFTER_DAYS"
+          else
+            printf 'last successful mutation sweep: %s days ago (%s)\n' "$age" "$out"
+          fi

@@ -740,6 +740,53 @@ claim coverage it lost. Two cases deliberately pin a limit from the table
 below rather than correct behavior — they go red when that limit is closed,
 which is the signal to update them, not to remove them.
 
+**The controls are themselves covered by a mutation sweep.**
+`bash scripts/run-mutation-sweep.sh` applies a registry of sabotages
+(`scripts/mutants/registry.sh`) to a copy of the checker and runs the full
+control suite against each one, confirming the controls go red. A sabotage
+nobody catches is a hole in the controls. It is **weekly and on demand, never a
+PR gate**: the controls can only develop holes when the checker or the controls
+change, so a per-PR run mostly re-proves the previous answer, and everything
+that would have made that redundant run affordable was a second list to keep in
+sync.
+
+Mutants are declarative `<target, old, new>` substitutions with an
+exactly-once anchor assertion, never `.patch` files — a patch carries context
+lines, so it rots on precisely the edits the sweep exists to check.
+
+**A mutant must be silent on the clean tree.** The harness gates on a clean
+baseline before its runner loop, so a mutant that breaks the checker outright
+runs zero controls and proves nothing about them. The interesting mutation of
+any construct is the one that blinds a predicate while leaving the clean-tree
+verdict intact — which is the shape a real regression has.
+
+Outcomes are classified from the harness's per-case `PASS`/`FAIL` lines and its
+`-- N/M controls passed --` trailer, **never from exit status**: a baseline
+abort, a run where no control executed, and a genuine kill all exit 1.
+
+| Outcome | Meaning | Result |
+|---|---|---|
+| `CAUGHT` | at least one control went red | pass |
+| `SURVIVED-DECLARED` | an expected survivor, against a recorded stated limit the sweep verifies still says so | pass |
+| `SURVIVED-UNDECLARED` | nothing caught it — a real gap in the controls | FAIL |
+| `CAUGHT-DECLARED` | a declared survivor that started being caught: the limit was closed, so the declaration is now false | FAIL |
+| `ANCHOR-MISSING` | `old` does not occur exactly once in its target | FAIL |
+| `BASELINE-DIRTY` | the harness aborted at its baseline gate, so no control ran; the mutant is loud and needs the silent form of the same construct | FAIL |
+| `HARNESS-ERROR` | the harness died for a reason that is not about the mutant | aborts the run — an environment failure, never a finding |
+
+**An `ANCHOR-MISSING` mutant is re-anchored to the construct it targeted.**
+Retiring one requires naming the construct that is no longer mutable. Deleting
+it to green the sweep is never the fix — the same rule this section already
+applies to controls.
+
+**Which control kills which mutant is prose, in both files, checked by
+nobody** — a stated limit, not an oversight. A machine-checked link is what a
+per-PR fast path needed; as a standing artifact it is a second list whose
+staleness the design carrying it cannot detect.
+
+**A gap the sweep finds becomes a residual, not an edit to the checker in the
+same change** — for the reason the next paragraph gives.
+
 **Never widen the checker's trigger set and add a dispatch site in the same
 commit without re-running it.** Widening leg 2's regex is what exposed four
 live dispatch sites that both a manual sweep and the checker's first cut had
@@ -758,5 +805,6 @@ it is:
 | A citation whose owner name is **not the token immediately before the anchor** — separated by a line break (grep is line-based) or by an intervening word (`in the \`cepa:autonomy\` contract (§2b)`) | leg 4 captures exactly one preceding token, so the citation falls through to the permissive unqualified branch and a wrong-owner citation passes clean. Reflow fixes the line-break shape only — two such instances were found and reflowed on 2026-07-31; the intervening-word shape needs the owner name moved adjacent to the anchor, and is live in `README.md` today |
 | An example anchor written in prose with a literal section sign (leg 4 has no `prose` hatch — it scans whole roots, with no line context to mark) | leg 4 reads a citation set, not annotated lines; documentation must describe such examples in words instead |
 | Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
+| Whether the *mutant set* is complete — a green sweep means every **enumerated** mutant was killed, which is not coverage of the checker | the enumeration is hand-authored, so a construct nobody thought to sabotage reports as covered; and a mutant killed by a control that is itself wrong still reports `CAUGHT`. That is the ceiling on what any mutation sweep over this suite can prove |
 
 Each is a human obligation on review, not a covered case.
