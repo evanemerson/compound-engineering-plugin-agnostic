@@ -71,20 +71,12 @@ jobs:
         if: always()
         run: bash scripts/check-model-pins-controls.sh
 
-  # GitHub disables a `schedule:` workflow after 60 days of repository
-  # inactivity. The disable is SILENT: no run, no notification, no failed
-  # check. The mutation sweep simply stops, its evidence ages out, and every
-  # green run of the `check` job above keeps reporting that the controls are
-  # covered — the one-layer-up version of exactly what the sweep exists to
-  # catch. So it gets a detector rather than a comment asking a human to
-  # notice an absence.
-  #
-  # It lives on push/pull_request, NOT in a second scheduled workflow: a
-  # scheduled heartbeat shares the failure mode it would be watching for —
-  # the same 60-day rule disables both, and the detector goes quiet together
-  # with the thing it detects. A push-triggered check cannot fire during the
-  # silence, and that limit is the honest one: it reports at the next push,
-  # the first moment anyone is present to act on it.
+  # Detects GitHub's SILENT 60-day disable of `schedule:` workflows, which
+  # would otherwise stop the mutation sweep with no run, no notification and
+  # no failed check anywhere. What this detector is for, why it is
+  # push-triggered rather than a second scheduled job, why it warns instead of
+  # failing, and how its `UNVERIFIED` differs from §9's evidence-field
+  # `UNVERIFIED` are all `cepa:autonomy` §9f — read them there.
   #
   # ITS OWN JOB, and that is a security boundary, not tidiness. The `check`
   # job runs `bash scripts/*.sh` FROM THE PR HEAD — attacker-authored on a
@@ -98,13 +90,11 @@ jobs:
   # that had assumed the question settled. A separate job shares no PATH, no
   # filesystem, and no checkout: it needs none of the repo, only the API.
   #
-  # WARNS, never fails. Sweep freshness is not a property of the PR being
-  # reviewed, and failing unrelated PRs is how a signal gets routed around.
-  # Every failure path below exits 0 explicitly AFTER emitting a warning —
-  # there is deliberately no silent fall-through, because a detector that
-  # cannot tell "fresh" from "did not parse" is the exact defect it exists to
-  # catch. The sweep's cadence and why it is not a PR gate are
-  # `cepa:autonomy` §9f.
+  # The one implementation rule that belongs at this site rather than in §9f:
+  # every failure path below exits 0 explicitly AFTER emitting a warning.
+  # There is deliberately no silent fall-through — a detector that cannot tell
+  # "fresh" from "did not parse" is the exact defect it exists to catch, and
+  # this one shipped with that path before review reproduced it.
   sweep-freshness:
     runs-on: ubuntu-latest
     timeout-minutes: 5

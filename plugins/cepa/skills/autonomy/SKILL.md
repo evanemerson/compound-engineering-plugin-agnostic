@@ -779,6 +779,49 @@ Retiring one requires naming the construct that is no longer mutable. Deleting
 it to green the sweep is never the fix — the same rule this section already
 applies to controls.
 
+**A `SURVIVED-DECLARED` cites a limit; open work is not a limit.** The
+distinction is what keeps the category honest, and it runs in both directions.
+A construct **no fixture can reach** is a limit — the sweep found three, each
+recorded at its site and each measured rather than argued (a probe that
+consumes the input before the guard under test sees it; a branch unreachable
+from the regex that feeds it). A construct nobody has *got around to*
+covering is open work, and declaring it is how a backlog becomes a green run.
+The driver enforces only the floor: the cited `<file>:<line>` must live in the
+mutant's own target and must still carry the words `STATED LIMIT`. Whether the
+limit is the RIGHT one is a review obligation, and the cheapest attack on this
+category remains a one-word edit plus a plausible citation.
+
+**The sweep's exit codes, for a caller's gate.** Per-mutant outcomes are the
+table above; these are what a step reading `$?` sees. They exist separately
+because the classifier deliberately never reads exit status.
+
+| Exit | Meaning | Caller rule |
+|---|---|---|
+| 0 | a COMPLETE run with no findings | the only green |
+| 1 | a finding, or a run that asserted nothing (no mutants ran, tree changed mid-run) | fail |
+| 2 | usage or environment — a broken invocation, not a fact about the controls | fail, and never record it as a finding |
+| 3 | a FILTERED run that found nothing | **not a pass.** A subset proves nothing about the mutants it skipped. `--partial-ok` converts it to 0 for an operator verifying one mutant by hand; a gate that passes `--partial-ok` has disabled itself |
+
+**A freshness detector is not a sweep result.** The PR gate carries a
+separate, cheap check that the sweep is still *running* — necessary because a
+`schedule:` workflow is disabled silently after 60 days of repository
+inactivity, and an absent run produces no failure anywhere. Two limits are
+inherent and neither is a defect: it keys on the last **successful** run
+(liveness is not evidence), and being push-triggered it cannot fire *during*
+the silence — only at the next push, which is the first moment a person is
+present to act. It **warns**; freshness is not a property of the PR under
+review, and failing unrelated PRs is how a signal gets routed around.
+
+Its `UNVERIFIED` is **not** §9's evidence-field `UNVERIFIED`, and the two must
+not be read across. §9's rule — an `UNVERIFIED` that quietly passes a gate is
+fabricated evidence with extra steps — governs *evidence fields a worker was
+required to report*. The detector's `UNVERIFIED` is a **warning channel
+reporting its own inability to check**, on a signal that is deliberately
+advisory; it exits 0 by design, and making it fail would convert an unrelated
+API hiccup into a red PR. Same word, two constructs, opposite gate semantics —
+stated here because that is exactly the collision a reader hits going from §9
+to this section.
+
 **Which control kills which mutant is prose, in both files, checked by
 nobody** — a stated limit, not an oversight. A machine-checked link is what a
 per-PR fast path needed; as a standing artifact it is a second list whose
@@ -804,6 +847,7 @@ it is:
 | Whether text *near* a citation restates the cited rule (leg 4 checks resolution only) | a leg that flagged restatement would also flag §7's required relay-point instantiations, and its cheapest remedy would be deleting a guard |
 | A citation whose owner name is **not the token immediately before the anchor** — separated by a line break (grep is line-based) or by an intervening word (`in the \`cepa:autonomy\` contract (§2b)`) | leg 4 captures exactly one preceding token, so the citation falls through to the permissive unqualified branch and a wrong-owner citation passes clean. Reflow fixes the line-break shape only — two such instances were found and reflowed on 2026-07-31; the intervening-word shape needs the owner name moved adjacent to the anchor, and is live in `README.md` today |
 | An example anchor written in prose with a literal section sign (leg 4 has no `prose` hatch — it scans whole roots, with no line context to mark) | leg 4 reads a citation set, not annotated lines; documentation must describe such examples in words instead |
+| Whether the sweep is still running *during* a repository silence | the freshness detector above is push-triggered on purpose: a scheduled heartbeat shares the same 60-day disable it would be watching for, so the detector would go quiet together with the thing it detects. Nothing observes an inactive repo from inside it |
 | Which branch actually *runs* at dispatch time | the checker reads declarations, never a live run — this is what the deferred `dispatch_models` Run Metadata field is for |
 | Whether the *mutant set* is complete — a green sweep means every **enumerated** mutant was killed, which is not coverage of the checker | the enumeration is hand-authored, so a construct nobody thought to sabotage reports as covered; and a mutant killed by a control that is itself wrong still reports `CAUGHT`. That is the ceiling on what any mutation sweep over this suite can prove |
 
