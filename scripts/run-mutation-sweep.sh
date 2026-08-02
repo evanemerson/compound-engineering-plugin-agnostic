@@ -704,19 +704,11 @@ if [ "$bad" -gt 0 ]; then
   exit 1
 fi
 
-# A filtered run that found nothing exits 3, NOT 0. The banner above already
-# says PARTIAL in prose, and prose in the middle of a report is invisible to
-# `set -e` and to every caller that reads `$?` — so a subset run was green by
-# construction, which is the one thing a subset must never be. Exit 3 rather
-# than folding it into 1: a subset that found nothing is not a finding, and a
-# caller that cannot tell those apart learns to ignore both.
-#
-# `--partial-ok` is for the operator who genuinely wants a subset's pass to be
-# a pass — verifying one mutant by hand while adding the control that kills it.
-# It is never how a gate calls this. §9f is why that distinction is load-
-# bearing here: the sweep is deliberately not a PR check, so a per-PR fast path
-# built on `--mutants` is the standing pressure, and this exit code is what
-# stops one from being green before it is right.
+# A filtered run that found nothing exits 3, NOT 0. What each exit code means
+# to a caller's gate is `cepa:autonomy` §9f — read it there. What belongs at
+# this site is only why the banner above is not sufficient on its own: prose in
+# the middle of a report is invisible to `set -e` and to every caller that
+# reads `$?`, so without this branch a subset run was green by construction.
 if [ -n "$MUTANTS" ] && [ "$PARTIAL_OK" -eq 0 ]; then
   printf '\nFiltered run: %d of %d mutants were never exercised, so this is not a sweep\n' \
     "$(( ${#MUT_IDS[@]} - ran ))" "${#MUT_IDS[@]}"

@@ -193,19 +193,20 @@ not exempt the detector from the class.
   putting 22 of 26 cases on leg 4. The construct-based enumeration found what
   incident-based authoring could not.
 
-- [ ] P2 — **`timeout-minutes` is still unmeasured on a hosted runner.** The
-  control suite grew 57 → 75 cases and its own runtime 30.1s → 40.3s, which
-  predicted a ~50 min sweep. **Measured after the growth: 42m41s for 63
-  mutants — unchanged.** The prediction was wrong because per-mutant cost is
-  dominated by the tree copy and restore, not by the suite; recorded here
-  because the arithmetic that looked obvious is the arithmetic that sets the
-  bound. So the declared bounds (job 180, step 150) still hold with the same
-  margin they had, and they remain ~3x an unvalidated LOCAL figure.
-  The one `workflow_dispatch` run that calibrates them is still owed and is
-  the first thing to do after merge: the failure mode is a CANCELLED job,
-  which `failure()` does not catch — the workflow adds `cancelled()` for
-  exactly this, but the bound itself has never been checked against a hosted
-  runner, which is slower than this machine.
+- [x] **RESOLVED 2026-08-02 — measured on a hosted runner.** One
+  `workflow_dispatch` on `main` (run 30741347574, 63 mutants against 75
+  controls): **64.0 min — 43% of the 150-min step bound, 36% of the 180-min
+  job bound.** Both hold with real margin; neither number is changed.
+
+  **1.50x the local figure** (42.7 min on this machine). The reliability
+  reviewer predicted exactly this, and the reasoning was right: per-mutant
+  cost is dominated by the tree copy and restore, and that I/O is what a
+  hosted runner does more slowly. My own note above — that growing the suite
+  57 → 75 left the runtime "essentially unchanged" — was true locally and did
+  not transfer. **A local timing is not evidence about these bounds.** That
+  sentence now sits in the workflow beside the numbers, together with the
+  re-measure trigger, so the next person to grow the registry or the suite
+  does not repeat the inference.
 
 - [ ] P3 — **the registry has no mutant for leg 2's readability probe.**
   Discovered by building L2j: the probe is the construct that actually catches

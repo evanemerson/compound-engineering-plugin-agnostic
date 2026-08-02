@@ -65,9 +65,15 @@ jobs:
     #
     # The JOB bound must exceed the sweep step's, and the step bound is what
     # should trip first: a job that hits its own limit is CANCELLED, and a
-    # cancelled job's steps do not run — including the observer below. Not yet
-    # measured on a hosted runner; the first workflow_dispatch run calibrates
-    # both, tracked in memory/tasks.d/.
+    # cancelled job's steps do not run — including the observer below.
+    #
+    # MEASURED on a hosted runner, 2026-08-02, 63 mutants against 75 controls:
+    # 64 min, i.e. 43% of the step bound and 36% of the job bound. That is
+    # 1.50x the same sweep on the maintainer's machine (42.7 min) — per-mutant
+    # cost is dominated by a tree copy and restore, and that I/O is exactly
+    # what a hosted runner does more slowly, so a LOCAL timing is not evidence
+    # about these bounds. Re-measure the same way when the registry or the
+    # control suite grows materially.
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
