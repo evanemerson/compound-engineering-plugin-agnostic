@@ -122,7 +122,7 @@ mut ext-md "$CHK" \
 mut ext-cite-yaml "$CHK" \
   "CITE_EXTS=\"\$MD_EXTS sh yml yaml\"" \
   "CITE_EXTS=\"\$MD_EXTS sh yml\"" \
-  'kills: narrowing leg 4 extensions by one. LOOSENING-adjacent coverage loss with no control behind it — case 28 uses .yml, and nothing plants a .yaml.'
+  'kills: narrowing leg 4 extensions by one. Expected killer: 37, which plants a broken citation in a .yaml under .github — case 28 covers only .yml.'
 
 # ===========================================================================
 # Shared config: the sanctioned tier set
@@ -136,7 +136,7 @@ mut tier-inherit "$CHK" \
 mut tier-fable "$CHK" \
   "ALLOWED_TIERS='sonnet opus haiku'" \
   "ALLOWED_TIERS='sonnet opus haiku fable'" \
-  'kills: admitting the top tier to automatic dispatch. L3c plants fable in a mode-conditional marker, where tier_rank still rejects it — so leg 1 has no fable plant behind it.'
+  'kills: admitting the top tier to automatic dispatch. Expected killer: L1p. L3c plants fable in a mode-conditional marker, where tier_rank rejects it independently, so it cannot reach leg 1.'
 
 # ===========================================================================
 # Shared config: the tier cost ladder
@@ -174,29 +174,29 @@ mut l1-file-symlink "$CHK" \
 mut l1-unreadable "$CHK" \
   "  if [ ! -r \"\$f\" ]; then" \
   "  if false; then" \
-  'kills: the per-file readability guard in leg 1. No control plants an unreadable AGENT definition (33/34 plant under scripts/, which is leg 4).'
+  'kills: the per-file readability guard in leg 1. Expected killer: L1g. 33/34 plant under scripts/, which is leg 4.'
 
 mut l1-bom "$CHK" \
   "sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$f\" 2>/dev/null |
     awk" \
   "cat \"\$f\" 2>/dev/null |
     awk" \
-  'kills: BOM/CRLF normalization before frontmatter parsing — a CRLF or BOM first line reads as "no frontmatter" and reports a pinned file as unpinned. No control plants either.'
+  'kills: BOM/CRLF normalization before frontmatter parsing — a BOM first line reads as "no frontmatter" and reports a pinned file as unpinned. Expected killer: L1h. CRLF alone cannot fail this: \r is in [[:space:]] under LC_ALL=C, so the BOM is the observable half.'
 
 mut l1-awk-nofm "$CHK" \
   "awk 'NR==1 && \$0 !~ /^---[[:space:]]*\$/{exit} NR==1{next} /^---[[:space:]]*\$/{exit} /^model:/{print; exit}')" \
   "awk 'NR==1{next} /^---[[:space:]]*\$/{exit} /^model:/{print; exit}')" \
-  'LOOSENING. kills: the guard that a file with no frontmatter at all has no pin — prose containing a model: line would satisfy leg 1. No control plants a frontmatter-free agent file.'
+  'LOOSENING. kills: the guard that a file with no frontmatter at all has no pin — prose containing a model: line would satisfy leg 1. Expected killer: L1i.'
 
 mut l1-awk-close "$CHK" \
   "awk 'NR==1 && \$0 !~ /^---[[:space:]]*\$/{exit} NR==1{next} /^---[[:space:]]*\$/{exit} /^model:/{print; exit}')" \
   "awk 'NR==1 && \$0 !~ /^---[[:space:]]*\$/{exit} NR==1{next} /^model:/{print; exit}')" \
-  'LOOSENING. kills: the closing-delimiter exit — a model: line in the BODY, after frontmatter ends, would count as a pin. No control plants one.'
+  'LOOSENING. kills: the closing-delimiter exit — a model: line in the BODY, after frontmatter ends, would count as a pin. Expected killer: L1j.'
 
 mut l1-value-comment "$CHK" \
   "s/^model:[[:space:]]*//; s/[[:space:]]*#.*\$//; " \
   "s/^model:[[:space:]]*//; " \
-  'kills: inline-comment stripping in the value. `model: sonnet  # note` would stop reading as a pin. No control plants a commented value.'
+  'kills: inline-comment stripping in the value. `model: sonnet  # note` would stop reading as a pin. Expected killer: L1k.'
 
 mut l1-value-lowercase "$CHK" \
   "    tr '[:upper:]' '[:lower:]')
@@ -205,12 +205,12 @@ mut l1-value-lowercase "$CHK" \
   "    cat)
 
   case \"\$value\" in" \
-  'kills: lowercasing the frontmatter value. `model: Sonnet` would stop reading as a pin. No control plants a capitalized tier in leg 1 (case 8 is leg 4).'
+  'kills: lowercasing the frontmatter value. `model: Sonnet` would stop reading as a pin. Expected killer: L1m; case 8 lowercases a leg 4 qualifier, a different construct.'
 
 mut l1-tier-exact "$CHK" \
   "grep -qx -- \"\$value\"" \
   "grep -q -- \"\$value\"" \
-  'LOOSENING. kills: exact-line matching of the tier — the value becomes a substring pattern, so `model: son` validates against sonnet. No control plants a truncated tier.'
+  'LOOSENING. kills: exact-line matching of the tier — the value becomes a substring pattern, so `model: son` validates against sonnet. Expected killer: L1n.'
 
 mut l1-empty-branch "$CHK" \
   "    \"\"|\"~\"|null)" \
@@ -222,7 +222,7 @@ mut l1-nomodel-count "$CHK" \
     misses=\$((misses + 1))" \
   "    miss \"model-pin: \${f} — no model: key in frontmatter (dispatches at the invoking session's tier)\"
     misses=\$((misses + 0))" \
-  'kills: counting the no-frontmatter-key miss. The line still prints, so only a COUNT assertion can see it — and no control plants an agent file with no model: key at all.'
+  'kills: counting the no-frontmatter-key miss. The line still prints, so only a COUNT assertion can see it. Expected killers: L1i and L1j, which both reach this branch and both pin its count.'
 
 mut l1-count-zero "$CHK" \
   "if [ \"\$agent_count\" -eq 0 ]; then" \
@@ -295,7 +295,7 @@ mut l3-grep-rc "$CHK" \
 mut l3-marker-boundary "$CHK" \
   "      sed -n 's/.*[^a-z]interactive=\\([a-z]*\\).*/\\1/p' | tr '[:upper:]' '[:lower:]')" \
   "      sed -n 's/.*interactive=\\([a-z]*\\).*/\\1/p' | tr '[:upper:]' '[:lower:]')" \
-  'LOOSENING. kills: the left word boundary on the interactive= key, so a run-on token like noninteractive=haiku satisfies the branch. No control plants one.'
+  'LOOSENING. kills: the left word boundary on the interactive= key, so a run-on token like noninteractive=haiku satisfies the branch. Expected killer: L3g.'
 
 mut l3-malformed "$CHK" \
   "    if [ -z \"\$inter\" ] || [ -z \"\$head\" ]; then" \
@@ -364,22 +364,22 @@ mut l4-cite-re-qual "$CHK" \
 mut l4-index-anchored "$CHK" \
   "    grep -aoE '^### [0-9]+[A-Za-z]+\\.' 2>/dev/null |" \
   "    grep -aoE '### [0-9]+[A-Za-z]+\\.' 2>/dev/null |" \
-  'LOOSENING. kills: the line anchor on the heading index — a mid-line mention of a heading would DEFINE that anchor, so citations resolve against prose. No control plants one.'
+  'LOOSENING. kills: the line anchor on the heading index — a mid-line mention of a heading would DEFINE that anchor, so citations resolve against prose. Expected killer: 40.'
 
 mut l4-index-bom "$CHK" \
   "sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$sk\" 2>/dev/null |" \
   "cat \"\$sk\" 2>/dev/null |" \
-  'kills: BOM/CRLF normalization when building the anchor index — a CRLF skill file defines no anchors, so every citation into it MISSes. No control plants one.'
+  'kills: BOM/CRLF normalization when building the anchor index — a BOM-led skill file defines no anchors, so every citation into it MISSes. Expected killer: 41, whose heading sits on line 1 because that is the only line a BOM can reach.'
 
 mut l4-index-lowercase "$CHK" \
   "    sed 's/^### //; s/\\.\$//' | tr '[:upper:]' '[:lower:]')" \
   "    sed 's/^### //; s/\\.\$//')" \
-  'kills: lowercasing the INDEX side of the anchor lookup. Case 12 lowercases the CITATION, so it passes either way — the two sides are separate constructs.'
+  'kills: lowercasing the INDEX side of the anchor lookup. Expected killer: 42. Case 12 lowercases the CITATION, so it passes either way — the two sides are separate constructs.'
 
 mut l4-skillfiles-zero "$CHK" \
   "if [ \"\$skill_files\" -eq 0 ]; then" \
   "if false; then" \
-  'kills: the guard that citation targets are unverifiable when no SKILL.md was found. Expected killer: 20.'
+  'kills: the guard that citation targets are unverifiable when no SKILL.md was found. Expected killer: 38. NOT 20 — case 20 blanks the HEADINGS and keeps the files, so skill_files stays non-zero and this guard never runs.'
 
 mut l4-delimiter "$CHK" \
   "    cite_pairs=\"\${cite_pairs}\${qual}|\${p}\"\$'\n'
@@ -403,7 +403,7 @@ while IFS=' ' read -r q a; do" \
 mut l4-qual-dash "$CHK" \
   "  case \"\$qual\" in -*) qual='' ;; esac" \
   "  case \"\$qual\" in -*) : ;; esac" \
-  'kills: blanking a leading-dash qualifier — qualifier sanitization, without which a list bullet before an anchor reads as an owner claim. Expected killer: 5.'
+  'kills: blanking a leading-dash qualifier — qualifier sanitization, without which a dash attached to a real `cepa:`-prefixed owner reads as an owner claim. Expected killer: 39. NOT 5 — case 5 plants `-x`, which takes the unqualified branch with or without the blanking.'
 
 mut l4-qual-prefix "$CHK" \
   "  qual=\${qual##*:}" \

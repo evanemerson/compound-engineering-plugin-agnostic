@@ -69,7 +69,9 @@ while [ $# -gt 0 ]; do
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --partial-ok) PARTIAL_OK=1 ;;
     --keep) KEEP=1 ;;
-    -h|--help) sed -n '1,55p' "$0"; exit 0 ;;
+    # Print the header to the first line of code, never a line count — a fixed
+    # window spills code into the help text the moment the header grows.
+    -h|--help) awk '/^set /{exit} {print}' "$0"; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
   shift
@@ -141,6 +143,15 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
       *:*) ;;
       *) reg_errors="${reg_errors}${id}: survivor reference '${MUT_LIMIT[$i]}' is not <file>:<line>"$'\n' ;;
     esac
+    # The cited limit must live in the mutant's OWN target. Without this, any
+    # line anywhere in the repo carrying the words STATED LIMIT satisfies the
+    # check below — and this checker already has five, two of which record no
+    # limit about any mutant (a header sentence and a pointer at §9f's table).
+    # That made silencing a genuine regression a `mut`->`survivor` edit plus a
+    # reference to unrelated prose. Still only a floor: it does not verify the
+    # limit is the RIGHT one, which stays a review obligation.
+    [ "$lf" = "$t" ] || \
+      reg_errors="${reg_errors}${id}: survivor cites ${lf}, which is not its own target ${t}"$'\n'
     case "$ll" in
       ''|*[!0-9]*) reg_errors="${reg_errors}${id}: survivor reference has no line number"$'\n' ;;
       *)
@@ -617,9 +628,12 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
     exit 2
   fi
 
-  # Bounded per mutant. The harness bounds each CHECKER invocation at 120s
-  # across ~59 controls, so one pathological mutant's worst case is ~2 hours —
-  # the whole CI budget, spent before any other mutant runs.
+  # Bounded per mutant. The harness bounds each CHECKER invocation at 120s, so
+  # a pathological mutant's worst case scales with the SUITE SIZE and would
+  # otherwise consume the whole CI budget before any other mutant runs. The
+  # count is deliberately not restated here: it grows every time a gap is
+  # closed, and a stale number beside a timeout is how a bound silently stops
+  # matching the work it bounds.
   out=$( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" 2>&1 )
 
   # Restore before classifying, so an error in classification cannot leave the

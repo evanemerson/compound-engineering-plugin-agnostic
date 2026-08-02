@@ -134,13 +134,30 @@ jobs:
           # maintained, eventually-consistent search index, so an issue this
           # workflow created minutes ago can be invisible to the next run and a
           # duplicate gets opened. The plain list reads current state.
-          num=$(gh issue list --state open --limit 100 --json number,title \
+          # Every `gh` call here is bounded. This step is the observer for a run
+          # that has ALREADY failed — often by exhausting the sweep step's 150
+          # minutes out of the job's 180 — so it starts with perhaps 30 minutes
+          # of budget left, and GitHub API slowness is not independent of
+          # "something is generally wrong with this run". An unbounded call here
+          # spends the remainder and the JOB is cancelled before the issue is
+          # ever posted: the observer failing in exactly the silent way the
+          # sweep it watches would have. A bounded call fails fast and loudly.
+          num=$(timeout 120 gh issue list --state open --limit 100 --json number,title \
                   --jq 'first(.[] | select(.title == env.SWEEP_ISSUE_TITLE) | .number)') || {
             printf 'FATAL: could not query issues — this sweep failure has no observer.\n' >&2
             exit 1
           }
+          # The write half needs the same treatment: a hung comment/create is
+          # indistinguishable from a posted one unless it is bounded and its
+          # failure is surfaced.
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body-file "$body"
+            timeout 120 gh issue comment "$num" --body-file "$body" || {
+              printf 'FATAL: could not comment on issue #%s — this sweep failure has no observer.\n' "$num" >&2
+              exit 1
+            }
           else
-            gh issue create --title "$SWEEP_ISSUE_TITLE" --body-file "$body"
+            timeout 120 gh issue create --title "$SWEEP_ISSUE_TITLE" --body-file "$body" || {
+              printf 'FATAL: could not open the tracking issue — this sweep failure has no observer.\n' >&2
+              exit 1
+            }
           fi

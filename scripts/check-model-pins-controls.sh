@@ -370,9 +370,17 @@ reg L2h 'a correctly pinned dispatch is silent' 0 0 '' '^WARN ' \
 reg L2i 'a SYMLINKED plugin directory is still scanned' 0 1 \
   'dispatch instruction with no pin' '' \
   'kills: dropping -L from legs 2-3 SCAN_DIRS discovery — a whole plugin scanned by nothing'
+# This case kills NO registered mutant, and that is the finding it records.
+# It was written to kill leg 2 grep read-error arm; the sweep then showed it
+# staying GREEN under that mutant, because leg 2 readability probe reads the
+# whole file first and refuses it before the arm runs. The arm is now a
+# declared survivor (see the STATED LIMIT at check-model-pins.sh:311). What
+# this fixture actually covers is that probe — a construct NOTHING in the
+# registry sabotages. Kept for exactly that reason: it is the only case
+# standing behind it, and editing leg 2 read-error arm will not move it.
 reg L2j 'an UNREADABLE file under a scanned plugin is refused by leg 2' 3 0 \
   'unreadable during leg 2 scan' '' \
-  'kills: leg 2 grep read-error arm, which separates exit 1 (no matches) from exit 2 (could not read). Cases 33 and 34 plant unreadable paths under scripts/, which legs 2-3 never read'
+  'covers leg 2 readability probe, which no mutant sabotages — NOT a kill for the grep read-error arm, which is a declared survivor. L3f is the sibling that does kill a live mutant, because leg 3 has no probe'
 
 # --- Leg 3: mode-conditional pairs -----------------------------------------
 reg L3a 'mode-conditional with the headless branch deleted' 1 0 \
@@ -612,8 +620,19 @@ ${SS}9c." ;;
     39) say "$d" "See -cepa:grounding ${SS}9c here." ;;
     # The mention must NOT be at the start of a line, or the clean checker
     # defines the anchor too and the case degrades into a second baseline.
+    #
+    # BOTH assertions are needed, and the positive one is the load-bearing
+    # half. Asserting only the negative — "the line did not land at column 0" —
+    # is VACUOUSLY TRUE when nothing landed at all: redirect the append at a
+    # path that cannot be written and the case still printed PASS, because the
+    # 1 MISS it expects comes from `say` rather than from the distinguishing
+    # fixture. Reproduced. That is this file's own rule 3, in the one shape it
+    # does not cover in so many words: a plant whose expected count survives
+    # its own no-op.
     40) printf 'Prose that mentions the heading ### 9zz. must not define it.\n' \
           >> "$d/plugins/cepa/skills/autonomy/SKILL.md"
+        grep -q 'mentions the heading ### 9zz\.' \
+          "$d/plugins/cepa/skills/autonomy/SKILL.md" || return 1
         grep -q '^### 9zz\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
         say "$d" "The rule is ${SS}9zz here." ;;
     # The heading is on LINE 1 because that is the only line a BOM can reach.
@@ -805,8 +824,15 @@ EOF
            > "$d/plugins/cepa/commands/zzl3e.md" ;;
 
     # L2j and L3f plant the SAME shape under two names on purpose: legs 2 and 3
-    # each own a read-error arm, and a single fixture asserting both messages
-    # would go green the moment either leg started leaning on the other.
+    # report an unreadable file through separate constructs, and each case
+    # names the leg it is about in its expected message. (An earlier note here
+    # claimed a single combined case "would go green the moment either leg
+    # started leaning on the other" — that is wrong, and measurably so: a
+    # combined case asserting both messages would fail on the count as well as
+    # on the regex. The split is redundant rather than stronger. Kept because
+    # two named messages diagnose faster than one, and corrected here because
+    # an unmeasured claim sitting beside measured ones is how the next reader
+    # learns the wrong lesson.)
     L2j) printf '# zzl2j\n\nNothing in this file can be read.\n' \
            > "$d/plugins/cepa/commands/zzl2j.md"
         chmod 000 "$d/plugins/cepa/commands/zzl2j.md"
@@ -1016,7 +1042,11 @@ run_one() {
   ran=$((ran + 1))
 
   cp -a "$PRISTINE" "$dir" || { error_case "$i" 'could not copy fixture'; return; }
-  plant "$id" "$dir" || { error_case "$i" 'plant step failed or landed as a no-op'; return; }
+  # "returned non-zero" is the whole claim this can make. A plant that no-ops
+  # SILENTLY is caught only by its own post-plant assertion, which is why every
+  # arm that can no-op carries one — the message used to say "or landed as a
+  # no-op", which promised a detection the mechanism does not perform.
+  plant "$id" "$dir" || { error_case "$i" 'plant step returned non-zero'; return; }
 
   if ! run_checker "$dir" "$(case_timeout "$id")"; then
     fail_case "$i" 'checker printed no "-- N MISS, M WARN --" verdict line'
