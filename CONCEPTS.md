@@ -181,6 +181,78 @@ to appear to cover it, because the contrived control makes the gap
 unfindable. Stating the limit keeps "not checked, documented" distinguishable
 from "not checked, silently".
 
+The boundary runs both ways, and it is what keeps the category honest. A
+construct **no fixture can reach** is a limit. A construct nobody has *got
+around to* covering is open work, and recording it as a limit is how a backlog
+becomes a green run. A limit that starts being checked is a failure, not a
+bonus — the record is now false and must be retired. Where tooling verifies a
+limit at all it verifies a floor (that the citation still points at a location
+that still says so, in the file it claims to be about); whether the limit is
+the *right* one stays a review obligation, and a one-word edit plus a
+plausible citation remains the cheapest attack on the category.
+
+### Mutation sweep
+A periodic run that weakens a gating checker one registered change at a time
+and re-runs the checker's entire control suite against each weakened copy,
+confirming the controls actually go red. Its subject is the verification
+layer, not the code the checker guards.
+
+Distinct from generic mutation testing, which generates mutants over product
+code: here they are hand-enumerated **by construct** over an instrument, in
+source order, with deliberately no target count — a fixed count is a criterion
+an implementer can satisfy having done the wrong thing. Each registered change
+is a declarative `<target, old, new>` substitution asserted to match its anchor
+**exactly once**, never a patch (a patch carries context lines, so it rots on
+precisely the edits the sweep exists to check). Two invariants are not
+inferable from the format: a registered change must leave the checker's verdict
+on the clean tree **unchanged** — one that breaks the checker outright runs
+zero controls and proves nothing — and one whose anchor stops matching is
+re-anchored to the construct it targeted, never deleted to green the run.
+
+Deliberately not a per-change gate: the controls can only develop holes when
+the checker or the controls change, so a per-change run mostly re-proves the
+previous answer, and everything that would make that redundant run affordable
+is a second list to keep in sync.
+
+### Declared survivor
+A registered sabotage expected to survive, because no available fixture can
+make any control notice it, and that gap is already recorded as a
+[stated limit](#stated-limit) at a cited location.
+
+The category the whole registry's honesty rests on, and therefore the one
+worth the most suspicion: a declared survivor that *starts* being caught is a
+failure rather than a pass, because the limit was closed and the declaration
+is now false. Open work is never a limit — see `Stated limit` for the
+boundary and for what tooling can and cannot verify about it.
+
+### Harness freeze
+Deliberately holding a verification driver and its registry byte-identical
+across a change that edits only the controls, so that every outcome which
+flips is attributable to a control rather than to the instrument.
+
+The trap is the reason this needs a name: the freeze is right for
+attribution and wrong for the record. The frozen files' descriptive prose goes
+on asserting the world the change just ended, and because a freeze's whole
+value is that it suppresses edits, a paired **reconcile at unfreeze** is the
+only thing distinguishing "suppressed and later applied" from "suppressed and
+lost". Untreated, the stale description tells a future editor that a construct
+is already covered by a control they are about to delete.
+
+### Detector self-exemption
+A verification component exhibiting the exact failure class it was built to
+catch — a silent-pass hunter that passes silently, a liveness check that
+cannot report its own inability to check.
+
+The class a detector detects is the class its author was thinking hardest
+about, which is precisely what makes that region read as covered ground and
+lets it survive review a crash would not. The correction is procedural: before
+a detector ships, walk its own finding list back over its own source.
+Distinguished from [one-layer-down regression](#one-layer-down-regression),
+which is a *fix* re-committing its class in the logic it touches; this is a
+*detector* instantiating the class it names.
+
+*Avoid:* self-referential bug, ironic failure.
+
 ## Fix authoring
 
 ### One-layer-down regression
@@ -189,10 +261,15 @@ same class of defect in the logic it touches, so the class resurfaces in a new
 form instead of being closed.
 
 Distinguished from a plain regression in that each step is a genuine partial
-improvement, which is what lets the sequence continue unnoticed. The common
+improvement, which is what lets the sequence continue unnoticed. One common
 generator is modelling a fix on neighbouring call sites: consistency copies
 whatever those neighbours also fail to do, and when the site being changed is
 the correct outlier, symmetry propagates the omission instead of the fix.
+
+A second generator is a tool being applied to everything except itself: the
+component that detects a class is exempted from it by assumption rather than
+by decision. See [detector self-exemption](#detector-self-exemption), which is
+that generator given its own name.
 
 *Avoid:* recursive fix bug, self-reintroducing fix.
 
@@ -202,3 +279,4 @@ the correct outlier, symmetry propagates the omission instead of the fix.
 - Duplicated policy prose had been treated as uniformly a defect — it is not: a clause that must sit adjacent to the content it governs (an untrusted-data guard at a relay point) is an instantiation to audit for completeness, not a restatement to consolidate into a citation.
 - An unset model tier on a dispatch had been read as a neutral default — it is not: it resolves to the invoking session's tier, which makes cost a property of the operator's session rather than of the task.
 - Consistency between sibling call sites had been treated as self-evidently good — it is not: when the site being changed is the correct outlier, matching its neighbours adopts their omission, so the direction of the levelling has to be established before the change, not after.
+- A verification tool had been treated as outside the class it verifies — it is not: the harness built to catch silent passes shipped five of its own across three review rounds, and the freshness detector built to catch a silently disabled job had a silent-pass path in its own fall-through.
