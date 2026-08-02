@@ -193,18 +193,19 @@ not exempt the detector from the class.
   putting 22 of 26 cases on leg 4. The construct-based enumeration found what
   incident-based authoring could not.
 
-- [ ] P2 — **the timeout bound is now measured against a LARGER suite.** The
-  control suite went 57 → 75 cases, and its own runtime 30.1s → 40.3s, so the
-  local sweep moves from ~42 min to ~50. The declared bounds (job 180, step
-  150) still hold locally with margin, but they remain ~3x an unvalidated
-  LOCAL figure and the margin just shrank by a fifth. The one
-  `workflow_dispatch` run that calibrates them is still owed, and it is now
-  the *first* thing to do after merge rather than a nice-to-have — a suite
-  that grows every time a gap is closed will reach the bound eventually, and
-  the failure mode is a CANCELLED job, which `failure()` does not catch.
-  (The workflow's own comment already anticipates this: "Recalibrate whenever
-  the registry grows materially." The registry did not grow; the suite each
-  mutant runs did, which is the same arithmetic from the other side.)
+- [ ] P2 — **`timeout-minutes` is still unmeasured on a hosted runner.** The
+  control suite grew 57 → 75 cases and its own runtime 30.1s → 40.3s, which
+  predicted a ~50 min sweep. **Measured after the growth: 42m41s for 63
+  mutants — unchanged.** The prediction was wrong because per-mutant cost is
+  dominated by the tree copy and restore, not by the suite; recorded here
+  because the arithmetic that looked obvious is the arithmetic that sets the
+  bound. So the declared bounds (job 180, step 150) still hold with the same
+  margin they had, and they remain ~3x an unvalidated LOCAL figure.
+  The one `workflow_dispatch` run that calibrates them is still owed and is
+  the first thing to do after merge: the failure mode is a CANCELLED job,
+  which `failure()` does not catch — the workflow adds `cancelled()` for
+  exactly this, but the bound itself has never been checked against a hosted
+  runner, which is slower than this machine.
 
 - [ ] P3 — **the registry has no mutant for leg 2's readability probe.**
   Discovered by building L2j: the probe is the construct that actually catches
@@ -242,3 +243,12 @@ The first full sweep also exposed a defect in the sweep's own report: a footer
 sentence beginning with the bare token `SURVIVED-UNDECLARED` was picked up by
 the CI failure-issue grep (`^<OUTCOME> `) and reported as a 64th mutant.
 Reworded, with the constraint recorded at the site.
+
+### Full sweep, 2026-08-01, after the control work
+
+Clean tree at `6b28a56` — gate result. **58 CAUGHT / 5 SURVIVED-DECLARED / 0
+undeclared survivors, 0 baseline-dirty, 0 anchor-missing, exit 0.** 42m41s for
+63 mutants. The weekly job is green on day one, which was the whole point of
+taking option (b).
+
+Before: 40 CAUGHT / 2 SURVIVED-DECLARED / 21 SURVIVED-UNDECLARED, exit 1.
