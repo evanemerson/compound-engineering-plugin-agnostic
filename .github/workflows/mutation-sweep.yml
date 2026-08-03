@@ -79,8 +79,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The classifier decides what every mutant result MEANS, so it is
-      # verified before it is trusted — and it is cheap, so a broken one fails
-      # in seconds instead of two hours later.
+      # verified before it is trusted — and it is cheap relative to the sweep,
+      # so a broken one fails in ~25s instead of two hours later. It is no longer
+      # sub-second: the hang cases below the classifier cases carry two
+      # deliberate multi-second waits, which is what makes them evidence.
       - name: Mutation sweep classifier selftest
         run: bash scripts/run-mutation-sweep.sh --selftest
 

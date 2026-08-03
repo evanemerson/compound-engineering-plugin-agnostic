@@ -228,7 +228,7 @@ not exempt the detector from the class.
   include (#20), whether the registry should be data rather than sourced shell
   (#21), and the exact wording of §9f's gap-table row (#23 — a row was written;
   its wording is not settled). #12 is folded into the item above. #13 —
-  the classifier's own coverage — is closed by `--selftest` (17 assertions
+  the classifier's own coverage — is closed by `--selftest` (30 assertions
   across every branch, run as its own CI step before the sweep).
 
 ### Caught by this branch's own work
