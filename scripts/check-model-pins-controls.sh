@@ -254,7 +254,7 @@ reg 34 'an unreadable FILE in a citation root is reported' 1 0 \
 reg 36 'a root whose only scannable files are empty is reported' 1 0 \
   "leg 4 root '\\.github' holds no non-empty scannable file" '' \
   'kills: counting listed files instead of readable content — a truncating merge leaves a root that scans nothing'
-# Runs under a SHORT timeout (see CASE_TIMEOUT): the regression this guards is
+# Runs under a SHORT timeout (see `case_timeout`): the regression this guards is
 # a HANG, not a wrong answer, so the failure has to be bounded or the suite
 # hangs with it.
 reg 32 'a symlink to a character device does not hang the scan' 0 0 '' '^MISS ' \
@@ -924,16 +924,96 @@ fi
 
 # Per-case bound. A case whose regression is a HANG rather than a wrong answer
 # has to fail fast, or the suite hangs with the defect it is testing for.
-case_timeout() { case "$1" in 32) printf 20 ;; *) printf 120 ;; esac; }
+#
+# ONE default, named once. It used to be spelled twice — in the `*)` arm here
+# and as run_checker's `${2:-120}` fallback — so the two could drift with
+# nothing to notice, and a reader could not tell which one governed.
+CASE_TIMEOUT_DEFAULT=120
+CASE_KILL_GRACE=30
+case_timeout() {
+  case "$1" in
+    32) printf 20 ;;
+    *)  printf '%s' "$CASE_TIMEOUT_DEFAULT" ;;
+  esac
+}
 
 CHK_OUT=''; CHK_RC=0; CHK_MISS=''; CHK_WARN=''
 run_checker() {  # run_checker <dir> [timeout_seconds]
+  # `${2-...}`, NOT `${2:-...}`. The colon form substitutes on null as well as
+  # unset, so a `case_timeout` arm edited to `printf ''` would become the
+  # default silently and the empty-string arm below could never fire for a
+  # caller-position value — a guard implying coverage it did not provide. An
+  # OMITTED argument still defaults; an EMPTY one is an error, because
+  # case_timeout is total and has no reason to return nothing.
+  local bound="${2-$CASE_TIMEOUT_DEFAULT}"
+
+  # The bound IS the mechanism for any case whose regression is a hang, and it
+  # arrives in CALLER POSITION — no textual anchor can pin a value passed as an
+  # argument, so nothing in this suite could have caught a bad one. Every way
+  # of expressing "not really a bound" is refused here, where both callers pass
+  # through, because each of them leaves all 75 controls green: a healthy
+  # checker finishes in under a second, so nothing in the suite observes the
+  # bound at all until the hang it exists for actually happens.
+  #
+  #   0        GNU timeout reads it as "no timeout at all"
+  #   999999   arithmetically a bound, operationally none
+  #   -k 0     no KILL escalation, so a TERM-ignoring hang runs unbounded
+  #   ''       would silently become the default under `${2:-}`
+  #
+  # Both operands, matching `capture_controls` in run-mutation-sweep.sh, which
+  # this is modelled on — validating only the one named in the bug report is
+  # how a fix scoped to the reported instance leaves the rest of the construct
+  # live.
+  #
+  # Refused, not asserted. The controls suite tests the CHECKER, and
+  # `run_checker` is harness, so a control asserting this would be the category
+  # error §9f's control->mutant rule exists to prevent. The assertion arrives
+  # when the sweep gains a tier that mutates the harness itself.
+  # Each operand on its own, NEVER concatenated. `case "$grace$bound"` reads as
+  # a tidy one-liner and is wrong: with grace=30 and an EMPTY bound it tests
+  # "30", which is all digits and passes, so the concatenation hides exactly
+  # the operand the guard was added for.
+  local _v
+  for _v in "$bound" "$CASE_KILL_GRACE"; do
+    case "$_v" in
+      ''|*[!0-9]*)
+        printf 'FATAL: run_checker needs a numeric bound and grace, got %s / %s\n' \
+          "$bound" "$CASE_KILL_GRACE" >&2
+        printf '       (the bound comes from case_timeout — see its arms).\n' >&2
+        exit 2 ;;
+      # Length-2-or-more starting with 0. Plain "0" is deliberately NOT matched
+      # here — it is a bound question, not a notation one, and falls to the
+      # range check below where the diagnosis is accurate.
+      0?*)
+        printf 'FATAL: run_checker refuses a leading-zero bound/grace (%s / %s): bash\n' \
+          "$bound" "$CASE_KILL_GRACE" >&2
+        printf '       reads it as octal and timeout does not, so the two disagree.\n' >&2
+        exit 2 ;;
+    esac
+  done
+  # Shape before arithmetic. `[ 99999999999999999999 -gt 120 ]` is an
+  # "integer expression expected" error returning 2, which `if` reads as false
+  # — so an overflow-length digit string would fall through a comparison-only
+  # check into the accepting branch.
+  if [ "${#bound}" -gt 6 ] || [ "${#CASE_KILL_GRACE}" -gt 6 ] \
+     || [ "$bound" -lt 1 ] || [ "$bound" -gt "$CASE_TIMEOUT_DEFAULT" ] \
+     || [ "$CASE_KILL_GRACE" -lt 1 ] || [ "$CASE_KILL_GRACE" -gt "$CASE_TIMEOUT_DEFAULT" ]; then
+    printf 'FATAL: run_checker refuses a per-case bound/grace outside 1..%s (got %s / %s).\n' \
+      "$CASE_TIMEOUT_DEFAULT" "$bound" "$CASE_KILL_GRACE" >&2
+    printf '       0 means "no timeout" to GNU timeout, and a value far above the\n' >&2
+    printf '       default is a bound only arithmetically — both leave every control\n' >&2
+    printf '       green while the hang guard this suite depends on is gone.\n' >&2
+    printf '       A case that legitimately needs longer raises %s deliberately.\n' \
+      'CASE_TIMEOUT_DEFAULT' >&2
+    exit 2
+  fi
+
   # Bounded: a hung checker would otherwise hang the suite and the CI job
-  # until the job timeout, with no diagnostic. `-k 30`: TERM alone is not a
+  # until the job timeout, with no diagnostic. `-k`: TERM alone is not a
   # bound — a checker that ignores or never reaches the handler (the mutants
-  # this suite exists for get to be arbitrary) would turn one case's 120s
+  # this suite exists for get to be arbitrary) would turn one case's bound
   # into the sweep's 900s outer abort; KILL keeps a hang a CASE failure.
-  CHK_OUT=$(cd "$1" && timeout -k 30 "${2:-120}" bash "$CHECKER" 2>&1)
+  CHK_OUT=$(cd "$1" && timeout -k "$CASE_KILL_GRACE" "$bound" bash "$CHECKER" 2>&1)
   CHK_RC=$?
   local verdict
   verdict=$(printf '%s\n' "$CHK_OUT" | grep -oE '^-- [0-9]+ MISS, [0-9]+ WARN --$' | tail -1)

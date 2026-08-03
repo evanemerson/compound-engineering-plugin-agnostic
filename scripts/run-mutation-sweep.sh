@@ -1028,12 +1028,14 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
     exit 2
   fi
 
-  # Bounded per mutant. The harness bounds each CHECKER invocation at 120s, so
-  # a pathological mutant's worst case scales with the SUITE SIZE and would
-  # otherwise consume the whole CI budget before any other mutant runs. The
-  # count is deliberately not restated here: it grows every time a gap is
-  # closed, and a stale number beside a timeout is how a bound silently stops
-  # matching the work it bounds.
+  # Bounded per mutant. The harness bounds each CHECKER invocation at
+  # `check-model-pins-controls.sh`'s CASE_TIMEOUT_DEFAULT, so a pathological
+  # mutant's worst case scales with the SUITE SIZE and would otherwise consume
+  # the whole CI budget before any other mutant runs. Neither the per-case
+  # bound nor the count is restated here — both change, and a stale number
+  # beside a timeout is how a bound silently stops matching the work it bounds.
+  # (The value was spelled here as well as twice in the controls suite; raising
+  # it there used to leave this derivation wrong with nothing to notice.)
   #
   # The capture itself — the rm -f guard and the file-not-pipe bound — lives in
   # capture_controls so that --selftest exercises THIS path rather than a copy.
