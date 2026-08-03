@@ -634,7 +634,20 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   # count is deliberately not restated here: it grows every time a gap is
   # closed, and a stale number beside a timeout is how a bound silently stops
   # matching the work it bounds.
-  out=$( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" 2>&1 )
+  #
+  # A FILE, not a $( ) pipe. A pipe is read until the LAST writer exits, and
+  # `timeout` puts each nested child in its own process group — so a hung
+  # descendant that inherited the suite's plain stdout would survive the
+  # group-kill and hold the read open past the bound (residual finding #12).
+  # Measured 2026-08-03: today every long-lived descendant is captured by
+  # run_checker's inner substitution, so the pipe DID return at the outer
+  # bound — but that property is an accident of the suite's current fd
+  # wiring, one backgrounded fixture helper away from breaking. The file
+  # makes the bound structural: the driver waits on `timeout` alone. A
+  # transcript truncated by the kill has no trailer -> HARNESS-ERROR ->
+  # exit 2, never a false CAUGHT.
+  ( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" ) > "$WORK/controls.out" 2>&1
+  out=$(cat "$WORK/controls.out")
 
   # Restore before classifying, so an error in classification cannot leave the
   # next mutant running against two mutations at once.
