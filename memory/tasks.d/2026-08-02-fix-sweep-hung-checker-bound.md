@@ -5,16 +5,32 @@
 5 findings — 0 P1, 3 P2, 2 P3; 3 applied in the same commit as the findings
 file, 2 deferred below.
 
-- [ ] P2 — **the hang-path refutation evidence is prose, not a committed
-  executable artifact** (finding #3, conf 70, judgment) —
-  memory/tasks.d/2026-08-01-feat-mutation-sweep-harness.md:284. The
-  23s-at-outer-bound measurement should become a driver selftest or controls
-  case that plants a hung/TERM-ignoring checker, runs the real
-  `> $WORK/controls.out` capture at a scaled bound, and asserts
-  return-at-bound + HARNESS-ERROR/exit 2. Deferred: new-control design work
-  in the harness's stated zero-mutant-coverage zone, not a mechanical edit.
-  Same class as
+- [x] **RESOLVED 2026-08-03 — built in `fix/hang-path-executable-guard`
+  (1.18.3).** Ten `--selftest` cases drive the real `capture_controls` path at a
+  scaled bound against a TERM-ignoring checker whose descendant escapes the
+  group-kill, plus an exactly-once anchor on the production call site. The pair
+  asserts the *discrimination* — same fixture through both capture shapes in one
+  run — rather than an absolute threshold, so the guard-removed direction runs
+  every time instead of living in a PR body. Proven three ways: intact 27/27;
+  `$( )` pipe restored → exit 1 (24/27); plant no-oped → exit 1 (23/27).
+  Chosen home is the driver's `--selftest`, not the controls suite (§9f: every
+  control must kill a named mutant, and all 63 target the checker; a 20s case
+  there costs ~21 min across a ~43 min sweep). Asserts the CURRENT file-redirect
+  bound — it does not replay the 23s measurement, which was taken against the
+  retired `$( )` topology. Selftest coverage is not mutant coverage, so the
+  stated zero-mutant-coverage limit is unchanged.
+
+  Was: P2 finding #3 (conf 70, judgment) — the hang-path refutation evidence is
+  prose, not a committed executable artifact
+  (memory/tasks.d/2026-08-01-feat-mutation-sweep-harness.md:284), the same class
+  as
   docs/solutions/logic-errors/verification-evidence-must-be-a-committed-executable-artifact.md.
+  Deferred at the time as new-control design work in the harness's stated
+  zero-mutant-coverage zone rather than a mechanical edit. That read held up:
+  plan review found two defects in the first design — a function closing over
+  globals unset on the selftest path, and assertions that a fixture writing
+  nothing would have satisfied — either of which would have shipped a control
+  that passes with the guard removed.
 
 - [ ] P3 — **RESOLVED marker format in the finding-#12 entry** (finding #5,
   conf 65, judgment) — same file, :274. architecture-reviewer: reformat to
