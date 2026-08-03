@@ -10,8 +10,8 @@
 P2/P3 were applied in the same commit as this file; the items below are what
 remains open.
 
-**21 items open below** (the operator call carried from the 2026-08-02 shard is
-now resolved): 2 recorded by plan-review findings that are themselves
+**20 items open below** (the operator call and the `case_timeout()` pinning gap
+are now resolved): 2 recorded by plan-review findings that are themselves
 `status: applied` (their fix was "record it as a residual"), 7 deferred by the
 PR #36 review, and 12 surfaced by the compound pass (10 live instances of the
 same class elsewhere in the tooling, plus 2 proposals needing a decision).
@@ -94,14 +94,25 @@ Documented in `docs/solutions/logic-errors/an-assertion-must-name-the-edit-that-
 detachment modes, found while generalizing the class. Each was verified against
 source by the prevention agent; none is fixed.
 
-- [ ] P2 — **`case_timeout()` is the pinning gap verbatim, unfixed, on the only
-  hang guard the 75-control suite has.** `scripts/check-model-pins-controls.sh:927`
-  + `:936`. Control 32's `why` says its regression is a hang, so the bound *is*
-  the mechanism; `32) printf 0` unbounds it and all 75 controls stay green,
-  because a healthy checker finishes in under a second. Byte-for-byte the defect
-  just fixed in `capture_controls`. Compounding: `120` is hardcoded twice, and
-  the comment at `:257` points readers at `CASE_TIMEOUT`, an identifier that does
-  not exist in the file.
+- [x] **RESOLVED 2026-08-03 — fixed in `fix/case-timeout-unpinnable-bound`
+  (1.18.4).** `run_checker` now refuses a non-numeric or zero per-case bound at
+  the callee, where every caller passes through, because the bound arrives in
+  caller position and no textual anchor can pin it. The `120` default is named
+  once (`CASE_TIMEOUT_DEFAULT`) instead of spelled in two places that could
+  drift, `-k 30` likewise (`CASE_KILL_GRACE`), and the comment at `:257`
+  pointing at a non-existent `CASE_TIMEOUT` identifier now cites `case_timeout`.
+
+  Proven in both directions against fixture copies: on `main`, planting
+  `32) printf 0` — which deletes the suite's only hang guard — left it at
+  **75/75, exit 0**, confirming the defect was real and invisible. On this
+  branch the same plant is **exit 2** with a named reason, while intact stays
+  75/75.
+
+  Stated limit, deliberately not closed here: this is a **runtime refusal, not
+  an assertion**. The controls suite tests the checker, and `run_checker` is
+  harness, so a control asserting it would be the category error §9f's
+  control→mutant rule exists to prevent. The assertion arrives with the sweep
+  tier below.
 
 - [ ] P2 — **leg 4's zero-coverage floor greps its own source.**
   `scripts/check-model-pins.sh:470` + `:663`. `CITE_ROOTS` includes `scripts`,

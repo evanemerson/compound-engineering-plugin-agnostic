@@ -254,7 +254,7 @@ reg 34 'an unreadable FILE in a citation root is reported' 1 0 \
 reg 36 'a root whose only scannable files are empty is reported' 1 0 \
   "leg 4 root '\\.github' holds no non-empty scannable file" '' \
   'kills: counting listed files instead of readable content — a truncating merge leaves a root that scans nothing'
-# Runs under a SHORT timeout (see CASE_TIMEOUT): the regression this guards is
+# Runs under a SHORT timeout (see `case_timeout`): the regression this guards is
 # a HANG, not a wrong answer, so the failure has to be bounded or the suite
 # hangs with it.
 reg 32 'a symlink to a character device does not hang the scan' 0 0 '' '^MISS ' \
@@ -924,16 +924,56 @@ fi
 
 # Per-case bound. A case whose regression is a HANG rather than a wrong answer
 # has to fail fast, or the suite hangs with the defect it is testing for.
-case_timeout() { case "$1" in 32) printf 20 ;; *) printf 120 ;; esac; }
+#
+# ONE default, named once. It used to be spelled twice — in the `*)` arm here
+# and as run_checker's `${2:-120}` fallback — so the two could drift with
+# nothing to notice, and a reader could not tell which one governed.
+CASE_TIMEOUT_DEFAULT=120
+CASE_KILL_GRACE=30
+case_timeout() {
+  case "$1" in
+    32) printf 20 ;;
+    *)  printf '%s' "$CASE_TIMEOUT_DEFAULT" ;;
+  esac
+}
 
 CHK_OUT=''; CHK_RC=0; CHK_MISS=''; CHK_WARN=''
 run_checker() {  # run_checker <dir> [timeout_seconds]
+  local bound="${2:-$CASE_TIMEOUT_DEFAULT}"
+
+  # The bound IS the mechanism for any case whose regression is a hang, and it
+  # arrives in CALLER POSITION — no textual anchor can pin a value passed as an
+  # argument, so nothing in this suite could have caught a bad one. GNU
+  # `timeout` reads a duration of 0 as "no timeout at all", so `32) printf 0`
+  # deletes this suite's only hang guard while all 75 controls stay green: a
+  # healthy checker finishes in under a second, so every expectation still
+  # holds and case 32 keeps reporting PASS with nothing bounding it.
+  #
+  # Refused here, where every caller passes through. This is a runtime refusal,
+  # not an assertion — the controls suite tests the CHECKER, and `run_checker`
+  # is harness, so a control asserting it would be the category error §9f's
+  # control->mutant rule exists to prevent. The assertion arrives when the
+  # sweep gains a tier that mutates the harness itself.
+  case "$bound" in
+    ''|*[!0-9]*)
+      printf 'FATAL: run_checker needs a numeric per-case bound, got %s\n' "$bound" >&2
+      printf '       (case_timeout returned it — see its arms).\n' >&2
+      exit 2 ;;
+  esac
+  if [ "$bound" -eq 0 ]; then
+    printf 'FATAL: run_checker refuses a zero per-case bound. GNU timeout reads 0 as\n' >&2
+    printf '       "no timeout at all", which removes the hang guard while every\n' >&2
+    printf '       control stays green — a healthy checker finishes in under a second,\n' >&2
+    printf '       so nothing here would notice the bound was gone.\n' >&2
+    exit 2
+  fi
+
   # Bounded: a hung checker would otherwise hang the suite and the CI job
-  # until the job timeout, with no diagnostic. `-k 30`: TERM alone is not a
+  # until the job timeout, with no diagnostic. `-k`: TERM alone is not a
   # bound — a checker that ignores or never reaches the handler (the mutants
-  # this suite exists for get to be arbitrary) would turn one case's 120s
+  # this suite exists for get to be arbitrary) would turn one case's bound
   # into the sweep's 900s outer abort; KILL keeps a hang a CASE failure.
-  CHK_OUT=$(cd "$1" && timeout -k 30 "${2:-120}" bash "$CHECKER" 2>&1)
+  CHK_OUT=$(cd "$1" && timeout -k "$CASE_KILL_GRACE" "$bound" bash "$CHECKER" 2>&1)
   CHK_RC=$?
   local verdict
   verdict=$(printf '%s\n' "$CHK_OUT" | grep -oE '^-- [0-9]+ MISS, [0-9]+ WARN --$' | tail -1)
