@@ -42,12 +42,41 @@
 # baseline gate, the control suite, and the model-pins job together.
 SS=$'\302\247'
 
+# The harness tier's target, spelled once.
+DRV='scripts/run-mutation-sweep.sh'
+
 MUT_IDS=(); MUT_TARGET=(); MUT_OLD=(); MUT_NEW=(); MUT_WHY=(); MUT_LIMIT=()
+MUT_HARNESS=()
 
 # mut <id> <target> <old> <new> <why>
 mut() {
   MUT_IDS+=("$1"); MUT_TARGET+=("$2"); MUT_OLD+=("$3"); MUT_NEW+=("$4")
-  MUT_WHY+=("$5"); MUT_LIMIT+=('')
+  MUT_WHY+=("$5"); MUT_LIMIT+=(''); MUT_HARNESS+=('controls')
+}
+
+# hmut <id> <target> <old> <new> <why>  — a HARNESS mutant.
+#
+# Same substitution machinery, different subject and different judge: the
+# target is the sweep's own driver, and the verdict comes from the driver's
+# `--selftest` trailer rather than from the control suite. It exists because
+# the verification chain terminates — every `mut` above proves the CONTROLS
+# catch a weakened checker, and nothing proved the driver's own assertions
+# catch a weakened driver. Four of them could not, and shipped green.
+#
+# THE CONSTRAINT THAT DECIDES WHETHER A `hmut` IS WRITEABLE, and it is not the
+# one you would guess: the mutation must make an assertion print a `FAIL  `
+# line **and still reach the trailer**. A mutation that makes the driver exit
+# EARLY — broken argument parsing, a guard's own `exit 2`, a FATAL — produces
+# no trailer, which is HARNESS-ERROR, which aborts the whole sweep. That is
+# never a finding about the mutant.
+#
+# So a guard that kills by REFUSING cannot be a `hmut` at all today. Those need
+# a `refuse` expectation keyed on a machine token, which does not exist yet;
+# the two known instances are recorded in the branch's residual shard rather
+# than registered here as mutants that would take the run down.
+hmut() {
+  MUT_IDS+=("$1"); MUT_TARGET+=("$2"); MUT_OLD+=("$3"); MUT_NEW+=("$4")
+  MUT_WHY+=("$5"); MUT_LIMIT+=(''); MUT_HARNESS+=('selftest')
 }
 
 # survivor <id> <target> <old> <new> <file:line of the STATED LIMIT> <why>
@@ -60,6 +89,7 @@ mut() {
 # A declared survivor that starts being CAUGHT is a FAIL: the limit was closed
 # and this declaration is now false.
 survivor() {
+  MUT_HARNESS+=('controls')
   MUT_IDS+=("$1"); MUT_TARGET+=("$2"); MUT_OLD+=("$3"); MUT_NEW+=("$4")
   MUT_WHY+=("$6"); MUT_LIMIT+=("$5")
 }
@@ -463,3 +493,43 @@ mut v-exit "$CHK" \
   "  echo \"FAIL: a dispatch can run at the invoking session's tier, or a check could not run.\"
   exit 0" \
   'kills: the exit code, which is the entire mechanism by which CI fails. This mutant passed 26 of 26 controls before the suite asserted exit status. Expected killers: every non-zero-expectation case.'
+
+# ===========================================================================
+# The HARNESS tier — subject is the driver, judge is the driver's --selftest
+# ===========================================================================
+# These close the gap the checker mutants above structurally cannot reach: all
+# of them prove the CONTROLS catch a weakened checker, and none proves the
+# driver's own assertions catch a weakened driver. On 2026-08-03 four of those
+# assertions could not fail and were green the day they shipped.
+#
+# Each entry below corresponds to a defect that actually shipped and was caught
+# by a human mutating this file by hand. Registering them makes the evidence
+# re-runnable instead of reproducible-only-by-redoing-the-experiment.
+#
+# Two further defects from the same set are deliberately ABSENT, and their
+# absence is the tier's stated limit rather than an oversight: `ST_NAP` margin
+# and the controls suite's `run_checker` bound guard both kill by REFUSING —
+# the driver exits before printing a trailer, which is HARNESS-ERROR, which
+# aborts the whole sweep. Registering them would take the run down instead of
+# reporting a kill. They need a `refuse` expectation keyed on a machine token;
+# recorded in the branch shard with that design.
+
+hmut sweep-rm-guard "$DRV" \
+  '  rm -f "$out_file" || {
+    printf '"'"'FATAL: could not clear the previous controls transcript. Stopping rather\n'"'"' >&2
+    printf '"'"'       than risking classifying %s from a stale one.\n'"'"' "$label" >&2
+    exit 2
+  }' \
+  '  rm -f "$out_file" 2>/dev/null || :' \
+  'kills: the pre-clear guard on the controls transcript. Without it a failed open leaves the PREVIOUS mutant complete transcript in place to be classified as THIS mutant result — a false CAUGHT, reproduced under chmod 444. Expected killer: "an unclearable transcript path is fatal, never classified".'
+
+hmut sweep-anchor-inline "$DRV" \
+  '  capture_controls "$COPY" "$CONTROLS_REL" "$WORK/controls.out" 30 900 "mutant $id" ;;' \
+  '  # capture_controls "$COPY" "$CONTROLS_REL" "$WORK/controls.out" 30 900 "mutant $id"
+      ( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" ) > "$WORK/controls.out" 2>&1 ;;' \
+  'kills: routing the production capture through the guarded function. The commented-out call site keeps the literal in the file, so a text-counting anchor still reports PASS while the sweep has silently lost the structural bound. Expected killer: "the mutant loop still routes its capture through the guarded function".'
+
+hmut sweep-zero-bound "$DRV" \
+  '  if [ "$bound" -eq 0 ] || [ "$grace" -eq 0 ]; then' \
+  '  if false; then' \
+  'kills: the refusal of a zero bound/grace. GNU timeout reads 0 as "no timeout at all", so removing this lets a caller silently unbound the capture. Anchored on the REFUSAL, never on the call site 900 — --selftest exits long before the mutant loop, so mutating the call site changes nothing in the transcript. Expected killer: "a zero bound is refused, not silently unbounded".'

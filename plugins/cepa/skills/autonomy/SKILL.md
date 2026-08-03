@@ -742,9 +742,18 @@ which is the signal to update them, not to remove them.
 
 **The controls are themselves covered by a mutation sweep.**
 `bash scripts/run-mutation-sweep.sh` applies a registry of sabotages
-(`scripts/mutants/registry.sh`) to a copy of the checker and runs the full
-control suite against each one, confirming the controls go red. A sabotage
-nobody catches is a hole in the controls. It is **weekly and on demand, never a
+(`scripts/mutants/registry.sh`) to a copy of the tree and runs a harness against
+each one, confirming the harness goes red. A sabotage nobody catches is a hole.
+
+There are **two tiers**, because a verification chain terminates and the last
+link is trusted for printing PASS. Checker mutants sabotage the checker and are
+judged by the full control suite. **Harness mutants** sabotage the sweep's own
+driver and are judged by the driver's `--selftest`, closing the gap where the
+driver's assertions were covered by nothing. A harness mutant's sabotage must
+make an assertion go red *and still reach the trailer*: a mutation that exits
+early produces no trailer, which is `HARNESS-ERROR`, which aborts the run and
+is never a finding about the mutant. Guards that kill by refusing therefore
+cannot be registered as harness mutants today. It is **weekly and on demand, never a
 PR gate**: the controls can only develop holes when the checker or the controls
 change, so a per-PR run mostly re-proves the previous answer, and everything
 that would have made that redundant run affordable was a second list to keep in
@@ -761,8 +770,11 @@ any construct is the one that blinds a predicate while leaving the clean-tree
 verdict intact — which is the shape a real regression has.
 
 Outcomes are classified from the harness's per-case `PASS`/`FAIL` lines and its
-`-- N/M controls passed --` trailer, **never from exit status**: a baseline
-abort, a run where no control executed, and a genuine kill all exit 1.
+trailer — `-- N/M controls passed --` for the checker tier, `-- N/M classifier
+selftests passed --` for the harness tier — **never from exit status**: a
+baseline abort, a run where no control executed, and a genuine kill all exit 1.
+The two trailers are matched separately rather than by one loosened pattern, so
+neither tier can silently accept the other's transcript.
 
 | Outcome | Meaning | Result |
 |---|---|---|

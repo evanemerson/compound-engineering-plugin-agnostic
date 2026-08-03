@@ -77,10 +77,42 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# A harness mutant runs THIS driver, from a copy, with --selftest. If its
+# mutation breaks argument parsing, --selftest is not honoured and the child
+# starts a real sweep inside the copy — which is a git work tree with a full
+# registry. Measured: mutating `--selftest) SELFTEST=1 ;;` to `SELFTEST=0` made
+# the child print the sweep header and begin one.
+#
+# The time bound does NOT contain that. The child's own captures run under
+# their own `timeout`, and those grandchildren sit in their own process groups,
+# so they survive the outer group-kill and keep writing into the work tree for
+# minutes after the capture returns, racing its cleanup. This marker is the
+# only bound on DEPTH; the bound is only a bound on time.
+#
+# --selftest, --list and --help stay available in a child: they are what a
+# harness mutant is there to run, and they touch nothing.
+if [ "$SELFTEST" -eq 0 ] && [ "$LIST_ONLY" -eq 0 ] && [ -n "${CEPA_SWEEP_CHILD:-}" ]; then
+  printf 'FATAL: refusing to run a sweep inside a sweep (CEPA_SWEEP_CHILD is set).\n' >&2
+  printf '       A harness mutant invokes this driver with --selftest; arriving here\n' >&2
+  printf '       means the mutation broke argument parsing, so the mutant is about\n' >&2
+  printf '       the driver rather than about anything the sweep measures.\n' >&2
+  exit 2
+fi
+export CEPA_SWEEP_CHILD=1
+
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   printf 'FATAL: not inside a git work tree\n' >&2; exit 2; }
 REGISTRY="$REPO_ROOT/scripts/mutants/registry.sh"
 CONTROLS_REL='scripts/check-model-pins-controls.sh'
+# The harness tier's subject is this file, and its judge is this file's own
+# --selftest. The bound is NOT sized off the nominal selftest runtime: baseline
+# is ~22s, but a mutant that removes a bound lets a hang fixture run its full
+# nap and takes ~39s. Sizing at "25s plus slack" would truncate the transcript
+# of the mutant that most needs to be CAUGHT, turning it into a run-ending
+# HARNESS-ERROR.
+DRIVER_REL='scripts/run-mutation-sweep.sh'
+HARNESS_BOUND=120
+HARNESS_KILL_GRACE=10
 [ -r "$REGISTRY" ] || { printf 'FATAL: no readable registry at %s\n' "$REGISTRY" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------
@@ -132,6 +164,19 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   [ -n "${MUT_OLD[$i]}" ] || reg_errors="${reg_errors}${id}: empty 'old' would match everywhere"$'\n'
   [ "${MUT_OLD[$i]}" = "${MUT_NEW[$i]}" ] && reg_errors="${reg_errors}${id}: 'new' is identical to 'old'"$'\n'
   [ -n "${MUT_WHY[$i]}" ] || reg_errors="${reg_errors}${id}: empty 'why'"$'\n'
+
+  # An unknown harness must never fall through to the controls default: that
+  # would run the wrong suite and read its transcript with the wrong
+  # vocabulary, which is a wrong ANSWER rather than an error.
+  case "${MUT_HARNESS[$i]}" in
+    controls|selftest) ;;
+    *) reg_errors="${reg_errors}${id}: unknown harness '${MUT_HARNESS[$i]}'"$'\n' ;;
+  esac
+  # A harness mutant's target must BE the driver — anything else is classified
+  # from a transcript the mutated file never produced.
+  if [ "${MUT_HARNESS[$i]}" = 'selftest' ] && [ "$t" != "$DRIVER_REL" ]; then
+    reg_errors="${reg_errors}${id}: harness 'selftest' requires target ${DRIVER_REL}, got '${t}'"$'\n'
+  fi
 
   # A declared survivor must cite a location that actually records a stated
   # limit. Nothing machine-checks that the limit is the RIGHT one — relabelling
@@ -244,9 +289,36 @@ count_occurrences() {  # count_occurrences <haystack-var-name> <needle>
 #
 # A missing trailer is never a CAUGHT.
 CLASS=''; CLASS_DETAIL=''
-classify_transcript() {  # classify_transcript <transcript>
-  local out="$1" trailer failed
+classify_transcript() {  # classify_transcript <transcript> [mode: controls|selftest]
+  local out="$1" mode="${2:-controls}" trailer failed
   CLASS=''; CLASS_DETAIL=''
+
+  # The selftest transcript is strikingly parallel to the controls one — both
+  # mark a red case with `FAIL  ` and end in a `-- N/M ... --` trailer — but it
+  # has no fixture setup and no baseline gate, so the three pre-trailer tokens
+  # below cannot appear in it. Handled as a distinct mode rather than a
+  # parameterized trailer regex: sharing the regex would silently apply
+  # setup-error semantics to a transcript that cannot produce them, which is a
+  # branch that can never fire, i.e. the exact shape this harness exists to
+  # refuse.
+  if [ "$mode" = 'selftest' ]; then
+    trailer=$(printf '%s\n' "$out" | grep -oE -- '^-- [0-9]+/[0-9]+ classifier selftests passed --$' | tail -1)
+    if [ -z "$trailer" ]; then
+      CLASS='HARNESS-ERROR'
+      CLASS_DETAIL=$(printf '%s\n' "$out" | grep -m1 -E '^FATAL' \
+        || printf 'no selftest trailer (the driver exited before finishing — a mutation that cannot reach the trailer is never a finding about the mutant)')
+      return
+    fi
+    failed=$(printf '%s\n' "$out" | grep -cE '^FAIL  ')
+    if [ "$failed" -gt 0 ]; then
+      CLASS='CAUGHT'
+      CLASS_DETAIL="$failed selftest assertion(s) went red: $(printf '%s\n' "$out" | grep -E '^FAIL  ' | sed 's/^FAIL  //' | cut -c1-40 | tr '\n' '|')"
+      return
+    fi
+    CLASS='SURVIVED'
+    CLASS_DETAIL="${trailer#-- }"
+    return
+  fi
 
   # A control that could not be SET UP is checked FIRST, before the trailer —
   # the harness still prints its trailer after a setup error, so a
@@ -321,9 +393,21 @@ resolve_outcome() {  # resolve_outcome <class> <is_declared_survivor 0|1>
 # expansion here would abort the whole selftest with "WORK: unbound variable"
 # before a single assertion ran.
 CAP_ELAPSED=0; CAP_RC=0
-capture_controls() {  # <run_dir> <suite_path> <out_file> <kill_grace> <bound> [label]
-  local run_dir="$1" suite="$2" out_file="$3" grace="$4" bound="$5"
-  local label="${6:-$3}"
+capture_controls() {  # <run_dir> <suite_path> <out_file> <kill_grace> <bound> <label> [args...]
+  # `label` is REQUIRED, not optional. With an optional label AND trailing args
+  # the signature is ambiguous, and `shift 6` on a 5-argument call returns 1
+  # SILENTLY (set -u is on, errexit is not), leaving all five arguments in "$@"
+  # to be handed to the suite — which answers an unknown argument with exit 2,
+  # so no trailer, so HARNESS-ERROR, so a whole-sweep abort blamed on the
+  # environment. Refused here instead.
+  if [ $# -lt 6 ]; then
+    printf 'FATAL: capture_controls needs <run_dir> <suite> <out_file> <grace> <bound> <label>,\n' >&2
+    printf '       got %s argument(s). A missing label would silently become the\n' "$#" >&2
+    printf '       suite argv.\n' >&2
+    exit 2
+  fi
+  local run_dir="$1" suite="$2" out_file="$3" grace="$4" bound="$5" label="$6"
+  shift 6
   local t0 t1
 
   # The BOUND is the whole point of this function, and it is the one part no
@@ -378,7 +462,7 @@ capture_controls() {  # <run_dir> <suite_path> <out_file> <kill_grace> <bound> [
   # below: the file arm returns at the bound while the same fixture through a
   # $( ) pipe is held for the orphan's full nap. Superseded prose: the
   # 2026-08-02 hand measurement was taken against the retired $( ) topology.
-  ( cd "$run_dir" && timeout -k "$grace" "$bound" bash "$suite" ) > "$out_file" 2>&1
+  ( cd "$run_dir" && timeout -k "$grace" "$bound" bash "$suite" "$@" ) > "$out_file" 2>&1
   CAP_RC=$?
 
   t1=$(date +%s)
@@ -398,8 +482,8 @@ capture_controls() {  # <run_dir> <suite_path> <out_file> <kill_grace> <bound> [
 # ---------------------------------------------------------------------------
 if [ "$SELFTEST" -eq 1 ]; then
   st_pass=0; st_fail=0
-  st() {  # st <name> <expected-outcome> <expected-ok> <declared 0|1> <transcript>
-    classify_transcript "$5"
+  st() {  # st <name> <expected-outcome> <expected-ok> <declared 0|1> <transcript> [mode]
+    classify_transcript "$5" "${6:-controls}"
     resolve_outcome "$CLASS" "$4"
     if [ "$OUTCOME" = "$2" ] && [ "$OUTCOME_OK" -eq "$3" ]; then
       printf 'PASS  %s\n' "$1"; st_pass=$((st_pass + 1))
@@ -483,6 +567,37 @@ FATAL: no controls ran (--only matched nothing?) — a suite that asserts nothin
   st 'a setup error outranks a real FAIL in the same run' HARNESS-ERROR       0 0 "$SETUPERR_MIXED"
   st 'a setup error on a declared survivor still errors'  HARNESS-ERROR       0 1 "$SETUPERR"
   st 'an empty transcript is not a finding'               HARNESS-ERROR       0 0 "$EMPTY"
+
+  # --- Selftest-mode classification (the harness tier).
+  # A driver mutant is classified from the DRIVER's own selftest trailer, whose
+  # vocabulary differs from the controls suite's. These cases exist so the mode
+  # is exercised on every branch rather than only on the branch a given sweep
+  # happens to reach.
+  ST_SELF_RED='PASS  a case that held
+FAIL  the assertion the mutant was expected to redden
+        expected X, got Y
+
+-- 29/30 classifier selftests passed --'
+
+  ST_SELF_GREEN='PASS  a case that held
+PASS  another case that held
+
+-- 30/30 classifier selftests passed --'
+
+  # The controls trailer presented in selftest mode. This is the case that
+  # stops the two modes from quietly accepting each other's transcripts: read
+  # as a pass it would report SURVIVED for a run that never produced a selftest
+  # result at all.
+  ST_SELF_WRONGTRAILER='PASS  1    a control
+-- 57/57 controls passed --'
+
+  st 'a red selftest assertion is a driver kill'          CAUGHT              1 0 "$ST_SELF_RED"        selftest
+  st 'a green selftest is a real driver gap'              SURVIVED-UNDECLARED 0 0 "$ST_SELF_GREEN"      selftest
+  st 'a green selftest on a declared survivor is fine'    SURVIVED-DECLARED   1 1 "$ST_SELF_GREEN"      selftest
+  st 'a driver that exits before its trailer is no kill'  HARNESS-ERROR       0 0 "$EMPTY"              selftest
+  st 'a controls trailer is not a selftest result'        HARNESS-ERROR       0 0 "$ST_SELF_WRONGTRAILER" selftest
+  # ...and the converse: a selftest trailer must not satisfy controls mode.
+  st 'a selftest trailer is not a controls result'        HARNESS-ERROR       0 0 "$ST_SELF_GREEN"
 
   # ANCHOR-MISSING is decided before the harness runs, so it is exercised
   # against the substitution primitives rather than a transcript.
@@ -625,6 +740,21 @@ printf -- '-- 2/2 controls passed --\n'
 EOF
   }
 
+  # The fixture's CAPABILITY to emit a trailer is a precondition of the
+  # truncation assertions, not an assumption they may make. Without this, the
+  # `printf` that emits it can be deleted and every assertion stays green — the
+  # trailer-absence check passes because the fixture cannot produce one, and the
+  # classification check passes because an empty-of-trailer transcript is
+  # HARNESS-ERROR either way. That is precisely the vacuity the trailer was
+  # ADDED to close, re-openable in silence. Measured: deleting the printf left
+  # the suite at 30/30 green until this assertion existed.
+  st_fixture_can_emit() {  # st_fixture_can_emit <dir> <label>
+    if grep -q -- '-- 2/2 controls passed --' "$1/controls.sh" 2>/dev/null
+    then ok=0; else ok=1; fi
+    st_assert "the hang fixture can emit a trailer at all ($2)" "$ok" \
+      "the generated fixture has no trailer statement, so every truncation assertion below it is vacuous"
+  }
+
   st_reap() {  # st_reap <pid> — SIGTERM is ignored by construction, so KILL
     local p="$1" i=0
     st_pid_ok "$p" || return 1
@@ -657,6 +787,7 @@ EOF
   trap 'st_hang_signal INT' INT
   trap 'st_hang_signal TERM' TERM
   st_hang_fixture "$ST_HANG_DIR"
+  st_fixture_can_emit "$ST_HANG_DIR" 'arm 1'
 
   # --- Arm 1: the guarded shape. Returns at the bound, leaving the orphan live.
   capture_controls "$ST_HANG_DIR" "$ST_HANG_DIR/controls.sh" \
@@ -716,6 +847,7 @@ EOF
   # again be a number in a PR body — the exact evidence form these cases exist
   # to retire.
   st_hang_fixture "$ST_HANG_DIR"
+  st_fixture_can_emit "$ST_HANG_DIR" 'arm 2'
   st_probe="$ST_HANG_DIR/pipe.elapsed"
 
   # The pipe arm must not be able to outlive its own assertion. Its only natural
@@ -949,7 +1081,26 @@ if [ "$DIRTY" -eq 1 ]; then
 else
   printf 'clean tree at %s — gate result\n' "$HEAD_SHA"
 fi
-printf 'harness: %s (run once per mutant, in a copy under %s)\n' "$CONTROLS_REL" "${TMPDIR:-/tmp}"
+# One line per tier ACTUALLY SELECTED by this run, not a hardcoded single
+# harness — with two tiers, a fixed line announces the controls suite for a run
+# that also drove the driver's own selftest, in the operator-facing summary the
+# header exists to be.
+sweep_tiers=' '
+i=0
+while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
+  if selected "${MUT_IDS[$i]}"; then
+    case "$sweep_tiers" in *" ${MUT_HARNESS[$i]} "*) ;; *) sweep_tiers="${sweep_tiers}${MUT_HARNESS[$i]} " ;; esac
+  fi
+  i=$((i + 1))
+done
+case "$sweep_tiers" in
+  *" controls "*) printf 'harness: %s (run once per mutant, in a copy under %s)\n' \
+                    "$CONTROLS_REL" "${TMPDIR:-/tmp}" ;;
+esac
+case "$sweep_tiers" in
+  *" selftest "*) printf 'harness: %s --selftest (the driver judged by its own assertions)\n' \
+                    "$DRIVER_REL" ;;
+esac
 printf '\n'
 printf 'A green sweep means every ENUMERATED mutant was killed. That is not coverage of\n'
 printf 'the checker: the enumeration is hand-authored, and a mutant killed by a control\n'
@@ -1042,7 +1193,18 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   # The selftest also anchors this call site at exactly one occurrence: without
   # that, inlining the capture back into this loop would leave every hang-case
   # assertion green while production silently lost the structural bound.
-  capture_controls "$COPY" "$CONTROLS_REL" "$WORK/controls.out" 30 900 "mutant $id"
+  # Which harness judges this mutant. The controls call site keeps its exact
+  # spelling: the selftest's exactly-once anchor counts it, and rewriting it to
+  # share a code path with the tier below would make that anchor track a
+  # variable instead of the call it protects.
+  cls_mode="${MUT_HARNESS[$i]}"
+  case "$cls_mode" in
+    selftest)
+      capture_controls "$COPY" "$DRIVER_REL" "$WORK/controls.out" \
+                       "$HARNESS_KILL_GRACE" "$HARNESS_BOUND" "mutant $id" --selftest ;;
+    *)
+      capture_controls "$COPY" "$CONTROLS_REL" "$WORK/controls.out" 30 900 "mutant $id" ;;
+  esac
   out=$(cat "$WORK/controls.out")
 
   # Restore before classifying, so an error in classification cannot leave the
@@ -1055,7 +1217,7 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
     exit 2
   fi
 
-  classify_transcript "$out"
+  classify_transcript "$out" "$cls_mode"
   if [ "$CLASS" = 'HARNESS-ERROR' ]; then
     printf 'FATAL: the control harness failed for a reason that is not about mutant %s:\n' "$id" >&2
     printf '       %s\n' "$CLASS_DETAIL" >&2

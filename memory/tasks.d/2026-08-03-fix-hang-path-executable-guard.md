@@ -10,8 +10,9 @@
 P2/P3 were applied in the same commit as this file; the items below are what
 remains open.
 
-**20 items open below** (the operator call and the `case_timeout()` pinning gap
-are now resolved): 2 recorded by plan-review findings that are themselves
+**20 items open below** (the operator call, the `case_timeout()` pinning gap and
+the sweep-tier proposal are now resolved; the tier's own stated limit is filed
+as the new `refuse`-mode item): 2 recorded by plan-review findings that are themselves
 `status: applied` (their fix was "record it as a residual"), 7 deferred by the
 PR #36 review, and 12 surfaced by the compound pass (10 live instances of the
 same class elsewhere in the tooling, plus 2 proposals needing a decision).
@@ -195,17 +196,39 @@ source by the prevention agent; none is fixed.
 
 ### Proposed, needs a decision before building
 
-- [ ] **A second mutation-sweep tier that mutates the sweep itself.** The mutant
-  loop is already generic over `MUT_TARGET`; only the harness is hardcoded. A
-  `MUT_HARNESS` column in `scripts/mutants/registry.sh`, defaulting to the
-  controls suite, would let mutants target `run-mutation-sweep.sh` classified
-  from its own `-- N/M classifier selftests passed --` trailer. All four defects
-  this branch shipped become one-line registry entries
-  (`sweep-fixture-trailer`, `sweep-rm-guard`, `sweep-anchor-inline`,
-  `sweep-zero-bound`, `sweep-nap-margin`). At ~25s it is PR-gate affordable in a
-  way the 64-minute controls sweep explicitly is not. **This is the construct
-  that stops the next instance from needing a list** — everything above is a
-  list.
+- [x] **RESOLVED 2026-08-03 — built in `feat/sweep-harness-tier` (1.19.0).**
+  `MUT_HARNESS` + an `hmut` verb; `classify_transcript` gains a `selftest` mode
+  matched separately from the controls mode (never one loosened trailer regex,
+  which would let each tier silently accept the other's transcript);
+  `capture_controls` takes trailing args with a now-REQUIRED label; a per-tier
+  report header; and a recursion marker.
+
+  Three mutants registered and all CAUGHT, each naming the assertion that killed
+  it: `sweep-rm-guard`, `sweep-anchor-inline`, `sweep-zero-bound`. The 63
+  checker mutants are unaffected (t-predicate still CAUGHT by 31/33/35).
+
+  **Two of the five intended mutants are deliberately absent, and that is the
+  tier's stated limit rather than an oversight.** Plan review measured all five:
+  `sweep-nap-margin` makes the driver exit 2 before its trailer, which is
+  HARNESS-ERROR, which aborts the whole sweep — it would take the run down
+  instead of reporting a kill. So **a guard that kills by REFUSING cannot be a
+  harness mutant at all today**, which also covers #37's `run_checker` bound
+  guard. See the `refuse`-mode item below.
+
+  Recursion is real and was measured: mutating `--selftest) SELFTEST=1 ;;` to
+  `SELFTEST=0` made the mutated child print the sweep header and begin a real
+  sweep. The time bound does not contain it — the child's captures spawn
+  grandchildren in their own process groups that survive the outer group-kill —
+  so the exported marker is the only bound on depth.
+
+- [ ] P2 — **a `refuse` expectation mode, so guards that kill by refusing can be
+  registered.** Needed by `sweep-nap-margin` and by #37's `run_checker` bound
+  guard, which is currently a runtime refusal with no assertion. Design
+  constraint that makes it non-trivial: keying `refuse` on HARNESS-ERROR alone
+  would report CAUGHT for **any** broken environment — the
+  environment-failure-as-finding inversion this repo documents. It needs a
+  machine token on the harness's exit path, never English FATAL prose, which
+  means touching each guard that should be killable.
 
 - [ ] **CLAUDE.md rule — drafted, NOT applied** (full autonomy never edits
   CLAUDE.md mid-run). Two agents disagree on placement: the prevention agent
