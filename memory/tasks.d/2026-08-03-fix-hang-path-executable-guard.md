@@ -108,6 +108,23 @@ source by the prevention agent; none is fixed.
   branch the same plant is **exit 2** with a named reason, while intact stays
   75/75.
 
+  PR #37 review then found two more doors of identical silence and one bug in
+  the fix itself: a huge bound (`999999`) is arithmetically a bound and
+  operationally none; `-k 0` disables the KILL escalation entirely (verified —
+  a TERM-ignoring child ran its full 12s at `-k 0` versus a kill at 5s with
+  `-k 3`), and the PR had *named* `CASE_KILL_GRACE` while validating only its
+  sibling — a fix scoped to the reported instance, in the PR closing that class.
+  The guard now takes a range (`1..CASE_TIMEOUT_DEFAULT`), rejects leading
+  zeros, and checks length before arithmetic. It also validates each operand
+  **separately**: the reviewer's suggested `case "$grace$bound"` one-liner
+  masked an empty bound (`"30" + "" = "30"`, all digits, passes) — caught by
+  running the proof rather than reading it.
+
+  Nine bypass attempts plus two legitimate edits, all measured: bound `0`,
+  `999999`, empty, overflow-length, `032`, and grace `0`, `999999` all reach
+  exit 2 with an accurate diagnosis; bound `45` and a raised default still pass
+  75/75.
+
   Stated limit, deliberately not closed here: this is a **runtime refusal, not
   an assertion**. The controls suite tests the checker, and `run_checker` is
   harness, so a control asserting it would be the category error §9f's
