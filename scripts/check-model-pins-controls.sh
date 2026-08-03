@@ -929,8 +929,11 @@ case_timeout() { case "$1" in 32) printf 20 ;; *) printf 120 ;; esac; }
 CHK_OUT=''; CHK_RC=0; CHK_MISS=''; CHK_WARN=''
 run_checker() {  # run_checker <dir> [timeout_seconds]
   # Bounded: a hung checker would otherwise hang the suite and the CI job
-  # until the job timeout, with no diagnostic.
-  CHK_OUT=$(cd "$1" && timeout "${2:-120}" bash "$CHECKER" 2>&1)
+  # until the job timeout, with no diagnostic. `-k 30`: TERM alone is not a
+  # bound — a checker that ignores or never reaches the handler (the mutants
+  # this suite exists for get to be arbitrary) would turn one case's 120s
+  # into the sweep's 900s outer abort; KILL keeps a hang a CASE failure.
+  CHK_OUT=$(cd "$1" && timeout -k 30 "${2:-120}" bash "$CHECKER" 2>&1)
   CHK_RC=$?
   local verdict
   verdict=$(printf '%s\n' "$CHK_OUT" | grep -oE '^-- [0-9]+ MISS, [0-9]+ WARN --$' | tail -1)
