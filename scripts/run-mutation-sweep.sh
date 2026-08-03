@@ -310,6 +310,90 @@ resolve_outcome() {  # resolve_outcome <class> <is_declared_survivor 0|1>
 }
 
 # ---------------------------------------------------------------------------
+# Controls capture — the guarded path, shared by the mutant loop and --selftest
+# ---------------------------------------------------------------------------
+# Extracted so the selftest drives the REAL capture rather than a re-typed copy
+# of it: a case that re-types this shape proves only its own copy, which is this
+# repo's documented "each fix reintroduced the defect class one layer down".
+#
+# Takes every path as an argument and closes over NO globals. --selftest runs
+# and exits long before $WORK and $COPY are created, and under `set -u` an unset
+# expansion here would abort the whole selftest with "WORK: unbound variable"
+# before a single assertion ran.
+CAP_ELAPSED=0; CAP_RC=0
+capture_controls() {  # <run_dir> <suite_path> <out_file> <kill_grace> <bound> [label]
+  local run_dir="$1" suite="$2" out_file="$3" grace="$4" bound="$5"
+  local label="${6:-$3}"
+  local t0 t1
+
+  # The BOUND is the whole point of this function, and it is the one part no
+  # anchor can pin: it lives in the caller's arguments, not in a spelling the
+  # selftest can count. GNU timeout treats a duration of 0 as "no timeout at
+  # all", so `900` -> `0` — the standard idiom for "stop bounding this while I
+  # investigate" — silently removes the bound while every selftest assertion
+  # stays green. Validated here instead, where both callers pass through.
+  case "$grace$bound" in
+    ''|*[!0-9]*)
+      printf 'FATAL: capture_controls needs numeric <kill_grace> <bound>, got %s %s\n' \
+        "$grace" "$bound" >&2
+      exit 2 ;;
+  esac
+  if [ "$bound" -eq 0 ] || [ "$grace" -eq 0 ]; then
+    printf 'FATAL: capture_controls refuses a zero bound/grace (%s %s) — GNU timeout\n' \
+      "$grace" "$bound" >&2
+    printf '       reads 0 as "no timeout", which removes the bound this function exists\n' >&2
+    printf '       to enforce while every selftest assertion stays green.\n' >&2
+    exit 2
+  fi
+
+  # Cleared FIRST, fatally. The path is reused across mutants and the redirect's
+  # status is unread (the suite's exit code is deliberately not a signal), so a
+  # failed open — EACCES, quota, a fork failure, or a symlink a mutated checker
+  # planted at this path — would leave the PREVIOUS mutant's complete transcript
+  # in place and classify THIS mutant from it: a false CAUGHT, reproduced under
+  # chmod 444. After rm -f, a failed open yields a MISSING file -> empty
+  # transcript -> no trailer -> HARNESS-ERROR -> exit 2.
+  rm -f "$out_file" || {
+    printf 'FATAL: could not clear the previous controls transcript. Stopping rather\n' >&2
+    printf '       than risking classifying %s from a stale one.\n' "$label" >&2
+    exit 2
+  }
+
+  # `date` into variables FIRST, never `$(( $(date +%s) - t0 ))`: an arithmetic
+  # expansion whose operand is an unguarded command substitution leaves the
+  # variable empty on failure, and `[ "" -gt N ]` exits 2 which `if` reads as
+  # false — landing in the reassuring branch. Documented as S1 of
+  # a-detector-is-not-exempt-from-the-class-it-detects.md.
+  t0=$(date +%s)
+
+  # A FILE, not a $( ) pipe. A pipe is read until the LAST writer exits, and
+  # `timeout` puts each nested child in its own process group — so a hung
+  # descendant that inherited the suite's plain stdout would survive the
+  # group-kill and hold the read open past the bound (residual finding #12).
+  # The file makes the bound structural: the driver waits on `timeout` alone. A
+  # transcript truncated by the kill has no trailer -> HARNESS-ERROR -> exit 2,
+  # never a false CAUGHT.
+  #
+  # Both directions are asserted on every --selftest run by the hang cases
+  # below: the file arm returns at the bound while the same fixture through a
+  # $( ) pipe is held for the orphan's full nap. Superseded prose: the
+  # 2026-08-02 hand measurement was taken against the retired $( ) topology.
+  ( cd "$run_dir" && timeout -k "$grace" "$bound" bash "$suite" ) > "$out_file" 2>&1
+  CAP_RC=$?
+
+  t1=$(date +%s)
+  # Guarding the OPERANDS, not just the expansion order above. Reading `date`
+  # into variables first defeats the "[ "" -gt N ] exits 2" variant, but an
+  # empty operand still makes $(( )) evaluate to 0 — and 0 satisfies every
+  # "returned fast enough" comparison downstream. A failed clock must not read
+  # as a fast capture, so it becomes -1 and fails those comparisons instead.
+  case "$t0$t1" in
+    ''|*[!0-9]*) CAP_ELAPSED=-1 ;;
+    *)           CAP_ELAPSED=$((t1 - t0)) ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # --selftest
 # ---------------------------------------------------------------------------
 if [ "$SELFTEST" -eq 1 ]; then
@@ -427,6 +511,322 @@ FATAL: no controls ran (--only matched nothing?) — a suite that asserts nothin
       st_fail=$((st_fail + 1))
     fi
   done
+
+  # -------------------------------------------------------------------------
+  # Hang cases: the capture's bound is STRUCTURAL, not an accident of fd wiring
+  # -------------------------------------------------------------------------
+  # These replace a hand-run measurement that was recorded as prose and then
+  # discarded — the class
+  # docs/solutions/logic-errors/verification-evidence-must-be-a-committed-executable-artifact.md
+  # exists to prevent. They drive the REAL capture_controls path, at a scaled
+  # bound, against a checker that hangs and ignores TERM.
+  #
+  # The planted descendant needs BOTH properties to hold a pipe open: its own
+  # process group (what a nested `timeout` creates) AND inheritance of the
+  # suite's plain stdout. run_checker's descendants have the first but not the
+  # second — every checker invocation is captured by its inner $( ) — which is
+  # why the 2026-08-02 measurement saw a pipe return at the bound. A fixture
+  # with only property 1 discriminates nothing; verified by measurement before
+  # this was written.
+  st_assert() {  # st_assert <name> <ok: 0=pass> [detail]
+    if [ "$2" -eq 0 ]; then
+      printf 'PASS  %s\n' "$1"; st_pass=$((st_pass + 1))
+    else
+      printf 'FAIL  %s\n        %s\n' "$1" "${3:-no detail}"; st_fail=$((st_fail + 1))
+    fi
+  }
+
+  # ONE constant, both thresholds. The file arm must return in < ST_NAP/2 and
+  # the pipe arm be held >= ST_NAP/2. Raising a threshold above ST_NAP/2 does
+  # not loosen the case, it DELETES its discrimination — the assertions then
+  # pass with the guard removed. A threshold moves only by moving ST_NAP.
+  ST_NAP=20
+  # The file arm's own bound and grace. Named, not spelled at the call site:
+  # the claim above is that ST_NAP is the knob, and that is only true if the
+  # numbers it must stay clear of are checked against it. The file arm returns
+  # at ST_BOUND+ST_GRACE, so it must land well under ST_NAP/2 or the
+  # separation assertions fail for a reason unrelated to the guard. Shaving the
+  # selftest's runtime by lowering ST_NAP is the predictable edit — 20 of its
+  # ~24 seconds are in this block — and at ST_NAP=10 the margin is 1 second.
+  ST_BOUND=3; ST_GRACE=1
+  # Demands MARGIN, not merely inequality. The discrimination threshold is
+  # ST_NAP/2 and the file arm lands at bound+grace, so a config that merely
+  # satisfies `bound+grace < ST_NAP/2` can sit one second from the edge and
+  # flake — measured at ST_NAP=10, which is precisely the value someone shaving
+  # this block's runtime would reach for. Require 4x instead, so the knob
+  # refuses a marginal setting loudly rather than producing an intermittent red
+  # that reads as a guard regression.
+  if [ $(((ST_BOUND + ST_GRACE) * 4)) -gt "$ST_NAP" ]; then
+    printf 'FATAL: hang-case constants leave too little margin: bound+grace (%s) needs\n' \
+      "$((ST_BOUND + ST_GRACE))" >&2
+    printf '       ST_NAP >= %s, got %s. Below that the arms still "pass" locally while\n' \
+      "$(((ST_BOUND + ST_GRACE) * 4))" "$ST_NAP" >&2
+    printf '       sitting close enough to ST_NAP/2 (%s) to flake — and the failure then\n' \
+      "$((ST_NAP / 2))" >&2
+    printf '       reads as a guard regression rather than a bad constant.\n' >&2
+    exit 2
+  fi
+
+  # The selftest path has NO cleanup trap of its own: `trap cleanup EXIT INT
+  # TERM` is installed far below, after this block's `exit 0`. Without the trap
+  # below, a Ctrl-C or a failed assertion between plant and reap strands a
+  # TERM-ignoring process — and SIGINT reaches the foreground group, which this
+  # fixture deliberately escapes.
+  ST_HANG_DIR=''
+  # Validated before it reaches `kill`. A leading `-` turns `kill -9 "$p"` into
+  # a process-GROUP kill, and `kill -9 -1` signals everything this user owns.
+  st_pid_ok() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+  st_hang_cleanup() {
+    [ -n "$ST_HANG_DIR" ] || return 0
+    if [ -r "$ST_HANG_DIR/orphan.pid" ]; then
+      st_pid=$(cat "$ST_HANG_DIR/orphan.pid" 2>/dev/null || printf '')
+      st_pid_ok "$st_pid" && { kill -9 "$st_pid" 2>/dev/null || :; }
+    fi
+    # Matches the production cleanup()'s leak-reporting idiom rather than
+    # discarding the status silently.
+    rm -rf "$ST_HANG_DIR" \
+      || printf 'WARN: hang fixture leaked at %s\n' "$ST_HANG_DIR" >&2
+  }
+  # EXIT stays idempotent; the SIGNAL paths must also TERMINATE. Without this,
+  # a Ctrl-C cleans up and then lets the remaining ~20s of assertions run
+  # against a deleted fixture — reporting 21/27 and exit 1, which on the CI
+  # gate is indistinguishable from a real classifier regression and names the
+  # fixture as the culprit. That is the "stopped" -> "regressed" collapse this
+  # whole script exists to refuse.
+  st_hang_signal() { st_hang_cleanup; trap - INT TERM; kill -"$1" $$; }
+
+  # A plausible PARTIAL transcript, then an escaping TERM-ignoring sleeper that
+  # inherits stdout, then a block. The transcript matters: an EMPTY one already
+  # classifies HARNESS-ERROR (asserted above), so without the positive
+  # transcript assertions below, a fixture that wrote nothing would satisfy
+  # every other assertion here and the case would prove nothing.
+  #
+  # The sleeper records its own PID before exec'ing, so liveness is checked by
+  # `kill -0` on a known PID rather than `pgrep -f <marker>` — a pattern match
+  # also matches the wrapping `timeout`'s argv, so it reports success even when
+  # the sleeper never started, and it cannot tell one case's orphan from
+  # another's. It also keeps --selftest free of procps.
+  #
+  # `timeout -k 1 $ST_NAP` on the sleeper: a TERM-ignoring process under a plain
+  # `timeout N` is NOT bounded at N. This makes the escaped process bounded by
+  # construction, whether or not any reap runs.
+  st_hang_fixture() {  # st_hang_fixture <dir>
+    # Same reuse discipline capture_controls applies to the transcript: this
+    # path is written by every plant, and a stale value from the previous arm
+    # would be reaped (or asserted live) as if it were this arm's orphan.
+    rm -f "$1/orphan.pid"
+    cat > "$1/controls.sh" <<EOF
+printf 'baseline: 0 MISS, 0 WARN, exit 0; 96 tracked files; coverage counters non-zero\n'
+printf 'PASS  1    a line that landed before the hang\n'
+timeout -k 1 $ST_NAP bash -c 'echo \$\$ > "$1/orphan.pid"; exec sleep $ST_NAP' &
+trap '' TERM
+sleep $ST_NAP
+printf -- '-- 2/2 controls passed --\n'
+EOF
+  }
+
+  st_reap() {  # st_reap <pid> — SIGTERM is ignored by construction, so KILL
+    local p="$1" i=0
+    st_pid_ok "$p" || return 1
+    kill -9 "$p" 2>/dev/null || :
+    # Signal delivery is asynchronous: a single probe right after the kill can
+    # still see the process and turn a healthy reap into an intermittent FAIL.
+    while [ "$i" -lt 40 ]; do
+      kill -0 "$p" 2>/dev/null || return 0
+      # Fractional sleep is a GNU extension, not POSIX. On busybox it errors
+      # and returns instantly, collapsing the stated 4s poll to a busy spin
+      # and turning a healthy reap into a FAIL.
+      sleep 0.1 2>/dev/null || sleep 1
+      i=$((i + 1))
+    done
+    return 1
+  }
+
+  ST_HANG_DIR=$(mktemp -d "${TMPDIR:-/tmp}/cepa-sweep-hang.XXXXXX") || exit 2
+  # The fixture is the one place this file GENERATES a shell script, and the
+  # dir path is interpolated into it — including into a single-quoted `bash -c`
+  # argument. A quote or metacharacter arriving via TMPDIR would break out of
+  # that quoting. Defense in depth: no sanctioned flow reaches it.
+  case "$ST_HANG_DIR" in
+    *[\'\"\$\`\\]*)
+      printf 'FATAL: TMPDIR yields a fixture path with shell metacharacters: %s\n' \
+        "$ST_HANG_DIR" >&2
+      exit 2 ;;
+  esac
+  trap st_hang_cleanup EXIT
+  trap 'st_hang_signal INT' INT
+  trap 'st_hang_signal TERM' TERM
+  st_hang_fixture "$ST_HANG_DIR"
+
+  # --- Arm 1: the guarded shape. Returns at the bound, leaving the orphan live.
+  capture_controls "$ST_HANG_DIR" "$ST_HANG_DIR/controls.sh" \
+                   "$ST_HANG_DIR/controls.out" "$ST_GRACE" "$ST_BOUND" 'the hang selftest'
+  st_file_elapsed=$CAP_ELAPSED
+  st_orphan=$(cat "$ST_HANG_DIR/orphan.pid" 2>/dev/null || printf '')
+
+  # Liveness AFTER the capture returned is itself the escape proof: a descendant
+  # inside the killed group would already be dead. A plant that no-oped returns
+  # FAST, which without this assertion reads as "returned at the bound".
+  if [ -n "$st_orphan" ] && kill -0 "$st_orphan" 2>/dev/null; then ok=0; else ok=1; fi
+  st_assert 'hang fixture planted a descendant that escaped the group-kill' "$ok" \
+    "no live orphan after the capture; the plant no-oped and the timing below would be vacuous"
+
+  if [ "$st_file_elapsed" -lt $((ST_NAP / 2)) ]; then ok=0; else ok=1; fi
+  st_assert 'file capture returns at its own bound, not the hung checker s' "$ok" \
+    "elapsed ${st_file_elapsed}s, expected < $((ST_NAP / 2))s"
+
+  # Positive, not merely "it errored": the transcript the fixture wrote must be
+  # PRESENT and TRUNCATED. Present proves the fixture ran and wrote through the
+  # inherited fd; truncated (no trailer) is what makes it a HARNESS-ERROR.
+  if grep -q '^baseline: ' "$ST_HANG_DIR/controls.out" \
+     && grep -q '^PASS  ' "$ST_HANG_DIR/controls.out"; then ok=0; else ok=1; fi
+  st_assert 'hung capture still holds the transcript written before the hang' "$ok" \
+    "captured file is empty or missing its pre-hang lines — HARNESS-ERROR here would be vacuous"
+
+  # A NEGATIVE assertion decided by grep must branch on the STATUS, not on
+  # "non-zero". grep exits 2 on error (a broken ERE, an unreadable file), which
+  # is equally non-zero and would land in the "absent -> PASS" branch — turning
+  # this into a permanent pass with its evidence sent to /dev/null. The fixture
+  # emits its trailer AFTER the hang, so a capture that fails to bound produces
+  # a COMPLETE transcript and this goes red; without that trailer the assertion
+  # was vacuous, since the fixture could not emit one at all.
+  grep -qE '^-- [0-9]+/[0-9]+ controls passed --$' "$ST_HANG_DIR/controls.out"
+  case $? in
+    0) ok=1; st_why="a trailer survived, so this transcript would classify as a real result" ;;
+    1) ok=0; st_why='' ;;
+    *) ok=1; st_why="grep failed, so trailer-absence was never established" ;;
+  esac
+  st_assert 'the kill truncates the transcript before its trailer' "$ok" "$st_why"
+
+  # The condition the mutant loop's exit-2 branch actually tests. resolve_outcome
+  # is deliberately NOT asserted here: the loop exits 2 on this class before
+  # reaching it, and six cases above already cover that mapping.
+  classify_transcript "$(cat "$ST_HANG_DIR/controls.out" 2>/dev/null || printf '')"
+  if [ "$CLASS" = 'HARNESS-ERROR' ]; then ok=0; else ok=1; fi
+  st_assert 'a truncated hang transcript classifies HARNESS-ERROR (-> exit 2)' "$ok" \
+    "got $CLASS ($CLASS_DETAIL) — a hung checker must never read as a mutant result"
+
+  if st_reap "$st_orphan"; then ok=0; else ok=1; fi
+  st_assert 'the escaped orphan is reapable' "$ok" \
+    "orphan $st_orphan survived SIGKILL and a 4s poll"
+
+  # --- Arm 2: the SAME fixture through the shape the guard replaced.
+  # Committed, not hand-run. This is what makes "the file redirect is
+  # load-bearing" re-verifiable: without it the removed-guard direction would
+  # again be a number in a PR body — the exact evidence form these cases exist
+  # to retire.
+  st_hang_fixture "$ST_HANG_DIR"
+  st_probe="$ST_HANG_DIR/pipe.elapsed"
+
+  # The pipe arm must not be able to outlive its own assertion. Its only natural
+  # end is the fixture's bound — the very mechanism under test — so an outer
+  # `timeout` kills the READER. Without it a misbehaving fixture would block
+  # rather than fail, and the weekly job's selftest step carries no
+  # timeout-minutes: the sweep would end CANCELLED with zero mutants run.
+  timeout $((ST_NAP * 3)) bash -c '
+    d="$1"; t0=$(date +%s)
+    o=$( cd "$d" && timeout -k "$2" "$3" bash controls.sh 2>&1 )
+    t1=$(date +%s)
+    printf "%s" "$((t1 - t0))"
+  ' _ "$ST_HANG_DIR" "$ST_GRACE" "$ST_BOUND" > "$st_probe"
+  st_pipe_rc=$?
+  st_pipe_elapsed=$(cat "$st_probe" 2>/dev/null || printf '')
+  case "$st_pipe_elapsed" in ''|*[!0-9]*) st_pipe_elapsed=-1 ;; esac
+
+  if [ "$st_pipe_rc" -ne 124 ] && [ "$st_pipe_elapsed" -ge 0 ]; then ok=0; else ok=1; fi
+  st_assert 'the pipe arm returns at all (its own bound is measurable)' "$ok" \
+    "rc=$st_pipe_rc elapsed=$st_pipe_elapsed — the fixture's own bound failed"
+
+  if [ "$st_pipe_elapsed" -ge $((ST_NAP / 2)) ]; then ok=0; else ok=1; fi
+  st_assert 'a $( ) pipe IS held past the bound by the same fixture' "$ok" \
+    "elapsed ${st_pipe_elapsed}s, expected >= $((ST_NAP / 2))s — if this ever fails, the file arm above has stopped discriminating"
+
+  if [ $((st_pipe_elapsed - st_file_elapsed)) -ge $((ST_NAP / 2)) ]; then ok=0; else ok=1; fi
+  st_assert 'file and pipe captures are separated by the orphan s lifetime' "$ok" \
+    "pipe ${st_pipe_elapsed}s - file ${st_file_elapsed}s < $((ST_NAP / 2))s: the redirect is no longer load-bearing"
+
+  if st_reap "$(cat "$ST_HANG_DIR/orphan.pid" 2>/dev/null || printf '')"
+  then ok=0; else ok=1; fi
+  st_assert 'the pipe arm orphan is reapable too' "$ok" \
+    "arm-2 orphan survived SIGKILL and a 4s poll"
+
+  # --- capture_controls has TWO guards; the cases above exercise one.
+  # The rm -f half is invisible to them: every call above targets a freshly
+  # mktemp'd path where the file cannot pre-exist, so deleting the guard
+  # entirely leaves the suite green. It is not decoration — its own comment
+  # records a reproduction, and without it a failed open leaves the PREVIOUS
+  # mutant's complete transcript on disk to be classified as THIS mutant's
+  # result: a false CAUGHT. Exercised here by making the clear itself fail.
+  #
+  # Skipped as root, where directory permissions do not deny unlink.
+  if [ "$(id -u)" -ne 0 ]; then
+    st_ro="$ST_HANG_DIR/ro"
+    mkdir -p "$st_ro"
+    printf 'baseline: 0 MISS, 0 WARN, exit 0; 96 tracked files; coverage counters non-zero\n\nFAIL  L1   a previous mutant that WAS caught\n\n-- 56/57 controls passed --\n' \
+      > "$st_ro/controls.out"
+    printf "printf -- '-- 2/2 controls passed --\\\\n'\n" > "$st_ro/green.sh"
+    chmod 555 "$st_ro"
+    # A subshell: the guard's failure path is `exit 2`, which is the behaviour
+    # under test and must not end the selftest.
+    ( capture_controls "$st_ro" "$st_ro/green.sh" "$st_ro/controls.out" 1 3 'rm -f guard' ) \
+      >/dev/null 2>&1
+    st_ro_rc=$?
+    chmod 755 "$st_ro" 2>/dev/null || :
+    if [ "$st_ro_rc" -eq 2 ]; then ok=0; else ok=1; fi
+    st_assert 'an unclearable transcript path is fatal, never classified' "$ok" \
+      "exit $st_ro_rc, expected 2 — without the rm -f guard a failed open leaves the previous mutant's transcript to be read as this one's result"
+  fi
+
+  # The bound lives in the CALLER's arguments, so no textual anchor can pin it.
+  # GNU timeout reads a duration of 0 as "no timeout", making `900` -> `0` a
+  # silent removal of the bound. Refused inside the function instead.
+  ( capture_controls "$ST_HANG_DIR" "$ST_HANG_DIR/controls.sh" \
+                     "$ST_HANG_DIR/zero.out" 30 0 'zero bound' ) >/dev/null 2>&1
+  if [ $? -eq 2 ]; then ok=0; else ok=1; fi
+  st_assert 'a zero bound is refused, not silently unbounded' "$ok" \
+    "expected exit 2 — GNU timeout treats 0 as no timeout at all"
+
+  st_hang_cleanup
+  ST_HANG_DIR=''
+  trap - EXIT INT TERM
+
+  # --- The single link between these cases and production.
+  # Everything above exercises capture_controls against a fixture. Production is
+  # a SEPARATE line calling it at 30/900. Inlining the capture back into the
+  # mutant loop, or reverting that one call site to a $( ), would leave every
+  # assertion above green while the sweep silently lost the structural bound.
+  # Same exactly-once anchoring the registry applies to its mutants.
+  # The needle is assembled from fragments so that NO line of this file contains
+  # it contiguously — spelled out in one piece, the search line matches itself
+  # and the expected count becomes 2, which silently tracks the assertion
+  # instead of the call site it exists to protect.
+  # An unreadable $0 is an ENVIRONMENT failure, not a missing call site. The
+  # old `|| st_self=''` turned it into an empty haystack, count 0, and a
+  # message telling the operator to restore a call site that is present and
+  # correct — the same inversion read_file itself was rewritten to stop making.
+  st_self=$(read_file "$0") || {
+    printf 'FATAL: could not read %s, so the call-site anchor was never checked.\n' "$0" >&2
+    printf '       This is an environment failure, never a finding about the loop.\n' >&2
+    exit 2
+  }
+
+  # Counted against a NORMALIZED form, because the raw text answers the wrong
+  # question. Commenting the call out and inlining a $( ) beside it left the
+  # literal intact and the assertion green while production lost the bound
+  # entirely; and wrapping the line — in the house style this block's own
+  # capture_controls call uses — dropped the count to 0 and reddened the weekly
+  # job for a whitespace change. So: drop comment-only lines, join backslash
+  # continuations, collapse space runs, then count.
+  st_norm=$(printf '%s\n' "$st_self" \
+    | sed 's/^[[:space:]]*#.*$//' \
+    | sed -e ':a' -e 'N' -e '$!ba' -e 's/\\\n[[:space:]]*/ /g' \
+    | tr -s ' ')
+  st_needle='capture_controls "$COPY"'
+  st_needle="$st_needle"' "$CONTROLS_REL" "$WORK/controls.out"'
+  st_anchor=$(count_occurrences st_norm "$st_needle")
+  if [ "$st_anchor" -eq 1 ]; then ok=0; else ok=1; fi
+  st_assert 'the mutant loop still routes its capture through the guarded function' "$ok" \
+    "found $st_anchor live (non-comment) occurrences of the production call site, expected exactly 1"
 
   printf -- '\n-- %d/%d classifier selftests passed --\n' "$st_pass" "$((st_pass + st_fail))"
   [ "$st_fail" -eq 0 ] || exit 1
@@ -635,31 +1035,12 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   # closed, and a stale number beside a timeout is how a bound silently stops
   # matching the work it bounds.
   #
-  # A FILE, not a $( ) pipe. A pipe is read until the LAST writer exits, and
-  # `timeout` puts each nested child in its own process group — so a hung
-  # descendant that inherited the suite's plain stdout would survive the
-  # group-kill and hold the read open past the bound (residual finding #12).
-  # Measured 2026-08-02: today every long-lived descendant is captured by
-  # run_checker's inner substitution, so the pipe DID return at the outer
-  # bound — but that property is an accident of the suite's current fd
-  # wiring, one backgrounded fixture helper away from breaking. The file
-  # makes the bound structural: the driver waits on `timeout` alone. A
-  # transcript truncated by the kill has no trailer -> HARNESS-ERROR ->
-  # exit 2, never a false CAUGHT.
-  #
-  # Cleared FIRST, fatally. The path is reused across mutants and the
-  # redirect's status is unread (the suite's exit code is deliberately not a
-  # signal), so a failed open — EACCES, quota, a fork failure, or a symlink a
-  # mutated checker planted at this path — would leave the PREVIOUS mutant's
-  # complete transcript in place and classify THIS mutant from it: a false
-  # CAUGHT, reproduced under chmod 444. After rm -f, a failed open yields a
-  # MISSING file -> empty transcript -> no trailer -> HARNESS-ERROR -> exit 2.
-  rm -f "$WORK/controls.out" || {
-    printf 'FATAL: could not clear the previous controls transcript. Stopping rather\n' >&2
-    printf '       than risking classifying mutant %s from a stale one.\n' "$id" >&2
-    exit 2
-  }
-  ( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" ) > "$WORK/controls.out" 2>&1
+  # The capture itself — the rm -f guard and the file-not-pipe bound — lives in
+  # capture_controls so that --selftest exercises THIS path rather than a copy.
+  # The selftest also anchors this call site at exactly one occurrence: without
+  # that, inlining the capture back into this loop would leave every hang-case
+  # assertion green while production silently lost the structural bound.
+  capture_controls "$COPY" "$CONTROLS_REL" "$WORK/controls.out" 30 900 "mutant $id"
   out=$(cat "$WORK/controls.out")
 
   # Restore before classifying, so an error in classification cannot leave the

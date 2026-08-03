@@ -171,6 +171,27 @@ problems" from "examined no inputs", so a traversal that could not complete is
 never a pass. The failure mode is self-flattering — it reads as the tool
 working — which is why it survives review that a crash would not.
 
+### Vacuous assertion
+An assertion whose truth value does not depend on the construct it names, so it
+reports PASS whether or not that construct exists.
+
+Four ways the detachment happens, each with its own mechanical test — the
+fixture cannot produce the condition being denied (capability); no call site
+puts the guard in its failing state (reachability); the check matches text
+rather than behaviour, so a comment or dead code satisfies it (observability);
+or the value under test arrives as a caller's argument, which no textual anchor
+can pin (pinning). The test that catches all four is one question per
+assertion: *what single-line edit to production code turns this red?*
+
+Distinct from [silent pass], which reports clean because a failure earlier in
+the run left it with nothing to check. A vacuous assertion suffers no failure
+and examines every input it intended to — it simply was never coupled to its
+subject. Distinct also from a control that proves only the branch it exercises,
+which at least reaches a branch; a vacuous assertion reaches none of the
+protected construct.
+
+*Avoid:* decorative assertion, vacuous control.
+
 ### Stated limit
 A gap in what a verification tool checks that is recorded openly in the tool
 itself, rather than closed with a check that only looks complete.
