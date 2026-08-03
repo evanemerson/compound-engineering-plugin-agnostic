@@ -639,13 +639,26 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   # `timeout` puts each nested child in its own process group — so a hung
   # descendant that inherited the suite's plain stdout would survive the
   # group-kill and hold the read open past the bound (residual finding #12).
-  # Measured 2026-08-03: today every long-lived descendant is captured by
+  # Measured 2026-08-02: today every long-lived descendant is captured by
   # run_checker's inner substitution, so the pipe DID return at the outer
   # bound — but that property is an accident of the suite's current fd
   # wiring, one backgrounded fixture helper away from breaking. The file
   # makes the bound structural: the driver waits on `timeout` alone. A
   # transcript truncated by the kill has no trailer -> HARNESS-ERROR ->
   # exit 2, never a false CAUGHT.
+  #
+  # Cleared FIRST, fatally. The path is reused across mutants and the
+  # redirect's status is unread (the suite's exit code is deliberately not a
+  # signal), so a failed open — EACCES, quota, a fork failure, or a symlink a
+  # mutated checker planted at this path — would leave the PREVIOUS mutant's
+  # complete transcript in place and classify THIS mutant from it: a false
+  # CAUGHT, reproduced under chmod 444. After rm -f, a failed open yields a
+  # MISSING file -> empty transcript -> no trailer -> HARNESS-ERROR -> exit 2.
+  rm -f "$WORK/controls.out" || {
+    printf 'FATAL: could not clear the previous controls transcript. Stopping rather\n' >&2
+    printf '       than risking classifying mutant %s from a stale one.\n' "$id" >&2
+    exit 2
+  }
   ( cd "$COPY" && timeout -k 30 900 bash "$CONTROLS_REL" ) > "$WORK/controls.out" 2>&1
   out=$(cat "$WORK/controls.out")
 

@@ -281,7 +281,7 @@ The missing step is a reconcile pass after the unfreeze, not a weaker freeze.
   exit 2), and **latent** — no registered mutant targets the construct case 32
   guards. Needs a design call: `-k` on the inner timeout, `--foreground`,
   process-group-aware killing, or accept and record. (finding #12, conf 85.)
-  **RESOLVED 2026-08-03** (fix/sweep-hung-checker-bound, 1.18.2) — the central
+  **RESOLVED 2026-08-02** (fix/sweep-hung-checker-bound, 1.18.2) — the central
   claim did not survive re-measurement against the real constructs. A hand-hung
   checker (`sleep 600`) in a driver-style copy, outer bound scaled to `-k 5 20`:
   the `$( )` returned at **23s = the outer bound**, twice. The orphans are real
