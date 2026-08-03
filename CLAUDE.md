@@ -103,3 +103,13 @@ the duplication that let the sites diverge stayed live.
   canonical spec. Never invent variants.
 - After any `/cepa:review` run on this repo, apply fixes per the autonomy
   contract and update the findings file statuses in the same commit.
+- The mutation sweep refuses a tree that changed mid-run: make no tracked-file
+  edits between start and finish (~43 min local, ~64 min hosted) or every
+  result is discarded as INVALID.
+- Version scope: repo-root docs (`CONCEPTS.md`, `todos/`, `memory/`) do not
+  bump the manifests — only plugin content does. Precedent: #31, #34.
+- `gh pr merge --subject` REPLACES gh's auto-appended `(#N)`; include it
+  yourself or main loses the PR backlink (this is why 78d37c3 lacks one).
+- Test a workflow `run:` block before pushing: extract it with
+  `yaml.safe_load` and run it under `bash -e` (GitHub's default shell) with
+  stubs on `PATH`.
