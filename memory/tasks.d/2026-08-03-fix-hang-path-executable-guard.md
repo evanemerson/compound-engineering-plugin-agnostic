@@ -10,33 +10,26 @@
 P2/P3 were applied in the same commit as this file; the items below are what
 remains open.
 
-**22 items open below:** 1 operator call carried from the 2026-08-02 shard, 2
-recorded by plan-review findings that are themselves `status: applied` (their
-fix was "record it as a residual"), 7 deferred by the PR #36 review, and 12
-surfaced by the compound pass (10 live instances of the same class elsewhere in
-the tooling, plus 2 proposals needing a decision).
+**21 items open below** (the operator call carried from the 2026-08-02 shard is
+now resolved): 2 recorded by plan-review findings that are themselves
+`status: applied` (their fix was "record it as a residual"), 7 deferred by the
+PR #36 review, and 12 surfaced by the compound pass (10 live instances of the
+same class elsewhere in the tooling, plus 2 proposals needing a decision).
 
-- [ ] P3 — **RESOLVED marker format in the finding-#12 entry** (carried from
-  `2026-08-02-fix-sweep-hung-checker-bound.md`, finding #5, conf 65, judgment) —
-  `memory/tasks.d/2026-08-01-feat-mutation-sweep-harness.md:274`.
-  architecture-reviewer: reformat to the file's `- [x] **RESOLVED <date> —**`
-  lead; previous-comments-reviewer: current styling is a reasonable fusion with
-  no in-section precedent to diverge from. **Still the operator's call — asked,
-  not decided.** This branch edited that file's neighbourhood and deliberately
-  left the marker untouched in both directions rather than settling it by
-  omission.
+- [x] **RESOLVED 2026-08-03 — operator chose to backfill.** The finding-#12
+  entry at `memory/tasks.d/2026-08-01-feat-mutation-sweep-harness.md:274` now
+  leads with the file's `- [x] **RESOLVED <date> — summary**` opener, matching
+  the six prior entries, with the original text preserved verbatim under a
+  `Was:` lead. The disagreement resolved once the question narrowed:
+  previous-comments-reviewer's only objection was that the section had no
+  resolution precedent to diverge from, and this branch created one.
 
-  **The question has narrowed since it was filed.** This branch's own new entry
-  at `2026-08-02-fix-sweep-hung-checker-bound.md:8` uses the
-  `- [x] **RESOLVED <date> —**` lead, so the in-section precedent
-  previous-comments-reviewer said was absent now exists and favours one answer.
-  What remains is whether to backfill `:274` for consistency.
-
-  `sinks:` when settled, flip all three —
-  `todos/review-2026-08-02-231333.md` finding #5,
+  All three sinks flipped in the same commit, per the `sinks:` list recorded
+  here when the item was filed — `todos/review-2026-08-02-231333.md` finding #5
+  (`status: completed`, counters `deferred: 0 / completed: 2`),
   `memory/tasks.d/2026-08-02-fix-sweep-hung-checker-bound.md`, and this bullet.
-  Written down because "flipped one sink, not the other" has now recurred twice
-  in this repo, and this item's sink count just went from two to three.
+  Writing the list down is what made the third flip automatic rather than
+  remembered.
 
 - [ ] P3 — **`--selftest` is wired only to the weekly job, not the PR gate**
   (plan review finding #11, cut from scope).

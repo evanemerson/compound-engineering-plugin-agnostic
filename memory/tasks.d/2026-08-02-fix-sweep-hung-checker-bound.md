@@ -3,7 +3,7 @@
 ## 2026-08-02 — review of PR #35 (todos/review-2026-08-02-231333.md)
 
 5 findings — 0 P1, 3 P2, 2 P3; 3 applied in the same commit as the findings
-file, 2 deferred at the time. One is now resolved; 1 remains open below.
+file, 2 deferred at the time. Both are now resolved; none remain open.
 
 - [x] **RESOLVED 2026-08-03 — built in `fix/hang-path-executable-guard`
   (1.18.3).** 13 new `--selftest` assertions (17 → 30) drive the real
@@ -43,9 +43,14 @@ file, 2 deferred at the time. One is now resolved; 1 remains open below.
   nothing would have satisfied — either of which would have shipped a control
   that passes with the guard removed.
 
-- [ ] P3 — **RESOLVED marker format in the finding-#12 entry** (finding #5,
-  conf 65, judgment) — same file, :274. architecture-reviewer: reformat to
-  the file's `- [x] **RESOLVED <date> —**` lead; previous-comments-reviewer:
-  current styling is a reasonable fusion with no in-section precedent to
-  diverge from. Agents disagree; operator's call, cost is one cosmetic edit
-  either way.
+- [x] **RESOLVED 2026-08-03 — backfilled** (fix/hang-path-executable-guard,
+  1.18.3). Operator's call, taken after the question narrowed: this branch's own
+  new entry above adopts the `- [x] **RESOLVED <date> —**` opener, so the
+  in-section precedent previous-comments-reviewer said was absent now exists.
+  `2026-08-01-feat-mutation-sweep-harness.md:274` reformatted to lead with it,
+  original text preserved verbatim under a `Was:` lead.
+
+  Was: P3 — RESOLVED marker format in the finding-#12 entry (finding #5,
+  conf 65, judgment). architecture-reviewer wanted the reformat;
+  previous-comments-reviewer called the existing styling a reasonable fusion
+  with no in-section precedent to diverge from.

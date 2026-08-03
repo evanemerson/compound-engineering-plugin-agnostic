@@ -271,25 +271,15 @@ of them naming a killer whose own comment in that PR says it cannot do the
 job. The discipline that made the evidence trustworthy made the record wrong.
 The missing step is a reconcile pass after the unfreeze, not a weaker freeze.
 
-- [x] ~~P2 — **the nested per-mutant timeout cannot reach a hung checker.**~~ GNU
-  `timeout` without `--foreground` puts its child in a new process group, so
-  the sweep's outer `timeout -k 30 900` never signals the controls suite's own
-  nested `timeout 120 bash "$CHECKER"`. Verified empirically: the grandchild
-  survives as an orphan, the child's TERM trap never fires, and because the
-  orphan holds the pipe the outer `$( )` reads, one mutant's worst case is
-  ~1050s not 930s. Never a false CAUGHT (no trailer -> `HARNESS-ERROR` ->
-  exit 2), and **latent** — no registered mutant targets the construct case 32
-  guards. Needs a design call: `-k` on the inner timeout, `--foreground`,
-  process-group-aware killing, or accept and record. (finding #12, conf 85.)
-  **RESOLVED 2026-08-02** (fix/sweep-hung-checker-bound, 1.18.2) — the central
-  claim did not survive re-measurement against the real constructs. A hand-hung
-  checker (`sleep 600`) in a driver-style copy, outer bound scaled to `-k 5 20`:
-  the `$( )` returned at **23s = the outer bound**, twice. The orphans are real
-  (inner timeout + checker survive the group-kill, dying at the inner bound) but
-  they cannot hold the OUTER pipe: every checker invocation is captured by
-  `run_checker`'s inner `$( )`, whose reader dies in the group-kill, so the
-  outer reader gets EOF on time. The blocking topology needs a descendant that
-  inherits the suite's plain stdout — which the suite does not have today.
+- [x] **RESOLVED 2026-08-02 — the central claim did not survive re-measurement;
+  the bound was made structural anyway** (fix/sweep-hung-checker-bound, 1.18.2).
+  A hand-hung checker (`sleep 600`) in a driver-style copy, outer bound scaled
+  to `-k 5 20`: the `$( )` returned at **23s = the outer bound**, twice. The
+  orphans are real (inner timeout + checker survive the group-kill, dying at the
+  inner bound) but they cannot hold the OUTER pipe: every checker invocation is
+  captured by `run_checker`'s inner `$( )`, whose reader dies in the group-kill,
+  so the outer reader gets EOF on time. The blocking topology needs a descendant
+  that inherits the suite's plain stdout — which the suite does not have today.
   What was hardened, since the bound held by fd-wiring accident rather than by
   structure: the driver now writes the controls transcript to a file under
   `$WORK` and waits on `timeout` alone (a future backgrounded fixture helper
@@ -299,6 +289,24 @@ The missing step is a reconcile pass after the unfreeze, not a weaker freeze.
   accepted and recorded, not fixed. Verified: controls 75/75, selftest 17/17,
   checker 0/0, one-mutant sweep (`t-predicate` CAUGHT by 31/33/35) through the
   file path.
+
+  **Superseded in part on 2026-08-03** (fix/hang-path-executable-guard, 1.18.3):
+  the 23s figure above was measured against the `$( )` topology this entry
+  retired, so it is history rather than a reproducible result. The current
+  file-redirect bound is now asserted by committed `--selftest` cases — see
+  `memory/tasks.d/2026-08-02-fix-sweep-hung-checker-bound.md`. The `selftest
+  17/17` above is 1.18.2's frozen verification record and is left as measured.
+
+  Was: ~~P2 — **the nested per-mutant timeout cannot reach a hung checker.**~~
+  GNU `timeout` without `--foreground` puts its child in a new process group, so
+  the sweep's outer `timeout -k 30 900` never signals the controls suite's own
+  nested `timeout 120 bash "$CHECKER"`. Verified empirically: the grandchild
+  survives as an orphan, the child's TERM trap never fires, and because the
+  orphan holds the pipe the outer `$( )` reads, one mutant's worst case is
+  ~1050s not 930s. Never a false CAUGHT (no trailer -> `HARNESS-ERROR` ->
+  exit 2), and **latent** — no registered mutant targets the construct case 32
+  guards. Needs a design call: `-k` on the inner timeout, `--foreground`,
+  process-group-aware killing, or accept and record. (finding #12, conf 85.)
 
 - [ ] P3 — **the STATED LIMIT guard binds to a line, not to content.** With
   the target-file check applied, a survivor must cite its own target — but
