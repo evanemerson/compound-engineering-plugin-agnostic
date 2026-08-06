@@ -5,12 +5,18 @@ name: changelog
 # hand-written changelog was rejected (it is both a restatement surface and a
 # shared append sink, the two failure classes CLAUDE.md already documents).
 #
-# Security: this workflow interpolates NO event data (no github.event.* through
-# an expression) into any run: step, so there is no injection surface — the same
-# rule model-pins.yml states for itself. A release title is attacker-influenced
-# only by someone who can already publish releases, but the rule is cheap to
-# keep and the exception would have to be re-justified by every later reader.
-# If a future step needs event data, pass it through env: with quoting.
+# Security: same no-event-data-interpolation rule as `model-pins.yml` — read the
+# reasoning in that file's Security comment rather than here, so the two cannot
+# drift apart.
+#
+# What that rule does NOT cover, and what a reader of this file needs to know:
+# release BODIES reach `main` through this job. `--generate-notes` folds each
+# merged PR's title into the next release body verbatim, the generator prints
+# matching bullet lines as-is, and this job commits the result under
+# contents: write with no human in the loop. So content a PR author chooses
+# lands in a tracked file — markdown and links, not shell and not HTML (GitHub
+# sanitizes raw HTML on render), which is why it is accepted rather than
+# escaped. Anything stronger than markdown reaching that path is a new problem.
 #
 # Action pinning: full 40-char commit SHA with a trailing `# vX.Y.Z` naming the
 # tag it was resolved from, matching the other workflows. A version tag is
@@ -31,14 +37,15 @@ on:
     types: [published, edited, deleted, released]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 # Serialized, never cancelled. Two release events in quick succession must queue
-# rather than race on the same file — CLAUDE.md's shared-sink rule permits a
-# single trunk-point writer, which is exactly what this group makes it.
+# rather than race on the same file — see `scripts/generate-changelog.sh`'s
+# header for why whole-file regeneration satisfies CLAUDE.md's shared-sink rule;
+# this group is the serialization point that argument depends on.
 # cancel-in-progress: false because a cancelled run leaves the changelog stale
-# with nothing to notice; the second run is cheap.
+# with nothing to notice; the second run is cheap. (With three or more events
+# queued, GitHub still supersedes the older PENDING run — harmless here, since
+# each run reads the live release list rather than its event payload, so the
+# survivor is a strict superset.)
 concurrency:
   group: changelog-main
   cancel-in-progress: false
@@ -46,6 +53,19 @@ concurrency:
 jobs:
   regenerate:
     runs-on: ubuntu-latest
+    # Job scope, not workflow scope. `model-pins.yml` scopes its permissions
+    # per-job so a write-capable credential never shares a job with anything
+    # attacker-influenced; declaring it at workflow level here would silently
+    # hand push access to `main` to any second job a later edit adds.
+    #
+    # Why one job is safe for THIS workflow, re-derived rather than inherited:
+    # the triggers are `release` and `workflow_dispatch` only, so there is no
+    # fork-PR path; `checkout` pins `ref: main`, never a PR head; and the only
+    # script executed is resolved from `main`. No step in this job runs code an
+    # outside contributor authored, so the $GITHUB_PATH reachability that forces
+    # model-pins.yml's two-job split does not arise.
+    permissions:
+      contents: write
     # The generator makes one paginated API call and writes a file. The bound is
     # for the push-retry loop below, not the generation.
     timeout-minutes: 10
@@ -76,15 +96,56 @@ jobs:
               echo "::error::could not fetch origin/main"; exit 1; }
             git reset --quiet --hard origin/main
 
-            bash scripts/generate-changelog.sh CHANGELOG.md || {
-              echo "::error::changelog generation failed; nothing was committed"; exit 1; }
-
-            if git diff --quiet -- CHANGELOG.md; then
-              echo "CHANGELOG.md is already current; nothing to commit"
-              exit 0
+            # Generation is retried too. It holds the only network call in the
+            # pipeline, so it is the MORE likely transient failure — retrying
+            # only the push meant a single API blip ended the job with two
+            # unused attempts in hand. Exit 2 is the generator's usage/
+            # environment code and never fixes itself, so it fails fast.
+            # `|| gen_rc=$?`, not `if ! cmd; then gen_rc=$?`: inside the then-
+            # branch of an `if !`, $? is the status of the NEGATION (always 0),
+            # so the exit-2 fast path below would never fire. The `||` also
+            # keeps `set -e` — GitHub's default run shell is `bash -e {0}` —
+            # from aborting on the expected non-zero.
+            gen_rc=0
+            bash scripts/generate-changelog.sh CHANGELOG.md || gen_rc=$?
+            if [ "$gen_rc" -ne 0 ]; then
+              if [ "$gen_rc" -eq 2 ] || [ "$attempt" -ge 3 ]; then
+                echo "::error::changelog generation failed (exit $gen_rc); nothing was committed"
+                exit 1
+              fi
+              echo "generation failed (exit $gen_rc); retrying after backoff"
+              sleep $((attempt * 5))
+              attempt=$((attempt + 1))
+              continue
             fi
 
+            # The generator exited 0, so the file must exist. Assert it: `git
+            # diff` on a path that is absent or untracked is not an error, and
+            # the comparison below cannot distinguish that from "unchanged".
+            [ -f CHANGELOG.md ] || {
+              echo "::error::generator exited 0 but CHANGELOG.md does not exist"; exit 1; }
+
+            # Stage FIRST, then compare against the index. `git diff` ignores
+            # untracked files, so on a main that had lost CHANGELOG.md the
+            # worktree-vs-index compare returned 0 — byte-identical to
+            # "unchanged" — and this job reported success having pushed nothing,
+            # on every release, forever. Staging gives an untracked file an
+            # index entry so the comparison can see it.
             git add CHANGELOG.md
+            # `|| diff_rc=$?` rather than `cmd; diff_rc=$?`. A bare statement is
+            # NOT a condition context, so under `bash -e` the expected exit 1
+            # ("the file differs" — the whole reason to continue) aborted the
+            # job before $? was ever read.
+            diff_rc=0
+            git diff --cached --quiet -- CHANGELOG.md || diff_rc=$?
+            case "$diff_rc" in
+              0) echo "CHANGELOG.md is already current; nothing to commit"; exit 0 ;;
+              1) ;;   # differs — fall through and commit
+              # >=128 is a git error, NOT "changed". Treating it as changed
+              # committed on the strength of a failed comparison.
+              *) echo "::error::git diff failed (exit $diff_rc)"; exit 1 ;;
+            esac
+
             git commit --quiet -m 'chore: regenerate CHANGELOG.md from releases'
 
             if git push --quiet origin HEAD:main; then
@@ -92,12 +153,29 @@ jobs:
               exit 0
             fi
 
-            echo "push rejected (main moved); retrying"
+            # Distinguish a race from a refusal BEFORE retrying. If origin/main
+            # has not moved past the commit this attempt was based on, the push
+            # was refused for a reason no retry can fix — branch protection, a
+            # revoked token, an archived repo — and the old code reported all
+            # three as "main is moving faster than this job can land", sending
+            # the reader to investigate commit velocity on a repo that averages
+            # one commit a day.
+            git fetch --quiet origin main || true
+            if [ "$(git rev-parse origin/main)" = "$(git rev-parse HEAD^)" ]; then
+              echo "::error::push to main was rejected but origin/main did not move — this is branch protection, token scope, or repo state, not a race. Retrying cannot help."
+              exit 1
+            fi
+
+            # Backoff. Without it the three attempts completed in ~64ms, all
+            # inside the window of the same competing push — a retry loop that
+            # covered only the instant of the first rejection.
+            echo "push rejected and origin/main moved; retrying after backoff"
+            sleep $((attempt * 5))
             attempt=$((attempt + 1))
           done
 
           # Never fall through silently. A workflow that exhausts its retries
           # and exits 0 is indistinguishable from one that had nothing to do —
           # the exact defect model-pins.yml's freshness detector exists to catch.
-          echo "::error::could not push CHANGELOG.md after 3 attempts; main is moving faster than this job can land"
+          echo "::error::could not land CHANGELOG.md after 3 attempts — either main is moving faster than this job can land, or generation kept failing. The per-attempt messages above name which."
           exit 1

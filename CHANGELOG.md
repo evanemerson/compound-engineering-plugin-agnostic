@@ -160,7 +160,7 @@ _feat: enforce brain cross-repo provenance filter_
 
 _fix: brain writeback source_refs requires kind field_
 
-_No PR-derived entries; see the release page._
+_Release body has no parseable change list; see the release page._
 
 [Compare v1.10.0...v1.10.1](https://github.com/evanemerson/compound-engineering-plugin-agnostic/compare/v1.10.0...v1.10.1)
 
