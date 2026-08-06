@@ -1,0 +1,103 @@
+name: changelog
+
+# Regenerates CHANGELOG.md from this repo's GitHub Releases and commits it to
+# main. The file is DERIVED — see scripts/generate-changelog.sh for why a
+# hand-written changelog was rejected (it is both a restatement surface and a
+# shared append sink, the two failure classes CLAUDE.md already documents).
+#
+# Security: this workflow interpolates NO event data (no github.event.* through
+# an expression) into any run: step, so there is no injection surface — the same
+# rule model-pins.yml states for itself. A release title is attacker-influenced
+# only by someone who can already publish releases, but the rule is cheap to
+# keep and the exception would have to be re-justified by every later reader.
+# If a future step needs event data, pass it through env: with quoting.
+#
+# Action pinning: full 40-char commit SHA with a trailing `# vX.Y.Z` naming the
+# tag it was resolved from, matching the other workflows. A version tag is
+# mutable; a tag pin grants every future publisher push write access to a job
+# that holds `contents: write`. To bump, re-resolve and replace BOTH the SHA and
+# the comment together:
+#
+#     gh api repos/actions/checkout/git/refs/tags/v4.5.0 --jq .object.sha
+#
+# No `push:` trigger, deliberately. This job pushes to main; a push trigger
+# would re-enter it on its own commit. The releases are the only input, so a
+# push cannot change the output anyway.
+on:
+  release:
+    # `deleted` and `edited` matter as much as `published`: the changelog is a
+    # projection of the release list, so any change to that list leaves the file
+    # stale. `released` fires when a pre-release is promoted.
+    types: [published, edited, deleted, released]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Serialized, never cancelled. Two release events in quick succession must queue
+# rather than race on the same file — CLAUDE.md's shared-sink rule permits a
+# single trunk-point writer, which is exactly what this group makes it.
+# cancel-in-progress: false because a cancelled run leaves the changelog stale
+# with nothing to notice; the second run is cheap.
+concurrency:
+  group: changelog-main
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    # The generator makes one paginated API call and writes a file. The bound is
+    # for the push-retry loop below, not the generation.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          # Full history: the retry loop resets onto origin/main, and a depth-1
+          # clone cannot.
+          fetch-depth: 0
+
+      - name: Regenerate and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # Up to 3 attempts. The generator's output depends ONLY on the release
+          # list, never on the tree, so re-running after a reset converges
+          # rather than compounding — that is what makes a blind retry safe here
+          # and would not be safe for an appending writer.
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            git fetch --quiet origin main || {
+              echo "::error::could not fetch origin/main"; exit 1; }
+            git reset --quiet --hard origin/main
+
+            bash scripts/generate-changelog.sh CHANGELOG.md || {
+              echo "::error::changelog generation failed; nothing was committed"; exit 1; }
+
+            if git diff --quiet -- CHANGELOG.md; then
+              echo "CHANGELOG.md is already current; nothing to commit"
+              exit 0
+            fi
+
+            git add CHANGELOG.md
+            git commit --quiet -m 'chore: regenerate CHANGELOG.md from releases'
+
+            if git push --quiet origin HEAD:main; then
+              echo "committed an updated CHANGELOG.md on attempt $attempt"
+              exit 0
+            fi
+
+            echo "push rejected (main moved); retrying"
+            attempt=$((attempt + 1))
+          done
+
+          # Never fall through silently. A workflow that exhausts its retries
+          # and exits 0 is indistinguishable from one that had nothing to do —
+          # the exact defect model-pins.yml's freshness detector exists to catch.
+          echo "::error::could not push CHANGELOG.md after 3 attempts; main is moving faster than this job can land"
+          exit 1
