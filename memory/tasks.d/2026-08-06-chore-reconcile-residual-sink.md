@@ -108,13 +108,83 @@ Each was re-read at its cited construct, not taken from its own description:
 - **`registry.sh` still has `l2-grep-binary` and `l2-grep-rc` both citing
   `check-model-pins.sh:311`** — the STATED LIMIT line-vs-content gap.
 
+### An eighth occurrence, found while documenting the seventh
+
+`todos/review-2026-08-01-000851.md` declared `total: 23` with state counters
+summing to **28** — a violation of `cepa:file-todos`'s explicit invariant that
+the state counters must sum to `total`, in the canonical spec's own flagship
+field. The body was correct (9 applied + 8 completed + 6 deferred = 23, and
+p1+p2+p3 = 23) and the `triage:` line beside the counters was accurate ("5
+skipped (removed)"). Only the machine-parsed counter was wrong: the 5 skipped
+findings had been *removed from the file*, so they were no longer in `total`,
+but `skipped: 5` stayed.
+
+Fixed to `skipped: 0` in this run — the count survives in the `triage:` line
+and in the body's triage note, which names all five findings by number.
+
+Worth stating: this was found by the compound run *for this pattern*, in a
+directory the reconciliation had not been scoped to. `memory/tasks.d/` was the
+reported symptom; `todos/` has the same consumers, the same producers, and a
+stricter invariant that nothing checks.
+
+### From the /cepa:compound run — proposals needing an operator decision
+
+- [ ] P2 — **build `scripts/check-residual-integrity.sh` (+ a controls suite).**
+  The solution doc's Prevention section specifies it: house style of
+  `check-model-pins.sh`, scoped to the tracked half (`memory/tasks.d/*.md`,
+  `todos/review-*.md`). Five candidate legs, each run against the live tree
+  during design: struck-prose-with-open-box (0 hits today), open box carrying
+  closure vocabulary (0), a supersession blockquote covering open boxes (0,
+  needs a small state machine rather than a one-liner), a `- **P[123]` bullet
+  with no checkbox (**2 legitimate hits today** — the evidence block this
+  reconciliation deliberately created), and one finding id boxed in two shards
+  (0; finding numbers are per-run, not globally unique, so same-origin needs a
+  human). **Every leg ships WARN, not MISS, in the first cut** — a check that
+  MISSes on legitimate prose is worse than no check here, and two legs have
+  live false positives today. Promote individually after a clean burn-in.
+  The counter-sum leg is the exception: it is a pure arithmetic invariant the
+  spec already states, and is MISS-able on day one.
+
+- [ ] P3 — **CLAUDE.md rule for this class — drafted, NOT applied.** Full
+  autonomy never edits CLAUDE.md mid-run. The draft cites the solution doc and
+  the checker rather than restating either, per this repo's own
+  restatement-hostility rule — which is exactly the trap the model-pin section's
+  history documents. Open question the operator should settle first: whether
+  this earns a new Critical Rules heading, or an append to the existing
+  enumeration. `each-fix-reintroduced-the-defect-class-one-layer-down.md`'s
+  Prevention section says explicitly **not** to add a fourth heading for this
+  family, and that argument applies here unchanged.
+
+- [ ] P3 — **`todos/` per-finding lifecycle is unchecked in the same way.**
+  `cepa:file-todos` requires a `status: completed` finding to carry a
+  `resolved: <date> — <branch/PR>` line. Nothing verifies the pairing, so a
+  `completed` with no `resolved:` (or the reverse) is the identical defect one
+  level down. Flagged from the checker design, **not verified against the tree
+  this run** — recorded as a lead, not a finding.
+
 ### The durable lesson
 
-The pattern reached **seven occurrences** with this audit and finally has a
-solution doc. Its Detection section is the deliverable, because every instance
-so far was found by a human reading prose and noticing it disagreed with a
-field — which does not scale and did not happen for seven days, seven days, and
-three PRs respectively in the three cases above.
+The pattern reached **eight occurrences** and finally has a solution doc:
+`docs/solutions/logic-errors/a-closure-claim-in-prose-is-not-the-field-a-consumer-parses.md`
+(gitignored — `docs/` is local by convention, so this shard and CONCEPTS.md are
+the tracked half). Its Detection section is the deliverable, because every
+instance so far was found by a human reading prose and noticing it disagreed
+with a field — which does not scale and did not happen for seven days and three
+PRs in the two measured cases above.
+
+CONCEPTS.md gained **Narrative closure**, **Phantom residual**, **Unmarked
+residual** and **Reconciliation pass** under *Autonomy*, plus one flagged
+ambiguity. `Reconciliation pass` carries a disambiguation against the
+`Residual sink` entry's existing use of "reconciliation" for cross-shard
+duplicate collapse — a different axis (shard vs sibling shard, not entry vs
+tree). Brain writeback: 20 atoms, all promoted `evidence_only`.
+
+Recorded because it cost a retry: `brain-client.sh review` takes
+`<memory_id> <action>` as literals, not a payload file. Passing a file path
+fails all 20 promotions silently enough that the rows sit stranded in `pending`,
+where recall drops them — the writeback reads as successful and the memories are
+invisible. The `cepa:brain` contract's "always promote the ids the call DID
+return" exists for the 5xx case; this is a second way to strand rows.
 
 Worth stating plainly: this sink's consumers (`/cepa:sweep`,
 `/cepa:triage`) read the box. Every phantom item is a unit of attention
