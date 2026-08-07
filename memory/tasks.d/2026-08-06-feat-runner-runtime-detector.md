@@ -160,3 +160,25 @@ Not everything here dies with the premise. These survive any redesign:
 - Any repo-derived value reaching an argument position is validated first, and
   `^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$` is **not** sufficient — it admits `.` and
   `..` as whole path components.
+
+### A fifth instance, found by reading the job's own hosted output
+
+The first hosted run printed `read 0 annotation(s)` — true, and it exposed a
+silent-pass path in the line that produced it:
+
+    msgs=$(api ".../check-runs/$cr/annotations" --jq '.[].message') || continue
+
+A failed annotations call and a check-run with no annotations both leave `msgs`
+empty, so `|| continue` collapsed them. An API refusal printed the identical
+summary line to a genuinely clean scan — inside the job whose own header says
+*"'found nothing' and 'looked at nothing' are otherwise indistinguishable"* and
+*"every failure path exits 0 AFTER emitting a warning."*
+
+Fixed: failure is distinguished from empty, counted as `unread`, reported in the
+summary, and a pass with `unread > 0` is announced as **QUALIFIED, not clean**.
+Regression case added to the extract-and-run harness (now 9).
+
+Worth recording plainly: across this one branch the class landed **five** times —
+the reconstruct-the-fact premise, the tip-check omission, warn-with-no-escalation,
+the guard matching its own source, and this. Four were caught by review or by
+running the code; the count is the point, not any one instance.

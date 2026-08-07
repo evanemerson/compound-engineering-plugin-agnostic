@@ -289,7 +289,7 @@ jobs:
             exit 0
           fi
 
-          inspected=0; skipped=0; annotations=0; hits=""
+          inspected=0; skipped=0; annotations=0; unread=0; hits=""
           while IFS=$(printf '\t') read -r wf_id wf_name; do
             [ -n "$wf_id" ] || continue
             run=$(api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf_id/runs?status=completed&branch=$tip&per_page=1" \
@@ -324,8 +324,18 @@ jobs:
             fi
             inspected=$((inspected + 1))
             for cr in $crs; do
-              msgs=$(api "repos/$GITHUB_REPOSITORY/check-runs/$cr/annotations" \
-                       --jq '.[].message') || continue
+              # NOT `|| continue`. A failed annotations call and a check-run
+              # with no annotations both leave `msgs` empty, so collapsing them
+              # makes "the API refused us" print the same summary line as "we
+              # looked and it was clean" — the silent pass this job's own header
+              # forbids, and the exact reason `unread` is reported separately
+              # below rather than folded into `annotations`.
+              if ! msgs=$(api "repos/$GITHUB_REPOSITORY/check-runs/$cr/annotations" \
+                            --jq '.[].message'); then
+                printf '::warning::could not read annotations for check-run %s: %s\n' \
+                  "$cr" "$(head -c 200 "$err" | head -1)"
+                unread=$((unread + 1)); continue
+              fi
               [ -n "$msgs" ] || continue
               n=$(printf '%s\n' "$msgs" | grep -c . || true)
               annotations=$((annotations + n))
@@ -345,8 +355,11 @@ jobs:
           fi
 
           if [ -z "$hits" ]; then
-            printf 'no runtime deprecation warnings: inspected %s run(s), read %s annotation(s), skipped %s workflow(s) with stale or missing runs\n' \
-              "$inspected" "$annotations" "$skipped"
+            if [ "$unread" -gt 0 ]; then
+              printf '::warning::no deprecation warnings found, but %s check-run(s) would not surrender their annotations — this pass is QUALIFIED, not clean\n' "$unread"
+            fi
+            printf 'no runtime deprecation warnings: inspected %s run(s), read %s annotation(s), %s unreadable, skipped %s workflow(s) with stale or missing runs\n' \
+              "$inspected" "$annotations" "$unread" "$skipped"
             exit 0
           fi
 
