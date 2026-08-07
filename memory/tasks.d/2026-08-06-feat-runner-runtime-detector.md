@@ -182,3 +182,35 @@ Worth recording plainly: across this one branch the class landed **five** times 
 the reconstruct-the-fact premise, the tip-check omission, warn-with-no-escalation,
 the guard matching its own source, and this. Four were caught by review or by
 running the code; the count is the point, not any one instance.
+
+### A sixth instance: the fix for the false positive over-corrected
+
+The observer's first run on `main` after merging reported **3 skipped, 0
+inspected** — permanent UNVERIFIED. The tip check added for the second review's
+finding 1 was measured wrong in the other direction:
+
+    SKIP  model-pins — newest run 31179058157 is at 7ef5e15, not the tip cc6926b
+
+**This step runs inside `model-pins`, so `model-pins`' newest *completed* run is
+always the previous commit's — a run cannot observe itself.** Every other
+workflow is at tip only by coincidence. So in steady state the job would have
+reported "no evidence" forever, which is a detector that never detects.
+
+It failed *safe* — UNVERIFIED, not falsely clean, and the inspected/skipped
+counters are exactly what made it visible on the first real run. That is the
+counters doing their job. But safe is not working.
+
+Fixed by asking the question the design actually cares about. The annotation
+depends only on **which actions are pinned**, so a run at an ancestor commit is
+valid evidence provided no workflow file changed in between —
+`compare/<run_sha>...<tip>` filtered to `.github/workflows/`. A compare that
+cannot be fetched is a skip with its reason, never an assumed "unchanged".
+Evidence provenance is now printed per run (`at tip` / `at <sha>, pins unchanged
+since`) so a reader can see which commit each verdict rests on.
+
+Verified against the live API: **3 inspected, 0 skipped, 1 annotation read** —
+where the previous cut read 0, a value indistinguishable from a broken call.
+
+The adversarial persona's warning on the redesign was *"a redesign written in the
+glow of a good catch is exactly where an over-correction hides."* It was right,
+about a place it did not name.

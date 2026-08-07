@@ -301,16 +301,38 @@ jobs:
             run_id=$(printf '%s' "$run" | cut -f1)
             head_sha=$(printf '%s' "$run" | cut -f2)
             suite=$(printf '%s' "$run" | cut -f3)
-            # A run at an older commit is evidence about an older tree. Measured
-            # 2026-08-07: `changelog` sat at the PR #39 merge and
-            # `mutation-sweep` at a 2026-08-03 commit, both BEFORE the pin was
-            # fixed — so both still carry the old node20 annotation. Reporting
-            # those as current would have made this job's first act a false
-            # positive against an already-closed finding.
-            if [ "$head_sha" != "$tip_sha" ]; then
-              printf 'SKIP  %s — newest run %s is at %s, not the %s tip %s (stale evidence)\n' \
-                "$wf_name" "$run_id" "${head_sha:0:12}" "$tip" "${tip_sha:0:12}"
-              skipped=$((skipped + 1)); continue
+            # Evidence must describe the CURRENT PINS — which is not the same as
+            # "must be at the tip", and the difference is the whole correctness
+            # of this job.
+            #
+            # Requiring the tip was the first cut, and it was measured wrong
+            # BOTH ways. It correctly killed a false positive (`changelog` and
+            # `mutation-sweep` sat at pre-bump commits still carrying the old
+            # node20 annotation). But it then made the job observe NOTHING: this
+            # step runs INSIDE model-pins, so model-pins' newest *completed* run
+            # is always the previous commit's — a run can never see itself — and
+            # every other workflow is at tip only by coincidence. First run on
+            # main after merging: 3 skipped, 0 inspected, permanent UNVERIFIED.
+            #
+            # The annotation depends only on which actions are pinned, so a run
+            # at an ANCESTOR commit is valid evidence as long as no workflow file
+            # changed in between. That is what is asked here.
+            if [ "$head_sha" = "$tip_sha" ]; then
+              provenance="at tip"
+            else
+              drift=$(api "repos/$GITHUB_REPOSITORY/compare/$head_sha...$tip_sha" \
+                        --jq '[.files[].filename | select(startswith(".github/workflows/"))] | length')
+              if [ -z "$drift" ]; then
+                printf 'SKIP  %s — could not compare run %s at %s against the tip: %s\n' \
+                  "$wf_name" "$run_id" "${head_sha:0:12}" "$(head -c 200 "$err" | head -1)"
+                skipped=$((skipped + 1)); continue
+              fi
+              if [ "$drift" -ne 0 ]; then
+                printf 'SKIP  %s — run %s is at %s and %s workflow file(s) changed since (stale evidence)\n' \
+                  "$wf_name" "$run_id" "${head_sha:0:12}" "$drift"
+                skipped=$((skipped + 1)); continue
+              fi
+              provenance="at ${head_sha:0:12}, pins unchanged since"
             fi
             if [ -z "$suite" ] || [ "$suite" = "null" ]; then
               printf 'SKIP  %s — run %s reported no check suite\n' "$wf_name" "$run_id"
@@ -323,6 +345,7 @@ jobs:
               skipped=$((skipped + 1)); continue
             fi
             inspected=$((inspected + 1))
+            printf 'READ  %s — run %s (%s)\n' "$wf_name" "$run_id" "$provenance"
             for cr in $crs; do
               # NOT `|| continue`. A failed annotations call and a check-run
               # with no annotations both leave `msgs` empty, so collapsing them
