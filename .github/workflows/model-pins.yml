@@ -21,15 +21,32 @@ name: model-pins
 # To bump: re-resolve the SHA from upstream and replace BOTH the SHA and the
 # comment together —
 #
-#     gh api repos/actions/checkout/git/refs/tags/v4.5.0 --jq .object.sha
+#     gh api repos/actions/checkout/git/refs/tags/v7.0.2 --jq .object.sha
 #
 # Never edit the comment alone (it then lies about which commit runs), and
-# never restore a bare tag. There is deliberately no dependabot/renovate
-# config: `main` is unprotected here, so an unattended bot opening PRs against
-# it is a larger decision than this file should make on its own. That leaves
-# bumping manual and therefore easy to forget — a pinned-but-stale action is
-# the accepted trade against a mutable-tag supply chain, and the follow-on is
-# tracked in memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md.
+# never restore a bare tag.
+#
+# ELIGIBLE MAJORS ARE CONSTRAINED BY THE JS RUNTIME, not by recency, and this
+# is the one place that constraint is written down — the sibling workflows cite
+# it rather than restate it. GitHub removes Node 20 from the runner on
+# 2026-09-16; `actions/checkout` declares its runtime in its own `action.yml`
+# `runs.using`, and v4.x is the last `node20` line (v5.0.0 was exactly that
+# change and nothing else). So a bump target must be v5 or later — read the
+# candidate's own runtime before pinning it, rather than trusting this note to
+# age well:
+#
+#     gh api "repos/actions/checkout/contents/action.yml?ref=v7.0.2" \
+#       --jq .content | tr -d '\n' | base64 -d | grep -A2 '^runs:'
+#
+# Downgrading to a v4.x SHA is therefore not a neutral rollback; after
+# 2026-09-16 it is a job with no interpreter.
+#
+# There is deliberately no dependabot/renovate config: `main` is unprotected
+# here, so an unattended bot opening PRs against it is a larger decision than
+# this file should make on its own. That leaves bumping manual and therefore
+# easy to forget — a pinned-but-stale action is the accepted trade against a
+# mutable-tag supply chain, and the follow-on is tracked in
+# memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md.
 
 # Deliberately NOT path-filtered. A filter buys nothing here (the check
 # takes seconds) and costs correctness twice: a PR that moves agent
@@ -58,7 +75,7 @@ jobs:
     # for the case that guard is ever weakened.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Policy check first, controls second with `if: always()`. Both always
       # run, so neither hides the other. Controls-first was tried and inverted
       # the diagnostic on the common case: the controls build a fixture from

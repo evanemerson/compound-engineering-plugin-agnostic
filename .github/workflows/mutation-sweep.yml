@@ -21,8 +21,9 @@ name: mutation-sweep
 # Action pinning: pinned to a FULL 40-char commit SHA with a trailing comment
 # naming the tag it was resolved from, matching model-pins.yml. A version tag
 # is mutable, so a tag pin grants every future publisher push write access to
-# this job. This SHA and model-pins.yml's are the same on purpose — bump both
-# together or neither.
+# this job. Every workflow in this directory carries the same SHA on purpose —
+# bump them together or none, and read model-pins.yml for which majors the
+# action's JS runtime leaves eligible.
 #
 # A WEEKLY JOB NEEDS AN OBSERVER. A `schedule:` failure on the default branch
 # produces no PR check and no notification, so on failure this opens or updates
@@ -76,7 +77,7 @@ jobs:
     # control suite grows materially.
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The classifier decides what every mutant result MEANS, so it is
       # verified before it is trusted — and it is cheap relative to the sweep,
