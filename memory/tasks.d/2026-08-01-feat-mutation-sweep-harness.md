@@ -69,7 +69,7 @@ not exempt the detector from the class.
   itself rather than a fresh branch, and the merge plus the timeout
   calibration moved to the end of the work.
 
-- [ ] ~~P1 — **the observer channel ships saturated.**~~ The sweep exits 1 on its
+- [x] ~~P1 — **the observer channel ships saturated.**~~ The sweep exits 1 on its
   first full run, so the weekly job is red from day one and its issue carries
   21 known items before it carries a new one. The workflow's own comment
   justifies `failure()` over `always()` because "an issue opened on a green run
@@ -98,7 +98,7 @@ not exempt the detector from the class.
   workflow lands in the UNVERIFIED branch, so it warns rather than passing
   quietly.
 
-- [ ] ~~P2 — **the `schedule:` off-switch is documented but not detected.**~~
+- [x] ~~P2 — **the `schedule:` off-switch is documented but not detected.**~~
   GitHub disables scheduled workflows after 60 days of repository inactivity;
   the only mitigation is a comment telling a human to notice an absent run.
   This is the one-layer-up version of what the sweep solves. Right-sized fix is
@@ -113,7 +113,7 @@ not exempt the detector from the class.
   cannot tell those apart learns to ignore both. The weekly workflow never
   filters, so CI is unaffected.
 
-- [ ] ~~P3 — **a filtered run that passes exits 0.**~~ `--mutants X` prints the
+- [x] ~~P3 — **a filtered run that passes exits 0.**~~ `--mutants X` prints the
   PARTIAL banner and exits 0; the banner is prose in the middle of a report CI
   consumes. Any future step running a subset is green by construction — and a
   per-PR fast path is explicitly discussed and rejected in both headers, which
@@ -315,13 +315,22 @@ The missing step is a reconcile pass after the unfreeze, not a weaker freeze.
   their rationale gone. Refines the already-open "nothing machine-checks that a
   SURVIVOR declaration is honest". (finding #13, conf 80.)
 
-- [ ] P3 — **`exit 3` and the detector's `UNVERIFIED` have no rule in §9f.**
+- [x] ~~P3 — **`exit 3` and the detector's `UNVERIFIED` have no rule in §9f.**
   §9f's outcome table is per-mutant with no exit-code row; the freshness
   detector, its 16-day bound and its stated limit live only in a YAML comment.
   Both fail safe today. Note the collision: §9 says "for a caller's gate,
   UNVERIFIED counts as MISSING", while this step's UNVERIFIED exits 0 by
   design — same word, different constructs, and that is exactly what wants
-  saying once rather than twice. (finding #14, conf 75.)
+  saying once rather than twice. (finding #14, conf 75.)~~ **Shipped
+  2026-08-03** in `d28ae7a` (1.18.1). Verified 2026-08-06 against
+  `plugins/cepa/skills/autonomy/SKILL.md`: §9f carries a four-row exit-code
+  table ("The sweep's exit codes, for a caller's gate") whose exit-3 row states
+  a filtered run is **not a pass** and that a gate passing `--partial-ok` has
+  disabled itself; the freshness detector has its own paragraph; and the
+  UNVERIFIED collision is resolved explicitly — *"Same word, two constructs,
+  opposite gate semantics — stated here because that is exactly the collision
+  a reader hits going from §9 to this section."* Closed here on 2026-08-06,
+  three PRs after the fix landed: the work shipped and the box never moved.
 
 - [ ] P3 — **leg 2's readability probe is sabotaged by no mutant** (see the
   earlier entry; the second review corroborates it and adds that a probe-only

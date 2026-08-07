@@ -102,6 +102,26 @@ Consent captured once from the operator — explicitly, per capability — that 
 ### Write-back
 The closing half of consuming a residual: flipping the item's status in every sink it lives in, committed immediately so the pipeline's own state never trips its own cleanliness gates. An item consumed from a sink is closed there or explicitly re-reported — never left half-consumed.
 
+### Narrative closure
+A prose statement that an item is done — struck-through text, a blockquote disclaiming the entries below it, a note in a different shard, a commit message — written instead of updating the status field a consumer actually parses, leaving the item open to every automated reader.
+
+The failure is structural rather than careless: the explaining sentence carries the reasoning and is the part a writer wants to produce, while the status field has no content of its own and answers no question, so composing the closure prompts nothing about it. Striking the prose makes it worse, because the strike feels like it recorded the closure.
+
+*Avoid:* prose closure, soft close.
+
+### Phantom residual
+A sink entry whose parsed status still reads open although the work it describes has shipped — the artifact a narrative closure leaves behind. Distinct from a residual, which is genuinely unfinished; a backlog counting both is measuring record decay alongside work, and cannot be read as evidence about either.
+
+*Avoid:* stale checkbox, orphaned todo.
+
+### Unmarked residual
+Genuinely open work recorded in a sink without the status field's required syntax, so the scan that finds phantom residuals never includes it in the population at all. The mirror image of a phantom residual and the more dangerous of the two: a phantom is a wrong answer inside the scanned set, an unmarked residual never enters the set and so surfaces as a clean pass rather than as an error.
+
+### Reconciliation pass
+A re-read of every entry in a sink against the current state of the tree rather than against the entry's own description, correcting status in both directions and producing counts that are measured rather than inherited. Distinct from write-back, which is per-item and happens at consumption time, and from the cross-shard duplicate reconciliation named under [residual sink](#residual-sink), which compares sibling shards to each other rather than any of them to the tree.
+
+An entry's own prose is never evidence for its status during the pass — trusting it reproduces the condition the pass exists to correct.
+
 ## Subagent dispatch
 
 ### Model pin
@@ -301,3 +321,4 @@ that generator given its own name.
 - An unset model tier on a dispatch had been read as a neutral default — it is not: it resolves to the invoking session's tier, which makes cost a property of the operator's session rather than of the task.
 - Consistency between sibling call sites had been treated as self-evidently good — it is not: when the site being changed is the correct outlier, matching its neighbours adopts their omission, so the direction of the levelling has to be established before the change, not after.
 - A verification tool had been treated as outside the class it verifies — it is not: the harness built to catch silent passes shipped five of its own across three review rounds, and the freshness detector built to catch a silently disabled job had a silent-pass path in its own fall-through.
+- Recording closure in prose had been treated as equivalent to closing an item — it is not: only the status field a consumer parses closes it for automated readers, so prose closure leaves a phantom residual, and the inverse — open work carrying no status syntax at all — is invisible to the same scan rather than miscounted by it.

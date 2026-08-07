@@ -24,7 +24,7 @@ diff, so both are recorded here rather than fixed silently.
   silently. Fix: reduce all four to citations; consider generalizing leg 4 to
   every `§N<letter>` anchor repo-wide rather than only `§9`.
 
-- [ ] P3 — `.github/workflows/model-pins.yml:8-10` states *"Leg 2 … is
+- [x] ~~P3 — `.github/workflows/model-pins.yml:8-10` states *"Leg 2 … is
   heuristic and only warns, so a false positive never blocks a merge."* The
   checker exits 1 when warnings are non-zero
   (`plugins/cepa/scripts/check-model-pins.sh:338-341`) and §9f requires both
@@ -32,7 +32,21 @@ diff, so both are recorded here rather than fixed silently.
   (`50120ad` shipped the comment and that verdict block together) — not later
   rot. Fix: delete the sentence and point at §9f; a comment describing what an
   adjacent checker does is a restatement in a different language from its
-  subject, so it is never re-read when the behavior changes.
+  subject, so it is never re-read when the behavior changes.~~ **Shipped
+  2026-07-30 in PR #27**, as review finding #5 of
+  `todos/review-2026-07-30-075218.md`. Verified 2026-08-06: the sentence is
+  gone from the tree — `model-pins.yml:8-10` now reads *"Its pass condition is
+  defined by `cepa:autonomy` §9f — read it there rather than inferring it from
+  this comment or from any one leg's output verb"*, which also forecloses the
+  next copy rather than only deleting this one.
+
+  **This box stayed open for seven days after the fix landed**, because the
+  closure was recorded in a *different* shard —
+  `memory/tasks.d/2026-07-30-docs-compound-restatement-drift.md`'s "Applied
+  this run" section names this exact fix — and nothing walked back to the
+  source checkbox. A closure claim written where the work happened is not the
+  field a consumer parses where the work was *filed*; see the solution doc
+  this reconciliation landed.
 
 ### Checked and clean (each claim located and dated, so it can be re-checked rather than trusted)
 
