@@ -24,7 +24,11 @@ name: changelog
 # that holds `contents: write`. To bump, re-resolve and replace BOTH the SHA and
 # the comment together:
 #
-#     gh api repos/actions/checkout/git/refs/tags/v4.5.0 --jq .object.sha
+#     gh api repos/actions/checkout/git/refs/tags/v7.0.2 --jq .object.sha
+#
+# Which majors are eligible is constrained by the action's JS runtime, not by
+# recency. `model-pins.yml` states that constraint and how to check a candidate
+# against it; read it there.
 #
 # No `push:` trigger, deliberately. This job pushes to main; a push trigger
 # would re-enter it on its own commit. The releases are the only input, so a
@@ -70,7 +74,7 @@ jobs:
     # for the push-retry loop below, not the generation.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           # Full history: the retry loop resets onto origin/main, and a depth-1
