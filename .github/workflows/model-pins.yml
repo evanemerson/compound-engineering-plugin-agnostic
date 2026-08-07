@@ -87,6 +87,37 @@ jobs:
       - name: Check model-pin checker controls
         if: always()
         run: bash scripts/check-model-pins-controls.sh
+      # The runner has defaulted to Node 24 since 2026-06-16, so
+      # FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 is a no-op today and is deliberately
+      # NOT set — it was correct advice in the 2025-09-19 changelog and the
+      # platform moved past it. The variable that still bites is the opposite
+      # escape hatch, named in the runner's own message: it forces workflows
+      # BACK onto the dying runtime, which silences the very warning the
+      # `runtime-deprecation` job below exists to observe. Silencing the
+      # detector reads as a clean pass, so it fails here instead.
+      #
+      # SCOPE, stated because it is narrower than it looks: this sees only the
+      # literal string committed under .github/. It cannot see the variable set
+      # as a repo-level Actions variable in the web UI, nor one exported at
+      # runtime by a third-party action via $GITHUB_ENV. Nothing in scope does
+      # either today — actions/checkout is the only pinned action.
+      - name: Refuse the deprecated-runtime escape hatch
+        if: always()
+        run: |
+          # The needle is ASSEMBLED AT RUN TIME so this guard cannot match its
+          # own source. Written as one literal, `grep -rn <name> .github/` finds
+          # this very line on a clean tree and the step is permanently red —
+          # caught by running it, not by reading it. That is the same defect
+          # this repo already carries one live instance of (a zero-coverage
+          # floor whose scan root contains the file declaring it), and the same
+          # reason the sibling scripts construct a section sign rather than
+          # writing one.
+          needle="ACTIONS_ALLOW_USE_UNSECURE_NODE""_VERSION"
+          if grep -rn "$needle" .github/; then
+            printf '::error::the above pins a workflow to a deprecated JS runtime and silences the runtime-deprecation observer. Bump the action instead\n'
+            exit 1
+          fi
+          printf 'no deprecated-runtime escape hatch under .github/ (needle: %s)\n' "$needle"
 
   # Detects GitHub's SILENT 60-day disable of `schedule:` workflows, which
   # would otherwise stop the mutation sweep with no run, no notification and
@@ -172,4 +203,202 @@ jobs:
               "$age" "$out" "$STALE_AFTER_DAYS"
           else
             printf 'last successful mutation sweep: %s days ago (%s)\n' "$age" "$out"
+          fi
+
+  # Observes the deprecation warning the RUNNER ALREADY EMITS, rather than
+  # re-deriving each pinned action's runtime from upstream. Verified against
+  # this repo's own history: run 30867814226 (2026-08-04, two days before the
+  # v4.4.0 -> v7.0.1 bump) carries
+  #
+  #   ##[warning]Node.js 20 is deprecated. The following actions target
+  #   Node.js 20 but are being forced to run on Node.js 24:
+  #   actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+  #
+  # naming the offending action BY ITS PINNED SHA. That warning sat in this
+  # repo's logs for months with nothing watching it, which is why the node20
+  # deadline was found by a human asking about it by name. The gap was never a
+  # missing signal — it was an authoritative signal with no observer, the same
+  # finding this file's `sweep-freshness` job exists to close one layer up.
+  #
+  # ITS OWN JOB, no checkout — the same security boundary `sweep-freshness`
+  # documents above: a token must not share a job with `bash scripts/*.sh` run
+  # from a PR head, because `$GITHUB_PATH` is prepended for every later step in
+  # the same job. This job parses no repo content at all — it greps API output —
+  # so no repo-derived value ever reaches an argument position.
+  #
+  # Every failure path exits 0 AFTER emitting a warning, and every count it
+  # reports is one it actually measured. Absence of the annotation is the
+  # HEALTHY state, so "found nothing" and "looked at nothing" are otherwise
+  # indistinguishable — that ambiguity is the whole defect class this repo keeps
+  # paying for, and the inspected/annotation counters are what rule it out.
+  runtime-deprecation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Stated explicitly rather than inherited by reference. Unlisted scopes
+      # are set to `none` by GitHub, so copying `sweep-freshness`'s
+      # `actions: read` alone would 403 on the check-runs calls.
+      actions: read   # list workflows and their runs
+      checks: read    # check-suites -> check-runs -> annotations
+      issues: write   # the observer itself
+    steps:
+      - name: Runtime deprecation observer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: a pinned action targets a deprecated runner runtime
+          # Warn-then-escalate. An immediate MISS reddens every unrelated PR for
+          # as long as the condition stands, and `cepa:autonomy` 9f already
+          # records where that leads: failing unrelated PRs is how a signal gets
+          # routed around. But warn-forever is the same no-observer failure one
+          # layer up, so the check goes red once the tracking issue has been
+          # open this long. The clock is the issue's own created_at — NOT a
+          # countdown to a hardcoded removal date, which would reintroduce the
+          # policy table this design deleted and would itself go stale. What is
+          # worth reddening a PR over is not the calendar; it is "this has been
+          # ignored for three weeks".
+          ESCALATE_AFTER_DAYS: 21
+        run: |
+          set -o pipefail
+          err="$RUNNER_TEMP/gh.err"
+          # stderr to a file, never 2>&1: on a 404 `gh` writes the API's JSON
+          # body to STDOUT, which would put a raw blob inside the annotation.
+          # Same lesson as sweep-freshness, observed on its first hosted run.
+          api() { gh api "$@" 2>"$err"; }
+
+          if ! tip=$(api "repos/$GITHUB_REPOSITORY" --jq '.default_branch' ) \
+             || [ -z "$tip" ]; then
+            printf '::warning::runtime deprecation UNVERIFIED: could not resolve the default branch: %s\n' \
+              "$(head -c 300 "$err" | head -1)"
+            exit 0
+          fi
+          if ! tip_sha=$(api "repos/$GITHUB_REPOSITORY/commits/$tip" --jq '.sha') \
+             || [ -z "$tip_sha" ]; then
+            printf '::warning::runtime deprecation UNVERIFIED: could not resolve %s tip: %s\n' \
+              "$tip" "$(head -c 300 "$err" | head -1)"
+            exit 0
+          fi
+
+          if ! wfs=$(api "repos/$GITHUB_REPOSITORY/actions/workflows" \
+                       --jq '.workflows[] | [.id, .name] | @tsv'); then
+            printf '::warning::runtime deprecation UNVERIFIED: could not list workflows: %s\n' \
+              "$(head -c 300 "$err" | head -1)"
+            exit 0
+          fi
+          if [ -z "$wfs" ]; then
+            printf '::warning::runtime deprecation UNVERIFIED: zero workflows enumerated — a scan over nothing is not a pass\n'
+            exit 0
+          fi
+
+          inspected=0; skipped=0; annotations=0; hits=""
+          while IFS=$(printf '\t') read -r wf_id wf_name; do
+            [ -n "$wf_id" ] || continue
+            run=$(api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf_id/runs?status=completed&branch=$tip&per_page=1" \
+                    --jq '.workflow_runs[0] | [.id, .head_sha, .check_suite_id] | @tsv') || run=""
+            if [ -z "$run" ]; then
+              printf 'SKIP  %s — no completed run on %s\n' "$wf_name" "$tip"
+              skipped=$((skipped + 1)); continue
+            fi
+            run_id=$(printf '%s' "$run" | cut -f1)
+            head_sha=$(printf '%s' "$run" | cut -f2)
+            suite=$(printf '%s' "$run" | cut -f3)
+            # A run at an older commit is evidence about an older tree. Measured
+            # 2026-08-07: `changelog` sat at the PR #39 merge and
+            # `mutation-sweep` at a 2026-08-03 commit, both BEFORE the pin was
+            # fixed — so both still carry the old node20 annotation. Reporting
+            # those as current would have made this job's first act a false
+            # positive against an already-closed finding.
+            if [ "$head_sha" != "$tip_sha" ]; then
+              printf 'SKIP  %s — newest run %s is at %s, not the %s tip %s (stale evidence)\n' \
+                "$wf_name" "$run_id" "${head_sha:0:12}" "$tip" "${tip_sha:0:12}"
+              skipped=$((skipped + 1)); continue
+            fi
+            if [ -z "$suite" ] || [ "$suite" = "null" ]; then
+              printf 'SKIP  %s — run %s reported no check suite\n' "$wf_name" "$run_id"
+              skipped=$((skipped + 1)); continue
+            fi
+            crs=$(api "repos/$GITHUB_REPOSITORY/check-suites/$suite/check-runs" \
+                    --jq '.check_runs[].id') || crs=""
+            if [ -z "$crs" ]; then
+              printf 'SKIP  %s — no check runs resolved for run %s\n' "$wf_name" "$run_id"
+              skipped=$((skipped + 1)); continue
+            fi
+            inspected=$((inspected + 1))
+            for cr in $crs; do
+              msgs=$(api "repos/$GITHUB_REPOSITORY/check-runs/$cr/annotations" \
+                       --jq '.[].message') || continue
+              [ -n "$msgs" ] || continue
+              n=$(printf '%s\n' "$msgs" | grep -c . || true)
+              annotations=$((annotations + n))
+              # STRUCTURAL match — no version literal, so the next runtime cycle
+              # is caught without an edit here. That is an assumption about
+              # GitHub's wording, not a contract; see the residual shard for the
+              # re-verification trigger.
+              hit=$(printf '%s\n' "$msgs" | grep -Ei 'node(\.js)?[[:space:]]*[0-9]+[[:space:]]+(is|are)([[:space:]]+being)?[[:space:]]+deprecated' || true)
+              [ -n "$hit" ] && hits=$(printf '%s\n%s — %s' "$hits" "$wf_name" "$hit")
+            done
+          done <<< "$wfs"
+
+          if [ "$inspected" -eq 0 ]; then
+            printf '::warning::runtime deprecation UNVERIFIED: %s workflows enumerated but none had a usable run at the %s tip — this is not a clean pass, it is no evidence\n' \
+              "$skipped" "$tip"
+            exit 0
+          fi
+
+          if [ -z "$hits" ]; then
+            printf 'no runtime deprecation warnings: inspected %s run(s), read %s annotation(s), skipped %s workflow(s) with stale or missing runs\n' \
+              "$inspected" "$annotations" "$skipped"
+            exit 0
+          fi
+
+          printf '::warning::a pinned action targets a deprecated runner runtime:%s\n' "$hits"
+
+          # The issue is the observer. Filed only on push to the default branch:
+          # a fork `pull_request` token is read-only regardless of the
+          # permissions block, so attempting it on a PR would fail for a reason
+          # unrelated to the finding.
+          num=$(api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+                  --jq "[.[] | select(.title == \"$ISSUE_TITLE\")] | .[0].number // \"\"") || num=""
+          opened=$(api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+                  --jq "[.[] | select(.title == \"$ISSUE_TITLE\")] | .[0].created_at // \"\"") || opened=""
+
+          if [ -n "$opened" ]; then
+            # Parsed into a variable and gated BEFORE the arithmetic. Inlined,
+            # an unparseable timestamp leaves the operand empty, `[ "" -gt N ]`
+            # errors, `if` reads that error as false, and control falls to the
+            # reassuring branch — and `set -e` does not abort on an arithmetic
+            # error inside an assignment. This exact bug shipped in the job
+            # above before review reproduced it.
+            if ts=$(date -u -d "$opened" +%s 2>/dev/null) && [ -n "$ts" ]; then
+              age=$(( ( $(date -u +%s) - ts ) / 86400 ))
+              if [ "$age" -gt "$ESCALATE_AFTER_DAYS" ]; then
+                printf '::error::this has been open %s days (issue #%s, since %s), past its %s-day bound. Bump the pin\n' \
+                  "$age" "$num" "$opened" "$ESCALATE_AFTER_DAYS"
+                exit 1
+              fi
+              printf 'tracking issue #%s open %s days of %s\n' "$num" "$age" "$ESCALATE_AFTER_DAYS"
+            else
+              printf '::warning::could not parse tracking issue #%s created_at %s — escalation clock UNVERIFIED\n' \
+                "$num" "$opened"
+            fi
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" != "push" ]; then
+            printf 'not filing an issue: event is %s, and a fork pull_request token is read-only\n' "$GITHUB_EVENT_NAME"
+            exit 0
+          fi
+          body="$RUNNER_TEMP/issue-body.md"
+          {
+            printf 'The runner reports a pinned action on a deprecated JS runtime.\n\n'
+            printf 'Run: %s/%s/actions/runs/%s\n\n```\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf '%s\n' "$hits"
+            printf '```\n\nThe warning names the action by its pinned SHA. Bump it per the\n'
+            printf 'action-pinning recipe in `.github/workflows/model-pins.yml`.\n'
+          } > "$body"
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body-file "$body" \
+              || printf '::warning::could not comment on issue #%s\n' "$num"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body-file "$body" \
+              || printf '::warning::could not open the tracking issue\n'
           fi

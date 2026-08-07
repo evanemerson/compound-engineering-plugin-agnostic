@@ -68,13 +68,35 @@ this repo.
 
 ### Open — the operator's call before any build resumes
 
-- [ ] P1 — **redesign to observe the runner's own annotations**, or keep the
-  reconstruct-the-fact design with findings 3/4/5/8/9/10 applied. The evidence
-  favours observing: authoritative (it is what actually executes the action),
-  self-updating for node24 → node28 with no edit here, no annotation convention,
-  no second list, no self-expiry. The remaining real gap is narrow and matches a
-  shape this repo has already built once — GitHub *warns* but never *fails*, and
-  a warning in a job log has no observer.
+- [x] ~~P1 — **redesign to observe the runner's own annotations**, or keep the
+  reconstruct-the-fact design with findings 3/4/5/8/9/10 applied.~~
+  **Operator chose observe, 2026-08-07.** Shipped as the `runtime-deprecation`
+  job in `model-pins.yml`; plan
+  `docs/plans/2026-08-07-runtime-deprecation-observer.md`, second review
+  `todos/review-2026-08-07-054748.md` (7 findings, 6 applied, no judgment-class
+  P1 — revise-and-continue, unlike the first).
+
+  Two things the second panel caught that would have shipped broken:
+
+  - **The observer's first act would have been a false positive.** Selecting
+    each workflow's newest completed run on main, with no tip check, resolves
+    `changelog` to the PR #39 merge and `mutation-sweep` to a 2026-08-03 commit
+    — both *before* PR #40 fixed the pin, both still carrying the old node20
+    annotation. Fixed by comparing `head_sha` to the branch tip and routing a
+    mismatch to UNVERIFIED. Verified against the live API.
+  - **Warn-forever is the same no-observer failure one layer up.** The first cut
+    quoted the earlier finding 5 to drop the MISS entirely and never re-added
+    its second stage. Now escalates to MISS once the tracking issue has been
+    open past `ESCALATE_AFTER_DAYS` — clocked on the issue's own `created_at`,
+    deliberately **not** a countdown to a hardcoded removal date, which would
+    reintroduce the policy table the redesign deleted.
+
+  And one the panel did not catch, found by running the code: the
+  escape-hatch guard's `grep` pattern was a literal inside the file it scans, so
+  it matched **its own source** and was permanently red on a clean tree. Fourth
+  instance on record of a detector falling to the class it detects — inside the
+  PR whose plan cites that very defect as the thing it avoids by construction.
+  The needle is now assembled at run time.
 
 - [ ] P1 — **reopen the renovate/dependabot decision, or record it as declined
   again with the new cost evidence.** Twice deferred; the standing reason
@@ -82,10 +104,40 @@ this repo.
   larger decision than a tooling PR should make) is unchanged, but this incident
   is the second data point against it and the deferral now has a measured price.
 
-- [ ] P2 — **`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`** is a runner opt-in that
+- [x] ~~P2 — **`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`** is a runner opt-in that
   forces the newer runtime today. Worth setting as a forward-compatibility probe
-  independent of any detector? It surfaces breakage on this repo's schedule
-  rather than GitHub's.
+  independent of any detector?~~ **Resolved 2026-08-07 as obsolete — deliberately
+  NOT set.** The runner has defaulted to Node 24 since 2026-06-16, so the
+  variable is a no-op. From the same log line that named it:
+
+      Node 20 is being deprecated. This workflow is running with Node 24 by
+      default. If you need to temporarily use Node 20, you can set the
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable.
+
+  The 2025-09-19 changelog's advice was correct when written and the platform
+  moved past it — setting it now would be cargo-cult. **The variable that still
+  bites is the opposite one**, and it is the genuinely useful guard: setting
+  `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` forces workflows *back* onto the
+  dying runtime and silences the very warning the observer reads, which would
+  read as a clean pass. A step under `check` now refuses it — proven green → red
+  → green by planting it. Stated scope: it sees only the literal committed under
+  `.github/`, not a repo-level Actions variable set in the web UI nor one
+  exported at runtime via `$GITHUB_ENV`.
+
+- [ ] P2 — **pin the match to a historical fixture instead of a generic shape?**
+  (second review, finding 8, conf 50.) The structural match
+  (`Node.js <N> is deprecated`) is assumed to survive the next runtime cycle's
+  wording. A literal historical fixture would be provably not self-updating but
+  detectably stale via the committed tests. Trades a known maintenance cost
+  against an unmeasured false-negative risk.
+
+- [ ] P3 — **re-verify the match against GitHub's wording at the next Node
+  deprecation announcement** (second review, finding 3). The annotation is
+  undocumented text, and the node20 warning stops entirely once removal
+  completes on 2026-09-16 — a permanent clean pass after that is *correct* until
+  node24 starts dying, and *wrong* if the next cycle's phrasing differs. The
+  coverage counters cannot tell those apart. This is the one place the design
+  can go quietly stale.
 
 - [ ] P3 — **the `# vX.Y.Z` tag comment has no verification either** and is as
   human-entered as anything proposed here. Recorded so the asymmetry is a
