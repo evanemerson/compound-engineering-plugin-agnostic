@@ -2,7 +2,7 @@
 
 ## 2026-08-06
 
-- **P3 — `.github/workflows/changelog.yml` pushes directly to an unprotected
+- [ ] **P3 — `.github/workflows/changelog.yml` pushes directly to an unprotected
   `main`.** If branch protection is ever enabled, this job needs either a
   `github-actions[bot]` bypass allowance or a PR-based flow. It now fails with a
   message that names protection explicitly rather than blaming a push race, so
@@ -14,7 +14,7 @@
   Interacts with the standing "turn on branch protection for main" item — do
   these two together or the first release after protection breaks the changelog.
 
-- **P3 — a second pinned action now depends on manual SHA bumping.**
+- [ ] **P3 — a second pinned action now depends on manual SHA bumping.**
   `changelog.yml` pins `actions/checkout@11d5960a...  # v4.4.0`, the same SHA as
   both sibling workflows. Correct as pinned, but it widens the premise of the
   deferred renovate/dependabot question in
@@ -23,7 +23,7 @@
   when that question is revisited.
   Source: `todos/review-2026-08-06-151255.md` finding 19.
 
-- **P3 — `CHANGELOG.md` becomes an autonomy-§7 relay point the moment anything
+- [ ] **P3 — `CHANGELOG.md` becomes an autonomy-§7 relay point the moment anything
   reads it into a prompt.** Nothing does today (`grep -rln "CHANGELOG.md"` finds
   only the generator, the workflow, and `CLAUDE.md`), so no clause is needed yet.
   The next PR that wires a reader — `document-release`, `compound-refresh`, or

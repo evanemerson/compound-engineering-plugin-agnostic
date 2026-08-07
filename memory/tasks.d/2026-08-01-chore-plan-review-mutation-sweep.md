@@ -16,8 +16,21 @@ doc in `docs/plans/` nor a scope-pinning issue — so premise scrutiny was on.
 
 > **Status of everything in this section is SUPERSEDED by the triage section at
 > the bottom of this file.** The lists below are the review-time snapshot and are
-> kept as evidence; 8 were subsequently fixed and 5 skipped. Do not read their
-> checkboxes as current — the triage section is authoritative for what is open.
+> kept as evidence; 8 were subsequently fixed and 5 skipped. The triage section
+> is authoritative for what is open.
+>
+> **The items below are deliberately NOT checkboxes** (reconciled 2026-08-06).
+> They were `- [ ]` until then, and this warning — which asked the reader not to
+> read those checkboxes as current — was the only thing standing between them
+> and a consumer. A consumer greps `^- \[ \]`; it does not read blockquotes. The
+> 18 open boxes in this section were phantom work for five days, and one of them
+> (the weekly sweep's "no named observer") was contradicted by the triage
+> section 100 lines further down in the same file *and* by
+> `.github/workflows/mutation-sweep.yml`, which has shipped an observer since
+> day one. Evidence is not a task, so it no longer carries a task's syntax.
+> Marking them `[x]` would have been the other wrong answer: 5 were skipped and
+> several were mooted when the fast path was deleted, and none of that is
+> "completed".
 
 ### The headline: the plan's central mechanism does not work as written
 
@@ -45,7 +58,7 @@ than at implementation.
 
 ### At review time — the two contradictions block U2/U3 as designed
 
-- [ ] **P1 — how the driver reaches the mutated checker is undecided.**
+- **P1 — how the driver reaches the mutated checker is undecided.**
   `CEPA_PIN_CHECKER` is the harness's purpose-built mutation hook and is
   hard-refused whenever `CI` is set (i.e. exactly where U3 runs). "Copy tree to a
   throwaway dir" also fails as written: the harness resolves its root via
@@ -56,7 +69,7 @@ than at implementation.
   existing guard but pays a full tree copy per mutant; the second is cheaper and
   uses the documented path but weakens a deliberate control. (findings #2, #10)
 
-- [ ] **P1 — whether the per-PR fast path should exist at all.** product-lens
+- **P1 — whether the per-PR fast path should exist at all.** product-lens
   argues the residual deferred on cadence and named weekly-or-manual as its own
   acceptable answers, neither of which needs an `expect` mapping; dropping the
   fast path removes `expect`, `--only`, and CAUGHT-BY-OTHER — about a third of
@@ -66,65 +79,65 @@ than at implementation.
 
 ### At review time — correctness of the mechanism (P1)
 
-- [ ] Adding `mutation-sweep.yml` **breaks controls 17 and 36** on the first
+- Adding `mutation-sweep.yml` **breaks controls 17 and 36** on the first
   commit: both neutralize `model-pins.yml` by name, so a second workflow file
   leaves `.github` still scannable and the expected MISS never appears.
   Reproduced (`2/2 passed` → `FAIL 17` / `FAIL 36`). Fix is to replant both on
   every scannable file under `.github`, in the same commit. (finding #8)
-- [ ] Mutation confinement to the throwaway copy is unstated; an interrupted run
+- Mutation confinement to the throwaway copy is unstated; an interrupted run
   can leave a weakened checker in the working tree, whose diff looks like a
   one-line edit. No constraint stops a `target` with `..` or an absolute path
   either. (finding #10)
-- [ ] `expect` is a list but CAUGHT is defined singular — a partially-firing list
+- `expect` is a list but CAUGHT is defined singular — a partially-firing list
   passes both modes, so a declared control can be dead from birth. (finding #11)
-- [ ] SURVIVOR declarations are unverified: relabelling a real gap as expected is
+- SURVIVOR declarations are unverified: relabelling a real gap as expected is
   a one-word diff, and D3 guards only the opposite direction. This repo has
   shipped that remedy shape before (deleting a leg-3 marker to quiet the
   checker). (finding #12)
-- [ ] The driver's classifier ships with one of six outcomes tested — the defect
+- The driver's classifier ships with one of six outcomes tested — the defect
   this plan exists to detect, one layer down. (finding #13)
-- [ ] The blocking PR gate contradicts "gaps become residuals": the branch becomes
+- The blocking PR gate contradicts "gaps become residuals": the branch becomes
   unmergeable the moment the harness works. Proposed `SURVIVED-KNOWN-GAP`, valid
   only with a residual-shard reference. (finding #14)
 
 ### At review time — scope, cost, record-keeping (P2/P3)
 
-- [ ] "§9f already requires every control to name the mutant it kills, so the
+- "§9f already requires every control to name the mutant it kills, so the
   mapping is half-written already" is **measured wrong**: 49 of 57 controls name a
   mutant, and the eight that do not (6, 9, 10a, 10b, 18, L2g, L2h, L3e) are every
   one a zero-MISS false-positive guard — the only controls that can kill a
   loosened predicate. The unwritten half is the half covering the mutant class
   where the checker silently stops catching things. (finding #16)
-- [ ] `scripts` is a leg-4 citation root and `.sh` is scanned, with no
+- `scripts` is a leg-4 citation root and `.sh` is scanned, with no
   prose-suppression hatch: a literal `§N<letter>` in either new file must resolve
   or the baseline reddens and takes the sweep, the controls, and the model-pins
   job down together. (finding #17)
-- [ ] The weekly run's failure has no named observer — no PR check, no
+- The weekly run's failure has no named observer — no PR check, no
   notification. The CAUGHT-BY-OTHER mitigation depends on someone reading it.
   Needs `permissions: issues: write` if it files an issue. (finding #19)
-- [ ] The new workflow drops `model-pins.yml`'s documented security posture (no
+- The new workflow drops `model-pins.yml`'s documented security posture (no
   event-data interpolation into `run:`, never `pull_request_target`, no
   secrets) — it carried forward only the mechanical SHA pin and timeout.
   (finding #20)
-- [ ] A sourced `registry.sh` makes running the sweep on a contributor branch
+- A sourced `registry.sh` makes running the sweep on a contributor branch
   equivalent to running that branch's code, before any validation. Trust boundary
   unstated. (finding #21)
-- [ ] `--allow-dirty` brands every local run INVALID, including U2's own verify —
+- `--allow-dirty` brands every local run INVALID, including U2's own verify —
   the person who needs the sweep is mid-edit by construction. Proposal: split
   "dirty at start" (LOCAL, runs normally) from "changed during the run"
   (INVALID), which also matches the incident that motivated the gate.
   (finding #22)
-- [ ] The accounting figure is a coverage claim with nothing bounding it; §9f's
+- The accounting figure is a coverage claim with nothing bounding it; §9f's
   gap table needs a row saying a green sweep is not checker coverage.
   (finding #23)
-- [ ] No rule for re-anchoring or retiring an ANCHOR-MISSING mutant — deleting it
+- No rule for re-anchoring or retiring an ANCHOR-MISSING mutant — deleting it
   is the cheapest route to green CI on exactly the PRs that edit the checker,
   which is how a suite loses coverage silently. §9f already forbids this for
   controls. (finding #24)
-- [ ] Fast-mode fallback cost is uncapped and correlates with the trigger:
+- Fast-mode fallback cost is uncapped and correlates with the trigger:
   fallbacks cluster on the PRs that edit the checker. ~8 fallbacks exhaust a
   5-minute budget. (finding #25)
-- [ ] Advisory (confidence 50, below the auto-apply anchor): `--only` names two
+- Advisory (confidence 50, below the auto-apply anchor): `--only` names two
   different things inside U2; "the solution doc" in Out of scope is cited without
   a path. (findings #27, #28)
 
@@ -221,18 +234,46 @@ same reason — all artifacts of the fast path.
 
 ### Deferred — build-time detail, nothing to decide until the code is written
 
-- [ ] **#2 (P1) — how the driver reaches the mutated checker. Must be answered
+**Reconciled 2026-08-06.** All six were deferred *toward the build*, and the
+build happened on `feat/mutation-sweep-harness`. Two were answered there, one
+was folded, and three are live but **owned by that branch's shard** — carrying
+an open box in both files is the duplication `cepa:autonomy` §5 dedup exists to
+prevent, and it double-counts the backlog. The owner is
+`memory/tasks.d/2026-08-01-feat-mutation-sweep-harness.md`.
+
+- [x] ~~**#2 (P1) — how the driver reaches the mutated checker. Must be answered
   before U2 is written.** `CEPA_PIN_CHECKER` is the harness's purpose-built hook
   and is hard-refused whenever `CI` is set; a bare file copy is not a git work
   tree (root via `git rev-parse`, fixture from `git ls-files`), so it exits 2.
   Options: clone including `.git` / `git worktree add` with the hook unset, or use
-  the hook and add a narrow `CEPA_MUTATION_SWEEP=1` exemption to the CI guard.
-- [ ] #12 — nothing machine-checks a `SURVIVOR` declaration beyond D4's
-  stated-limit reference; relabelling a real gap as expected is a one-word diff.
-- [ ] #13 — the classifier's own coverage beyond U2's per-outcome fixtures.
-- [ ] #20 — whether the workflow header rules belong in prose or a shared include.
-- [ ] #21 — whether the registry should be data rather than sourced shell.
-- [ ] #23 — exact wording of §9f's gap-table row.
+  the hook and add a narrow `CEPA_MUTATION_SWEEP=1` exemption to the CI guard.~~
+  **Answered 2026-08-01 — option (a).** `cp -a` the tree *including* `.git` to a
+  temp dir, cwd inside the copy, `CEPA_PIN_CHECKER` left unset. The cost
+  objection did not survive measurement (1.7 MB tree + 9.1 MB `.git`, copied
+  once per *run*, not per mutant); `git worktree add` was rejected inside option
+  (a) because it checks out HEAD and would test the committed checker while the
+  operator is mid-edit — the exact moment the sweep matters. Full reasoning and
+  its stated consequence: the feat shard, "Decided this run".
+- [x] ~~#13 — the classifier's own coverage beyond U2's per-outcome fixtures.~~
+  **Closed by `--selftest`** — assertions across every classifier branch, wired
+  as its own CI step ahead of the sweep
+  (`.github/workflows/mutation-sweep.yml:87-88`). Verified 2026-08-06.
+- [x] ~~#12 — nothing machine-checks a `SURVIVOR` declaration beyond D4's
+  stated-limit reference; relabelling a real gap as expected is a one-word
+  diff.~~ **Not closed — folded**, and tracked at its owner. The driver now
+  enforces a floor (the cited `<file>:<line>` must live in the mutant's own
+  target and still carry the words `STATED LIMIT`), which is #12's floor, not
+  its ceiling. Live as "nothing machine-checks that a `SURVIVOR` declaration is
+  *honest*" in the feat shard, refined there by a further finding: two mutants
+  cite the same line whose two claims sit on separate lines.
+- #20 — whether the workflow header rules belong in prose or a shared include.
+  **Still open**; box lives in the feat shard.
+- #21 — whether the registry should be data rather than sourced shell.
+  **Still open**; box lives in the feat shard.
+- #23 — exact wording of §9f's gap-table row. **Partially done and still open**:
+  a row was written and is live in §9f ("Which control kills which mutant is
+  prose, in both files, checked by nobody"), but its wording is not settled.
+  Box lives in the feat shard.
 
 ### Still open: whether to build this at all
 

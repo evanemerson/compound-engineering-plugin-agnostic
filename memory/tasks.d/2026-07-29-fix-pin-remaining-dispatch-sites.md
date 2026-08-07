@@ -23,11 +23,15 @@
   relative ceiling is not statically checkable; §9d records that rejection
   and names a `model_policy` config key as the honest path (still a
   non-goal). Enforced by `check-model-pins.sh` leg 3.
-- [ ] Deferred from PR #24, **partially closed**: finding #5 (centralize the
+- Deferred from PR #24, **partially closed**: finding #5 (centralize the
   dispatch-model policy in `cepa:autonomy` and cite it) — DONE 2026-07-29 in
   PR #26 (1.15.0) as §9; the normalization PR #25's finding #6 did is what
   made it cheap, as predicted. Finding #4 (`dispatch_models` Run Metadata
   field) is **still open** — see
   `memory/tasks.d/2026-07-29-fix-close-model-inherit-leaks.md`.
+  *(Checkbox removed 2026-08-06: this bullet is a cross-reference, and its only
+  open half is finding #4, whose box lives in the PR #24 shard. Two boxes for
+  one item double-counts the backlog — the same §5 dedup rule this file already
+  applies one bullet down for finding #10.)*
 - Not repeated here (already recorded in the PR #24 shard, §5 dedup):
   finding #10, the `/cepa:setup` consumer half of PR #24's finding #7.

@@ -2,7 +2,7 @@
 
 ## 2026-08-06
 
-- **P2 — the runner's JS runtime is a dependency this repo had no watcher for,
+- [ ] **P2 — the runner's JS runtime is a dependency this repo had no watcher for,
   and still only half has one.** `actions/checkout` was pinned at a `node20`
   major with ~6 weeks left before GitHub removes Node 20 from the runner
   (2026-09-16). Nothing in `memory/`, `todos/` or `.github/` mentioned it —
@@ -15,7 +15,7 @@
   notices when v7's runtime is deprecated in turn.** The next occurrence is
   found the same way this one was: by luck.
 
-- **P3 — the renovate/dependabot question is still open, and this PR is the
+- [ ] **P3 — the renovate/dependabot question is still open, and this PR is the
   second data point for it, not a resolution.** Deferred in
   `memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md` on the reasoning
   that `main` is unprotected, so an unattended bot opening PRs against it is
@@ -30,7 +30,7 @@
   Whatever settles this has to compare against the runtime, or against the
   newest major, not against the pinned line's own tag.
 
-- **P3 — the `v4.5.0` in each bump-recipe example was live documentation rot.**
+- [ ] **P3 — the `v4.5.0` in each bump-recipe example was live documentation rot.**
   Two workflows told a future bumper to run
   `gh api .../git/refs/tags/v4.5.0`, i.e. to pin the very line being
   deprecated. Now `v7.0.2`. The general shape — an illustrative version number
