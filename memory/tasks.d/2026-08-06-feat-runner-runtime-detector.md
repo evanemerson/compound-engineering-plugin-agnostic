@@ -214,3 +214,21 @@ where the previous cut read 0, a value indistinguishable from a broken call.
 The adversarial persona's warning on the redesign was *"a redesign written in the
 glow of a good catch is exactly where an over-correction hides."* It was right,
 about a place it did not name.
+
+### Settled 2026-08-08: `main` stays unprotected. Do not re-propose.
+
+Operator decision, final: **no branch protection, no ruleset, nothing that can
+block a push to `main`.** Not a deferral pending better arguments — this is
+closed. Do not raise it again, and do not re-derive it from the fact that
+several residuals mention `main` being unprotected.
+
+Consequences, accepted knowingly:
+
+- `runtime-deprecation`'s escalation to a red check is **advisory**. It goes red
+  and merges still proceed. Its value is the annotation and the tracking issue,
+  not a gate.
+- Same for `check` and the controls suite — a red run is a signal a human acts
+  on, which is what CLAUDE.md already says ("treat it as blocking anyway").
+- The renovate/dependabot item above keeps `main` being unprotected as its
+  standing reason. That reason is now permanent rather than provisional, so
+  settle that question on its own merits.
