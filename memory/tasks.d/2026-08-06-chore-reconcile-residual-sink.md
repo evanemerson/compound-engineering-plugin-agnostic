@@ -130,6 +130,15 @@ stricter invariant that nothing checks.
 ### From the /cepa:compound run — proposals needing an operator decision
 
 - [ ] P2 — **build `scripts/check-residual-integrity.sh` (+ a controls suite).**
+  **Spec moved under it 2026-08-09 (PR #46, 1.21.0) — build against the current
+  text, not the pre-#46 one.** `cepa:file-todos` now states an *agreement*
+  invariant, not only the counter sum: each state counter must equal the body's
+  own `status:` count plus human-triage removals, `total` is never shrunk, and
+  removals live in `skipped`. Two shapes are explicitly non-tallyable and a leg
+  that treats them as drift is wrong — severity-suffix batches
+  (`severity: P2/P3 (batch)`) and heading ranges (`### 21-25`). Both misfired
+  during #46: a scan called twelve files bad when six were, and a pass shrank a
+  correct file's `total` from 30 to 26 on a heading range it could not see.
   The solution doc's Prevention section specifies it: house style of
   `check-model-pins.sh`, scoped to the tracked half (`memory/tasks.d/*.md`,
   `todos/review-*.md`). Five candidate legs, each run against the live tree

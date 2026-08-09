@@ -87,6 +87,19 @@ are called out — they should be resolved before merging.
   table or one-at-a-time — because a skip is an explicit human judgment that
   the finding is wrong. Autonomous runs never skip; they defer.
 
+**Every transition above also writes the frontmatter `summary` block**, in the
+same edit as the body change. This is not bookkeeping: the counters are what
+`/cepa:sweep`, `/cepa:lfg`, and `previous-comments-reviewer` read, and six
+findings files had drifted before anyone compared a block to its own body.
+Per `cepa:file-todos` — cited, not restated here:
+
+- a status change moves one finding between two state counters;
+- **"skip N" increments `skipped` and leaves `total` UNCHANGED** — never shrink
+  `total` to absorb a removal, which erases it from every parsed field and
+  leaves it only in the `triage:` prose;
+- re-derive the counters from the body afterwards rather than adjusting them
+  from memory, and check the severity counters too, not only the sums.
+
 Finish with the summary: applied / fixed / deferred / skipped counts and the
 findings file path.
 

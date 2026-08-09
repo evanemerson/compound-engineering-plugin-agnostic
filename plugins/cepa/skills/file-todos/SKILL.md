@@ -186,28 +186,65 @@ perfectly. That shipped, was reported as "counters verified", and was caught
 only by a later review — twice. So the counters must also **agree with the
 body**:
 
-> Each `p1`/`p2`/`p3` and each state counter equals the number of findings in
-> the body carrying that `severity:` / `status:` value, **plus** any findings
-> removed from the file by human-driven triage.
+> Each state counter equals the number of findings in the body carrying that
+> `status:` value, **plus** any findings removed from the file by human-driven
+> triage. `p1`/`p2`/`p3` equal their body counts exactly on any file that has
+> had no removals.
 
-Removals are the only sanctioned source of a gap, and they must be visible:
-`total − (findings present in the body)` may never exceed `skipped`. Note the
-two kinds of skip behave differently here and a checker must not assume one —
+**One encoding for a removal, mandated — both were in use and the invariant
+could not tell them apart.** `total` is fixed when the file is written and is
+**never shrunk**. A human-triage removal increments `skipped` by exactly one and
+leaves `total` alone. The rejected alternative — shrink `total`, leave
+`skipped: 0` — erases the removal from every parsed field, leaving it only in
+`triage:` prose, which is the closure-claim class this repo already documents.
+
+That makes the gap an **equality**, not a bound:
+
+> `total − (findings present in the body)` **equals** the number of human-triage
+> removals, and that number is what `skipped` holds — minus any retained skips,
+> which are still in the body and already tallied there.
+
+An inequality (`gap ≤ skipped`) would be satisfied by `gap = 0, skipped = 0`,
+which is precisely the encoding being rejected: a file can shrink `total` to
+absorb any number of removals and still pass. That is a check that cannot fail
+on the state it exists to catch.
+
+The two kinds of skip behave differently and a checker must not assume one —
 human-triage skips are **removed** from the body, while the `/cepa:resolve-pr`
-verdict skips are **retained** in it. A file with retained skips has no gap at
-all.
+verdict skips are **retained** in it. A file with only retained skips has no gap.
+
+**Stated limit:** `skipped` is a single scalar with no severity breakdown, so
+once a file has had a removal, `p1`/`p2`/`p3` cannot be re-derived from the body
+alone — the removed finding's severity is unrecoverable. The severity counters
+are therefore verifiable only on files with no removals. This is a real hole,
+recorded rather than papered over; closing it would need a per-severity removal
+field, which no consumer has asked for.
 
 Verify against the body, never against the block's own arithmetic:
 
 ```bash
-grep -o '^- severity: P[123]' todos/review-<stamp>.md | sort | uniq -c
-grep -o '^- status: [a-z]*'   todos/review-<stamp>.md | sort | uniq -c
+grep -oE '^-?[[:space:]]*severity: P[123]'  todos/review-<stamp>.md | sort | uniq -c
+grep -oE '^-?[[:space:]]*status: [a-z]+'    todos/review-<stamp>.md | sort | uniq -c
 ```
 
-A line naming a range or a batch (`severity: P2/P3 (batch)`) is **not
-tallyable** and must be reported as such rather than counted as disagreement —
-treating it as drift is how a scan of this repo reported twelve bad files when
-six were bad.
+**The leading `-` is optional and the pattern must tolerate both.** Two field
+formats are live in this repo — `- severity: P1` and bare `severity: P1` — and a
+pattern anchored to one returns **zero rows on the other, silently**. A zero
+count is not a clean file; it is a pattern that did not fire. Compare the row
+count against the `### N` headings before reading any tally as a result.
+
+**Two shapes are NOT tallyable**, and both must be reported as such rather than
+counted as disagreement:
+
+- a **severity suffix** naming a range or batch — `severity: P2/P3 (batch)`;
+- a **heading range** — `### 21-25`, one `severity:`/`status:` pair covering
+  several enumerated findings.
+
+Miscounting these is not hypothetical. A scan of this repo reported twelve bad
+files when six were bad, by treating batch suffixes as drift; a later pass then
+shrank a *correct* file's `total` from 30 to 26 and declared four findings
+unrecoverable, because a heading-range block was invisible to a per-line tally.
+They were never lost. Expand the block, then count.
 
 ## Run Metadata (optional frontmatter fields)
 

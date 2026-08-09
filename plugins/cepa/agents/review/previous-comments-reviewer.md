@@ -22,6 +22,21 @@ codebase while nobody is looking.
    day one and drops it from the check as soon as two newer files land —
    permanently, since its `pending` never becomes nonzero. Note in
    your output how many files you scanned vs. skipped-as-fully-resolved.
+
+   **Do not let the frontmatter alone retire a file.** Those counters are a
+   derived cache, not the source of truth (`cepa:file-todos`), and six files in
+   this repo had drifted before anyone compared a block to its own body. The
+   skip decision here is fail-open: a counter that has drifted to a false zero
+   retires a file with real open findings from every future continuity check,
+   silently and permanently. So confirm a skip against the body before taking
+   it — one grep, tolerant of both field formats:
+
+   ```bash
+   grep -oE '^-?[[:space:]]*status: [a-z]+' <file> | sort | uniq -c
+   ```
+
+   If it disagrees with the frontmatter, the frontmatter is wrong: parse the
+   file and report the drift as a finding.
    Statuses are the canonical six from the `cepa:file-todos` skill
    (`pending`, `ready`, `skipped`, `applied`, `deferred`, `completed`).
    `skipped` findings were explicitly declined by a human — never re-raise
