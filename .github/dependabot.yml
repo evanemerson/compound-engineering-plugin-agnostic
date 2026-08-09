@@ -1,0 +1,36 @@
+# Keeps the SHA-pinned actions in .github/workflows/ current.
+#
+# Adopted 2026-08-09 after three deferrals. The standing objection — `main` is
+# unprotected, so an unattended bot is too large a call for a tooling PR — died
+# twice over: `caaef86` made "unprotected" permanent rather than provisional, so
+# the premise could never resolve; and Dependabot opens pull requests, it cannot
+# merge them and never pushes to `main`. The full reasoning, including what the
+# `runtime-deprecation` observer already discharged, is in
+# memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md. Not restated here.
+#
+# THIS FILE CONFIGURES VERSION UPDATES ONLY. Dependabot *security* updates — the
+# CVE coverage that is the remaining justification for adopting a bot at all —
+# are a repo-settings feature and cannot be enabled from here. Both were turned
+# on in the same change (`vulnerability-alerts` and `automated-security-fixes`,
+# verified by re-reading the API, not by trusting the write). If this file ever
+# exists while those are off, the coverage is roughly half of what it reads as.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      # Weekly rather than monthly: Dependabot opens nothing when there is
+      # nothing to update, so the higher frequency costs no noise and halves
+      # the worst-case lag. The failure this exists to prevent was measured in
+      # months, not weeks.
+      interval: weekly
+    commit-message:
+      prefix: chore
+    open-pull-requests-limit: 3
+    groups:
+      # Encodes the rule mutation-sweep.yml already states: "Every workflow in
+      # this directory carries the same SHA on purpose — bump them together or
+      # none." One grouped PR per cycle, never a partial sweep across files.
+      actions:
+        patterns:
+          - "*"

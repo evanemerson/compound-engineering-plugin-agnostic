@@ -98,11 +98,59 @@ this repo.
   PR whose plan cites that very defect as the thing it avoids by construction.
   The needle is now assembled at run time.
 
-- [ ] P1 — **reopen the renovate/dependabot decision, or record it as declined
+- [x] ~~P1 — **reopen the renovate/dependabot decision, or record it as declined
   again with the new cost evidence.** Twice deferred; the standing reason
   (`main` is unprotected, so an unattended bot opening PRs against it is a
   larger decision than a tooling PR should make) is unchanged, but this incident
-  is the second data point against it and the deferral now has a measured price.
+  is the second data point against it and the deferral now has a measured price.~~
+  **SETTLED 2026-08-09 in PR `chore/adopt-dependabot` — ADOPTED.** This is the
+  canonical record; the three sibling references cite it rather than restate it.
+
+  **The standing reason died twice over.** `caaef86` made `main` being
+  unprotected *permanent* rather than provisional — a deferral whose blocking
+  premise can never resolve is a decline that was never written down. And the
+  premise overstated the mechanism: Dependabot opens pull requests, it cannot
+  merge them and it never pushes to `main`. The surface is "a PR appears and a
+  human merges it", which is every PR in this repo already.
+
+  **The cost evidence that reopened it was mostly discharged, and that is
+  recorded rather than glossed.** The PR #40 incident — `actions/checkout` at a
+  `node20` major for months — would now be caught by `runtime-deprecation`
+  (#42/#43) without any bot. The adoption does **not** rest on it. What remains
+  uncovered, and is the actual justification: **security advisories**, which
+  neither the runtime observer nor the floated WARN-only check can see, plus
+  sub-major staleness. The 08-06 shard's constraint on any solution — compare
+  against the runtime or the newest major, never the pinned line's own tag — is
+  satisfied, because Dependabot compares against the newest release.
+
+  **The WARN-only substitute was weighed and lost on this repo's own record.**
+  `CLAUDE.md` plus four shard entries document four instances of a detector
+  falling to the class it detects — most recently *inside* the PR whose plan
+  cited that defect as the thing it avoided by construction. A fifth home-grown
+  detector plus controls suite plus mutant registrations, to replace a
+  configuration file, is the trade this repo keeps losing.
+
+  **What shipped, both halves together.** `.github/dependabot.yml` configures
+  **version updates only**. Dependabot *security* updates — the whole remaining
+  justification — are a repo-settings feature that a config file cannot turn on.
+  Measured before the change: `dependabot_security_updates: disabled`,
+  `GET /vulnerability-alerts` → 404, `automated-security-fixes` →
+  `{"enabled": false}`. Shipping the YAML alone would have claimed coverage the
+  change did not have. Both settings were enabled and then **verified by
+  re-reading the API** (404→204, false→true, disabled→enabled) rather than by
+  trusting the write's status code.
+
+- [ ] P3 — **confirm the Dependabot-PR token prediction on the first real bot
+  PR.** All three `model-pins.yml` jobs run on `pull_request` with no actor
+  guard, and `runtime-deprecation` requests `issues: write` — a scope GitHub
+  denies to Dependabot-triggered runs, which get a read-only `GITHUB_TOKEN` and
+  no secrets. Predicted behaviour, from the job's documented contract that
+  *every failure path exits 0 AFTER emitting a warning*: degraded-but-green with
+  non-zero skip counters, not a red check and not a false clean. **This is a
+  prediction from reading the job, not an observation.** Deliberately not
+  pre-guarded — adding an actor `if:` to a detector shipped two days earlier to
+  satisfy an unobserved prediction is the over-correction shape #43 already was.
+  Check the first Dependabot PR's checks tab and record what actually happened.
 
 - [x] ~~P2 — **`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`** is a runner opt-in that
   forces the newer runtime today. Worth setting as a forward-compatibility probe
@@ -231,4 +279,7 @@ Consequences, accepted knowingly:
   on, which is what CLAUDE.md already says ("treat it as blocking anyway").
 - The renovate/dependabot item above keeps `main` being unprotected as its
   standing reason. That reason is now permanent rather than provisional, so
-  settle that question on its own merits.
+  settle that question on its own merits. — **Done 2026-08-09: adopted.** Making
+  the reason permanent is precisely what settled it, in the opposite direction
+  from what a reader might assume: an objection that can never resolve cannot
+  keep deferring the thing it blocks. See the closed P1 above.

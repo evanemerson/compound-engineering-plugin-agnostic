@@ -21,8 +21,16 @@ findings #11 and #12 (#12 partially — see below).
   it pairs with the `policy-owner` marker below (plan-review finding #5,
   confidence 75).
 
-- [ ] P3 — `.github/workflows/model-pins.yml` — **the renovate/dependabot half
-  of PR #25 finding #12 was declined, not done.** The SHA pin landed
+- [x] ~~P3 — `.github/workflows/model-pins.yml` — **the renovate/dependabot half
+  of PR #25 finding #12 was declined, not done.**~~ **CLOSED 2026-08-09 —
+  ADOPTED** in PR `chore/adopt-dependabot`, ~10 months after this line was
+  written. Canonical reasoning lives in
+  `memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md`, cited not
+  restated. This bullet's own open question — *is a lighter substitute
+  preferable, a WARN-only check flagging when a pinned SHA has fallen behind its
+  upstream tag?* — is answered **no**, and by its own terms: a behind-its-tag
+  check read green through the entire node20 incident, because `v4.4.0` was the
+  newest release on its line while the runtime underneath went EOL. Originally: The SHA pin landed
   (`11d5960a326750d5838078e36cf38b85af677262 # v4.4.0`, resolved from upstream
   twice during the run) with a bump rule in the file. The bot rule did not:
   `main` is unprotected, so an unattended bot opening PRs against it is a
