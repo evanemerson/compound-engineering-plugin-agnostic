@@ -10,6 +10,14 @@
 
 Every version below is a tag you can check out: `git checkout vX.Y.Z`.
 
+## [v1.21.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/releases/tag/v1.21.0) - 2026-08-09
+
+_findings counters must agree with the body_
+
+* fix: counters must agree with the body, not just balance (1.21.0) by @evanemerson in #46
+
+[Compare v1.20.0...v1.21.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/compare/v1.20.0...v1.21.0)
+
 ## [v1.20.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/releases/tag/v1.20.0) - 2026-08-09
 
 _CI templates off the dying runtime + installed-copy drift check_
