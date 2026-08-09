@@ -13,18 +13,38 @@
 #   - Encryption keys (Fernet): generate at runtime, never commit one.
 #   - Whether tests require real Redis (autouse cache.clear() fixtures do).
 #
-# Action majors are chosen by RUNTIME, not recency. GitHub retires old Node
-# runtimes from the runner on a schedule, and an action whose `runs.using` names
-# a retired one is a step with no interpreter. Read a candidate's own runtime
-# before changing any tag below — do not trust its version number, and do not
-# paste this line as-is:
+# ACTION MAJORS: each tag below is the NEWEST major whose `runs.using` names a
+# runtime the runner still supports. Not "whatever is newest" (that ignores the
+# runtime), and not the minimum that satisfies it — on 2026-08-09 the minimum
+# was checkout@v5 / setup-node@v5 / setup-python@v6, which is correct today and
+# due again sooner. Newest-current-runtime puts the next forced bump farthest
+# out. State the criterion you used if you change it, so the pins below stay
+# reproducible from the rule.
 #
-#     gh api "repos/<OWNER>/<ACTION>/contents/action.yml?ref=<TAG>" \
-#       --jq .content | tr -d '\n' | base64 -d | grep -A2 '^runs:'
+# GitHub retires old Node runtimes on a schedule, and an action whose
+# `runs.using` names a retired one is a step with no interpreter. Read a
+# candidate's own runtime before changing a tag — never trust its version
+# number. Do not paste this line as-is; substitute the bracketed parts:
+#
+#     gh api "repos/<OWNER>/<REPO>/contents/<SUBPATH/>action.yml?ref=<TAG>" \
+#       --jq .content | tr -d '\n' | base64 --decode | grep -A2 '^runs:'
+#
+# THREE WAYS THAT LOOKUP LIES TO YOU — all three were reproduced against live
+# actions before this note was written:
+#   - EMPTY output means the request FAILED (bad tag, no auth, wrong path). It
+#     does NOT mean "no runtime problem". Check the exit code, read stderr.
+#   - `using: composite` is NOT a pass. A composite's own `steps:` may call
+#     node20 actions; you have to recurse into them.
+#   - For `owner/repo/subpath@tag` the subpath belongs in the CONTENTS path,
+#     not the repo name. `github/codeql-action/init@v3` is node20, but folding
+#     `init` into the repo name reads the repo root and returns
+#     `using: composite` with exit 0 — a confident wrong answer. Some actions
+#     ship `action.yaml`; try both spellings.
 #
 # Mutable major tags are deliberate here: a template is adapted, not consumed.
 # An adopting repo that wants supply-chain hardening should pin these to full
-# commit SHAs and add its own bump policy.
+# commit SHAs and add its own bump policy — `/cepa:setup` surfaces that choice
+# rather than leaving it to this comment.
 name: CI
 
 on:
@@ -87,7 +107,6 @@ jobs:
       REDIS_CACHE_URL: redis://localhost:6379/1
       # REDIS_CACHE_URL: redis://redis:6379/1       # container jobs
     steps:
-      # Action majors are chosen by RUNTIME, not recency — see the header.
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:

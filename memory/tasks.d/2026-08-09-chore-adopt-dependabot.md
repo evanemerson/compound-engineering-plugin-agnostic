@@ -11,8 +11,15 @@ Below is what could not land in a config-adoption PR.
 
 ### Open
 
-- [ ] P1 — **the CI templates this repo SHIPS pin a runtime that dies on
-  2026-09-16, and no detector here can see them.** Found by the adversarial
+- [x] ~~P1 — **the CI templates this repo SHIPS pin a runtime that dies on
+  2026-09-16, and no detector here can see them.**~~ **CLOSED 2026-08-09 —
+  PR #45 (1.20.0).** Both (a) and (b) below are done; what remains is tracked
+  as separate items in `memory/tasks.d/2026-08-09-fix-ci-template-runtime.md`,
+  which is where this branch's residuals live. Scope of the closure, stated
+  because PR #45's review found it was narrower than it read: this closes the
+  TEMPLATE population. Copies already installed in users' repos are a distinct
+  problem, filed in that shard.
+  Originally: Found by the adversarial
   reviewer, outside the diff, and verified directly:
   `plugins/cepa/templates/ci/django.yml:77,105` and
   `plugins/cepa/templates/ci/astro.yml:21` carry `actions/checkout@v4` — the
@@ -41,7 +48,7 @@ Below is what could not land in a config-adoption PR.
   owns template action currency and write it down**, since no automation can.
   Scope note already added to `2026-08-06-derive-changelog-on-release.md`.
 
-  **(a) DONE 2026-08-09 — PR `fix/ci-template-runtime` (1.19.1).** The finding
+  **(a) DONE 2026-08-09 — PR `fix/ci-template-runtime` (1.20.0).** The finding
   understated it: **all six pins were node20**, not just `checkout`. Verified by
   reading each action's own `action.yml` upstream rather than trusting version
   numbers — `checkout@v4` node20, `setup-node@v4` node20, `setup-python@v5`
@@ -63,18 +70,9 @@ Below is what could not land in a config-adoption PR.
   **Still open below** — the templates remain unwatched between now and the next
   runtime cycle.
 
-- [ ] P2 — **no observer for template action currency, and the next cycle has no
-  deadline yet.** (a) and (b) above fixed the instance and wrote down the rule;
-  neither creates a signal. The next Node retirement will find these templates
-  the same way this one did — by a human noticing. The honest options, cheapest
-  first: a grep-based WARN step over `plugins/cepa/templates/` comparing each
-  `uses:` major against the action's live `runs.using` (this is one of the few
-  places a home-grown check is genuinely not competing with Dependabot, which
-  structurally cannot reach a template directory); or accept the gap explicitly
-  and re-check at each announced retirement. Deferred because the escalation
-  design is a real decision — a check that reddens every PR because an upstream
-  action deprecated something is the routed-around-signal failure this repo
-  already documents.
+- Residuals discovered on branch `fix/ci-template-runtime` live in
+  `memory/tasks.d/2026-08-09-fix-ci-template-runtime.md`, per autonomy §5's
+  per-branch shard rule — not appended here. This line is the pointer.
 
 - [ ] P2 — **nothing re-reads the two repo settings the adoption depends on.**
   Raised independently by silent-failure-hunter and adversarial-reviewer.
