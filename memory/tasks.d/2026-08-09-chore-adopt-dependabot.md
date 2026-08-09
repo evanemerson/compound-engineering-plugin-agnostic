@@ -65,16 +65,26 @@ Below is what could not land in a config-adoption PR.
   `UNVERIFIED` with a warning, never a pass. `.github/dependabot.yml`'s header
   now names this gap and points here.
 
-- [ ] P2 — **`.github/dependabot.yml` has no validation, and a broken config is
-  indistinguishable from a quiet one.** A malformed key, a wrong
-  `package-ecosystem`, or a `directory` matching nothing surfaces only on the
-  repo's Insights → Dependabot page. Nothing in CI parses it. The repo's
-  dominant self-documented defect class, applied to the file that just became
-  load-bearing. The established local convention is policy-file-plus-observer
-  (`check-model-pins.sh` + its controls suite). Minimally a YAML-parse plus
-  required-key check gated on changes to the file. Note the honest counter-
-  argument before building: this is a fifth home-grown detector, and the
-  adoption's own reasoning was that those lose to configuration.
+- [x] ~~P2 — `.github/dependabot.yml` has no validation, and a broken config is
+  indistinguishable from a quiet one. Nothing in CI parses it.~~ **REFUTED
+  2026-08-09 by this branch's own CI run, minutes after filing.** Pushing the
+  review-fix commit produced a fourth PR check: `.github/dependabot.yml`, app
+  **Dependabot**, output title **"Dependabot config file validation"** (verified
+  via `gh api repos/{owner}/{repo}/commits/81d633d/check-runs`). The platform
+  validates the config and reddens the PR that breaks it — the exact guard the
+  finding proposed building. **Do not build it.**
+
+  Narrow sliver that genuinely remains, recorded rather than built: schema
+  validation is not coverage validation, so a config that parses but matches
+  nothing (a `directory` pointing at an empty path) can still pass. Not worth a
+  detector; the observable consequence is zero bot PRs, which the next bump
+  makes obvious.
+
+  Worth keeping for the pattern: this was filed because the repo's dominant
+  defect class plausibly applied, and nobody checked whether the platform
+  already covered it. Same shape as the token prediction corrected in the same
+  review — a confident inference where a cheap observation was available. Two in
+  one run is a signal about the run, not about the two items.
 
 - [ ] P3 — **grouping trades isolated review for atomic bumps, and the trade is
   invisible until a second action exists.** `patterns: ["*"]` is a no-op today —
