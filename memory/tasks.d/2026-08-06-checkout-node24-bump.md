@@ -42,8 +42,15 @@
   "against the runtime, or against the newest major". Both were still
   reconstruction. The answer was to stop deriving and start observing.
 
-- [ ] **P3 — the renovate/dependabot question is still open, and this PR is the
-  second data point for it, not a resolution.** Deferred in
+- [x] ~~**P3 — the renovate/dependabot question is still open, and this PR is the
+  second data point for it, not a resolution.**~~ **SETTLED 2026-08-09 —
+  ADOPTED**, in PR `chore/adopt-dependabot`. Reasoning is recorded once in
+  `memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md`; do not restate it
+  here. The one thing this bullet got right and is worth carrying: its stated
+  constraint — *compare against the runtime, or the newest major, not the pinned
+  line's own tag* — is what disqualified the WARN-only substitute and is
+  satisfied by Dependabot comparing against the newest release. Originally:
+  Deferred in
   `memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md` on the reasoning
   that `main` is unprotected, so an unattended bot opening PRs against it is
   too large a decision for a pinning PR. That reasoning is unchanged and the
@@ -64,3 +71,9 @@
   inside a copy-pasteable command ages into a wrong instruction — has no guard,
   and this repo has three such examples. Cheap partial remedy if it recurs:
   make the examples use a placeholder that cannot be pasted successfully.
+
+  **Still open, and worse in consequence as of 2026-08-09** now that bumping is
+  automated. What Dependabot does and does not touch, and why the manual recipe
+  stays load-bearing, is stated once in `.github/workflows/model-pins.yml`'s
+  header — read it there. Unchanged in kind, so this stays open here rather than
+  being folded into the adoption.

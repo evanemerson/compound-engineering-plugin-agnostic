@@ -98,11 +98,92 @@ this repo.
   PR whose plan cites that very defect as the thing it avoids by construction.
   The needle is now assembled at run time.
 
-- [ ] P1 — **reopen the renovate/dependabot decision, or record it as declined
+- [x] ~~P1 — **reopen the renovate/dependabot decision, or record it as declined
   again with the new cost evidence.** Twice deferred; the standing reason
   (`main` is unprotected, so an unattended bot opening PRs against it is a
   larger decision than a tooling PR should make) is unchanged, but this incident
-  is the second data point against it and the deferral now has a measured price.
+  is the second data point against it and the deferral now has a measured price.~~
+  **SETTLED 2026-08-09 in PR `chore/adopt-dependabot` — ADOPTED.** This is the
+  canonical record; the three sibling references cite it rather than restate it.
+
+  **The standing reason died twice over.** `caaef86` made `main` being
+  unprotected *permanent* rather than provisional — a deferral whose blocking
+  premise can never resolve is a decline that was never written down. And the
+  premise overstated the mechanism: Dependabot opens pull requests, it cannot
+  merge them and it never pushes to `main`. The surface is "a PR appears and a
+  human merges it", which is every PR in this repo already.
+
+  **The cost evidence that reopened it was mostly discharged, and that is
+  recorded rather than glossed.** The PR #40 incident — `actions/checkout` at a
+  `node20` major for months — would now be caught by `runtime-deprecation`
+  (#42/#43) without any bot. The adoption does **not** rest on it. What remains
+  uncovered, and is the actual justification: **security advisories**, which
+  neither the runtime observer nor the floated WARN-only check can see, plus
+  sub-major staleness. The 08-06 shard's constraint on any solution — compare
+  against the runtime or the newest major, never the pinned line's own tag — is
+  satisfied, because Dependabot compares against the newest release.
+
+  **The WARN-only substitute was weighed and lost on this repo's own record.**
+  `CLAUDE.md` plus four shard entries document four instances of a detector
+  falling to the class it detects — most recently *inside* the PR whose plan
+  cited that defect as the thing it avoided by construction. A fifth home-grown
+  detector plus controls suite plus mutant registrations, to replace a
+  configuration file, is the trade this repo keeps losing.
+
+  **What shipped, both halves together.** `.github/dependabot.yml` configures
+  **version updates only**. Dependabot *security* updates — the whole remaining
+  justification — are a repo-settings feature that a config file cannot turn on.
+  Measured before the change: `dependabot_security_updates: disabled`,
+  `GET /vulnerability-alerts` → 404, `automated-security-fixes` →
+  `{"enabled": false}`. Shipping the YAML alone would have claimed coverage the
+  change did not have. Both settings were enabled and then **verified by
+  re-reading the API** (404→204, false→true, disabled→enabled) rather than by
+  trusting the write's status code.
+
+- [x] ~~P3 — confirm the Dependabot-PR token prediction on the first real bot
+  PR: `runtime-deprecation` requests `issues: write`, a scope GitHub denies to
+  Dependabot runs, so expect degraded-but-green with non-zero skip counters.~~
+  **WRONG, and corrected 2026-08-09 by a static read before it was ever
+  observed** — PR #44's review. The mechanism does not exist: the job's only
+  write (`gh issue comment` / `gh issue create`) sits behind
+  `if [ "$GITHUB_EVENT_NAME" != "push" ]; then … exit 0` at `model-pins.yml:426`,
+  so on ANY `pull_request` event the write path is structurally unreachable and
+  `issues: write` is never exercised. There is nothing for the read-only
+  downgrade to deny; the surrounding calls are all GETs, which survive it.
+  Expect a **fully green run with normal counters**, not a degraded one.
+
+  Three reviewers reached this independently (silent-failure-hunter,
+  security-sentinel, adversarial-reviewer) and the orchestrator verified it
+  against the file. Recorded rather than quietly deleted, because the error is
+  the instructive part: the item was filed as an honest "prediction, not an
+  observation" and that framing is what made it feel safe to ship — but a
+  question a five-line static read can settle should never have been deferred to
+  a future observation at all. Labelling an unverified claim does not discharge
+  the duty to verify it when verification is cheap.
+
+- [ ] P2 — **the escalation clock never resets, so a future runtime cycle
+  reddens the very PR that fixes it** (PR #44 adversarial review; trace
+  verified). Nothing in the repo ever closes the tracking issue —
+  `grep -rn 'issue close' .github/ scripts/` returns zero. The clean path at
+  `model-pins.yml:386-393` prints "no runtime deprecation warnings" and exits 0
+  without ever checking whether an issue is open. So at the next cycle, line 401
+  finds the stale issue from the PREVIOUS cycle and reads its `created_at`;
+  `age` is hundreds of days; `exit 1` fires at line 418 on the FIRST detection,
+  skipping the entire 21-day warning window that lines 258-264 call
+  load-bearing. Worse, the escalation `exit 1` sits ABOVE the event guard, and
+  the job reads runs at `branch=$tip` — never the PR head — so the Dependabot
+  bump PR that fixes the condition is itself red for the condition it fixes, on
+  a permanently unprotected `main` under a "treat red as blocking" rule. Merging
+  over red once is the training event. Two fixes, both small: close the issue on
+  the clean path (guarded to `push` for the same token reason), and decide
+  explicitly whether escalation should redden PRs or only pushes. Also fold the
+  two identical `issues?state=open` queries at lines 401 and 403 into one — they
+  can disagree if the issue closes between them.
+
+  Undocumented escape hatch found in the same trace, worth writing down: because
+  line 401 queries `state=open` only, manually closing the issue while the
+  condition stands makes line 444 file a FRESH one with a fresh clock. Closing
+  it every 20 days defeats escalation indefinitely.
 
 - [x] ~~P2 — **`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`** is a runner opt-in that
   forces the newer runtime today. Worth setting as a forward-compatibility probe
@@ -231,4 +312,7 @@ Consequences, accepted knowingly:
   on, which is what CLAUDE.md already says ("treat it as blocking anyway").
 - The renovate/dependabot item above keeps `main` being unprotected as its
   standing reason. That reason is now permanent rather than provisional, so
-  settle that question on its own merits.
+  settle that question on its own merits. — **Done 2026-08-09: adopted.** Making
+  the reason permanent is precisely what settled it, in the opposite direction
+  from what a reader might assume: an objection that can never resolve cannot
+  keep deferring the thing it blocks. See the closed P1 above.

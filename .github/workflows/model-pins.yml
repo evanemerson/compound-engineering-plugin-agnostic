@@ -41,12 +41,18 @@ name: model-pins
 # Downgrading to a v4.x SHA is therefore not a neutral rollback; after
 # 2026-09-16 it is a job with no interpreter.
 #
-# There is deliberately no dependabot/renovate config: `main` is unprotected
-# here, so an unattended bot opening PRs against it is a larger decision than
-# this file should make on its own. That leaves bumping manual and therefore
-# easy to forget — a pinned-but-stale action is the accepted trade against a
-# mutable-tag supply chain, and the follow-on is tracked in
-# memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md.
+# Dependabot keeps these pins current — `.github/dependabot.yml`, weekly,
+# grouped so every workflow's SHA moves together. Adopted 2026-08-09 after three
+# deferrals; the reasoning and the objection that died are in
+# memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md. Read them there.
+#
+# It does NOT make the recipe above dead letter, and that matters more now that
+# it is the path nobody walks. Dependabot rewrites the `uses:` SHA and its
+# `# vX.Y.Z` comment, and nothing else — it ranks candidates by version, not by
+# the `runs.using` runtime the eligibility rule below turns on. Moving forward is
+# the safe direction and is what fixes the staleness this repo already paid for
+# once, but that rule is still what decides whether a proposed bump is mergeable:
+# read the candidate's own runtime rather than trusting a bot's PR title.
 
 # Deliberately NOT path-filtered. A filter buys nothing here (the check
 # takes seconds) and costs correctness twice: a PR that moves agent

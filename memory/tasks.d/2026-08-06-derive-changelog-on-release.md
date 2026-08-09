@@ -14,7 +14,18 @@
   Interacts with the standing "turn on branch protection for main" item — do
   these two together or the first release after protection breaks the changelog.
 
-- [ ] **P3 — a second pinned action now depends on manual SHA bumping.**
+- [x] ~~**P3 — a second pinned action now depends on manual SHA bumping.**~~
+  **CLOSED 2026-08-09 — no pinned action IN `.github/workflows/` depends on
+  manual bumping any more.** `.github/dependabot.yml` covers all three sites in
+  one grouped PR per cycle. **Scope stated deliberately:** PR #44's adversarial
+  review found `plugins/cepa/templates/ci/{astro,django}.yml` pinning mutable
+  tags that Dependabot structurally cannot reach — see the open P1 in
+  `memory/tasks.d/2026-08-09-chore-adopt-dependabot.md`. Action currency is
+  solved for the three sites this repo RUNS and unsolved for the two it SHIPS;
+  a reader arriving here must not read this closure as the general claim.
+  This bullet's job was to keep the count right when the question was revisited;
+  the count at revisit was three, and it was right. Reasoning:
+  `memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md`. Originally:
   `changelog.yml` pins `actions/checkout@11d5960a...  # v4.4.0`, the same SHA as
   both sibling workflows. Correct as pinned, but it widens the premise of the
   deferred renovate/dependabot question in
