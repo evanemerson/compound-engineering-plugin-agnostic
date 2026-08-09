@@ -101,6 +101,7 @@ Each finding under `## Findings` uses this structure:
 | `lines` | no | `N` or `N-M` | Line number or range |
 | `title` | yes | short text | One-line summary |
 | `resolved` | no | date + branch/PR | Only on `deferred → completed`: when and where the deferred item was fixed |
+| `counter_convention` | no | `legacy-total-shrink`, `persona-merged` | File-level: its counters follow a superseded convention and cannot be verified against its body. A checker skips on THIS field, never on a filename |
 
 When agents merge duplicate findings (same location, same reason), the merged
 finding's `action_class` becomes `corroborated` and its `confidence` is the
@@ -233,12 +234,24 @@ pattern anchored to one returns **zero rows on the other, silently**. A zero
 count is not a clean file; it is a pattern that did not fire. Compare the row
 count against the `### N` headings before reading any tally as a result.
 
-**Two shapes are NOT tallyable**, and both must be reported as such rather than
+**Three shapes are NOT tallyable**, and all must be reported as such rather than
 counted as disagreement:
 
 - a **severity suffix** naming a range or batch — `severity: P2/P3 (batch)`;
 - a **heading range** — `### 21-25`, one `severity:`/`status:` pair covering
-  several enumerated findings.
+  several enumerated findings;
+- **persona-merged entries** (pre-2026-07-18 plan reviews) — `total` counts raw
+  per-agent findings while the body carries deduplicated groups, sometimes with
+  a `(Merges Fx+Fy)` citation and sometimes not. Where the citations are
+  present the counts reconcile; where they are absent the file cannot be
+  verified from its body at all.
+
+A file whose counters follow a superseded convention carries
+`counter_convention:` in its frontmatter naming it — `legacy-total-shrink`,
+`persona-merged`. **A checker skips on that field, never on a filename.** A
+grandfather clause that lives only in prose beside the file is unreadable to
+every consumer, which is the defect this spec exists to prevent; it must be a
+field or it is not an exemption.
 
 Miscounting these is not hypothetical. A scan of this repo reported twelve bad
 files when six were bad, by treating batch suffixes as drift; a later pass then
