@@ -266,7 +266,10 @@ Repeat up to **3 rounds**:
    self-review over the diff since the checkpoint, rerun affected tests,
    then commit `fix(review): apply round-N findings` — staging only the
    files the batch touched, never a blanket `git add -A`.
-4. Only after tests pass, mark surviving findings `status: applied`. A fix
+4. Only after tests pass, mark surviving findings `status: applied` — and
+   update the frontmatter `summary` counters in the same edit, per
+   `cepa:file-todos`. A status change that leaves the counters stale makes the
+   block disagree with its own body, which is what every consumer reads. A fix
    whose tests fail is reverted and filed as `deferred` + all §5 sinks with
    an "attempted, reverted (reason)" note (autonomy §4) — never left
    recorded as applied. File everything else as `status: deferred` per

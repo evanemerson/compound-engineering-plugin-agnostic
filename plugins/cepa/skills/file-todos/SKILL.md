@@ -101,6 +101,7 @@ Each finding under `## Findings` uses this structure:
 | `lines` | no | `N` or `N-M` | Line number or range |
 | `title` | yes | short text | One-line summary |
 | `resolved` | no | date + branch/PR | Only on `deferred → completed`: when and where the deferred item was fixed |
+| `counter_convention` | no | `legacy-total-shrink`, `persona-merged` | File-level: its counters follow a superseded convention and cannot be verified against its body. A checker skips on THIS field, never on a filename |
 
 When agents merge duplicate findings (same location, same reason), the merged
 finding's `action_class` becomes `corroborated` and its `confidence` is the
@@ -129,6 +130,22 @@ ready    →  completed (fixed and verified)
 deferred →  completed (fixed later in a dedicated pass, outside triage —
                        add a `resolved:` line naming the date and branch)
 ```
+
+`completed` also covers a finding resolved because **the artifact it reviewed
+was superseded** — a plan-review finding against a plan that was blocked and
+replaced, where nobody fixed the defect and nobody rejected the finding: its
+subject ceased to exist. The `resolved:` line must say which happened, because
+the status alone cannot: distinguish *adopted into the replacement* from *moot
+by supersession* from *surface deleted*. Getting this wrong in the closing
+direction is expensive — one such file held six P1s that every subsequent
+review re-surfaced for two days after their subject was gone.
+
+A `superseded` enum value was considered and **rejected**: every consumer
+(`/cepa:triage`, `/cepa:sweep`, `/cepa:lfg`) only needs to know whether a
+finding is terminal, both states are terminal, and a new value would make every
+existing parser wrong to gain a distinction only metrics want. Recorded so it is
+not re-proposed. The cost is real and accepted: a count over `completed`
+overstates work actually performed.
 
 `skipped` removal applies to human-driven triage only (a batch-table reply
 or the one-at-a-time flow). Autonomous runs never delete findings:
@@ -162,6 +179,85 @@ omitted counter reads as zero (a freshly written file carries only
 to land. A transition with no counter forces the writer to choose between an
 unbalanced block and an invented field, and different runs choose
 differently.
+
+**The sum is not enough, and checking only the sum is the documented
+failure.** Every wrong distribution with the same total satisfies it: a file
+declaring `p2: 6, p3: 2` over a body of seven P2s and one P3 balances
+perfectly. That shipped, was reported as "counters verified", and was caught
+only by a later review — twice. So the counters must also **agree with the
+body**:
+
+> Each state counter equals the number of findings in the body carrying that
+> `status:` value, **plus** any findings removed from the file by human-driven
+> triage. `p1`/`p2`/`p3` equal their body counts exactly on any file that has
+> had no removals.
+
+**One encoding for a removal, mandated — both were in use and the invariant
+could not tell them apart.** `total` is fixed when the file is written and is
+**never shrunk**. A human-triage removal increments `skipped` by exactly one and
+leaves `total` alone. The rejected alternative — shrink `total`, leave
+`skipped: 0` — erases the removal from every parsed field, leaving it only in
+`triage:` prose, which is the closure-claim class this repo already documents.
+
+That makes the gap an **equality**, not a bound:
+
+> `total − (findings present in the body)` **equals** the number of human-triage
+> removals, and that number is what `skipped` holds — minus any retained skips,
+> which are still in the body and already tallied there.
+
+An inequality (`gap ≤ skipped`) would be satisfied by `gap = 0, skipped = 0`,
+which is precisely the encoding being rejected: a file can shrink `total` to
+absorb any number of removals and still pass. That is a check that cannot fail
+on the state it exists to catch.
+
+The two kinds of skip behave differently and a checker must not assume one —
+human-triage skips are **removed** from the body, while the `/cepa:resolve-pr`
+verdict skips are **retained** in it. A file with only retained skips has no gap.
+
+**Stated limit:** `skipped` is a single scalar with no severity breakdown, so
+once a file has had a removal, `p1`/`p2`/`p3` cannot be re-derived from the body
+alone — the removed finding's severity is unrecoverable. The severity counters
+are therefore verifiable only on files with no removals. This is a real hole,
+recorded rather than papered over; closing it would need a per-severity removal
+field, which no consumer has asked for.
+
+Verify against the body, never against the block's own arithmetic:
+
+```bash
+grep -oE '^-?[[:space:]]*severity: P[123]'  todos/review-<stamp>.md | sort | uniq -c
+grep -oE '^-?[[:space:]]*status: [a-z]+'    todos/review-<stamp>.md | sort | uniq -c
+```
+
+**The leading `-` is optional and the pattern must tolerate both.** Two field
+formats are live in this repo — `- severity: P1` and bare `severity: P1` — and a
+pattern anchored to one returns **zero rows on the other, silently**. A zero
+count is not a clean file; it is a pattern that did not fire. Compare the row
+count against the `### N` headings before reading any tally as a result.
+
+**Three shapes are NOT tallyable**, and all must be reported as such rather than
+counted as disagreement:
+
+- a **severity suffix** naming a range or batch — `severity: P2/P3 (batch)`;
+- a **heading range** — `### 21-25`, one `severity:`/`status:` pair covering
+  several enumerated findings;
+- **persona-merged entries** (pre-2026-07-18 plan reviews) — `total` counts raw
+  per-agent findings while the body carries deduplicated groups, sometimes with
+  a `(Merges Fx+Fy)` citation and sometimes not. Where the citations are
+  present the counts reconcile; where they are absent the file cannot be
+  verified from its body at all.
+
+A file whose counters follow a superseded convention carries
+`counter_convention:` in its frontmatter naming it — `legacy-total-shrink`,
+`persona-merged`. **A checker skips on that field, never on a filename.** A
+grandfather clause that lives only in prose beside the file is unreadable to
+every consumer, which is the defect this spec exists to prevent; it must be a
+field or it is not an exemption.
+
+Miscounting these is not hypothetical. A scan of this repo reported twelve bad
+files when six were bad, by treating batch suffixes as drift; a later pass then
+shrank a *correct* file's `total` from 30 to 26 and declared four findings
+unrecoverable, because a heading-range block was invisible to a per-line tally.
+They were never lost. Expand the block, then count.
 
 ## Run Metadata (optional frontmatter fields)
 
@@ -331,6 +427,11 @@ To find all pending P1 findings across all review files:
   /cepa:resolve-pr verdict skips (replied/not-addressing/declined), which
   stay `skipped` and RETAINED with their evidence, and are never filed to
   the residual sinks (they are answered, not deferred)
-- The frontmatter `summary` is the source of truth for counts
+- The frontmatter `summary` is what consumers **read** — it is a derived cache,
+  not the source of truth. The findings in the body are. When the two disagree
+  the block is wrong, and it is the block that gets corrected. (This line
+  previously read "the source of truth for counts", which is what licensed the
+  drift: a cache declared authoritative is a cache nobody re-derives. Six files
+  had drifted before anyone compared them to their own bodies.)
 - Keep finding titles under 80 characters
 - Code snippets in Problem/Fix sections use fenced code blocks with language tags
