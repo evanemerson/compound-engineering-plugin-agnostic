@@ -140,17 +140,50 @@ this repo.
   re-reading the API** (404→204, false→true, disabled→enabled) rather than by
   trusting the write's status code.
 
-- [ ] P3 — **confirm the Dependabot-PR token prediction on the first real bot
-  PR.** All three `model-pins.yml` jobs run on `pull_request` with no actor
-  guard, and `runtime-deprecation` requests `issues: write` — a scope GitHub
-  denies to Dependabot-triggered runs, which get a read-only `GITHUB_TOKEN` and
-  no secrets. Predicted behaviour, from the job's documented contract that
-  *every failure path exits 0 AFTER emitting a warning*: degraded-but-green with
-  non-zero skip counters, not a red check and not a false clean. **This is a
-  prediction from reading the job, not an observation.** Deliberately not
-  pre-guarded — adding an actor `if:` to a detector shipped two days earlier to
-  satisfy an unobserved prediction is the over-correction shape #43 already was.
-  Check the first Dependabot PR's checks tab and record what actually happened.
+- [x] ~~P3 — confirm the Dependabot-PR token prediction on the first real bot
+  PR: `runtime-deprecation` requests `issues: write`, a scope GitHub denies to
+  Dependabot runs, so expect degraded-but-green with non-zero skip counters.~~
+  **WRONG, and corrected 2026-08-09 by a static read before it was ever
+  observed** — PR #44's review. The mechanism does not exist: the job's only
+  write (`gh issue comment` / `gh issue create`) sits behind
+  `if [ "$GITHUB_EVENT_NAME" != "push" ]; then … exit 0` at `model-pins.yml:426`,
+  so on ANY `pull_request` event the write path is structurally unreachable and
+  `issues: write` is never exercised. There is nothing for the read-only
+  downgrade to deny; the surrounding calls are all GETs, which survive it.
+  Expect a **fully green run with normal counters**, not a degraded one.
+
+  Three reviewers reached this independently (silent-failure-hunter,
+  security-sentinel, adversarial-reviewer) and the orchestrator verified it
+  against the file. Recorded rather than quietly deleted, because the error is
+  the instructive part: the item was filed as an honest "prediction, not an
+  observation" and that framing is what made it feel safe to ship — but a
+  question a five-line static read can settle should never have been deferred to
+  a future observation at all. Labelling an unverified claim does not discharge
+  the duty to verify it when verification is cheap.
+
+- [ ] P2 — **the escalation clock never resets, so a future runtime cycle
+  reddens the very PR that fixes it** (PR #44 adversarial review; trace
+  verified). Nothing in the repo ever closes the tracking issue —
+  `grep -rn 'issue close' .github/ scripts/` returns zero. The clean path at
+  `model-pins.yml:386-393` prints "no runtime deprecation warnings" and exits 0
+  without ever checking whether an issue is open. So at the next cycle, line 401
+  finds the stale issue from the PREVIOUS cycle and reads its `created_at`;
+  `age` is hundreds of days; `exit 1` fires at line 418 on the FIRST detection,
+  skipping the entire 21-day warning window that lines 258-264 call
+  load-bearing. Worse, the escalation `exit 1` sits ABOVE the event guard, and
+  the job reads runs at `branch=$tip` — never the PR head — so the Dependabot
+  bump PR that fixes the condition is itself red for the condition it fixes, on
+  a permanently unprotected `main` under a "treat red as blocking" rule. Merging
+  over red once is the training event. Two fixes, both small: close the issue on
+  the clean path (guarded to `push` for the same token reason), and decide
+  explicitly whether escalation should redden PRs or only pushes. Also fold the
+  two identical `issues?state=open` queries at lines 401 and 403 into one — they
+  can disagree if the issue closes between them.
+
+  Undocumented escape hatch found in the same trace, worth writing down: because
+  line 401 queries `state=open` only, manually closing the issue while the
+  condition stands makes line 444 file a FRESH one with a fresh clock. Closing
+  it every 20 days defeats escalation indefinitely.
 
 - [x] ~~P2 — **`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`** is a runner opt-in that
   forces the newer runtime today. Worth setting as a forward-compatibility probe

@@ -72,10 +72,8 @@
   and this repo has three such examples. Cheap partial remedy if it recurs:
   make the examples use a placeholder that cannot be pasted successfully.
 
-  **Still open, and worse in consequence as of 2026-08-09.** Dependabot rewrites
-  the `uses:` SHA and its `# vX.Y.Z` comment and nothing else, so it never
-  touches these three prose recipes — and now that bumping is automated, the
-  manual recipe is the path nobody walks, which is exactly where rot goes
-  unnoticed. Unchanged in kind, so it stays here rather than being folded into
-  the adoption. `model-pins.yml`'s header now states that the recipe is still
-  load-bearing for judging whether a proposed bump is mergeable.
+  **Still open, and worse in consequence as of 2026-08-09** now that bumping is
+  automated. What Dependabot does and does not touch, and why the manual recipe
+  stays load-bearing, is stated once in `.github/workflows/model-pins.yml`'s
+  header — read it there. Unchanged in kind, so this stays open here rather than
+  being folded into the adoption.

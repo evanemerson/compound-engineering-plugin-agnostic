@@ -1,19 +1,20 @@
 # Keeps the SHA-pinned actions in .github/workflows/ current.
 #
-# Adopted 2026-08-09 after three deferrals. The standing objection — `main` is
-# unprotected, so an unattended bot is too large a call for a tooling PR — died
-# twice over: `caaef86` made "unprotected" permanent rather than provisional, so
-# the premise could never resolve; and Dependabot opens pull requests, it cannot
-# merge them and never pushes to `main`. The full reasoning, including what the
-# `runtime-deprecation` observer already discharged, is in
-# memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md. Not restated here.
+# Adopted 2026-08-09 after three deferrals; the standing objection and why it
+# died are in memory/tasks.d/2026-08-06-feat-runner-runtime-detector.md.
 #
 # THIS FILE CONFIGURES VERSION UPDATES ONLY. Dependabot *security* updates — the
 # CVE coverage that is the remaining justification for adopting a bot at all —
-# are a repo-settings feature and cannot be enabled from here. Both were turned
-# on in the same change (`vulnerability-alerts` and `automated-security-fixes`,
-# verified by re-reading the API, not by trusting the write). If this file ever
-# exists while those are off, the coverage is roughly half of what it reads as.
+# are a repo-settings feature that cannot be enabled from here. They were turned
+# on out of tree (`vulnerability-alerts`, `automated-security-fixes`) when this
+# file landed.
+#
+# NOTHING RE-READS THEM, and this comment is not a check. One click in Settings,
+# a fork (alerts default OFF on forks), or a repo transfer turns them off while
+# the weekly version-update PRs keep arriving on schedule — the observable
+# signal does not change, so the tree reads as full coverage while delivering
+# half of it. A drift detector is the open P2 in
+# memory/tasks.d/2026-08-09-chore-adopt-dependabot.md.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -31,6 +32,18 @@ updates:
       # Encodes the rule mutation-sweep.yml already states: "Every workflow in
       # this directory carries the same SHA on purpose — bump them together or
       # none." One grouped PR per cycle, never a partial sweep across files.
+      #
+      # TWO entries, and `applies-to` is spelled out on both rather than left to
+      # default. Security updates are a SEPARATE Dependabot subsystem, and a
+      # group with no `applies-to` covers version updates only — so a single
+      # entry would leave exactly the CVE half of this adoption ungrouped and
+      # free to bump a subset of the sites, breaking the invariant above in the
+      # one case the invariant most matters.
       actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      actions-security:
+        applies-to: security-updates
         patterns:
           - "*"
