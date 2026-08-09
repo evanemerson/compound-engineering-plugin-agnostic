@@ -11,8 +11,15 @@ Below is what could not land in a config-adoption PR.
 
 ### Open
 
-- [ ] P1 — **the CI templates this repo SHIPS pin a runtime that dies on
-  2026-09-16, and no detector here can see them.** Found by the adversarial
+- [x] ~~P1 — **the CI templates this repo SHIPS pin a runtime that dies on
+  2026-09-16, and no detector here can see them.**~~ **CLOSED 2026-08-09 —
+  PR #45 (1.20.0).** Both (a) and (b) below are done; what remains is tracked
+  as separate items in `memory/tasks.d/2026-08-09-fix-ci-template-runtime.md`,
+  which is where this branch's residuals live. Scope of the closure, stated
+  because PR #45's review found it was narrower than it read: this closes the
+  TEMPLATE population. Copies already installed in users' repos are a distinct
+  problem, filed in that shard.
+  Originally: Found by the adversarial
   reviewer, outside the diff, and verified directly:
   `plugins/cepa/templates/ci/django.yml:77,105` and
   `plugins/cepa/templates/ci/astro.yml:21` carry `actions/checkout@v4` — the
@@ -40,6 +47,32 @@ Below is what could not land in a config-adoption PR.
   adapts — so this is a tag bump, not a conversion to pinning); **(b) decide who
   owns template action currency and write it down**, since no automation can.
   Scope note already added to `2026-08-06-derive-changelog-on-release.md`.
+
+  **(a) DONE 2026-08-09 — PR `fix/ci-template-runtime` (1.20.0).** The finding
+  understated it: **all six pins were node20**, not just `checkout`. Verified by
+  reading each action's own `action.yml` upstream rather than trusting version
+  numbers — `checkout@v4` node20, `setup-node@v4` node20, `setup-python@v5`
+  node20; all three at `v7` are node24. Bumped all six to `v7`. Kept as mutable
+  major tags, deliberately: a template is adapted, not consumed, and an adopting
+  repo owns its own hardening.
+
+  **(b) DECIDED: the adopting repo owns currency after install; this repo owns
+  it only until then, and the mechanism is a written constraint rather than a
+  detector.** Both templates now carry a header stating that action majors are
+  chosen by RUNTIME rather than recency, with the `runs.using` lookup recipe.
+  The recipe uses `<OWNER>/<ACTION>/<TAG>` placeholders that cannot be pasted
+  successfully — which is the remedy the illustrative-version-rot P3 in
+  `2026-08-06-checkout-node24-bump.md` proposed, applied at the first new site
+  rather than retrofitted. Duplicated across both templates knowingly: they ship
+  into different repos independently, so a user installing one never receives
+  the other, and colocation is necessary rather than restatement.
+
+  **Still open below** — the templates remain unwatched between now and the next
+  runtime cycle.
+
+- Residuals discovered on branch `fix/ci-template-runtime` live in
+  `memory/tasks.d/2026-08-09-fix-ci-template-runtime.md`, per autonomy §5's
+  per-branch shard rule — not appended here. This line is the pointer.
 
 - [ ] P2 — **nothing re-reads the two repo settings the adoption depends on.**
   Raised independently by silent-failure-hunter and adversarial-reviewer.

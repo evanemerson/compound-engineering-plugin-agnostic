@@ -117,6 +117,59 @@ else
   miss "no .github/workflows — no CI gate"
 fi
 
+# --- installed-template action drift ---------------------------------------
+# A CI template is COPIED into the project; nothing reaches back into the copy
+# when the template later changes. So a repo that installed one before a bump
+# keeps the old pins forever while every other check here still calls its CI a
+# real gate — which is how a whole population of installed workflows can be
+# sitting on a runtime that is about to be removed, with cepa reporting health.
+#
+# This compares the project's pins against the templates this plugin CURRENTLY
+# ships. Deliberately a drift check and NOT a table of runtimes and removal
+# dates: that table is the design a prior review already rejected here, it goes
+# stale by construction, and it would need the network. This is self-updating —
+# every future template bump makes every stale install report drift.
+tpl_dir=$(cd "$(dirname "$0")/../templates/ci" 2>/dev/null && pwd) || tpl_dir=""
+if [ -n "$wf_files" ]; then
+  if [ -z "$tpl_dir" ] || [ ! -d "$tpl_dir" ]; then
+    # Never silent: "could not look" must not read like "found nothing".
+    info "action drift: templates dir not reachable from $0 — NOT CHECKED"
+  else
+    tpl_pins=$(grep -rhoE 'uses: +[A-Za-z0-9._/-]+@[A-Za-z0-9._-]+' "$tpl_dir" 2>/dev/null \
+               | sed 's/uses: *//' | sort -u)
+    if [ -z "$tpl_pins" ]; then
+      info "action drift: no pins found under $tpl_dir — NOT CHECKED"
+    else
+      drift=""
+      while IFS= read -r pin; do
+        [ -n "$pin" ] || continue
+        act=${pin%@*}
+        # A full 40-hex pin is NOT drift — it is the hardening the templates
+        # themselves recommend, and flagging it would punish the one action
+        # this advice asks for. Only a differing TAG is drift.
+        #
+        # STATED LIMIT: this exemption is a real blind spot, not a free win. A
+        # SHA pinned to a node20 commit is invisible here, and resolving a SHA
+        # to its runtime needs the network, which this read-only local script
+        # does not do. Hardened repos trade this check for their own bump
+        # policy — which is exactly what the templates tell them to add.
+        proj_tags=$(echo "$wf_files" | xargs grep -hoE "uses: +${act}@[A-Za-z0-9._-]+" 2>/dev/null \
+                    | sed 's/uses: *//' | sort -u \
+                    | grep -vxF "$pin" \
+                    | grep -vE "@[0-9a-f]{40}$") || true
+        [ -n "$proj_tags" ] && drift="${drift}$(echo "$proj_tags" | tr '\n' ' ')(template ships ${pin##*@}) "
+      done <<EOF
+$tpl_pins
+EOF
+      if [ -n "$drift" ]; then
+        miss "action pins differ from the cepa templates this plugin ships — an installed copy never tracks template updates: ${drift}"
+      else
+        ok "action pins match the cepa templates ($(echo "$tpl_pins" | wc -l | tr -d ' ') checked)"
+      fi
+    fi
+  fi
+fi
+
 # --- plugin version drift --------------------------------------------------
 IP="$HOME/.claude/plugins/installed_plugins.json"
 if ! command -v python3 >/dev/null 2>&1; then

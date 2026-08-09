@@ -97,6 +97,15 @@ Beyond the script's facts, check:
    inside a deploy job, a comment, or an echo is not a gate; a build that
    runs only on push-to-main is not a PR gate. Classify: none / deploy-only
    / real gate — and say which file earned the classification.
+   **A real gate can still be a dying gate.** When the script reports
+   `action pins differ from the cepa templates`, the project installed a
+   template before a later bump — its copy never tracks template updates, and
+   an action major whose JS runtime GitHub has retired is a step with no
+   interpreter. Report that as its own condition beside the classification
+   ("real gate, but N step(s) drifted from the shipped template"), name the
+   pins, and give the user the edit — fix mode never overwrites an existing
+   `ci.yml`, so nothing else will do it for them. `NOT CHECKED` is not a pass:
+   report it as unverified.
 6. **Grounding provider** — when the script's grounding facts show
    `grounding:` configured (see the `cepa:grounding` skill), interpret:
    configured-but-unavailable (binary or graph missing) means every review
@@ -185,6 +194,13 @@ Apply, in order — all idempotent, none destructive:
    project's test config (pytest.ini, package.json, Makefile) to fill these
    — an unadapted template that fails on first run teaches the user to
    ignore CI.
+   **Surface the action-pinning choice in the final report** — it is not a
+   TODO line, so the adapt pass above will not raise it, and this step commits.
+   The templates ship mutable major tags deliberately (a template is adapted,
+   not consumed), which means the installing repo inherits that default
+   silently unless you say so. State it once: the tags are mutable, hardening
+   to full commit SHAs is the adopter's call, and the template header explains
+   the runtime constraint that governs which majors are eligible.
 4. **Commit** the repairs (`chore(cepa): scaffold + CI from /cepa:setup`),
    staging ONLY the exact paths this fix run created — everything fix mode
    makes is a new path, so a scoped `git add <created paths>` can never

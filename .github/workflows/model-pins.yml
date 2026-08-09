@@ -27,8 +27,12 @@ name: model-pins
 # never restore a bare tag.
 #
 # ELIGIBLE MAJORS ARE CONSTRAINED BY THE JS RUNTIME, not by recency, and this
-# is the one place that constraint is written down — the sibling workflows cite
-# it rather than restate it. GitHub removes Node 20 from the runner on
+# is the one place in THIS repo's tree that constraint is written down — the
+# sibling workflows cite it rather than restate it. The one sanctioned
+# exception is `plugins/cepa/templates/ci/*.yml`: those ship into a different
+# repo where this file does not exist, so they instantiate the constraint
+# rather than citing it. Their copies are audited for completeness, not
+# consolidated — a pointer to a file the reader does not have is not a rule. GitHub removes Node 20 from the runner on
 # 2026-09-16; `actions/checkout` declares its runtime in its own `action.yml`
 # `runs.using`, and v4.x is the last `node20` line (v5.0.0 was exactly that
 # change and nothing else). So a bump target must be v5 or later — read the

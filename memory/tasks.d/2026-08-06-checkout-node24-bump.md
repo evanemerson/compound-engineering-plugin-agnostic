@@ -72,6 +72,18 @@
   and this repo has three such examples. Cheap partial remedy if it recurs:
   make the examples use a placeholder that cannot be pasted successfully.
 
+  **Field-validated 2026-08-09 (PR #45), and the retrofit is now cheap.** The
+  placeholder form shipped at two new sites (`plugins/cepa/templates/ci/*.yml`)
+  and the guard was verified: pasting the line with literal brackets exits 1
+  with no output. PR #45 also did the runtime audit a retrofit would need.
+  `model-pins.yml`'s own two examples still carry real version numbers — that
+  retrofit is tracked in
+  `memory/tasks.d/2026-08-09-fix-ci-template-runtime.md`. Caveat learned the
+  hard way at those new sites: a placeholder stops a careless paste but does
+  nothing about a recipe that is simply WRONG for some inputs — the same
+  command returned exit-0 wrong answers for subdirectory and composite actions
+  until #45's review caught it.
+
   **Still open, and worse in consequence as of 2026-08-09** now that bumping is
   automated. What Dependabot does and does not touch, and why the manual recipe
   stays load-bearing, is stated once in `.github/workflows/model-pins.yml`'s
