@@ -109,6 +109,26 @@ The failure is structural rather than careless: the explaining sentence carries 
 
 *Avoid:* prose closure, soft close.
 
+### Permanent-premise deferral
+A decision re-raised as an open deferral across multiple review cycles, each
+citing the same repo property that cannot change, as if further evidence could
+resolve it — functionally a decline that was never recorded as one.
+
+No individual deferral is wrong; each is a correct judgment that its PR is the
+wrong carrier. The defect is that nothing forces the writer to say whether the
+stated blocker is a changing condition or a fixed property, so a reason naming a
+permanent fact is indistinguishable from one naming a pending event. The
+discriminator is free at write time: *what happens, without anyone doing
+anything, that makes this actionable?* No answer means decline, not defer.
+Settling such an objection is a fan-out edit — the settling commit is the only
+moment anyone knows which items cited it.
+
+Distinct from [narrative closure](#narrative-closure), which falsely marks an
+item *closed*; this is the mirror, falsely keeping work *open* while it is
+behaviourally already decided.
+
+*Avoid:* permanent blocker, forever-deferred item.
+
 ### Phantom residual
 A sink entry whose parsed status still reads open although the work it describes has shipped — the artifact a narrative closure leaves behind. Distinct from a residual, which is genuinely unfinished; a backlog counting both is measuring record decay alongside work, and cannot be read as evidence about either.
 
@@ -212,6 +232,23 @@ protected construct.
 
 *Avoid:* decorative assertion, vacuous control.
 
+### Invariant substitution
+A check that verifies a real but strictly weaker invariant than the one it is
+presented as confirming — a component sum standing in for the distribution
+across components — so it passes on many states that falsify the actual claim.
+
+The check runs, discriminates, and reports honestly; only the proposition it
+establishes is narrower than the one it is cited for. A passing result is
+evidence for its own invariant and for nothing else, so the gap is invisible in
+the output and visible only by writing the asserted proposition beside the
+claim. A spec that states the weaker invariant teaches the substitution.
+
+Distinct from [vacuous assertion](#vacuous-assertion), which is decoupled from
+its construct entirely and can never fail; an invariant substitution is coupled
+to real data, just to a coarser projection of it.
+
+*Avoid:* weak check, proxy assertion.
+
 ### Stated limit
 A gap in what a verification tool checks that is recorded openly in the tool
 itself, rather than closed with a check that only looks complete.
@@ -231,6 +268,21 @@ limit at all it verifies a floor (that the citation still points at a location
 that still says so, in the file it claims to be about); whether the limit is
 the *right* one stays a review obligation, and a one-word edit plus a
 plausible citation remains the cheapest attack on the category.
+
+### Labelled prediction
+A claim shipped with an honest hedge — "a prediction, not an observation",
+"UNVERIFIED" — where the hedge is treated as sufficient diligence and stands in
+for a cheap verification step that was actually available.
+
+The label discharges the duty to disclose but not the duty to verify. It reads
+as candour and functions as an exemption: reviewers accept the framing, and the
+unverified premise ships as content.
+
+Distinct from [stated limit](#stated-limit), which legitimises a gap no
+available fixture can reach. A labelled prediction hedges a claim that could
+cheaply have been settled — the boundary is the recorded cost of settling it.
+
+*Avoid:* honest hedge, disclosed guess.
 
 ### Mutation sweep
 A periodic run that weakens a gating checker one registered change at a time
@@ -293,6 +345,25 @@ which is a *fix* re-committing its class in the logic it touches; this is a
 *detector* instantiating the class it names.
 
 *Avoid:* self-referential bug, ironic failure.
+
+### Population blindness
+A detector whose scope structurally excludes an entire population of the
+artifact it guards — not a matching bug but a boundary its design cannot cross,
+as when a check keyed on the runs this repo executes cannot see content shipped
+into other repos and never executed here.
+
+Population has two axes, and naming only one is a false coverage claim: which
+artifacts are enumerated, and which property is examined. A scan that reads a
+file for an attribute the file never contains is "scanned" and worthless. The
+recursive form is the one that survives review — an observer proposed as the
+remedy watches the population the fix just cleaned rather than the one still
+broken, so it is green on arrival.
+
+Distinct from [detector self-exemption](#detector-self-exemption), where a
+detector instantiates the class it hunts; here the detector is correctly
+implemented and never had the population in reach at all.
+
+*Avoid:* scope gap, coverage hole.
 
 ## Fix authoring
 
