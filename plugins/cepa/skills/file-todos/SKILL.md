@@ -130,6 +130,22 @@ deferred →  completed (fixed later in a dedicated pass, outside triage —
                        add a `resolved:` line naming the date and branch)
 ```
 
+`completed` also covers a finding resolved because **the artifact it reviewed
+was superseded** — a plan-review finding against a plan that was blocked and
+replaced, where nobody fixed the defect and nobody rejected the finding: its
+subject ceased to exist. The `resolved:` line must say which happened, because
+the status alone cannot: distinguish *adopted into the replacement* from *moot
+by supersession* from *surface deleted*. Getting this wrong in the closing
+direction is expensive — one such file held six P1s that every subsequent
+review re-surfaced for two days after their subject was gone.
+
+A `superseded` enum value was considered and **rejected**: every consumer
+(`/cepa:triage`, `/cepa:sweep`, `/cepa:lfg`) only needs to know whether a
+finding is terminal, both states are terminal, and a new value would make every
+existing parser wrong to gain a distinction only metrics want. Recorded so it is
+not re-proposed. The cost is real and accepted: a count over `completed`
+overstates work actually performed.
+
 `skipped` removal applies to human-driven triage only (a batch-table reply
 or the one-at-a-time flow). Autonomous runs never delete findings:
 unresolved items become `deferred` so the record survives — and the one
@@ -162,6 +178,36 @@ omitted counter reads as zero (a freshly written file carries only
 to land. A transition with no counter forces the writer to choose between an
 unbalanced block and an invented field, and different runs choose
 differently.
+
+**The sum is not enough, and checking only the sum is the documented
+failure.** Every wrong distribution with the same total satisfies it: a file
+declaring `p2: 6, p3: 2` over a body of seven P2s and one P3 balances
+perfectly. That shipped, was reported as "counters verified", and was caught
+only by a later review — twice. So the counters must also **agree with the
+body**:
+
+> Each `p1`/`p2`/`p3` and each state counter equals the number of findings in
+> the body carrying that `severity:` / `status:` value, **plus** any findings
+> removed from the file by human-driven triage.
+
+Removals are the only sanctioned source of a gap, and they must be visible:
+`total − (findings present in the body)` may never exceed `skipped`. Note the
+two kinds of skip behave differently here and a checker must not assume one —
+human-triage skips are **removed** from the body, while the `/cepa:resolve-pr`
+verdict skips are **retained** in it. A file with retained skips has no gap at
+all.
+
+Verify against the body, never against the block's own arithmetic:
+
+```bash
+grep -o '^- severity: P[123]' todos/review-<stamp>.md | sort | uniq -c
+grep -o '^- status: [a-z]*'   todos/review-<stamp>.md | sort | uniq -c
+```
+
+A line naming a range or a batch (`severity: P2/P3 (batch)`) is **not
+tallyable** and must be reported as such rather than counted as disagreement —
+treating it as drift is how a scan of this repo reported twelve bad files when
+six were bad.
 
 ## Run Metadata (optional frontmatter fields)
 
@@ -331,6 +377,11 @@ To find all pending P1 findings across all review files:
   /cepa:resolve-pr verdict skips (replied/not-addressing/declined), which
   stay `skipped` and RETAINED with their evidence, and are never filed to
   the residual sinks (they are answered, not deferred)
-- The frontmatter `summary` is the source of truth for counts
+- The frontmatter `summary` is what consumers **read** — it is a derived cache,
+  not the source of truth. The findings in the body are. When the two disagree
+  the block is wrong, and it is the block that gets corrected. (This line
+  previously read "the source of truth for counts", which is what licensed the
+  drift: a cache declared authoritative is a cache nobody re-derives. Six files
+  had drifted before anyone compared them to their own bodies.)
 - Keep finding titles under 80 characters
 - Code snippets in Problem/Fix sections use fenced code blocks with language tags
