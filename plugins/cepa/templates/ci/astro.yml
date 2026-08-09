@@ -2,6 +2,19 @@
 # Installed by /cepa:setup fix. Adapt the TODO lines to the project before
 # committing. Gate: the site must build; content/schema errors fail here
 # instead of at the host's deploy step.
+#
+# Action majors are chosen by RUNTIME, not recency. GitHub retires old Node
+# runtimes from the runner on a schedule, and an action whose `runs.using` names
+# a retired one is a step with no interpreter. Read a candidate's own runtime
+# before changing any tag below — do not trust its version number, and do not
+# paste this line as-is:
+#
+#     gh api "repos/<OWNER>/<ACTION>/contents/action.yml?ref=<TAG>" \
+#       --jq .content | tr -d '\n' | base64 -d | grep -A2 '^runs:'
+#
+# Mutable major tags are deliberate here: a template is adapted, not consumed.
+# An adopting repo that wants supply-chain hardening should pin these to full
+# commit SHAs and add its own bump policy.
 name: CI
 
 on:
@@ -18,9 +31,9 @@ jobs:
     #   run:
     #     working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22" # TODO: match .nvmrc / engines / deploy config
           cache: npm

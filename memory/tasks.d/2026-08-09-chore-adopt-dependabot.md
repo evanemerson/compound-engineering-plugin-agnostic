@@ -41,6 +41,41 @@ Below is what could not land in a config-adoption PR.
   owns template action currency and write it down**, since no automation can.
   Scope note already added to `2026-08-06-derive-changelog-on-release.md`.
 
+  **(a) DONE 2026-08-09 — PR `fix/ci-template-runtime` (1.19.1).** The finding
+  understated it: **all six pins were node20**, not just `checkout`. Verified by
+  reading each action's own `action.yml` upstream rather than trusting version
+  numbers — `checkout@v4` node20, `setup-node@v4` node20, `setup-python@v5`
+  node20; all three at `v7` are node24. Bumped all six to `v7`. Kept as mutable
+  major tags, deliberately: a template is adapted, not consumed, and an adopting
+  repo owns its own hardening.
+
+  **(b) DECIDED: the adopting repo owns currency after install; this repo owns
+  it only until then, and the mechanism is a written constraint rather than a
+  detector.** Both templates now carry a header stating that action majors are
+  chosen by RUNTIME rather than recency, with the `runs.using` lookup recipe.
+  The recipe uses `<OWNER>/<ACTION>/<TAG>` placeholders that cannot be pasted
+  successfully — which is the remedy the illustrative-version-rot P3 in
+  `2026-08-06-checkout-node24-bump.md` proposed, applied at the first new site
+  rather than retrofitted. Duplicated across both templates knowingly: they ship
+  into different repos independently, so a user installing one never receives
+  the other, and colocation is necessary rather than restatement.
+
+  **Still open below** — the templates remain unwatched between now and the next
+  runtime cycle.
+
+- [ ] P2 — **no observer for template action currency, and the next cycle has no
+  deadline yet.** (a) and (b) above fixed the instance and wrote down the rule;
+  neither creates a signal. The next Node retirement will find these templates
+  the same way this one did — by a human noticing. The honest options, cheapest
+  first: a grep-based WARN step over `plugins/cepa/templates/` comparing each
+  `uses:` major against the action's live `runs.using` (this is one of the few
+  places a home-grown check is genuinely not competing with Dependabot, which
+  structurally cannot reach a template directory); or accept the gap explicitly
+  and re-check at each announced retirement. Deferred because the escalation
+  design is a real decision — a check that reddens every PR because an upstream
+  action deprecated something is the routed-around-signal failure this repo
+  already documents.
+
 - [ ] P2 — **nothing re-reads the two repo settings the adoption depends on.**
   Raised independently by silent-failure-hunter and adversarial-reviewer.
   `vulnerability-alerts` and `automated-security-fixes` were enabled out of tree

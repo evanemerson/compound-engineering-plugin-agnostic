@@ -12,6 +12,19 @@
 #   - SECRET_KEY default: some projects error on an empty default — set one.
 #   - Encryption keys (Fernet): generate at runtime, never commit one.
 #   - Whether tests require real Redis (autouse cache.clear() fixtures do).
+#
+# Action majors are chosen by RUNTIME, not recency. GitHub retires old Node
+# runtimes from the runner on a schedule, and an action whose `runs.using` names
+# a retired one is a step with no interpreter. Read a candidate's own runtime
+# before changing any tag below — do not trust its version number, and do not
+# paste this line as-is:
+#
+#     gh api "repos/<OWNER>/<ACTION>/contents/action.yml?ref=<TAG>" \
+#       --jq .content | tr -d '\n' | base64 -d | grep -A2 '^runs:'
+#
+# Mutable major tags are deliberate here: a template is adapted, not consumed.
+# An adopting repo that wants supply-chain hardening should pin these to full
+# commit SHAs and add its own bump policy.
 name: CI
 
 on:
@@ -74,8 +87,9 @@ jobs:
       REDIS_CACHE_URL: redis://localhost:6379/1
       # REDIS_CACHE_URL: redis://redis:6379/1       # container jobs
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Action majors are chosen by RUNTIME, not recency — see the header.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12" # TODO: match the project's Dockerfile
           cache: pip
@@ -102,8 +116,8 @@ jobs:
       run:
         working-directory: backend # TODO: match the project layout
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install ruff
