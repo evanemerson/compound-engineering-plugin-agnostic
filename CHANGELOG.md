@@ -10,6 +10,20 @@
 
 Every version below is a tag you can check out: `git checkout vX.Y.Z`.
 
+## [v1.20.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/releases/tag/v1.20.0) - 2026-08-09
+
+_CI templates off the dying runtime + installed-copy drift check_
+
+* feat: derive CHANGELOG.md from GitHub Releases on publish by @evanemerson in #39
+* chore: bump actions/checkout to v7.0.1 (node24) before the 2026-09-16 runner removal by @evanemerson in #40
+* chore: reconcile memory/tasks.d/ against the tree + solution doc for the closure-claim pattern by @evanemerson in #41
+* feat: observe the runner's own runtime-deprecation warning by @evanemerson in #42
+* fix: evidence is a run with the same pins, not a run at the tip by @evanemerson in #43
+* chore: adopt Dependabot for pinned actions by @evanemerson in #44
+* fix: CI templates target a runtime that dies on 2026-09-16 (1.19.1) by @evanemerson in #45
+
+[Compare v1.19.0...v1.20.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/compare/v1.19.0...v1.20.0)
+
 ## [v1.19.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/releases/tag/v1.19.0) - 2026-08-04
 
 _mutation-sweep harness tier_
