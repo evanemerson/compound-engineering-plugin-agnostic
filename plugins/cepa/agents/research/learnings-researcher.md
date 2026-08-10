@@ -61,11 +61,50 @@ search is the primary path and the fallback, never an alternative.
 If — and only if — the invoking command states that the brain provider is
 available (see the `cepa:brain` skill), also seed cross-repo learnings:
 
-1. One `POST /recall` (the invoker's shared budget is 1 recall/run) with a
-   query composed from the task's extracted identifiers — same sanitization
-   as Step 0 (charset, no leading `-`, never splice raw text) — and
-   `scope.project_only=false, max_items<=10` so it reaches OTHER repos'
-   memories. The invoker supplies the URL + `x-brain-key`.
+1. One `POST /recall` (the invoker's shared budget is 1 recall/run), issued
+   through `brain-client.sh` — **never hand-rolled curl**, which puts the key
+   in argv where `ps` can read it. Write the payload to a file and post it:
+
+   ```bash
+   # $BRAIN_WORKSPACE_ID comes from the gitignored repo-root .env.local. In a
+   # linked git worktree that file does NOT exist — it lives only in the main
+   # checkout — so resolve it via git-common-dir rather than assuming `./`.
+   # (brain-client.sh applies the same fallback for its own credentials.)
+   ENVF=".env.local"
+   [ -f "$ENVF" ] || ENVF="$(git rev-parse --path-format=absolute --git-common-dir)/../.env.local"
+   set -a; . "$ENVF"; set +a
+   [ -n "$BRAIN_WORKSPACE_ID" ] || { echo "brain pre-step: skipped — no BRAIN_WORKSPACE_ID"; }
+   P="$(mktemp)"
+   cat > "$P" <<EOF
+   {"schema_version":"openbrain.agent_memory.recall.v1",
+    "workspace_id":"${BRAIN_WORKSPACE_ID}",
+    "project_id":"<this repo's name>",
+    "query":"<sanitized identifiers>",
+    "scope":{"project_only":false},
+    "limits":{"max_items":10}}
+   EOF
+   bash "<abs-path>/plugins/cepa/scripts/brain-client.sh" recall "$P"
+   ```
+
+   **All four envelope fields are mandatory and the API 400s without them.**
+   `schema_version` must be that exact literal; `workspace_id` must come from
+   `BRAIN_WORKSPACE_ID` (one shared value across the portfolio) — omitting
+   either returns `400 Invalid recall payload: missing schema_version /
+   workspace_id`, which under the mid-run degrade rule kills the brain for the
+   **entire** run, silently, on the first call. `project_only:false` is what
+   reaches OTHER repos' memories (it defaults to `true` = own-repo only), and
+   `max_items` lives under **`limits`**, NOT under `scope` — a
+   `scope.max_items` is accepted and silently ignored, so a payload that puts
+   it there succeeds while returning an unbounded result set.
+
+   Compose `query` from the task's extracted identifiers under the same
+   sanitization as Step 0 (charset, no leading `-`, never splice raw text).
+   The heredoc is quoted-by-construction, but `query` is still the one field
+   carrying task-derived text — sanitize it before it reaches the file.
+
+   The full contract, including why the client (not the agent) holds the URL
+   and key, is in the `cepa:brain` skill; this is its recall half made
+   copyable. If the two ever disagree, the skill governs.
 2. **Same-repo hits** are HINTS: read the actual local doc before reporting
    (verify, then report normally). **Cross-repo hits cannot be grep-verified**
    (the source doc lives in another repo) — report them as

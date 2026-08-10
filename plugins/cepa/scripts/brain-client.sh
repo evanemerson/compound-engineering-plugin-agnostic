@@ -28,8 +28,48 @@ set -euo pipefail
 
 _die() { printf 'brain-client: %s\n' "$1" >&2; exit 2; }
 
+# Fail LOCALLY on a payload missing the mandatory envelope, instead of letting
+# the API answer 400. Under the cepa:brain mid-run degrade rule a single non-2xx
+# disables the brain for the REST OF THE RUN, so a malformed body costs every
+# later call too — and the failure reads as an outage rather than as the caller
+# bug it is. Two shapes this catches: a caller that never learned the envelope
+# (the recall payload spec lived only in the skill, not at the build site), and
+# a builder that silently produced nothing — `jq -n ... > "$f"` leaves an EMPTY
+# file when jq is not installed, and `[ -f "$f" ]` happily accepts it.
+# grep, not jq: jq is NOT a dependency of this script and is absent on at least
+# one operator host. This is a presence check, not JSON validation.
+_assert_envelope() {
+  local f="$1" kind="$2"
+  [ -s "$f" ] || _die "$kind payload '$f' is empty — the builder produced no output (jq missing? redirect clobbered?)"
+  grep -q '"schema_version"' "$f" \
+    || _die "$kind payload '$f' has no schema_version — the API 400s and the brain degrades for the whole run (see the cepa:brain skill)"
+  grep -q '"workspace_id"' "$f" \
+    || _die "$kind payload '$f' has no workspace_id — set it from BRAIN_WORKSPACE_ID in .env.local"
+  # An EMPTY value is the worktree failure mode, not a typo: `. ./.env.local`
+  # in a linked worktree finds no file, leaves BRAIN_WORKSPACE_ID unset, and
+  # the heredoc interpolates "". The key is present, so a presence check passes
+  # and only the API rejects it.
+  grep -Eq '"workspace_id"[[:space:]]*:[[:space:]]*""' "$f" \
+    && _die "$kind payload '$f' has an EMPTY workspace_id — BRAIN_WORKSPACE_ID was unset when the payload was built (in a git worktree, .env.local lives in the main checkout)"
+  return 0
+}
+
 _load_env() {
   local envf="${BRAIN_ENV_FILE:-.env.local}"
+  # A linked git worktree has NO .env.local — the file is gitignored, so it
+  # exists only in the main checkout and is never copied by `git worktree add`.
+  # Without this fallback every brain call from a worktree either dies on
+  # "BRAIN_URL not set" or, worse, builds an envelope with an EMPTY
+  # workspace_id and 400s — which the mid-run degrade rule turns into a
+  # silent brain outage for the whole run. Resolve the main checkout via
+  # git-common-dir (which points at the REAL .git even from a worktree).
+  if [ ! -f "$envf" ] && [ -z "${BRAIN_ENV_FILE:-}" ]; then
+    local common
+    if common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+       && [ -f "${common%/.git}/.env.local" ]; then
+      envf="${common%/.git}/.env.local"
+    fi
+  fi
   if [ -f "$envf" ]; then
     # shellcheck disable=SC1090
     set -a; . "$envf"; set +a
@@ -70,11 +110,13 @@ case "$cmd" in
     ;;
   recall)
     [ -f "${1:-}" ] || _die "recall needs a payload file"
+    _assert_envelope "$1" recall
     _load_env
     _curl POST /recall "$1"
     ;;
   writeback)
     [ -f "${1:-}" ] || _die "writeback needs a payload file"
+    _assert_envelope "$1" writeback
     _load_env
     _curl POST /writeback "$1"
     ;;
