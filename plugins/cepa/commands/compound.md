@@ -154,33 +154,91 @@ canonical contract). No key → skip entirely; the doc on disk is unchanged
 and authoritative either way.
 
 1. **Decompose, never post the raw doc.** The Agent Memory API takes typed
-   atom arrays and rejects (422) content with ≥2 fenced code blocks or
-   >15k chars. Turn this solution into `memory_payload` atoms — the Root
-   Cause / Solution / Prevention / Detection points as short prose
-   `lessons`/`constraints`/`failures`, **fenced code stripped**, each atom
-   well under 15k. Add the qualifying CONCEPTS terms as `lessons` atoms.
-2. **PHI scrub** — run `brain-client.sh scrub` over every atom before egress
+   string arrays and rejects (422) content with ≥2 fenced code blocks or
+   >15k chars. Map this solution's Root Cause / Solution / Prevention /
+   Detection points into the `memory_payload` arrays below as short prose,
+   **fenced code stripped**, each string well under 15k (aim < ~500 chars,
+   ~3-8 total). Add the qualifying CONCEPTS terms to `lessons`. Name the
+   technology inside each string so it stands alone when recalled from
+   another repo.
+
+   `memory_payload` is an **OBJECT keyed by memory type, whose values are
+   arrays of PLAIN STRINGS** — `lessons`, `constraints`, `failures`
+   (also `decisions`, `outputs`, `unresolved_questions`, `next_steps`). It
+   is **NOT** a list of `{"type":…,"content":…}` objects; that shape is
+   rejected. The API turns each string into one memory row.
+2. **PHI scrub** — run `brain-client.sh scrub` over every string before egress
    (count redactions) when `brain_phi_scrub: true` OR the repo's
    `cepa.local.md` has a `## Compliance` section (the scrub is FORCED for
    compliance repos — see the skill; if the scrub tool can't run, SUPPRESS
    the writeback, do not send unscrubbed).
 3. **Write via the vendored client** (never inline the key on a command
-   line): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh" writeback
-   <payload.json>` which reads `BRAIN_URL` + `MCP_ACCESS_KEY` +
-   `BRAIN_WORKSPACE_ID` from the repo's gitignored `.env.local`, posts
-   `/writeback` with a base `idempotency_key` from
-   `idkey <repo> <doc-path> <payload.json>` (a CONTENT hash — the API
-   appends its own row index; unchanged docs dedup, edited docs get new
-   rows), then `PATCH /memories/:id/review evidence_only` on each returned
-   id. **Promote the ids the call DID return even on a partial (5xx) failure,
-   before degrading** — never leave rows stranded in `pending`. A
-   422/oversize atom is a recorded skip (`suppressed_writebacks`), never silent.
-4. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
+   line). Build the payload file with the literal envelope below, then post
+   it. **Every field shown is required and the API 400s without it** —
+   `schema_version` must be that EXACT literal (it is not a version number
+   to choose: `"1.0"`, `"1"`, `"v1"` all 400), and `workspace_id` comes from
+   `BRAIN_WORKSPACE_ID`. A 400 here costs more than this call: under the
+   mid-run degrade rule it disables the brain for the REST of the run.
+
+   ```bash
+   # $BRAIN_WORKSPACE_ID comes from the gitignored repo-root .env.local. In a
+   # linked git worktree that file does NOT exist — it lives only in the main
+   # checkout — so resolve it via git-common-dir rather than assuming `./`.
+   ENVF=".env.local"
+   [ -f "$ENVF" ] || ENVF="$(git rev-parse --path-format=absolute --git-common-dir)/../.env.local"
+   set -a; . "$ENVF"; set +a
+   CLIENT="${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"
+   IDKEY="$(bash "$CLIENT" idkey <repo> <doc-path> <doc-path>)"
+   SHA="$(git hash-object <doc-path>)"
+   P="$(mktemp)"
+   cat > "$P" <<EOF
+   {"schema_version":"openbrain.agent_memory.writeback.v1",
+    "workspace_id":"${BRAIN_WORKSPACE_ID}",
+    "project_id":"<repo>",
+    "idempotency_key":"${IDKEY}",
+    "runtime":{"name":"cepa-compound"},
+    "source_refs":[{"kind":"solution-doc","uri":"<repo>:<doc-path>@${SHA}","title":"<doc title>"}],
+    "memory_payload":{"lessons":[…],"constraints":[…],"failures":[…]}}
+   EOF
+   bash "$CLIENT" writeback "$P"
+   ```
+
+   Each `source_refs` element **requires** `kind` (an element without it
+   400s); `uri` packs repo+path+blob-SHA so provenance survives file moves.
+   The `idempotency_key` is a CONTENT hash and is the BASE only — the API
+   appends its own row index (`<base>:<n>`), so never add an index yourself.
+   Unchanged docs dedup; edited docs get new rows.
+4. **Promote every returned id — the rows are invisible until you do.**
+   Writeback stamps each row `review_status: pending`, which recall DROPS,
+   so an unpromoted write is indistinguishable from no write at all. Parse
+   the ids from the response (`memories[].memory_id`) and `review` each:
+
+   ```bash
+   # jq is NOT available on every operator host — parse with python3.
+   bash "$CLIENT" writeback "$P" > "$P.resp"
+   python3 -c "import json,sys; print('\n'.join(m['memory_id'] for m in json.load(open(sys.argv[1]))['memories']))" "$P.resp" > "$P.ids"
+   # `|| [ -n "$id" ]` is REQUIRED, not defensive style: a bare `while read`
+   # discards a final line with no trailing newline, so the last row is
+   # never promoted and stays invisible in `pending` forever — a silent,
+   # partial success that looks exactly like a clean run. (Reproduced live
+   # 2026-08-22: 2 rows written, 1 promoted, 1 stranded.)
+   while read -r id || [ -n "$id" ]; do
+     [ -n "$id" ] && bash "$CLIENT" review "$id" evidence_only
+   done < "$P.ids"
+   ```
+
+   Verify the promote count MATCHES the row count the writeback returned;
+   they are equal on success, and a shortfall means stranded rows, not a
+   partial write. **Promote the ids the call DID return even on a partial
+   (5xx) failure, before degrading** — never leave rows stranded in
+   `pending`. A 422/oversize string is a recorded skip
+   (`suppressed_writebacks`), never silent.
+5. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
    doc's source path already has active memories (edited doc), `PATCH review
    mark_stale` on them so recall stops serving the pre-edit version, THEN
-   write the current atoms (their new content hash makes them new rows).
+   write the current strings (their new content hash makes them new rows).
    (OB1's `supersede` action is a no-op without a related id — use `mark_stale`.)
-5. Record the outcome in the `brain` Run Metadata block; for interactive
+6. Record the outcome in the `brain` Run Metadata block; for interactive
    runs with no findings file, append a one-line record to the run's
    residual shard (`cepa:autonomy` §5 sink 1)
    for any strip/suppression/scrub. A brain failure degrades (grep-only
