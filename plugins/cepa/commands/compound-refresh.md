@@ -256,7 +256,9 @@ the cross-repo brain per the **`cepa:brain` skill**, via
 `.env.local`, never inline): a Delete or stale-mark → `mark_stale` the
 memories for that source path; a Replace/Update → `mark_stale` the prior
 memories for that path (OB1's `supersede` is a no-op without a related id),
-then write the successor's atoms (new content hash → new rows). No `brain:` key or
+then write the successor's `memory_payload` strings (new content hash → new
+rows — the payload is an object of typed string arrays, NOT a list of typed
+atom objects; the skill's call contract has the envelope). No `brain:` key or
 report-only mode → no brain calls (not configured — not a failure). A brain
 call that FAILS when configured → degrade (`status: degraded — <verb>
 failed`) and continue; files stay source-of-truth, so a miss loses nothing,

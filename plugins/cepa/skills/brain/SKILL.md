@@ -134,10 +134,15 @@ the mistake costs one script exit rather than the run's whole brain.
   Writeback stamps `review_status:pending`, which recall drops by default; promoting
   to `evidence_only` makes it recallable while keeping `can_use_as_instruction=false`.
   **Partial writeback:** the write is row-by-row and non-atomic — a mid-loop 5xx can
-  leave the first rows inserted (`pending`) before it fails. So ALWAYS promote the
-  ids the call DID return (they come back in the response) BEFORE degrading — never
-  leave rows stranded invisible in `pending`. The stable content idkey makes a later
-  re-run safe (unchanged atoms dedup; it re-surfaces the ids for any missed PATCH).
+  leave the first rows inserted (`pending`) before it fails. On that path the API
+  returns ONLY `{error}` and **discards the `created` array**, so those committed
+  rows' ids never reach the caller and cannot be promoted: they are stranded
+  invisible in `pending`, unrecoverable from the client. Treat a non-2xx writeback
+  as "this doc needs a re-run", never as a clean write — the stable content idkey
+  makes the re-run safe (unchanged strings dedup, and the re-run RE-SURFACES the
+  already-inserted rows' ids in its 200 response, which is the only way to promote
+  them). Within a SUCCESSFUL (200) call, promote every id in the response before
+  doing anything else.
 - **Retire on edit/prune → `mark_stale` (NOT `supersede`):** an edited doc, or a
   compound-refresh delete/stale-mark → `PATCH /memories/:id/review`
   `{action:"mark_stale"}` on the prior memories for that source path. OB1's
