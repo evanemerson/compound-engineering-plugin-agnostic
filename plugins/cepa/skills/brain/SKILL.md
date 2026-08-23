@@ -82,35 +82,67 @@ the exact `schema_version` LITERAL the API requires (a missing/wrong value 400s)
 portfolio). `brain-client.sh` posts the payload file verbatim, so the invoker (agent)
 builds the payload WITH `schema_version` + `workspace_id` in it.
 
+The `schema_version` literal is NOT a version number the caller chooses — it is a
+fixed contract string per verb, and a plausible substitute (`"1.0"`, `"1"`, `"v1"`)
+400s exactly like an omission. `brain-client.sh` rejects a wrong literal LOCALLY so
+the mistake costs one script exit rather than the run's whole brain.
+
 - **Recall (consumer):** `POST /recall`,
   `schema_version: "openbrain.agent_memory.recall.v1"`, body
   `{workspace_id, project_id, query, scope:{project_only:false}, limits:{max_items:10}}`.
   `project_only:false` is REQUIRED for cross-repo reach (defaults true = own-repo
   only). `max_items` lives under `limits`, NOT `scope` (a `scope.max_items` is
-  silently dropped). Returns scoped memories with `source_refs` provenance.
+  silently dropped).
+  **Response shape — provenance is `scope.project_id`, and `source_refs` is NOT
+  returned.** Each returned memory carries `memory_id`, `summary`, `content`,
+  `source` (`{kind:"agent_memory", uri:null, …}` — a self-reference, never the
+  originating doc), `provenance` (status/confidence/runtime), `scope`
+  (`{workspace_id, project_id, channel_id, visibility}`), `use_policy`,
+  `freshness`, `related_artifacts`. The `source_refs` written at writeback are
+  stored server-side but **never projected into the recall response**, and
+  `source.uri` is always null — so the provenance repo a consumer filters on is
+  `scope.project_id`, and a cross-repo hit CANNOT carry its originating doc path
+  or blob SHA. Any consumer keyed on a returned `source_refs` finds the field
+  absent on every hit and — being fail-closed — drops 100% of cross-repo recall
+  while reporting it as ordinary non-participant filtering. (Verified live
+  2026-08-22 against the deployed Edge Function: 10 hits across two repos, no
+  `source_refs` on any, `source.uri` null on all.)
 - **Writeback (producer):** `POST /writeback`,
-  `schema_version: "openbrain.agent_memory.writeback.v1"`, with a typed
-  `memory_payload` whose fields are ARRAYS (`lessons`, `constraints`, `failures`,
-  `outputs`, …) — each element becomes one memory row. There is NO document/free-form
-  field and NO upsert: a repeated `idempotency_key` is skipped, not updated. Provide a
-  STABLE BASE `idempotency_key = <repo>:<doc-path>` per writeback; **the API appends
-  its own row index** (`<base>:<n>`), so do NOT add an atom index yourself (that
-  double-indexes). Because keys are row-positional, inserting an atom mid-document
-  shifts later indices — prefer stable atom ordering, and on a real edit retire the
-  doc's prior memories (mark_stale) and rewrite rather than diff-patching atoms.
+  `schema_version: "openbrain.agent_memory.writeback.v1"`, with a required
+  `memory_payload`. **`memory_payload` is an OBJECT KEYED BY MEMORY TYPE whose
+  values are arrays of PLAIN STRINGS** — `lessons`, `constraints`, `failures`,
+  `decisions`, `outputs`, `unresolved_questions`, `next_steps` (plus `artifacts`,
+  objects of `{kind, uri, description}`, and `entities`). Each string becomes one
+  memory row. It is **NOT** a list of `{"type":…,"content":…}` objects and there is
+  no `atoms` field — that shape is rejected, and it is the shape an agent reaches
+  for when the build site describes the contents as "atoms". There is NO
+  document/free-form field and NO upsert: a repeated `idempotency_key` is skipped,
+  not updated. Provide a STABLE BASE `idempotency_key = <repo>:<doc-path>` per
+  writeback; **the API appends its own row index** (`<base>:<n>`), so do NOT add a
+  row index yourself (that double-indexes). Because keys are row-positional,
+  inserting a string mid-document shifts later indices — prefer stable ordering,
+  and on a real edit retire the doc's prior memories (mark_stale) and rewrite
+  rather than diff-patching rows.
   Each `source_refs` element REQUIRES a `kind` field (e.g. `"solution-doc"`) — an
   object without it 400s; pack repo+path+blob-SHA into `uri` as
   `<repo>:<doc-path>@<sha>` so provenance survives file moves. (Verified 2026-07-12
-  against the live API during the contexthub backfill.)
+  against the live API during the contexthub backfill.) Note these refs serve the
+  server-side record and the dashboard — recall does not return them (above), so
+  they cannot be relied on to identify a hit's source doc at consume time.
 - **Promote (producer, immediately after writeback):**
   `PATCH /memories/:id/review` `{action:"evidence_only"}` for each written memory.
   Writeback stamps `review_status:pending`, which recall drops by default; promoting
   to `evidence_only` makes it recallable while keeping `can_use_as_instruction=false`.
   **Partial writeback:** the write is row-by-row and non-atomic — a mid-loop 5xx can
-  leave the first rows inserted (`pending`) before it fails. So ALWAYS promote the
-  ids the call DID return (they come back in the response) BEFORE degrading — never
-  leave rows stranded invisible in `pending`. The stable content idkey makes a later
-  re-run safe (unchanged atoms dedup; it re-surfaces the ids for any missed PATCH).
+  leave the first rows inserted (`pending`) before it fails. On that path the API
+  returns ONLY `{error}` and **discards the `created` array**, so those committed
+  rows' ids never reach the caller and cannot be promoted: they are stranded
+  invisible in `pending`, unrecoverable from the client. Treat a non-2xx writeback
+  as "this doc needs a re-run", never as a clean write — the stable content idkey
+  makes the re-run safe (unchanged strings dedup, and the re-run RE-SURFACES the
+  already-inserted rows' ids in its 200 response, which is the only way to promote
+  them). Within a SUCCESSFUL (200) call, promote every id in the response before
+  doing anything else.
 - **Retire on edit/prune → `mark_stale` (NOT `supersede`):** an edited doc, or a
   compound-refresh delete/stale-mark → `PATCH /memories/:id/review`
   `{action:"mark_stale"}` on the prior memories for that source path. OB1's
@@ -144,10 +176,13 @@ comments, blanks, and any malformed/injection line are dropped there, never
 relayed into the researcher prompt (empty output + exit 0 = a valid empty
 registry → drop ALL cross-repo hits, distinct from the exit-3 unresolved case).
 It passes the resolved registry to the researcher; recall drops any
-memory whose `source_refs` `project_id` is `retracted` or absent from the manifest
-(fail-closed — an unknown provenance is dropped, not relayed). Until the manifest
-exists, recall runs but every cross-repo hit is provenance-labeled for the operator
-and no memory is trusted as cleared.
+memory whose **`scope.project_id`** (the response's provenance field — NOT
+`source_refs`, which recall never returns) is `retracted` or absent from the
+manifest (fail-closed — an unknown provenance is dropped, not relayed). Keying
+this filter on a field the response lacks silently drops every cross-repo hit,
+because fail-closed treats absent-field and unknown-repo identically. Until the
+manifest exists, recall runs but every cross-repo hit is provenance-labeled for
+the operator and no memory is trusted as cleared.
 
 ## Governance — evidence-only, always
 
@@ -159,8 +194,12 @@ and no memory is trusted as cleared.
   skipping the §7 strip.
 - Cross-repo hits cannot be grep-verified against a local doc (the source doc lives
   in another repo). So a cross-repo memory is **reportable-but-flagged evidence**,
-  capped at `confidence: 75`, carrying its `source_refs` (repo+path+SHA), and is
-  **never promoted to a local finding**. Same-repo grep-verification is unchanged.
+  capped at `confidence: 75`, carrying the provenance the response actually returns
+  — the repo from `scope.project_id`, plus `memory_id` — and is **never promoted to
+  a local finding**. The originating doc path/SHA is NOT recoverable from a recall
+  response (see the call contract), so report the repo and say the path is
+  unavailable; never invent one or imply the hit was traced to a file. Same-repo
+  grep-verification is unchanged.
 
 ## Compliance — content-level, with a mandatory scrub for `## Compliance` repos
 

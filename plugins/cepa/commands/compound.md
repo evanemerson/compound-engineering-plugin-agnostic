@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(gh repo view:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*)
 ---
 
 # Compound Documentation
@@ -154,33 +154,147 @@ canonical contract). No key → skip entirely; the doc on disk is unchanged
 and authoritative either way.
 
 1. **Decompose, never post the raw doc.** The Agent Memory API takes typed
-   atom arrays and rejects (422) content with ≥2 fenced code blocks or
-   >15k chars. Turn this solution into `memory_payload` atoms — the Root
-   Cause / Solution / Prevention / Detection points as short prose
-   `lessons`/`constraints`/`failures`, **fenced code stripped**, each atom
-   well under 15k. Add the qualifying CONCEPTS terms as `lessons` atoms.
-2. **PHI scrub** — run `brain-client.sh scrub` over every atom before egress
+   string arrays and rejects (422) content with ≥2 fenced code blocks or
+   >15k chars. Map this solution's Root Cause / Solution / Prevention /
+   Detection points into the `memory_payload` arrays below as short prose,
+   **fenced code stripped**, each string well under 15k (aim < ~500 chars,
+   ~3-8 total). Add the qualifying CONCEPTS terms to `lessons`. Name the
+   technology inside each string so it stands alone when recalled from
+   another repo.
+
+   `memory_payload` is an **OBJECT keyed by memory type, whose values are
+   arrays of PLAIN STRINGS** — `lessons`, `constraints`, `failures`
+   (also `decisions`, `outputs`, `unresolved_questions`, `next_steps`). It
+   is **NOT** a list of `{"type":…,"content":…}` objects; that shape is
+   rejected. The API turns each string into one memory row.
+2. **PHI scrub** — run `brain-client.sh scrub` over every string before egress
    (count redactions) when `brain_phi_scrub: true` OR the repo's
    `cepa.local.md` has a `## Compliance` section (the scrub is FORCED for
    compliance repos — see the skill; if the scrub tool can't run, SUPPRESS
    the writeback, do not send unscrubbed).
 3. **Write via the vendored client** (never inline the key on a command
-   line): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh" writeback
-   <payload.json>` which reads `BRAIN_URL` + `MCP_ACCESS_KEY` +
-   `BRAIN_WORKSPACE_ID` from the repo's gitignored `.env.local`, posts
-   `/writeback` with a base `idempotency_key` from
-   `idkey <repo> <doc-path> <payload.json>` (a CONTENT hash — the API
-   appends its own row index; unchanged docs dedup, edited docs get new
-   rows), then `PATCH /memories/:id/review evidence_only` on each returned
-   id. **Promote the ids the call DID return even on a partial (5xx) failure,
-   before degrading** — never leave rows stranded in `pending`. A
-   422/oversize atom is a recorded skip (`suppressed_writebacks`), never silent.
-4. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
+   line). Build the payload file with the literal envelope below, then post
+   it. **Every field shown is required and the API 400s without it** —
+   `schema_version` must be that EXACT literal (it is not a version number
+   to choose: `"1.0"`, `"1"`, `"v1"` all 400), and `workspace_id` comes from
+   `BRAIN_WORKSPACE_ID`. A 400 here costs more than this call: under the
+   mid-run degrade rule it disables the brain for the REST of the run.
+
+   **Build the payload with the Write tool, then run a script — never a
+   heredoc.** Two reasons, both of which have already bitten this file:
+
+   - `memory_payload` strings and the doc title are solution-doc prose that
+     routinely contains quotes, backslashes, and newlines. Splicing those
+     into a heredoc produces invalid JSON that `_assert_envelope` (a
+     grep-based presence check, not a JSON validator) passes straight
+     through to a 400.
+   - A heredoc inside an indented block is a silent killer: the terminator
+     must sit at column 0, so a copy that keeps this page's list indentation
+     swallows every following line as heredoc body and **exits 0 having done
+     nothing**. `<<-` does not save you (it strips tabs, not spaces).
+
+   So: emit the JSON with the **Write tool** (no shell quoting involved at
+   all — you are writing a file, and `json`-shaped text is just text), then
+   run the steps below. Compute the `idempotency_key` AFTER the payload
+   exists — `idkey`'s third argument is the PAYLOAD FILE, so the key hashes
+   the strings actually being written, not the source doc.
+
+   ```bash
+   set -euo pipefail
+   REPO="<repo>"; DOC="<doc-path>"; P="<payload-file you just wrote>"
+   # BRAIN_WORKSPACE_ID comes from the gitignored repo-root .env.local. In a
+   # linked git worktree that file does NOT exist — it lives only in the main
+   # checkout — so resolve it via git-common-dir rather than assuming `./`.
+   # BRAIN_ENV_FILE wins when set, matching brain-client.sh's _load_env
+   # precedence; diverging here loads different credentials than the client
+   # uses on the very same run.
+   ENVF="${BRAIN_ENV_FILE:-}"
+   if [ -z "$ENVF" ]; then
+     ENVF=".env.local"
+     [ -f "$ENVF" ] || ENVF="$(git rev-parse --path-format=absolute --git-common-dir)/../.env.local"
+   fi
+   set -a; . "$ENVF"; set +a
+   CLIENT="${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"
+   chmod 600 "$P"                              # payload holds doc content
+   git hash-object "$DOC"                      # blob SHA for the source_refs uri
+   bash "$CLIENT" idkey "$REPO" "$DOC" "$P"    # -> idempotency_key (hashes $P)
+   ```
+
+   Write the SHA into `source_refs[0].uri` as `<repo>:<doc-path>@<sha>` and
+   the idkey into `idempotency_key`, then re-Write the payload file. Its shape:
+
+   ```json
+   {"schema_version": "openbrain.agent_memory.writeback.v1",
+    "workspace_id": "<from BRAIN_WORKSPACE_ID>",
+    "project_id": "<repo>",
+    "idempotency_key": "<from idkey>",
+    "runtime": {"name": "cepa-compound"},
+    "source_refs": [{"kind": "solution-doc", "uri": "<repo>:<doc-path>@<sha>",
+                     "title": "<doc title>"}],
+    "memory_payload": {"lessons": [], "constraints": [], "failures": []}}
+   ```
+
+   Each `source_refs` element **requires** `kind` (an element without it
+   400s); `uri` packs repo+path+blob-SHA so provenance survives file moves.
+   The `idempotency_key` is a CONTENT hash and is the BASE only — the API
+   appends its own row index (`<base>:<n>`), so never add an index yourself.
+   Unchanged docs dedup; edited docs get new rows.
+4. **Post once, then promote every returned id — the rows are invisible
+   until you do.** Writeback stamps each row `review_status: pending`, which
+   recall DROPS, so an unpromoted write is indistinguishable from no write at
+   all. Post the payload EXACTLY ONCE and keep that response; re-posting to
+   re-read the ids spends a second call and discards the first response's ids.
+
+   ```bash
+   # A non-2xx writes an ERROR BODY to $P.resp and exits nonzero. Without this
+   # branch the next line's parse dies on a missing "memories" key, $P.ids
+   # ends up empty, and the promote loop runs zero times and exits 0 — a
+   # failed write that is bash-indistinguishable from "wrote 0 rows". THIS
+   # branch is what makes the mid-run degrade rule fire at all.
+   if ! bash "$CLIENT" writeback "$P" > "$P.resp"; then
+     echo "brain writeback FAILED: $(cat "$P.resp")" >&2
+     # degrade the provider for the rest of the run; do NOT parse. Rows the
+     # API committed before a mid-loop 5xx are NOT recoverable — it discards
+     # its created[] on error — so record the doc as needing a re-run (the
+     # stable idkey makes that safe) rather than reporting a clean write.
+     exit 1
+   fi
+   # jq is NOT available on every operator host — parse with python3.
+   if ! python3 -c "import json,sys; print('\n'.join(m['memory_id'] for m in json.load(open(sys.argv[1]))['memories']))" "$P.resp" > "$P.ids"; then
+     echo "brain writeback response UNPARSEABLE: $(cat "$P.resp")" >&2
+     exit 1
+   fi
+   # `|| [ -n "$id" ]` is REQUIRED, not defensive style: a bare `while read`
+   # discards a final line with no trailing newline, so the last row is
+   # never promoted and stays invisible in `pending` forever — a silent,
+   # partial success that looks exactly like a clean run. (Reproduced live
+   # 2026-08-22: 2 rows written, 1 promoted, 1 stranded.)
+   total=0; promoted=0
+   while read -r id || [ -n "$id" ]; do
+     [ -n "$id" ] || continue
+     total=$((total+1))
+     if bash "$CLIENT" review "$id" evidence_only >/dev/null; then
+       promoted=$((promoted+1))
+     else
+       echo "STRANDED: memory_id=$id failed to promote" >&2
+     fi
+   done < "$P.ids"
+   [ "$promoted" -eq "$total" ] \
+     || echo "brain writeback: $((total-promoted)) of $total ids stranded in pending" >&2
+   ```
+
+   The counters are the mechanism, not a reminder: report `written: $promoted`
+   and count any shortfall under `suppressed_writebacks`. A 422/oversize
+   string is a recorded skip, never silent.
+
+   The full contract is in the `cepa:brain` skill; this is its writeback
+   half made copyable. If the two ever disagree, the skill governs.
+5. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
    doc's source path already has active memories (edited doc), `PATCH review
    mark_stale` on them so recall stops serving the pre-edit version, THEN
-   write the current atoms (their new content hash makes them new rows).
+   write the current strings (their new content hash makes them new rows).
    (OB1's `supersede` action is a no-op without a related id — use `mark_stale`.)
-5. Record the outcome in the `brain` Run Metadata block; for interactive
+6. Record the outcome in the `brain` Run Metadata block; for interactive
    runs with no findings file, append a one-line record to the run's
    residual shard (`cepa:autonomy` §5 sink 1)
    for any strip/suppression/scrub. A brain failure degrades (grep-only

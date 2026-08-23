@@ -32,19 +32,39 @@ _die() { printf 'brain-client: %s\n' "$1" >&2; exit 2; }
 # the API answer 400. Under the cepa:brain mid-run degrade rule a single non-2xx
 # disables the brain for the REST OF THE RUN, so a malformed body costs every
 # later call too — and the failure reads as an outage rather than as the caller
-# bug it is. Two shapes this catches: a caller that never learned the envelope
-# (the recall payload spec lived only in the skill, not at the build site), and
-# a builder that silently produced nothing — `jq -n ... > "$f"` leaves an EMPTY
-# file when jq is not installed, and `[ -f "$f" ]` happily accepts it.
+# bug it is. Three shapes this catches: a caller that never learned the envelope
+# (the payload spec lived only in the skill, not at the build site), a caller
+# that INVENTED a plausible-looking value for a field whose value must be an
+# exact literal, and a builder that silently produced nothing — `jq -n ... > "$f"`
+# leaves an EMPTY file when jq is not installed, and `[ -f "$f" ]` happily
+# accepts it.
 # grep, not jq: jq is NOT a dependency of this script and is absent on at least
-# one operator host. This is a presence check, not JSON validation.
+# one operator host. This is a presence/literal check, not JSON validation.
 _assert_envelope() {
   local f="$1" kind="$2"
   [ -s "$f" ] || _die "$kind payload '$f' is empty — the builder produced no output (jq missing? redirect clobbered?)"
   grep -q '"schema_version"' "$f" \
     || _die "$kind payload '$f' has no schema_version — the API 400s and the brain degrades for the whole run (see the cepa:brain skill)"
+  # PRESENCE is not enough: schema_version must be one EXACT literal, and a
+  # caller with no envelope at the build site invents a plausible one instead.
+  # On 2026-08-22 a compound run burned its writeback on "1.0", "1", 1, and
+  # "v1" in turn — each present, each a 400. The API also accepts a parallel
+  # `openbrain.openclaw.*` literal (a different client's contract); cepa is the
+  # agent_memory client, so anything but its own literal is a caller bug here.
+  local want="openbrain.agent_memory.${kind}.v1"
+  grep -q "\"schema_version\"[[:space:]]*:[[:space:]]*\"${want}\"" "$f" \
+    || _die "$kind payload '$f' has a schema_version that is not the required literal \"${want}\" — the value is not a version number to choose, and any other string 400s (see the cepa:brain skill)"
   grep -q '"workspace_id"' "$f" \
     || _die "$kind payload '$f' has no workspace_id — set it from BRAIN_WORKSPACE_ID in .env.local"
+  # Writeback's one required body field. Its shape is an OBJECT of typed arrays
+  # (lessons/constraints/failures/…, each an array of plain strings), NOT a list
+  # of {type, content} objects — the shape an agent reaches for when the build
+  # site says only "atoms". A payload with `atoms` and no `memory_payload` is a
+  # 400; catch it here rather than spending the call.
+  if [ "$kind" = writeback ]; then
+    grep -q '"memory_payload"' "$f" \
+      || _die "writeback payload '$f' has no memory_payload — it is a required OBJECT of typed arrays (lessons/constraints/failures), not a list of typed atom objects (see the cepa:brain skill)"
+  fi
   # An EMPTY value is the worktree failure mode, not a typo: `. ./.env.local`
   # in a linked worktree finds no file, leaves BRAIN_WORKSPACE_ID unset, and
   # the heredoc interpolates "". The key is present, so a presence check passes
