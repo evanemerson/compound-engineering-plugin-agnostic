@@ -10,6 +10,14 @@
 
 Every version below is a tag you can check out: `git checkout vX.Y.Z`.
 
+## [v1.22.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/releases/tag/v1.22.0) - 2026-08-23
+
+_brain works from a git worktree_
+
+_Release body has no parseable change list; see the release page._
+
+[Compare v1.21.0...v1.22.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/compare/v1.21.0...v1.22.0)
+
 ## [v1.21.0](https://github.com/evanemerson/compound-engineering-plugin-agnostic/releases/tag/v1.21.0) - 2026-08-09
 
 _findings counters must agree with the body_
