@@ -79,6 +79,25 @@ arrived via graph output rather than a Detection section, quoted under
 its own marker so it is counted against the grounding record and never
 miscounted into the Detection pipeline's corruption stats.
 
+## Brain provider
+
+### Build-site literal
+The exact, copyable payload placed where a call is constructed, rather than only in the contract that governs it. A build site that describes a remote payload in prose forces the caller to invent one, and an invented value is plausible enough to pass local checks while the service rejects it. The governing contract remains authoritative — the copy carries an explicit precedence clause ("if the two ever disagree, the skill governs") so the two cannot silently diverge.
+
+*Avoid:* inline spec, duplicated envelope.
+
+### Contract drift
+Divergence between a document describing a remote service's contract and the contract that service actually enforces. Distinct from ordinary doc rot in that the repository holds no copy of the truth: the authority is a running service, so no amount of reading or reviewing the repo can falsify the description. The only operation that consults the authority is a call against it.
+
+### Degrade-reads-as-outage
+The reporting failure in which a caller-side payload defect surfaces as provider unavailability. A malformed request returns non-2xx, the mid-run degrade rule disables the provider for the remainder of the run, and the run reports the service as down — so the diagnosis names the wrong system and the actual bug survives. Seventeen review runs recorded the brain as unavailable while it was healthy throughout.
+
+### Fail-closed masking
+The condition where a correctly fail-closed filter keyed on the wrong field discards its entire input while producing the output of a healthy filter. Because absent-field and unknown-value are treated identically by design, a total loss is indistinguishable from routine filtering. The tripwire is quantitative: a drop count equal to the hit count is a wrong-field defect, not a clean pass.
+
+### Instruction without mechanism
+Prose directing a caller to verify something — that counts match, that every returned id was promoted — with no counter, comparison, or status check in the accompanying code. It reads as a safeguard and enforces nothing; the condition it warns about occurs silently and the reader believes it was checked.
+
 ## Autonomy
 
 ### Residual
@@ -392,4 +411,5 @@ that generator given its own name.
 - An unset model tier on a dispatch had been read as a neutral default — it is not: it resolves to the invoking session's tier, which makes cost a property of the operator's session rather than of the task.
 - Consistency between sibling call sites had been treated as self-evidently good — it is not: when the site being changed is the correct outlier, matching its neighbours adopts their omission, so the direction of the levelling has to be established before the change, not after.
 - A verification tool had been treated as outside the class it verifies — it is not: the harness built to catch silent passes shipped five of its own across three review rounds, and the freshness detector built to catch a silently disabled job had a silent-pass path in its own fall-through.
+- A document describing a remote API had been treated as verifiable by review — it is not: the repository contains no copy of the contract, so a coherent, reviewed description can be wrong in a way only a live call can detect. Five consecutive brain-provider fixes were all found by calling the service and none by reading the prose.
 - Recording closure in prose had been treated as equivalent to closing an item — it is not: only the status field a consumer parses closes it for automated readers, so prose closure leaves a phantom residual, and the inverse — open work carrying no status syntax at all — is invisible to the same scan rather than miscounted by it.

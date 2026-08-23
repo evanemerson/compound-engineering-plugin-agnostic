@@ -25,4 +25,13 @@ Deferred review findings from the /cepa:lfg run (see todos/review-2026-07-10-160
    (scqnzwmbhlpdtenfepuw): schema_version literals OK, limits.max_items OK, mark_stale drops
    from recall, content-hash idempotency dedups, cross-repo recall (project_only:false) works,
    OpenRouter text-embedding-3-small embeddings work. Brain is LIVE.
+   **STALE IN EFFECT — do not read "ALL PASS" as current.** That pass validated
+   the SERVICE, not the client's payloads, and two client-side contract breaks
+   have landed against the same live instance since: `d9544e3` (recall request
+   envelope) and `bc43d23`/#47 (writeback envelope + recall RESPONSE provenance —
+   the response carries no `source_refs`, only `scope.project_id`). Both were
+   found by calling the API, neither by reading the docs. Re-validated end-to-end
+   on 2026-08-23 at cepa 1.22.0: writeback 200 → 14 atoms → 14 promoted → 0
+   stranded → cross-repo recall hit. See
+   `docs/solutions/logic-errors/a-remote-contract-is-verified-by-calling-it-not-by-reading-the-doc-that-describes-it.md`.
 - residual sink sharded to memory/tasks.d/ at cepa 1.13.0 — a reader consulting only this file has not seen all residuals — 2026-07-29
