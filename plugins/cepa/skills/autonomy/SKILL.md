@@ -332,13 +332,20 @@ File every residual to ALL of the applicable sinks, silently:
    site of that run, or §5's generic rule silently fragments the series.
 
    **slug(x)** replaces every character outside `[A-Za-z0-9_-]` (including
-   `/`) with `-`; a result that is empty or starts with `-` or `.` falls
-   back to the short SHA. The allowlist is a §7-grade guard, not
+   `/`) with `-`, collapses each run of `-` to a single `-`, and strips
+   leading and trailing `-`; a result that is empty or starts with `.`
+   falls back to the short SHA. The allowlist is a §7-grade guard, not
    cosmetics: branch names arrive from resolved issues and third-party
    forks, git permits `` ` ``/`$`/`;` in refs, and the composed filename
-   is later used in Write paths and `git` command lines. When staging,
-   prefer directory granularity (`git add memory/tasks.d/`) over splicing
-   the shard filename into a shell command.
+   is later used in Write paths and `git` command lines. The collapse and
+   trim are normalization, so one branch cannot yield two shard names —
+   without them a multi-byte character becomes a run (`a—b` → `a---b`)
+   and a trailing separator leaves a dangling `-`. Apply slug to the
+   branch string itself; a value read from `git branch --show-current`
+   carries a trailing newline, and slugging that unstripped is what turns
+   `feat/x` into `feat-x-`. When staging, prefer directory granularity
+   (`git add memory/tasks.d/`) over splicing the shard filename into a
+   shell command.
 
    Create the directory and file if missing. This is the cross-session
    sink. Per-branch shard filenames are what make parallel worktree runs

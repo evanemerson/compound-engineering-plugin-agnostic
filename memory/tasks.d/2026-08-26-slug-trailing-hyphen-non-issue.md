@@ -1,7 +1,12 @@
 # `slug(x)` trailing-hyphen concern — NOT a defect, do not "fix" it
 
 **Raised:** 2026-08-26, while dogfooding `/cepa:handoff` (PR #48).
-**Status:** CLOSED — investigated, no change made, no change owed.
+**Status:** SUPERSEDED 2026-08-26 — the operator directed the fix be made
+anyway; `slug(x)` now collapses runs and trims leading/trailing `-` (cepa
+1.23.1). The analysis below stands as written — the defect genuinely did not
+occur on any real branch name — but the normalization was adopted regardless,
+so one branch can never yield two shard names. Read this file as the record of
+*why it was not urgent*, not as an argument against the change that shipped.
 
 ## The claim, and why it was wrong
 

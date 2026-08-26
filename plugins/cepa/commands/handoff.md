@@ -59,10 +59,11 @@ that names the run's residual shard uses this one value:
 
 `git branch --show-current` prints an **empty string on a detached HEAD** —
 a parked worktree is a routine state, not an error. §5's rule applies
-unchanged: an empty or `-`/`.`-leading slug falls back to the short SHA
-(`git rev-parse --short HEAD`). Resolve it explicitly rather than composing
-a path from an empty value; `memory/tasks.d/<date>-.md` is a silent
-collision, not a filename.
+unchanged: a slug that comes out empty (or `.`-leading) falls back to the
+short SHA (`git rev-parse --short HEAD`). Resolve it explicitly rather than
+composing a path from an empty value; `memory/tasks.d/<date>-.md` is a
+silent collision, not a filename. Strip the trailing newline before
+slugging — §5 says why.
 
 **Create both directories before writing anything:**
 
