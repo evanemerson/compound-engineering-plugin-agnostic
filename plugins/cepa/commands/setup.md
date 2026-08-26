@@ -162,6 +162,8 @@ Apply, in order — all idempotent, none destructive:
    category subdirs from the `compound-docs` skill: build-errors,
    database-issues, runtime-errors, performance-issues, security-issues,
    ui-bugs, integration-issues, logic-errors — each with a `.gitkeep`),
+   `docs/handoff/` (with a `.gitkeep` — session handoffs from
+   `/cepa:handoff`),
    `todos/`, `memory/`, `memory/tasks.d/` (with a `.gitkeep` — the sharded
    residual sink from `cepa:autonomy` §5), and `memory/tasks.md` (header
    line only; kept for back-compat reading — writers append to `tasks.d/`
