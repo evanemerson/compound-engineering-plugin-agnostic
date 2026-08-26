@@ -20,7 +20,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 
 ## What's Included
 
-### Commands (10)
+### Commands (11)
 
 | Command | What It Does |
 |---|---|
@@ -34,6 +34,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 | `/cepa:compound-refresh` | Refresh `docs/solutions/` against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md. Supports `mode:headless` |
 | `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
 | `/cepa:setup` | Health-check a project's cepa scaffold (read-only) or `fix` it: create missing dirs/config and install a stack-matched CI template |
+| `/cepa:handoff` | Wrap up a session without losing anything — inventory the work in flight, make residuals durable, save a handoff doc, and emit a self-contained prompt for the next session. Supports `mode:headless` |
 
 ### Agents (12)
 

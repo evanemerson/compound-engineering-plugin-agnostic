@@ -45,7 +45,7 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (10)
+### Commands (11)
 | Command | Purpose |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
@@ -58,6 +58,7 @@ Plan → Work → Review → Compound
 | `/cepa:compound-refresh` | Refresh `docs/solutions/` — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md (supports `mode:headless`) |
 | `/cepa:lfg` | **BETA** — hands-off pipeline: build all, review-fix until clean, PR, CI-green loop, compound, one report |
 | `/cepa:setup` | Project health check + scaffold/CI bootstrap (`fix` to apply) |
+| `/cepa:handoff` | Wrap up a session — inventory work in flight, file residuals, save a handoff doc, emit a paste-ready next-session prompt (supports `mode:headless`) |
 
 ### Research Agents (1)
 | Agent | Purpose |
