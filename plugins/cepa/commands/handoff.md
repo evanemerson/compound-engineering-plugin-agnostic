@@ -268,7 +268,9 @@ The next session must not spend context re-litigating these.>
 branch, file:line, what state it is in, what remains.>
 
 ## Unsettled — decide before starting
-<Open questions as questions. Each names what it blocks.>
+<Open questions as questions. Each names what it blocks. Anything owned by
+another worktree, checkout, or repo is marked read-only with its owner
+named — see the ownership rule below.>
 
 ## Goals
 <Direction and intent that outlives this session.>
@@ -297,6 +299,36 @@ Always present; `none — N sources scanned, M unverifiable` when clean.>
 value.** The first is what stops the next session re-deriving; the second
 is what stops it deciding something the operator wanted to decide. Both
 are worth more than a complete list of files touched.
+
+### Anything another worktree owns is READ-ONLY CONTEXT — say so
+
+A handoff is executed. Naming another worktree's branch, commit, or PR
+inside one is an implicit instruction to go work on it, whatever the
+surrounding prose intended. Every such reference is therefore written with
+its **owner named and its permitted use stated**:
+
+> Context only — `feature/x` is owned by the worktree at `<path>`; that
+> session merges it. Read `<sha>` to understand *why* this item is stale.
+> Do not branch from it, merge it, or commit to it.
+
+The rule binds any reference outside the handoff's own repo and branch:
+sibling worktrees, other checkouts, other repos. A checkout is a live
+workspace some session may be standing on, so a handoff that names one
+without marking it hands the next session a licence the operator never
+granted — and the next session has no way to tell the difference.
+
+**Scope the item to what is genuinely owed here.** A cross-boundary
+reference usually appears because *this* session left a loose end that
+touches it — an open PR it filed, a finding it verified. Say what is owed
+in THIS repo, and let the other reference stay explanatory. An item that
+reads "read their commit and decide which approach they took" has already
+crossed the line, even when the intent was only to explain staleness.
+
+This was a live defect: a handoff surfaced its own open PR (correct),
+but its generated prompt asked the next session to read another
+worktree's fix commit to determine which design shape had been chosen.
+The operator caught it and constrained the run manually. Nothing was
+damaged; the licence was still wrongly granted.
 
 ## Step 6: Commit
 
@@ -362,7 +394,10 @@ the operator actually pastes into a fresh session. Requirements:
   conversation. A reader with only the block and the repo can resume.
 - **Absolute repo path and exact starting SHA** in the first lines.
 - **Same content as the saved file**, not a summary of it. The file is the
-  durable copy; the block is the transport.
+  durable copy; the block is the transport. That includes the read-only
+  markings on cross-worktree references (Step 5) — the block is the part
+  that actually gets executed, so a marking dropped in transport is a
+  licence granted.
 - **The outer fence must be longer than any fence inside the content.**
   The document mandates a `## Verification` section containing a runnable
   block, so a three-backtick outer fence terminates at that block — the
