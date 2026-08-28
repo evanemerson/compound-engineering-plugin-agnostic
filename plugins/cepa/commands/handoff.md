@@ -385,6 +385,34 @@ splicing the raw subject into a shell command (§5's never-splice rule).
 Any dirty file this run did not write is left alone and reported as
 `left uncommitted (not written by this run)`.
 
+**Stamp the previous handoff as superseded.** A stale handoff left
+unmarked is indistinguishable from the current one: same directory, same
+naming, equally authoritative-looking. A fresh session has no context with
+which to notice, and "the reader will compare dates" is the same
+assumption that produces every other defect this command guards against.
+
+After writing the new handoff, find the most recent **prior** handoff in
+`docs/handoff/` (highest date strictly before this run's file; skip if
+none) and prepend one line to it:
+
+```
+> **SUPERSEDED** by `docs/handoff/<new-file>.md` (<date>). Kept as history.
+```
+
+Constraints:
+
+- **Only in the repo this run is executing in.** Never scan or stamp a
+  path in another repo or worktree — the ownership rule in Step 5 binds
+  writes as strictly as it binds references.
+- **One line, prepended.** Never rewrite, re-order, or summarize the old
+  file; its value is that it records what was believed at the time.
+- **Never stamp twice** — if the line is already present, leave it.
+- **Failure is safe and reported.** If the stamp cannot be written, say so
+  as a report line and continue; the run degrades to "newest date wins",
+  which is where it stood before. A failed stamp never blocks the handoff.
+- Stage it with the run's other writes when it is tracked; when `docs/` is
+  gitignored the edit is local-only, exactly like the handoff itself.
+
 1. **Checkpoint dirty work first, when it is coherent.** Uncommitted
    changes are the single easiest thing to lose at a session boundary.
    Stage the specific paths the session worked on — never `git add -A`,
