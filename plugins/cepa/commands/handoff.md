@@ -283,8 +283,8 @@ named — see the ownership rule below.>
 session's own scars. Cite, never restate at length.>
 
 ## Verification
-<A runnable block: the commands that prove the work is sound, with
-expected outcomes.>
+<A runnable block: the commands that prove the work is sound. Assert
+INTERNAL CONSISTENCY, never a pinned literal — see the rule below.>
 
 ## Residuals filed
 <Each item and its sink, per §5.>
@@ -299,6 +299,42 @@ Always present; `none — N sources scanned, M unverifiable` when clean.>
 value.** The first is what stops the next session re-deriving; the second
 is what stops it deciding something the operator wanted to decide. Both
 are worth more than a complete list of files touched.
+
+### `## Verification` asserts consistency, never a pinned literal
+
+A handoff is written mid-session and read later — sometimes minutes later,
+sometimes after the session kept working and shipped three more commits. Any
+expected value that names **mutable state** is therefore wrong by the time it
+matters:
+
+```
+BAD:   grep '"version"' ...   # expect: both 1.23.1
+GOOD:  test "$(grep -oE '"version": "[^"]+"' a.json)" \
+          = "$(grep -oE '"version": "[^"]+"' b.json)" && echo "manifests agree"
+```
+
+The bad form fails the moment a version bumps, and its failure is
+**ambiguous**: the reader cannot tell whether the repo drifted or the handoff
+went stale. That ambiguity is corrosive in the one document whose job is
+establishing ground truth — a reader who sees one false assertion has to
+re-verify the whole file.
+
+Prefer assertions that stay true across ordinary change:
+
+- **agreement between two places** ("both manifests match each other")
+- **a count against its source** (`ls | wc -l` vs the README's claim)
+- **derived state matching its origin** (the installed plugin's commit SHA
+  vs `git rev-parse HEAD`)
+- **a checker's own exit status** (`0 MISS, 0 WARN`)
+
+The last two are worth more than they look: an assertion that *proves* a
+claim in `## Established` is better than one that merely restates it.
+
+**The header SHA is the one deliberate exception** — it is a starting point,
+not an assertion, and a reader who has moved past it knows exactly why.
+
+This was a live defect: a handoff's own verification block asserted a version
+one bump behind the repo, and running it as written failed.
 
 ### Anything another worktree owns is READ-ONLY CONTEXT — say so
 
