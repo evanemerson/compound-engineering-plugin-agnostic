@@ -36,72 +36,72 @@ LOOKUP-FAILED, never as a pass. Composites recursed into (see below).
 Cutline, verified live 2026-08-28: **`checkout`/`setup-node` v5+ and
 `setup-python` v6+ are node24; v4 and below are node20/16/12.**
 
-### Scope: 30 repos scanned, 15 have workflows, 10 are exposed
+### Scope: 30 repos scanned, 15 have workflows, 10 exposed — but only 4 ARE OURS
 
-Clean (all node24): `artist360`, `compound-engineering`, `contexthub`,
-`dpc-insider-www`, `helm`, `kcprimetime`. Fifteen repos have no workflows.
+**Ownership was not checked in the first two passes of this shard, and it is the
+single most important cut.** Ten repos carry dying pins; six of them are other
+people's code that merely sits in `~/webapps`. We cannot merge a PR in those,
+and their maintainers own their own CI. Checked by `git remote get-url origin`
+plus `git log --author=Evan | wc -l`, and by `gh api repos/... --jq .fork` for
+the one ambiguous case.
 
-- [ ] **P1 — `medusajs` (7 pins, worst — node12)**
-  ```
-  actions/checkout@v2.3.5                 node12 -> actions/checkout@v7
-  actions/checkout@v3                     node16 -> actions/checkout@v7
-  actions/setup-node@v3                   node16 -> actions/setup-node@v7
-  peter-evans/create-pull-request@v5      node16 -> peter-evans/create-pull-request@v8
-  pnpm/action-setup@v2                    node16 -> pnpm/action-setup@v6
-  styfle/cancel-workflow-action@0.11.0    node16 -> styfle/cancel-workflow-action@0.13.1
-  styfle/cancel-workflow-action@0.9.1     node12 -> styfle/cancel-workflow-action@0.13.1
-  ```
-  Nothing here is even node20 — this CI may already be degraded. Two majors
-  behind on `create-pull-request` (v5→v8) and `pnpm/action-setup` (v2→v6) means
-  breaking changes are likely; this one is a real port, not a tag bump.
+Clean and ours (all node24): `artist360` (fixed 2026-08-09, PR #286),
+`compound-engineering`, `contexthub`, `dpc-insider-www`, `helm`, `kcprimetime`.
+Fifteen repos have no workflows at all.
 
-- [ ] **P1 — `paperclip` (8 pins)**
-  ```
-  actions/checkout@v4                     node20 -> actions/checkout@v7
-  actions/setup-node@v4                   node20 -> actions/setup-node@v7
-  actions/upload-artifact@v4              node20 -> actions/upload-artifact@v7
-  docker/build-push-action@v6             node20 -> docker/build-push-action@v7
-  docker/login-action@v3                  node20 -> docker/login-action@v4
-  docker/metadata-action@v5               node20 -> docker/metadata-action@v6
-  docker/setup-buildx-action@v3           node20 -> docker/setup-buildx-action@v4
-  pnpm/action-setup@v4                    node20 -> pnpm/action-setup@v6
-  ```
-  The whole docker publish chain. If this pipeline pushes images, its failure
-  is a shipping failure, not just a red check.
+#### OURS — the actual work list (4 repos, 8 pins)
 
-- [ ] **P1 — `OB1` (6 pins)**
-  ```
-  actions/checkout@v4                     node20 -> actions/checkout@v7
-  actions/github-script@v7                node20 -> actions/github-script@v9
-  actions/setup-node@v4                   node20 -> actions/setup-node@v7
-  actions/upload-artifact@v4              node20 -> actions/upload-artifact@v7
-  peter-evans/create-pull-request@v6      node20 -> peter-evans/create-pull-request@v8
-  release-drafter/release-drafter@v6      node20 -> release-drafter/release-drafter@v7
-  ```
+- [ ] **P2 — `artist360-www` (3)** — `evanemerson/artist-360-www`, 26 commits ours.
+  `checkout@v4`→v7, `setup-node@v4`→v7, `cloudflare/wrangler-action@v3`→v4.
+  **The only one of the four needing care:** wrangler-action v3→v4 tracks
+  Wrangler itself, and this workflow deploys the site — confirm the project's
+  wrangler version is compatible rather than assuming a tag swap.
+- [ ] **P3 — `dpc-pro-docs` (2)** — `evanemerson/dpc-pro-docs`, 82 commits ours.
+  `checkout@v4`→v7, `setup-node@v4`→v7. Pure tag swap.
+- [ ] **P3 — `youtube` (2)** — `evanemerson/youtube-transcript-scraper`, 52
+  commits ours. `checkout@v4`→v7, `astral-sh/setup-uv@v5`→v10. Five majors on
+  setup-uv (cache behaviour and `enable-cache` defaults moved) — read that
+  changelog; the checkout half is a straight swap.
+- [ ] **P3 — `dpc-pro` (1)** — `evanemerson/dpc-pro`, 1327 commits ours.
+  `setup-node@v4`→v7. Its `checkout@v5` and `setup-python@v6` are already
+  node24, and its `appleboy/ssh-action@v1` composite is clean. One line.
 
-- [ ] **P2 — `artist360-www` (3)** — `checkout@v4`→v7, `setup-node@v4`→v7,
-  `cloudflare/wrangler-action@v3`→v4. Wrangler v3→v4 is a major; check its
-  changelog before assuming a tag swap.
-- [ ] **P2 — `bakerydemo` (2)** — `checkout@v4`→v7, `setup-python@v4`→v7
-  (node16). Note it already runs `checkout@v6`/`setup-node@v6` elsewhere in the
-  same repo, so the v4s are stragglers in one file.
-- [ ] **P2 — `dpc-pro-docs` (2)** — `checkout@v4`→v7, `setup-node@v4`→v7.
-- [ ] **P2 — `youtube` (2)** — `checkout@v4`→v7, `astral-sh/setup-uv@v5`→v10.
-  Five majors on setup-uv; read its changelog.
-- [ ] **P3 — `dpc-pro` (1)** — `setup-node@v4`→v7. Its `checkout@v5` and
-  `setup-python@v6` are already node24.
-- [ ] **P3 — `compound-engineering-plugin` (1)** —
-  `googleapis/release-please-action@v4.4.0`→v5. This is the cepa mirror; worth
-  doing for consistency with the rule this repo enforces elsewhere.
-- [ ] **P3 — `illo-characters` (1)** — `checkout@v4`→v7. Repo did not exist at
-  the 2026-08-09 sweep; found only because the sweep was re-run.
+#### NOT OURS — recorded, not owed (6 repos, 25 pins)
+
+Do not open PRs in these. They will break on 2026-09-16 if their maintainers do
+nothing; the only action on our side is to pull their updates before September
+if their CI breaking would block us. Listed because a future sweep will find
+them again and should not re-litigate ownership.
+
+| Repo dir | Actually owned by | Pins | Note |
+|---|---|---|---|
+| `medusajs` | `medusajs/medusa-starter-default` | 7 | upstream starter template; nothing even node20 — all node12/16 |
+| `paperclip` | `paperclipai/paperclip` | 8 | **a fork under our account** — `gh api` confirms `fork=true`; top authors Dotta/Forgotten/Devin Foley, zero ours |
+| `OB1` | `NateBJones-Projects/OB1` | 6 | Nate's project; we use it, we do not own its CI |
+| `bakerydemo` | `wagtail/bakerydemo` | 2 | Wagtail's demo app |
+| `compound-engineering-plugin` | `EveryInc/compound-engineering-plugin` | 1 | **the upstream cepa was derived from — NOT our mirror.** Our plugin is this repo, `compound-engineering` |
+| `illo-characters` | `tmchow/illo-characters` | 1 | the illo skill's asset repo |
+
+**Two misattributions this section corrects, both from trusting a path or a
+remote prefix instead of checking:** `compound-engineering-plugin` was called
+"the cepa mirror" and given a do-it-for-consistency rationale — it is a third
+party's repo. `paperclip` was counted as ours because its remote reads
+`evanemerson`; it is a fork of `paperclipai/paperclip` with none of our commits.
+Both were P1/P3 items on a work list they never belonged on. The first two
+passes of this shard ranked `medusajs` as P1 — the single highest-priority item
+was in a repo we cannot merge to.
 
 ### Cross-repo boundary
 
 Per CLAUDE.md, **none of these fixes may be made from this repo's sessions.**
 Each is a branch + PR in its own repo's session. This shard is the durable
 carrier; `docs/handoff/2026-08-28-node20-installed-copies.md` holds the
-paste-ready prompt blocks.
+paste-ready prompt blocks — for the four owned repos only.
+
+Note the boundary rule and the ownership cut are different constraints that
+happen to point the same way here. The boundary rule says *do not run commands
+in another checkout*; it applies to `dpc-pro` as much as to `medusajs`.
+Ownership says *there is no PR to open at all*; it applies only to the six.
 
 ### Feeds an already-open finding
 
@@ -140,5 +140,11 @@ can be used to conclude. The open P2's proposed WARN step over
   covered by the tag cutline above.
 - **Only `~/webapps/*` at depth 1 was scanned.** Nested checkouts, worktrees,
   and repos outside `~/webapps` are unmeasured.
+- **Ownership is inferred from remote + commit authorship, not from a manifest.**
+  `git remote get-url origin` plus an author count, with `gh api .fork` for the
+  ambiguous case. A repo we own but have never committed to under the name
+  "Evan" would be misfiled as third-party by this method. The six were each
+  checked by hand; a future sweep should re-check rather than inherit this
+  table.
 - **Upstream targets drift.** Two moved in the 19 days between sweeps. Re-verify
   `runs.using` at fix time; do not paste these tags blind.
