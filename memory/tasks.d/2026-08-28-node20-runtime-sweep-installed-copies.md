@@ -36,6 +36,39 @@ LOOKUP-FAILED, never as a pass. Composites recursed into (see below).
 Cutline, verified live 2026-08-28: **`checkout`/`setup-node` v5+ and
 `setup-python` v6+ are node24; v4 and below are node20/16/12.**
 
+#### Second check, added 2026-08-28 after it failed: DOES THE TAG EXIST?
+
+The runtime lookup above resolves the runtime **of a tag**, and in doing so
+silently assumes the tag exists. That assumption is what broke on `youtube`:
+this shard prescribed `astral-sh/setup-uv@v10`, which 404s. The runtime check
+had "passed" because it was run against `@v10.0.1` — a real release — while the
+line written into the work list carried a floating major that was never
+published.
+
+Prescribing a tag therefore takes **two** checks, not one:
+
+```
+# 1. does the tag resolve at all?
+gh api "repos/<OWNER>/<REPO>/git/ref/tags/<TAG>" --jq .ref     # 404 => do not prescribe
+
+# 2. what runtime does it name? (the check already documented above)
+gh api "repos/<OWNER>/<REPO>/contents/action.yml?ref=<TAG>" \
+  --jq .content | tr -d '\n' | base64 --decode | grep -A2 '^runs:'
+```
+
+**Do not substitute `releases/latest` for check 1.** That endpoint reports a
+*release*, which is not the same object as a resolvable ref — it is exactly
+what produced the bad `v10` here, and what made an earlier pass of this shard
+report "targets moved v9→v10" as though both were usable tags.
+
+Actions are moving AWAY from floating majors as a supply-chain measure —
+setup-uv cites the tj-actions compromise explicitly — so this will recur. An
+action that publishes no floating major needs a deliberate full-version bump
+and cannot be left to ride a major tag. Verified 2026-08-28 for the three
+prescriptions still outstanding: `actions/checkout@v7`, `actions/setup-node@v7`
+and `cloudflare/wrangler-action@v4` all resolve as refs. `youtube` was the only
+affected item.
+
 ### Scope: 30 repos scanned, 15 have workflows, 10 exposed — but only 4 ARE OURS
 
 **Ownership was not checked in the first two passes of this shard, and it is the
@@ -58,10 +91,31 @@ Fifteen repos have no workflows at all.
   wrangler version is compatible rather than assuming a tag swap.
 - [ ] **P3 — `dpc-pro-docs` (2)** — `evanemerson/dpc-pro-docs`, 82 commits ours.
   `checkout@v4`→v7, `setup-node@v4`→v7. Pure tag swap.
-- [ ] **P3 — `youtube` (2)** — `evanemerson/youtube-transcript-scraper`, 52
-  commits ours. `checkout@v4`→v7, `astral-sh/setup-uv@v5`→v10. Five majors on
-  setup-uv (cache behaviour and `enable-cache` defaults moved) — read that
-  changelog; the checkout half is a straight swap.
+- [x] ~~**P3 — `youtube` (2)** — `evanemerson/youtube-transcript-scraper`, 52
+  commits ours.~~ **DONE 2026-08-28 — PR #29, merged as `6ced39a`.** CI green
+  on both matrix legs.
+  ```
+  actions/checkout@v4     -> @v7        node24
+  astral-sh/setup-uv@v5   -> @v10.0.1   node24   <- NOT @v10; see below
+  ```
+  **This shard prescribed `setup-uv@v5`→`v10` and that tag does not exist.**
+  setup-uv stopped publishing floating major and minor tags at v8.0.0 as a
+  deliberate supply-chain measure, citing the tj-actions compromise. Verified
+  against the API: `@v8`, `@v9`, `@v10` all 404 while `@v5` still resolves —
+  the floating majors were withdrawn, not merely absent for v10. Only full
+  versions (`v10.0.1`) or commit SHAs resolve. Applying the old line verbatim
+  produced a workflow whose action cannot be resolved at all — a harder failure
+  than the node20 one this shard exists to fix. **setup-uv needs deliberate
+  full-version bumps; there is no floating major to ride.**
+
+  Changelog review v5→v10, since this shard flagged it as the part needing
+  care: both inputs this workflow uses survive unchanged (`python-version`
+  still sets `UV_PYTHON`; `enable-cache` still boolean). Removed inputs
+  `pyproject-file`/`uv-file` (v6) and `server-url` (v7) were unused. v6 stopped
+  auto-activating a venv for `python-version` — harmless here because every
+  step goes through `uv sync`/`uv run`. v10 changed the `enable-cache` DEFAULT
+  to `auto` (disables caching on `pull_request_target`/`workflow_run`/
+  `release`), so the explicit `enable-cache: true` was kept, with a comment.
 - [ ] **P3 — `dpc-pro` (1)** — `evanemerson/dpc-pro`, 1327 commits ours.
   `setup-node@v4`→v7. Its `checkout@v5` and `setup-python@v6` are already
   node24, and its `appleboy/ssh-action@v1` composite is clean. One line.
@@ -95,13 +149,107 @@ was in a repo we cannot merge to.
 
 Per CLAUDE.md, **none of these fixes may be made from this repo's sessions.**
 Each is a branch + PR in its own repo's session. This shard is the durable
-carrier; `docs/handoff/2026-08-28-node20-installed-copies.md` holds the
-paste-ready prompt blocks — for the four owned repos only.
+carrier, and the paste-ready prompt blocks are inlined below rather than kept
+in a separate handoff.
+
+An earlier revision pointed at
+`docs/handoff/2026-08-28-node20-installed-copies.md`. **`docs/` is gitignored in
+this repo**, so that file existed only on the machine that wrote it — the
+pointer resolved to nothing from any other checkout or for anyone else reading
+the shard. Same defect class as a stale count: a reference that reads as
+authoritative and cannot be followed. The blocks now live in the tracked file
+that is meant to carry them.
 
 Note the boundary rule and the ownership cut are different constraints that
 happen to point the same way here. The boundary rule says *do not run commands
 in another checkout*; it applies to `dpc-pro` as much as to `medusajs`.
 Ownership says *there is no PR to open at all*; it applies only to the six.
+
+#### Paste-ready prompt blocks — the three outstanding repos
+
+Every tag below was re-verified as a resolvable ref on 2026-08-28. Re-verify at
+fix time anyway: run BOTH checks in the Method section, since tags can be
+withdrawn as well as superseded.
+
+**`artist360-www`** — 3 pins, the only one with a genuine upgrade hazard:
+
+```
+CI action pins in this repo target the node20 runtime GitHub removes on
+2026-09-16. After that date an action needing node20 has no interpreter and the
+step dies. Before changing any pin, verify BOTH that the target tag resolves
+(gh api "repos/<OWNER>/<REPO>/git/ref/tags/<TAG>") and what runtime it names —
+do not trust version numbers, and do not assume a floating major exists. Then
+branch, fix, and open a PR.
+
+  actions/checkout@v4             node20 -> actions/checkout@v7
+  actions/setup-node@v4           node20 -> actions/setup-node@v7
+  cloudflare/wrangler-action@v3   node20 -> cloudflare/wrangler-action@v4
+
+The two actions/* pins are straight tag swaps. wrangler-action v3->v4 is not:
+it tracks Wrangler itself, so confirm the project's wrangler version is
+compatible and that the accountId/apiToken secret wiring is unchanged. This
+workflow deploys the site, so let CI run green on the PR before merging — a
+green check is the verification here, not the diff.
+
+Note actions/setup-node sets the Node version used to build THIS PROJECT; the
+bump changes only which Node runs the action itself. Do not change the
+project's node-version input.
+
+Context: portfolio sweep at
+memory/tasks.d/2026-08-28-node20-runtime-sweep-installed-copies.md in the
+compound-engineering repo. Check this repo's own base-branch convention rather
+than assuming main or dev.
+```
+
+**`dpc-pro-docs`** — 2 pins, pure swap:
+
+```
+CI action pins in this repo target the node20 runtime GitHub removes on
+2026-09-16. After that date an action needing node20 has no interpreter and the
+step dies. Before changing any pin, verify BOTH that the target tag resolves
+(gh api "repos/<OWNER>/<REPO>/git/ref/tags/<TAG>") and what runtime it names.
+Then branch, fix, and open a PR.
+
+  actions/checkout@v4     node20 -> actions/checkout@v7
+  actions/setup-node@v4   node20 -> actions/setup-node@v7
+
+Both are straight tag swaps with no input changes. Confirm the workflow still
+parses and CI runs green.
+
+Note actions/setup-node sets the Node version used to build THIS PROJECT; the
+bump changes only which Node runs the action itself. Do not change the
+project's node-version input.
+
+Context: portfolio sweep at
+memory/tasks.d/2026-08-28-node20-runtime-sweep-installed-copies.md in the
+compound-engineering repo. Check this repo's own base-branch convention rather
+than assuming main or dev.
+```
+
+**`dpc-pro`** — 1 pin:
+
+```
+One CI action pin in this repo targets the node20 runtime GitHub removes on
+2026-09-16. After that date an action needing node20 has no interpreter and the
+step dies. Before changing it, verify BOTH that the target tag resolves
+(gh api "repos/actions/setup-node/git/ref/tags/v7") and what runtime it names.
+Then branch, fix, and open a PR.
+
+  actions/setup-node@v4   node20 -> actions/setup-node@v7
+
+Leave everything else alone: actions/checkout@v5 and actions/setup-python@v6
+are already node24, and appleboy/ssh-action@v1 is a composite with no nested
+actions (only `shell: bash` run steps), so it is clean.
+
+Note actions/setup-node sets the Node version used to build THIS PROJECT; the
+bump changes only which Node runs the action itself. Do not change the
+project's node-version input.
+
+Context: portfolio sweep at
+memory/tasks.d/2026-08-28-node20-runtime-sweep-installed-copies.md in the
+compound-engineering repo. dpc-pro branches off dev — confirm before creating
+the branch.
+```
 
 ### Feeds an already-open finding
 
