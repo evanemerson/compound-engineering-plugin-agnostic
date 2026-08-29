@@ -84,11 +84,28 @@ Fifteen repos have no workflows at all.
 
 #### OURS — the actual work list (4 repos, 8 pins)
 
-- [ ] **P2 — `artist360-www` (3)** — `evanemerson/artist-360-www`, 26 commits ours.
+**Status 2026-08-29: 2 of 4 done (5 of 8 pins).** `youtube` PR #29 / `6ced39a`;
+`artist360-www` PR #8 / `fab115f`. Remaining: `dpc-pro-docs` (2 pins),
+`dpc-pro` (1 pin) — both pure tag swaps, 18 days to the deadline.
+
+- [x] ~~**P2 — `artist360-www` (3)** — `evanemerson/artist-360-www`, 26 commits
+  ours.~~ **DONE 2026-08-29 — PR #8, merged as `fab115f`.**
   `checkout@v4`→v7, `setup-node@v4`→v7, `cloudflare/wrangler-action@v3`→v4.
-  **The only one of the four needing care:** wrangler-action v3→v4 tracks
-  Wrangler itself, and this workflow deploys the site — confirm the project's
-  wrangler version is compatible rather than assuming a tag swap.
+
+  **The predicted hazard was real and had a dependency consequence this shard
+  did not name.** wrangler-action v3→v4 tracks Wrangler itself, so the bump
+  required `@cloudflare/workers-types`→v5 for wrangler 4 (commit `e8ac058`) —
+  i.e. an action pin bump reached into the project's own package
+  dependencies, not just its CI. The shard said "confirm the project's wrangler
+  version is compatible"; the actual work was upgrading a typings package to
+  match. Worth generalizing: for any action that wraps a CLI (wrangler,
+  terraform, gcloud, aws), a major bump is a **toolchain** upgrade with
+  in-project dependency fallout, not a CI-only change — budget for it
+  accordingly.
+
+  That session also recorded why wrangler-action's `command` input is not
+  shell-injectable (commit `3701dd0`), which is a durable answer to a question
+  the bump naturally raises.
 - [ ] **P3 — `dpc-pro-docs` (2)** — `evanemerson/dpc-pro-docs`, 82 commits ours.
   `checkout@v4`→v7, `setup-node@v4`→v7. Pure tag swap.
 - [x] ~~**P3 — `youtube` (2)** — `evanemerson/youtube-transcript-scraper`, 52
@@ -165,41 +182,13 @@ happen to point the same way here. The boundary rule says *do not run commands
 in another checkout*; it applies to `dpc-pro` as much as to `medusajs`.
 Ownership says *there is no PR to open at all*; it applies only to the six.
 
-#### Paste-ready prompt blocks — the three outstanding repos
+#### Paste-ready prompt blocks — the two outstanding repos
 
 Every tag below was re-verified as a resolvable ref on 2026-08-28. Re-verify at
 fix time anyway: run BOTH checks in the Method section, since tags can be
 withdrawn as well as superseded.
 
-**`artist360-www`** — 3 pins, the only one with a genuine upgrade hazard:
-
-```
-CI action pins in this repo target the node20 runtime GitHub removes on
-2026-09-16. After that date an action needing node20 has no interpreter and the
-step dies. Before changing any pin, verify BOTH that the target tag resolves
-(gh api "repos/<OWNER>/<REPO>/git/ref/tags/<TAG>") and what runtime it names —
-do not trust version numbers, and do not assume a floating major exists. Then
-branch, fix, and open a PR.
-
-  actions/checkout@v4             node20 -> actions/checkout@v7
-  actions/setup-node@v4           node20 -> actions/setup-node@v7
-  cloudflare/wrangler-action@v3   node20 -> cloudflare/wrangler-action@v4
-
-The two actions/* pins are straight tag swaps. wrangler-action v3->v4 is not:
-it tracks Wrangler itself, so confirm the project's wrangler version is
-compatible and that the accountId/apiToken secret wiring is unchanged. This
-workflow deploys the site, so let CI run green on the PR before merging — a
-green check is the verification here, not the diff.
-
-Note actions/setup-node sets the Node version used to build THIS PROJECT; the
-bump changes only which Node runs the action itself. Do not change the
-project's node-version input.
-
-Context: portfolio sweep at
-memory/tasks.d/2026-08-28-node20-runtime-sweep-installed-copies.md in the
-compound-engineering repo. Check this repo's own base-branch convention rather
-than assuming main or dev.
-```
+(The `artist360-www` block is retired — that repo shipped as PR #8 / `fab115f`.)
 
 **`dpc-pro-docs`** — 2 pins, pure swap:
 
