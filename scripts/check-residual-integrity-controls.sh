@@ -15,12 +15,16 @@
 #
 # WHY A SYNTHETIC FIXTURE, unlike the model-pin controls which copy the tree.
 # That suite's baseline gate demands 0 MISS / 0 WARN, and this checker's
-# baseline over the live tree is NOT clean (2 MISS of real counter drift, 2 WARN
-# of legitimate no-checkbox prose). Copying the tree would make the baseline
-# dirty by construction, and the standard fix — waive the known findings —
-# builds a suite that passes because it was told to ignore what it found. So the
-# fixture is a minimal hand-built tree that is genuinely clean, and every case
-# is a delta from it.
+# baseline over the live tree carries 2 WARN by design — the known-legitimate
+# leg-4 hits the 2026-08-06 reconciliation deliberately created as an evidence
+# block. Copying the tree would make the baseline dirty by construction, and the
+# standard fix — waive the known findings — builds a suite that passes because
+# it was told to ignore what it found. So the fixture is a minimal hand-built
+# tree that is genuinely clean, and every case is a delta from it.
+#
+# (The tree also carried 2 MISS of real counter drift when this suite was
+# written. That was fixed in the same PR once CI wiring made deferring it
+# untenable — see the `real` case. The WARNs remain and are load-bearing.)
 #
 # THE COST, recorded rather than left implicit: a synthetic fixture exercises
 # the shapes it was built with, not the shapes the repo actually contains. The
@@ -140,6 +144,13 @@ reg gapeq 'the rejected encoding is INVISIBLE on one file (recorded limit)' 0 0 
 # a body that lost a finding while total held. Three MISS — the sums go too.
 reg gapne 'a removal the counters do not account for'  3 0 'must EQUAL the removals' '' \
   'kills: removal of the 1c gap check entirely'
+# The `gap < 0` arm looks redundant — the next branch catches the same inputs —
+# but it owns the message that NAMES the cause. Without this case, deleting the
+# arm passes the full suite and the operator gets `gap is -1`, which reads as an
+# internal arithmetic oddity rather than "a finding was added without updating
+# total". A diagnostic-quality regression, pinned like any other.
+reg gapneg 'a finding added without updating total names its cause' 1 0 'total was shrunk or a finding was added without it' '' \
+  'kills: deleting the gap<0 arm as redundant — detection survives, the message that explains it does not'
 # A file with only RETAINED skips (the /cepa:resolve-pr verdict edge) has NO
 # gap. The two kinds of skip behave differently and the checker must not assume
 # one: a naive `gap == skipped` that ignores retention fires here.
@@ -196,6 +207,40 @@ reg warnrc 'prose legs do not fail the run'         0 3 'WARN-ONLY' '' \
 reg trav  'an unreadable scan root is not a pass'   1 0 'traversal that could not complete' '' \
   'kills: dropping the traverse() stderr/exit predicate — a truncated walk reads as clean'
 
+# --- the silent-skip family (all found by review, all measured at 0 MISS) ---
+# These four shared one root shape, and it is this checker's own subject matter
+# one level down: a check that reads the right invariant over the WRONG ROW SET.
+# Leg 1 trusted that a path from find() meant the file was read, that a regex
+# match anywhere meant the field was declared, and that a field row anywhere
+# meant a finding existed. Each produced a clean pass indistinguishable from a
+# genuinely clean file.
+reg nosum  'a findings file with no summary: block is not clean' 2 0 "no 'summary:' block" '' \
+  'kills: the bare `continue` that dropped an unparseable file when a sibling parsed fine'
+reg nototal 'a summary: block with no total: is not clean'       2 0 "no 'total:' field" '' \
+  'kills: the bare `continue` on a missing total — every sub-invariant derives from it'
+reg nofm   'frontmatter with no closing --- is not clean'        2 0 "no closing '---'" '' \
+  'kills: treating an unextractable body as an empty-but-valid one (passes at total: 0)'
+# The exemption must live in FRONTMATTER. File-wide, any writer grants their own
+# file a total exemption by mentioning the field in prose or a code fence.
+reg fenceconv 'counter_convention: in a code fence does NOT exempt' 2 0 'but the body carries' '' \
+  'kills: the file-wide counter_convention grep — a self-service exemption written in prose'
+# A fenced block quoting field rows supplied a phantom finding.
+reg fencerow 'fenced field rows are not findings'                1 0 'must EQUAL the removals' '' \
+  'kills: tallying rows inside ``` fences — a deleted finding stayed invisible'
+# Rows that belong to no heading at all.
+reg orphan 'a status: row bound to no heading is caught'         1 0 'belongs to no heading' '' \
+  'kills: computing headings and never comparing it to anything but zero'
+
+# --- the env-override surface ----------------------------------------------
+# RESIDUAL_TODOS_DIR / RESIDUAL_SHARDS_DIR are real configuration the checker
+# exposes, and without this case they are DEAD SURFACE: every other case runs
+# the checker at its defaults, so a typo in either `${VAR:-default}` expansion
+# would ship green. The case relocates the whole fixture and asserts the
+# checker still finds and checks it — a silently-ignored override would make
+# the relocated tree invisible and trip the empty-tree guard instead.
+reg envdir 'the scan-root overrides are honored'   0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: a broken ${RESIDUAL_*_DIR:-default} expansion — otherwise untested configuration surface'
+
 # --- the empty-tree guard --------------------------------------------------
 # Measured before the guard existed: an empty tree passed `0 MISS, 0 WARN` and
 # exited 0. That is the most reassuring possible output from a run that checked
@@ -205,12 +250,28 @@ reg empty 'a run that found no input is not a pass' 1 0 'a scan over nothing is 
 
 # --- the live tree ---------------------------------------------------------
 # The synthetic fixture cannot see shapes nobody planted. This case runs the
-# checker over the REAL tree and pins the findings to the known set, so a change
-# in what the live tree produces fails here instead of passing silently. It is
-# NOT a clean-run assertion: the tree has 2 real MISS and 2 legitimate WARN
-# today, and pretending otherwise is what a waiver would do.
-reg real  'live tree matches the recorded finding set' 2 2 'a balanced total hides a wrong distribution' '' \
-  'kills: a checker that silently stops finding the known live drift'
+# checker over the REAL tree and pins its finding set, so a change in what the
+# live tree produces fails here instead of passing silently.
+#
+# 0 MISS is asserted because the tree is genuinely clean as of 2026-09-01 — the
+# one real drift the checker found on its first run
+# (todos/review-2026-08-25-194437.md, p2/p3 declared 4/4 over a body of 5/3) was
+# fixed in this same PR once CI wiring made deferring it untenable: a workflow
+# that ships red on main is not a deferral, it is a broken gate.
+#
+# THE 2 WARN ARE NOT SLACK. They are the two known-legitimate leg-4 hits — the
+# evidence block the 2026-08-06 reconciliation deliberately created — and
+# asserting the exact number is what makes this case fail if leg 4 starts or
+# stops firing. Do not "clean this up" to 0 WARN by editing that block; see the
+# P3 in memory/tasks.d/2026-09-01-feat-check-residual-integrity.md, which owns
+# that decision and explicitly rules out deleting the evidence.
+#
+# WHEN THIS CASE FAILS after a legitimate tree change: update the expected
+# counts here in the same commit as the change, and say why in the message.
+# The case is a tripwire on the tree, so a silent edit to its numbers defeats
+# it exactly the way a silent counter edit defeats leg 1.
+reg real  'live tree matches the recorded finding set' 0 2 'leg 4: 2' '^MISS ' \
+  'kills: a checker that silently stops finding the known live leg-4 hits, or starts MISSing on a clean tree'
 
 if [ "$LIST_ONLY" -eq 1 ]; then
   i=0
@@ -225,8 +286,25 @@ fi
 # Fixture
 # ---------------------------------------------------------------------------
 TMPROOT=$(mktemp -d "${TMPDIR:-/tmp}/cepa-residual-controls.XXXXXX") || exit 2
-cleanup() { [ "$KEEP" -eq 1 ] || rm -rf "$TMPROOT"; }
-trap cleanup EXIT
+cleanup() {
+  [ "$KEEP" -eq 1 ] && { printf 'fixtures kept at %s\n' "$TMPROOT"; return; }
+  # The `trav` case plants a mode-000 directory, and `rm -rf` cannot descend
+  # into one — so without restoring the traversal bits first, every run
+  # interrupted mid-`trav` leaks a fixture tree. Verified: `chmod 000 d && rm
+  # -rf parent` fails with "Permission denied" and the tree survives.
+  #
+  # The inline restore in the runner covers the normal path; this covers the
+  # signal path, which the inline restore cannot reach. INT and TERM are
+  # trapped for the same reason — a Ctrl-C or a cancelled CI job otherwise
+  # skips the restore entirely.
+  #
+  # A failed cleanup must not be silent, or a leaked tree per run accumulates
+  # with nothing to notice it. Same pattern and same rationale as
+  # scripts/check-model-pins-controls.sh — see its cleanup() comment.
+  chmod -R u+rwX "$TMPROOT" 2>/dev/null
+  rm -rf "$TMPROOT" 2>/dev/null || printf 'WARN: fixture leaked at %s\n' "$TMPROOT" >&2
+}
+trap cleanup EXIT INT TERM
 
 # A minimal CLEAN tree: one findings file that satisfies every sub-invariant,
 # and one shard with no prose defect. Every case is a delta from this.
@@ -311,6 +389,9 @@ plant() {  # plant <id> <dir>
     gapne) # Body loses a finding, total holds, but skipped does not account.
            sed -i '/^### 3$/,/^Body text.$/d' "$f"
            sed -i 's/^  applied: 3$/  applied: 2/; s/^  p3: 1$/  p3: 0/' "$f" ;;
+    gapneg) # A fourth finding appended, counters left at 3 — body exceeds
+            # total, which is the arm that names the cause.
+            printf '\n### 4\n- severity: P3\n- status: applied\n\nBody text.\n' >> "$f" ;;
     retain) # A RETAINED skip: still in the body, so there is no gap.
            sed -i 's/^### 3$/### 3/' "$f"
            sed -i '0,/^- status: applied$/!{0,/^- status: applied$/!s/^- status: applied$/- status: skipped/;}' "$f"
@@ -336,8 +417,35 @@ plant() {  # plant <id> <dir>
     leg3)  printf -- '- [ ] P3 — this was RESOLVED last week.\n' >> "$s" ;;
     leg4)  printf -- '- **P1 — a finding bullet with no checkbox.**\n' >> "$s" ;;
     warnrc) printf -- '- [ ] ~~P3 — struck.~~\n- [ ] P3 — this is DONE.\n- **P2 — no box.**\n' >> "$s" ;;
+    # Each of these six plants its defect ALONGSIDE the clean pristine file, so
+    # the case proves the bad file is caught while a sibling parses fine — the
+    # exact configuration in which the old aggregate guard was disarmed.
+    nosum)  sed -i 's/^summary:$/summaries:/' "$f" ;;
+    nototal) sed -i 's/^  total: 3$/  grand_total: 3/' "$f" ;;
+    nofm)   # Drop the CLOSING delimiter only, and zero the counters so every
+            # other sub-invariant would agree with an empty body. That is what
+            # made this shape pass: nothing disagreed.
+            printf -- '---\nsummary:\n  total: 0\n  p1: 0\n  p2: 0\n  p3: 0\n  applied: 0\n' > "$f" ;;
+    fenceconv) # Real drift, plus the exemption field quoted in a doc fence.
+            sed -i 's/^  applied: 3$/  applied: 1/; s/^  deferred: 0$/  deferred: 2/' "$f"
+            printf '\nThe exemption field looks like this:\n\n```yaml\ncounter_convention: legacy-total-shrink\n```\n' >> "$f" ;;
+    fencerow) # Delete a finding, leave counters whole, and let a fence supply
+            # the phantom rows. Counters agree; a finding is gone.
+            sed -i '/^### 3$/,/^Body text.$/d' "$f"
+            printf '\nExample of the field format:\n\n```yaml\n- severity: P3\n- status: applied\n```\n' >> "$f" ;;
+    orphan) # Same deletion, but the phantom rows sit before the first heading
+            # rather than in a fence — so fence-stripping alone cannot catch it.
+            sed -i '/^### 3$/,/^Body text.$/d' "$f"
+            sed -i 's/^# Fixture findings$/# Fixture findings\n\nLegend:\n- severity: P3\n- status: applied/' "$f" ;;
     trav)  chmod 000 "$d/todos" ;;
     empty) rm -f "$d/$FIX_TODOS" "$d/$FIX_SHARD" ;;
+    envdir) # Relocate the whole tree to non-default names. The runner sets the
+            # override env vars for this case; if the checker ignored them it
+            # would find nothing here and trip the empty-tree guard, which is a
+            # visibly different failure than the clean pass this expects.
+            mkdir -p "$d/alt-todos" "$d/alt-shards"
+            mv "$d/$FIX_TODOS" "$d/alt-todos/" && mv "$d/$FIX_SHARD" "$d/alt-shards/"
+            rmdir "$d/todos" "$d/memory/tasks.d" "$d/memory" 2>/dev/null || true ;;
     real)  : ;;  # no plant — this case runs against the real tree
     *) printf 'FATAL: no plant for case %s\n' "$id" >&2; return 1 ;;
   esac
@@ -360,13 +468,29 @@ assert_planted() {  # assert_planted <id> <dir>
 }
 
 CHK_OUT=''; CHK_MISS=''; CHK_WARN=''; CHK_RC=0
-run_checker() {  # run_checker <dir>
+run_checker() {  # run_checker <dir> [env assignments...]
   local d="$1" verdict
-  CHK_OUT=$(cd "$d" && bash "$CHECKER" 2>&1); CHK_RC=$?
+  shift
+  CHK_OUT=$(cd "$d" && env "$@" bash "$CHECKER" 2>&1); CHK_RC=$?
   verdict=$(printf '%s\n' "$CHK_OUT" | grep -E '^-- [0-9]+ MISS, [0-9]+ WARN --' | tail -1)
   [ -n "$verdict" ] || { CHK_MISS=''; CHK_WARN=''; return 1; }
   CHK_MISS=$(printf '%s' "$verdict" | sed -E 's/^-- ([0-9]+) MISS.*/\1/')
   CHK_WARN=$(printf '%s' "$verdict" | sed -E 's/.*, ([0-9]+) WARN --$/\1/')
+
+  # THE VERDICT MUST MATCH THE LINES. Every case reads counts from the verdict
+  # line alone, so a mutant that increments the counter while suppressing the
+  # message passes the whole suite while emitting a verdict claiming N MISS
+  # with no MISS line anywhere — a silenced diagnostic that reports as working
+  # enforcement. Asserting the structural identity kills that entire class in
+  # one place rather than needing a per-message case.
+  local emitted_miss emitted_warn
+  emitted_miss=$(printf '%s\n' "$CHK_OUT" | grep -c '^MISS ' || true)
+  emitted_warn=$(printf '%s\n' "$CHK_OUT" | grep -c '^WARN ' || true)
+  if [ "$emitted_miss" -ne "$CHK_MISS" ] || [ "$emitted_warn" -ne "$CHK_WARN" ]; then
+    CHK_OUT="${CHK_OUT}
+[controls] VERDICT/LINE MISMATCH: verdict says ${CHK_MISS} MISS / ${CHK_WARN} WARN, output carries ${emitted_miss} MISS / ${emitted_warn} WARN line(s)"
+    return 1
+  fi
   return 0
 }
 
@@ -456,7 +580,13 @@ while [ $i -lt ${#IDS[@]} ]; do
     fi
   fi
 
-  run_checker "$workdir" || { fail_case "$i" 'checker printed no verdict line'; \
+  # Only the envdir case runs with overrides; every other case must exercise
+  # the DEFAULT scan roots, or the defaults themselves go untested.
+  case_env=()
+  [ "$id" = envdir ] && case_env=(RESIDUAL_TODOS_DIR=alt-todos RESIDUAL_SHARDS_DIR=alt-shards)
+
+  run_checker "$workdir" "${case_env[@]+"${case_env[@]}"}" || { \
+    fail_case "$i" 'checker printed no verdict line'; \
     [ "$id" = trav ] && chmod 755 "$workdir/todos" 2>/dev/null; i=$((i + 1)); continue; }
   [ "$id" = trav ] && chmod 755 "$workdir/todos" 2>/dev/null
 

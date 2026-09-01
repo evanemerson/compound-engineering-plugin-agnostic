@@ -57,6 +57,17 @@
 # papering over it; closing it needs a per-severity removal field no consumer
 # has asked for. Such files are reported INFO, not silently passed.
 #
+# FOR WHOEVER WIRES THE NEXT CONSUMER — this script's output is written for a
+# human or a CI log. Its MISS/WARN messages interpolate repo-tracked file paths
+# and line numbers (never file prose, deliberately), so nothing here is an
+# autonomy §7 relay point TODAY: verified at the time of writing that no
+# workflow, command, skill, or agent reads this script's stdout. The moment one
+# does — a sweep summarizer, a CI-annotation-to-agent bridge — that consumer
+# becomes a relay point and owes a §7 untrusted-data clause AT THE RELAY SITE,
+# per CLAUDE.md. Recorded here because PR #9's Detection relay shipped as an
+# injection channel precisely by being wired up without anyone re-asking the
+# question at the new site.
+#
 # STATED LIMIT — leg 1c cannot detect the rejected encoding ON A SINGLE FILE,
 # and this is the most important limit here because 1c is the leg written to
 # catch it. A file whose `total` was shrunk to absorb a removal is BYTE-
@@ -100,6 +111,22 @@ export LC_ALL=C
 # A traversal that could not complete is never a pass. Non-empty stderr is the
 # predicate — strictly stronger than matching diagnostic text, and it covers
 # permission errors, symlink cycles, and anything find learns to complain about.
+#
+# INHERITED STATED LIMIT — this helper's two-part predicate (non-zero exit OR
+# non-empty stderr) has neither half individually pinned by any control, HERE OR
+# IN THE SIBLING, and cannot be: every failure a fixture can stage sets both, so
+# a control that removes either half still passes. Documented at
+# check-model-pins.sh:87-95 with the full measurement; cited rather than
+# restated, and named here because a reader of only this file would otherwise
+# have no way to know the gap exists. `each-fix-reintroduced-the-defect-class-
+# one-layer-down` is explicit that copying a shape obliges enumerating what it
+# does NOT do — this is that enumeration.
+#
+# NOT copied from the sibling, deliberately: its `dedup_resolved()` helper
+# exists because it discovers directories with `find` (plugins/*/agents), where
+# a symlink double-counts and inflates a coverage INFO line. This script's scan
+# roots are two fixed strings, so there is nothing to dedup. Recorded so the
+# omission reads as a decision rather than an oversight.
 TRAVERSE_FILES=()
 TRAVERSE_ERR=''
 traverse() {  # traverse <find args...> -> TRAVERSE_FILES[]; 1 and TRAVERSE_ERR on failure
@@ -132,6 +159,16 @@ SHARDS_DIR=${RESIDUAL_SHARDS_DIR:-memory/tasks.d}
 # The states the spec's lifecycle defines. Declared ONCE and consumed by every
 # site: the sibling checker shipped a widening that landed at three sites out
 # of four, which made a file readable by one leg and invisible to the others.
+#
+# THIS LIST MUST TRACK `plugins/cepa/skills/file-todos/SKILL.md`'s `status`
+# field enum (its frontmatter field table, ~line 94, and the Status Lifecycle
+# block below it). Unlike the autonomy skill, file-todos has no `### N<letter>.`
+# anchors, so check-model-pins.sh leg 4 has nothing to resolve here and NO
+# machine link forces this array to follow a spec edit. A seventh lifecycle
+# state added there would silently go uncounted here — the counter for it would
+# read 0 against a body that has one. The internal-duplication defence above
+# does not cover that; this note is the only thing that does, so grep for this
+# comment when editing the enum.
 STATES='pending ready skipped applied deferred completed'
 
 # ---------------------------------------------------------------------------
@@ -157,6 +194,8 @@ RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
 leg1_files=0
 leg1_skipped=0
 leg1_partial=0
+leg1_unreadable=0
+leg1_nototal=0
 
 if ! traverse -L "$TODOS_DIR" -type f -name 'review-*.md'; then
   miss "residual: could not walk ${TODOS_DIR} (${TRAVERSE_ERR}) — a traversal that could not complete is not a pass"
@@ -166,10 +205,42 @@ fi
 leg1_list=("${TRAVERSE_FILES[@]+"${TRAVERSE_FILES[@]}"}")
 
 for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
-  # A file with no summary: block is not a findings file this leg governs.
-  grep -qE '^summary:' "$f" || continue
+  # A file named review-*.md with no `summary:` block is NOT "not a findings
+  # file" — it is a findings file whose summary is missing or misspelled, and
+  # skipping it silently is the defect this whole script exists to prevent.
+  #
+  # The aggregate "checked nothing" guard below cannot cover this: it fires
+  # only when EVERY file falls through, so one well-formed sibling — which
+  # every real run has — disarms it permanently. Measured: a two-file fixture
+  # with one clean file and one whose `total:` was typo'd to `grand_total:`
+  # (declaring p1:5/completed:5 over a body of one applied P1) reported
+  # `0 MISS, 0 WARN`, exit 0. An ordinary typo, not an adversarial input.
+  # grep's exit 2 (unreadable, deleted mid-scan, permission change) must NOT
+  # be folded into exit 1 (no match) — `||` cannot tell them apart, and a file
+  # that vanished between the walk and the read would otherwise be reported as
+  # a file that merely lacks a summary block. traverse() proves the WALK
+  # completed; it says nothing about whether each file was still readable when
+  # its turn came. A concurrent /cepa:triage or a branch switch mid-scan is the
+  # ordinary way to produce this.
+  grep -qE '^summary:' "$f"
+  case $? in
+    0) : ;;
+    1) miss "residual: ${f} has no 'summary:' block — a findings file with no parsed summary is unverifiable, not clean"
+       misses=$((misses + 1)); leg1_unreadable=$((leg1_unreadable + 1)); continue ;;
+    *) miss "residual: ${f} could not be read (grep exit 2) — a file that disappeared or became unreadable mid-scan is not a clean file"
+       misses=$((misses + 1)); leg1_unreadable=$((leg1_unreadable + 1)); continue ;;
+  esac
 
-  if grep -qE '^counter_convention:' "$f"; then
+  # SCOPED TO FRONTMATTER, never file-wide. The spec says this field lives in
+  # frontmatter; a file-wide grep lets any writer grant their own file a total
+  # exemption by mentioning the field in prose or inside a documentation code
+  # fence — and this repo's findings files routinely discuss their own format.
+  # Measured on a drifted file: `counter_convention:` inside a ```yaml fence
+  # took the whole file out of legs 1a/1b/1c and reported `0 MISS, 0 WARN`.
+  # A self-service exemption granted by writing prose is exactly the
+  # "unreadable to every consumer" defect the field exists to prevent.
+  if printf '%s\n' "$(awk 'NR==1 && /^---[[:space:]]*$/ {infm=1; next} infm && /^---[[:space:]]*$/ {exit} infm' "$f")" |
+     grep -qE '^counter_convention:'; then
     leg1_skipped=$((leg1_skipped + 1))
     info "residual: ${f} carries counter_convention: — counters follow a superseded convention and are not verifiable from the body"
     continue
@@ -186,7 +257,16 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   ' "$f")
 
   declared_total=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*total:[[:space:]]*([0-9]+).*/\1/p' | head -1)
-  [ -n "$declared_total" ] || continue
+  # Same class as the missing-`summary:` case above: a summary block that
+  # parses but carries no `total:` is a misspelled or truncated block, and
+  # every downstream sub-invariant is derived from `total`. Falling through
+  # here means the file was counted as present and verified as nothing.
+  if [ -z "$declared_total" ]; then
+    miss "residual: ${f} has a 'summary:' block with no 'total:' field — every counter check derives from total, so nothing in this file was verified"
+    misses=$((misses + 1))
+    leg1_nototal=$((leg1_nototal + 1))
+    continue
+  fi
 
   # --- body tallies.
   #
@@ -201,6 +281,34 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   # subject matter one level down: a tally that fires on the wrong rows reads
   # exactly like a tally that fires on the right ones.
   body=$(awk 'NR==1 && /^---[[:space:]]*$/ {infm=1; next} infm && /^---[[:space:]]*$/ {infm=0; body=1; next} body' "$f")
+
+  # The extractor needs a SECOND `---` to ever enter the body state. Without
+  # one, `$body` is empty — and an empty body agrees perfectly with a summary
+  # declaring `total: 0` and every counter 0: no headings (so the tally-did-
+  # not-fire guard cannot fire, it requires headings > 0), gap 0, removals 0,
+  # every state counter 0 == 0. Measured: such a file reported `0 MISS,
+  # 0 WARN`, exit 0, and was counted in "summary blocks checked". A truncated
+  # save is the ordinary way to produce it.
+  #
+  # STRIP FENCED REGIONS. A ```yaml block quoting `- severity: P3` /
+  # `- status: applied` supplies phantom rows the tally counts as a real
+  # finding. Measured: deleting a finding from the body while leaving the
+  # counters untouched, then adding a documentation fence containing its field
+  # rows, produced `0 MISS, 0 WARN` — a finding vanished with every counter
+  # agreeing. That is the "inconsistent middle" leg 1c claims to catch, and it
+  # was invisible because the rows were counted from the wrong row set.
+  body=$(printf '%s\n' "$body" | awk '/^[[:space:]]*```/ {fence = !fence; next} !fence')
+
+  # Checked structurally rather than by testing `-z "$body"`: a findings file
+  # legitimately CAN have an empty body (total: 0, no findings yet), and
+  # conflating "no body" with "unparseable frontmatter" would MISS on that
+  # correct file. The delimiter count distinguishes them.
+  if [ "$(grep -cE '^---[[:space:]]*$' "$f")" -lt 2 ]; then
+    miss "residual: ${f} frontmatter has no closing '---' — the body could not be extracted, so an empty body was compared against the counters instead of the real one"
+    misses=$((misses + 1))
+    leg1_nototal=$((leg1_nototal + 1))
+    continue
+  fi
 
   # THE LEADING `-` IS OPTIONAL AND THE PATTERN MUST TOLERATE BOTH. Two field
   # formats are live in this repo — `- severity: P1` and bare `severity: P1` —
@@ -254,6 +362,19 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   # verifies nothing is not a pass" guard, at the per-file level.
   if [ "$headings" -gt 0 ] && [ "$body_status_rows" -eq 0 ]; then
     miss "residual: ${f} has ${headings} finding heading(s) but zero status: rows matched — the tally pattern did not fire; a zero count is not a clean file"
+    misses=$((misses + 1))
+    continue
+  fi
+
+  # EVERY FIELD ROW MUST BELONG TO A HEADING. `headings` was computed and then
+  # compared against nothing but zero, so any NON-zero mismatch was invisible:
+  # a finding deleted from the body while its field rows survived elsewhere
+  # (before the first `### N`, under a `Legend:` line) kept the tally whole and
+  # every counter agreeing. Measured at `0 MISS, 0 WARN` before this check.
+  # Files with a batch or range shape have already `continue`d above, so a
+  # legitimate one-pair-covers-several-findings file never reaches here.
+  if [ "$headings" -ne "$body_status_rows" ]; then
+    miss "residual: ${f} has ${headings} finding heading(s) but ${body_status_rows} status: row(s) — a field row that belongs to no heading is not a finding any consumer can read"
     misses=$((misses + 1))
     continue
   fi
@@ -319,6 +440,32 @@ done
 leg1_unexplained=$(( ${#leg1_list[@]} - leg1_skipped ))
 if [ "$leg1_files" -eq 0 ] && [ "$leg1_unexplained" -gt 0 ]; then
   miss "residual: leg 1 checked no summary block across ${leg1_unexplained} non-exempt findings file(s) — a scan that verifies nothing is not a pass"
+  misses=$((misses + 1))
+fi
+
+# EVERY WALKED FILE MUST BE ACCOUNTED FOR. The guard above fires only when the
+# whole run verified nothing, so a single well-formed sibling — which every
+# real run has — disarms it permanently while other files fall through
+# silently. Each `continue` above now emits its own MISS, and this reconciles
+# the totals so a FUTURE `continue` added without one cannot go unnoticed: the
+# arithmetic fails even though no individual check does.
+#
+# This is the accounting the sibling checker learned to keep after a truncated
+# walk reported `5 of 5 roots`. Same lesson, per-file rather than per-root.
+#
+# STATED LIMIT — NO CONTROL CAN REDDEN THIS, and that is not an oversight.
+# Every `continue` in the loop above either increments one of the four counters
+# or runs after `leg1_files` was incremented, so the arithmetic cannot fail on
+# any fixture that can be planted TODAY. Verified by mutation: replacing this
+# condition with `false` leaves the suite at 28/28. It is a tripwire for a
+# FUTURE edit — the next `continue` added without its own MISS — which is
+# precisely the shape that produced the P1 this check closes. Recorded here per
+# `an-assertion-must-name-the-edit-that-reddens-it`: the edit that reddens it
+# has not been written yet, so no control names it, and pretending otherwise
+# would make an unpinnable guard look pinned.
+leg1_accounted=$(( leg1_files + leg1_skipped + leg1_unreadable + leg1_nototal ))
+if [ "$leg1_accounted" -ne "${#leg1_list[@]}" ]; then
+  miss "residual: leg 1 walked ${#leg1_list[@]} findings file(s) but accounted for only ${leg1_accounted} — some file was dropped by a path that emits no finding of its own"
   misses=$((misses + 1))
 fi
 
