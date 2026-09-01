@@ -84,9 +84,47 @@ Fifteen repos have no workflows at all.
 
 #### OURS — the actual work list (4 repos, 8 pins)
 
-**Status 2026-08-29: 2 of 4 done (5 of 8 pins).** `youtube` PR #29 / `6ced39a`;
-`artist360-www` PR #8 / `fab115f`. Remaining: `dpc-pro-docs` (2 pins),
-`dpc-pro` (1 pin) — both pure tag swaps, 18 days to the deadline.
+**Status 2026-09-01: CLOSED — 4 of 4 repos, 8 of 8 pins, 15 days before the
+deadline.**
+
+| repo | pins | landed as | date |
+|---|---|---|---|
+| `youtube` | 2 | PR #29 / `6ced39a` | 2026-08-28 |
+| `artist360-www` | 3 | PR #8 / `fab115f` | 2026-08-29 |
+| `dpc-pro-docs` | 2 | PR #5 / `d659c879` | 2026-08-29 |
+| `dpc-pro` | 1 | direct commit `aac9bcce` | 2026-08-29 |
+
+Verified 2026-09-01 by reading the live workflow files through `gh api` — not
+by trusting this shard's own checkboxes. `dpc-pro-docs/ci.yml` carries
+`checkout@v7` + `setup-node@v7`; `dpc-pro/supply-chain-audit.yml:189` carries
+`setup-node@v7`, with every other pin in that repo already `checkout@v5` /
+`setup-python@v6` (node24) plus the clean `appleboy/ssh-action@v1` composite.
+
+### The shard went stale for three days and produced a hand-off for finished work
+
+On 2026-09-01 this session read the status line above (then dated 2026-08-29,
+reading "2 of 4"), re-verified that `actions/checkout@v7` and
+`actions/setup-node@v7` still resolve as node24 refs, and wrote paste-ready
+prompts for two repos that had **already shipped their fixes on 2026-08-29**.
+The operator caught it: "I think those are both done."
+
+**The wrong invariant was checked.** Verifying the prescription (does the target
+tag exist? what runtime does it name?) is necessary and this shard rightly
+demands it — but it says nothing about whether the *target repo still needs the
+change*. Both checks passed cleanly while the work list they served was three
+days out of date. This is another instance of
+`checking-the-wrong-invariant-reads-exactly-like-checking-the-right-one`, and
+the fourth recorded in this repo.
+
+`dpc-pro` also shows why a PR list is not a completion check: `aac9bcce` was a
+**direct commit to the branch**, so `gh pr list` showed nothing and the first
+pass here concluded the pin was outstanding. The workflow file is the authority
+on what a workflow pins; a PR search is a proxy that misses every non-PR path.
+
+**For the next sweep: read the current state of the target before prescribing
+anything.** One `gh api .../contents/.github/workflows/<f>` per repo — no
+working tree touched, no boundary-rule tension — costs one call and is the only
+check that answers "is this still owed."
 
 - [x] ~~**P2 — `artist360-www` (3)** — `evanemerson/artist-360-www`, 26 commits
   ours.~~ **DONE 2026-08-29 — PR #8, merged as `fab115f`.**
@@ -106,8 +144,9 @@ Fifteen repos have no workflows at all.
   That session also recorded why wrangler-action's `command` input is not
   shell-injectable (commit `3701dd0`), which is a durable answer to a question
   the bump naturally raises.
-- [ ] **P3 — `dpc-pro-docs` (2)** — `evanemerson/dpc-pro-docs`, 82 commits ours.
-  `checkout@v4`→v7, `setup-node@v4`→v7. Pure tag swap.
+- [x] ~~**P3 — `dpc-pro-docs` (2)** — `evanemerson/dpc-pro-docs`, 82 commits
+  ours. `checkout@v4`→v7, `setup-node@v4`→v7. Pure tag swap.~~
+  **DONE 2026-08-29 — PR #5, merged as `d659c879`.** Swap was pure as predicted.
 - [x] ~~**P3 — `youtube` (2)** — `evanemerson/youtube-transcript-scraper`, 52
   commits ours.~~ **DONE 2026-08-28 — PR #29, merged as `6ced39a`.** CI green
   on both matrix legs.
@@ -133,9 +172,13 @@ Fifteen repos have no workflows at all.
   step goes through `uv sync`/`uv run`. v10 changed the `enable-cache` DEFAULT
   to `auto` (disables caching on `pull_request_target`/`workflow_run`/
   `release`), so the explicit `enable-cache: true` was kept, with a comment.
-- [ ] **P3 — `dpc-pro` (1)** — `evanemerson/dpc-pro`, 1327 commits ours.
+- [x] ~~**P3 — `dpc-pro` (1)** — `evanemerson/dpc-pro`, 1327 commits ours.
   `setup-node@v4`→v7. Its `checkout@v5` and `setup-python@v6` are already
-  node24, and its `appleboy/ssh-action@v1` composite is clean. One line.
+  node24, and its `appleboy/ssh-action@v1` composite is clean. One line.~~
+  **DONE 2026-08-29 — direct commit `aac9bcce`, no PR.** In
+  `supply-chain-audit.yml:189`. Because it never became a PR, a `gh pr list`
+  check on 2026-09-01 reported it outstanding; the workflow file is the
+  authority, not the PR list.
 
 #### NOT OURS — recorded, not owed (6 repos, 25 pins)
 
