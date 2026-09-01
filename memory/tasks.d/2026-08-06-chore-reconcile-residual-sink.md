@@ -129,7 +129,21 @@ stricter invariant that nothing checks.
 
 ### From the /cepa:compound run — proposals needing an operator decision
 
-- [ ] P2 — **build `scripts/check-residual-integrity.sh` (+ a controls suite).**
+- [x] ~~P2 — **build `scripts/check-residual-integrity.sh` (+ a controls suite).**~~
+  **DONE 2026-09-01 — `feat/check-residual-integrity`, commit `37692e1`.**
+  Built to this spec: leg 1 MISS with all three sub-invariants (sums,
+  body agreement, gap EQUALITY), legs 2-4 WARN, 20 controls, mutation-verified.
+  Measured on the live tree exactly as the design predicted — legs 2 and 3 at
+  0 hits, leg 4 at the 2 legitimate hits this reconciliation created. The
+  fifth leg (supersession blockquote) is deliberately unbuilt and recorded in
+  the script header. **It found one real drift on its first clean run**
+  (`todos/review-2026-08-25-194437.md`, filed below), of exactly the
+  balanced-total/wrong-distribution shape the spec says a sum-only check
+  cannot catch. Two limits are recorded in the header rather than left looking
+  covered; the sharper one is that leg 1c cannot see the rejected encoding on
+  a single file, and control `gapeq` pins that limit so a future revision has
+  to change it deliberately.
+  <br>Original spec follows, unedited, as the record of what was asked for:
   **Spec moved under it 2026-08-09 (PR #46, 1.21.0) — build against the current
   text, not the pre-#46 one.** `cepa:file-todos` now states an *agreement*
   invariant, not only the counter sum: each state counter must equal the body's

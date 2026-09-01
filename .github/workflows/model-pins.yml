@@ -302,9 +302,31 @@ jobs:
           inspected=0; skipped=0; annotations=0; unread=0; hits=""
           while IFS=$(printf '\t') read -r wf_id wf_name; do
             [ -n "$wf_id" ] || continue
+            # `select(. != null)` is load-bearing. A workflow with NO completed
+            # run on the branch makes `.workflow_runs[0]` null, and
+            # `null | [...] | @tsv` renders as a two-character string of empty
+            # fields, NOT the empty string. `[ -z "$run" ]` is therefore false,
+            # the SKIP below is bypassed, and the loop proceeds with empty
+            # run_id/head_sha/suite. The next call becomes a compare against an
+            # empty base, which 404s; under `set -o pipefail` with GitHub's
+            # `bash -e` shell the assignment itself takes gh's non-zero status
+            # and kills the step BEFORE any guard runs. Observed 2026-09-01:
+            # adding a fourth workflow to this repo turned this job red with no
+            # diagnostic naming the cause, and EVERY newly-added workflow would
+            # have done the same until its first run landed on the default
+            # branch.
+            #
+            # The guard must sit BEFORE `@tsv`, not after it. `... | @tsv //
+            # empty` was tried first and does nothing: `@tsv` has already
+            # produced a (non-null, two-char) string, so the `//` alternative
+            # never fires. Verified against the live API both ways.
             run=$(api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf_id/runs?status=completed&branch=$tip&per_page=1" \
-                    --jq '.workflow_runs[0] | [.id, .head_sha, .check_suite_id] | @tsv') || run=""
-            if [ -z "$run" ]; then
+                    --jq '.workflow_runs[0] | select(. != null) | [.id, .head_sha, .check_suite_id] | @tsv') || run=""
+            # Belt and braces: a row whose FIRST field is empty is not a run,
+            # whatever jq rendered. The `// empty` above fixes the known
+            # producer; this catches any other shape yielding blank fields,
+            # because the cost of getting it wrong is a red job with no message.
+            if [ -z "$run" ] || [ -z "$(printf '%s' "$run" | cut -f1)" ]; then
               printf 'SKIP  %s — no completed run on %s\n' "$wf_name" "$tip"
               skipped=$((skipped + 1)); continue
             fi

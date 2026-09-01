@@ -1,0 +1,60 @@
+name: residual-integrity
+
+# Enforces that a findings file's parsed `summary:` counters agree with its own
+# body, and that a residual shard's checkbox agrees with its own prose.
+# Without a runner, that is prose-only compliance — the exact failure mode in
+# docs/solutions/logic-errors/a-closure-claim-in-prose-is-not-the-field-a-consumer-parses.md,
+# whose eight occurrences were each found by a human noticing prose disagreed
+# with a field. `/cepa:sweep` and `/cepa:triage` read the field.
+#
+# The check is read-only and takes seconds. Its pass condition, its four legs,
+# and its stated limits are defined in scripts/check-residual-integrity.sh's
+# own header — read them there rather than inferring them from this comment or
+# from any one leg's output verb.
+#
+# WHY LEG 1 FAILS AND LEGS 2-4 DO NOT: legs 2-4 read prose written by people,
+# where the fix for a false positive is to mangle correct writing. The checker
+# owns that argument; this workflow just runs it. A green run here with WARN
+# lines in the log is the designed state, not a deferred failure.
+#
+# Security: this workflow interpolates NO event data (no ${{ github.event.* }})
+# into any run: step — both steps are static `bash scripts/...` invocations, so
+# there is no injection surface. Keep it that way: if a future step needs event
+# data, pass it through env: with quoting rather than interpolating it into the
+# run: body.
+#
+# Action pinning, the bump recipe, and the JS-runtime eligibility constraint on
+# major versions are documented in .github/workflows/model-pins.yml. This
+# workflow CITES that file rather than restating it — a second copy is how the
+# two rationales in CLAUDE.md's model-pin history diverged.
+
+# Deliberately NOT path-filtered, for the reason model-pins.yml states: a PR
+# that moves a findings file outside the filtered paths would show no check at
+# all, which reads as "nothing to review" rather than as a failure, and a
+# path-filtered required check can never be satisfied on the PRs it skips.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Both checks finish in seconds. The bound exists because this job reads
+    # files reachable from an untrusted PR branch, and the default is 360
+    # minutes. Same rationale as model-pins.yml's `check` job.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Policy check first, controls second with `if: always()`. Both always
+      # run, so neither hides the other, and a genuinely drifted counter in a
+      # PR trips the CHECKER rather than being reported as a broken harness —
+      # model-pins.yml records why the reverse order inverts the diagnostic.
+      - name: Check residual integrity
+        run: bash scripts/check-residual-integrity.sh
+      - name: Check residual-integrity checker controls
+        if: always()
+        run: bash scripts/check-residual-integrity-controls.sh
