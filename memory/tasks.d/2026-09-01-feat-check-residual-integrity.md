@@ -144,6 +144,41 @@ one was reproduced with a real fixture before being fixed, and re-run after.
   next consumer, because PR #9's Detection relay shipped as an injection
   channel precisely by being wired up without re-asking at the new site.
 
+### Found by wiring CI — a latent defect in the deprecation observer
+
+- [x] **P2 — `runtime-deprecation` dies on any workflow with no runs yet.**
+  Adding `residual-integrity.yml` turned that job red with **no diagnostic**.
+  The new workflow is not the cause; it is the trigger. Every newly-added
+  workflow in this repo would have done the same until its first run landed on
+  the default branch. **FIXED 2026-09-01, commit `9f512fe`.**
+
+  `.workflow_runs[0]` is `null` for a workflow with no completed run on the
+  branch, and `null | [...] | @tsv` renders as a **two-character string of
+  empty fields**, not the empty string. So `[ -z "$run" ]` is false, the SKIP
+  is bypassed, and the loop proceeds with empty `run_id`/`head_sha`/`suite`.
+  The next call becomes a compare against an empty base, which 404s — and
+  under `set -o pipefail` with GitHub's `bash -e` shell the **assignment**
+  takes gh's non-zero status and kills the step before the `|| ...` guard
+  written for exactly that case can run.
+
+  Two things worth keeping:
+
+  1. **The guard must precede `@tsv`.** `... | @tsv // empty` was the first
+     fix and does **nothing** — `@tsv` has already produced a non-null string,
+     so the `//` alternative never fires. It was caught by testing against the
+     live API rather than by reading the filter, which looked correct.
+  2. **The step was never reaching `Dependabot Updates` at all.** It died two
+     entries earlier, so a fifth workflow had gone uninspected for as long as
+     it has existed — and the job reported success the whole time, because it
+     failed only once a workflow sorted before that one lacked runs. A partial
+     scan reporting as a clean pass is this repo's most-documented defect
+     class; here it was inside the job whose own header forbids it.
+
+  Verified by extracting the step with `yaml.safe_load` and replaying it under
+  `bash -e` with a real token, before and after. Before: 3 lines then exit 1,
+  no summary. After: exit 0, all five workflows reached, the new one correctly
+  SKIPped with its reason named.
+
 ### Recorded — the checker's own first-run defect
 
 Its first cut reported **21 MISS** over this tree. The tally grepped `status:`
