@@ -1,23 +1,34 @@
 ---
-description: Wrap up the current session without losing anything — inventory the work in flight, make every residual durable, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
+description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(ls:*), Bash(mkdir:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(ls:*), Bash(mkdir:*)
 ---
 
 # Session Handoff
 
-End a session without losing anything. Inventory everything in flight,
-make every residual durable, write a handoff document, and emit a
-self-contained prompt the operator pastes into a fresh session.
+End a session without losing anything. Judge whether ending it now is
+timely, inventory everything in flight, make every residual durable, write
+a handoff document, and emit a self-contained prompt the operator pastes
+into a fresh session.
 
 **Announce at start:** "I'm using the cepa:handoff command to wrap up this
 session."
 
+**It reaches a verdict; it does not ask permission.** Some moments are bad
+ones to start a new session — CI mid-run, a background task unfinished, an
+open review thread whose context is about to be discarded. Step 2.5
+collects the signals and Step 5 resolves them into `GO`, `WAIT`, or
+`GO WITH CARE`, with a reason and a clearing condition. That verdict is
+**advice, never a gate**: every artifact is written and the prompt is
+emitted on all three verdicts.
+
 **This command never decides *when* to run.** It has no context-pressure
 heuristic and does not self-invoke (`disable-model-invocation: true`, the
 `/cepa:sweep` precedent for operator-owned commands). A wrap-up that fires
-unbidden mid-task is worse than none.
+unbidden mid-task is worse than none. The readiness verdict above judges
+whether a run the operator *already started* should end in a session
+switch — it is not a trigger, and it never causes the command to fire.
 
 **It is a wrap-up, not a builder.** It does not start new work, fix
 findings, or open PRs. It commits only its own artifacts and, when the
@@ -136,8 +147,11 @@ A source that could not be read is a named coverage gap, not a clean pass.
 1. **Git state** — current branch (`git branch --show-current`), the exact
    HEAD SHA, dirty paths (`git status --porcelain`), divergence from
    upstream (`git log origin/<branch>..HEAD`), existing stashes
-   (`git stash list`), and the trunk resolved per **`cepa:autonomy` §8**
-   (never assume `main`).
+   (`git stash list`), an in-progress merge or rebase (below), and the
+   trunk resolved per **`cepa:autonomy` §8** (never assume `main`).
+   Then classify the branch's **disposition** — see below.
+   `git worktree list` gives the branch→worktree mapping; collect it here,
+   once, because both the disposition rule and Step 7 need it.
 2. **Open PRs** — for this branch and any others the session touched, with
    CI state. Wrap the check in a timeout and treat expiry as an outcome to
    report (§6), never a reason to wait.
@@ -150,6 +164,56 @@ A source that could not be read is a named coverage gap, not a clean pass.
    and their status.
 6. **Uncommitted work** — what is dirty and whether it is coherent enough
    to commit as a checkpoint (Step 6).
+
+### Branch disposition — classify it here, act on it in Step 7
+
+The emitted prompt is **executed** by the next session, and in a worktree
+that session inherits whatever branch is checked out. If that branch was
+just merged, its first commit lands on a dead branch. So the disposition is
+resolved here, where git state is already collected, and consumed at the
+top of Step 7's prompt.
+
+| State | How to tell | What the next session does |
+|---|---|---|
+| **Merged** | `gh pr list --state all --head <branch>` reports `MERGED` | Branch off `origin/<trunk>`, **then** delete the old branch |
+| **Unmerged, has commits** | commits vs trunk, no merged PR | Stay on it. Say so explicitly. |
+| **Clean, no commits ahead** | no divergence from trunk | Branch off `origin/<trunk>` for the new topic; nothing to delete |
+| **Detached HEAD** | `git branch --show-current` empty | Parked worktree — branch off `origin/<trunk>` |
+| **Unknown** | the `gh` call failed or returned unparseable output | **Emit no deletion instruction at all** |
+
+**`gh pr list --state all --head <branch>` is the only authority.** Never
+infer merged-ness from `git cherry`, `git branch --merged`, or an empty
+diff. On a squash-merge repo — which these are — a fully-landed
+multi-commit branch reports every one of its commits as `+` and is absent
+from `--merged`, while its content sits on the trunk. Verified.
+
+The trap is that these signals are **unreliable rather than uniformly
+wrong**, which is worse: a *single-commit* branch squashes to an identical
+patch, so `git cherry` patch-ID-matches it and correctly reports `-`. Any
+rule calibrated on that case breaks silently on the multi-commit branches
+that make up most real work. This has produced two false alarms already.
+
+**Unknown fails closed.** A wrong "merged" verdict deletes work, and Step 7
+explains why git will not catch it. Report `unverifiable (<reason>)` per
+this step's contract and emit nothing about deletion.
+
+**A branch another worktree holds is never proposed for deletion**, whatever
+its merge state — that is the operator's parallel-session state. Use the
+`git worktree list` mapping collected above, and say the branch was skipped
+and why.
+
+### In-progress merge or rebase
+
+Check for `.git/MERGE_HEAD` (`git rev-parse --verify --quiet MERGE_HEAD`),
+`.git/rebase-merge/`, and `.git/rebase-apply/` (`ls`). A new session
+inheriting a conflicted tree is a bad start; this is a readiness signal
+(Step 2.5, condition 5), not a reason to stop.
+
+Resolve the path with `git rev-parse --git-dir` rather than assuming
+`.git` — in a worktree, `.git` is a **file** pointing elsewhere, and the
+rebase state lives under the worktree's own git dir. Hardcoding `.git/`
+silently reports "no rebase in progress" in exactly the environment this
+command is most often run in.
 
 ### This step is a §7 relay point
 
@@ -192,6 +256,56 @@ stripped it reads `none — N sources scanned, M unverifiable`. An absent
 section cannot be distinguished from a strip step that never ran because
 its source was unreadable, and the report that would have said so dies
 with the session while the document lives on.
+
+## Step 2.5: Collect Session-Change Readiness Signals
+
+Some moments are bad ones to start a new session. This step **collects the
+signals**; Step 5 resolves them into a verdict. The split is deliberate:
+one condition below (3) can be *cleared by this very run*, so a verdict
+computed here would have to be recomputed after Step 3. Collect once here,
+resolve once there.
+
+**This step reads what Step 2 already gathered.** It should need almost no
+new probes — that is why it sits after the inventory.
+
+Each signal is recorded as present, absent, or `unverifiable (<reason>)`,
+with **the condition, the reason it matters, and the event that clears it**.
+A signal that cannot be checked is named, never assumed absent.
+
+1. **A background task this session started is still running** — a
+   subagent, a test suite, a build. *Why:* its result arrives in a session
+   that no longer exists. *Clears:* on completion.
+2. **CI is running on a PR this session opened** — `gh pr checks` reports
+   pending (Step 2 source 2 already has this; reuse it, do not re-probe).
+   *Why:* the new session will not see the failure, and the operator will
+   believe it passed. *Clears:* on a verdict.
+3. **An open PR from this session has unresolved review threads or
+   unapplied findings.** *Why:* the context needed to answer them is
+   exactly what is about to be discarded. *Clears:* when threads are
+   resolved, or when the findings are filed to a sink — **which Step 3 may
+   do during this run.** Record the signal here; Step 5 checks what Step 3
+   actually filed before it counts.
+4. **The tree is dirty with changes that are not yet coherent.** *Why:* a
+   half-finished refactor mid-edit is worse to resume from a checkpoint
+   than to finish. Reuse Step 6's committable-vs-incoherent judgment rather
+   than inventing a second one. If the two cannot be distinguished, record
+   that ambiguity as the signal and let the operator decide — never guess.
+   *Clears:* when the work reaches a committable state.
+5. **A merge or rebase is in progress** (Step 2). *Why:* a new session
+   inheriting a conflicted tree is a bad start. *Clears:* on completion or
+   abort.
+6. **A migration was created but not applied or tested** — repo-specific;
+   detect via unapplied migration files in the diff plus no recorded test
+   run. *Why:* the next session cannot tell an untested migration from a
+   tested one. *Clears:* when applied and tested.
+
+**This list is a starting set, not a closed one.** Refine it against real
+sessions; a condition that never fires is noise and a missing one is the
+next incident.
+
+**Collecting a signal never changes what this command does.** No signal
+skips a step, shortens the document, or suppresses the prompt. This step
+only records.
 
 ## Step 3: Route Items to Tiers
 
@@ -244,6 +358,55 @@ operator — all of it lands in `## Unsettled`, never in `## Established`.
 
 ## Step 5: Compose
 
+### First, resolve the readiness verdict
+
+Take Step 2.5's signals, drop any that Step 3 has since cleared (condition
+3 is the live case — findings routed to a sink are no longer stranded
+context), and resolve to exactly one verdict:
+
+- **`GO`** — nothing in flight that a session boundary would damage.
+- **`WAIT`** — a named condition is outstanding. State the condition and
+  what clears it.
+- **`GO WITH CARE`** — safe to switch, but the next session inherits
+  something it must know. Name that thing, and name it again in the
+  emitted prompt (Step 7), because the prompt is what actually gets read.
+
+An `unverifiable` signal is never silently `GO`. It resolves to
+`GO WITH CARE` naming what could not be checked — a check that could not
+run is a coverage gap, and this command's whole contract is that gaps are
+named rather than assumed clean.
+
+**Format** — two or three lines, in the document header and the report:
+
+```
+Session change: WAIT
+Reason:  CI is still running on PR #201 (3 checks pending, started 4m ago).
+         A new session will not see the result.
+Clears:  When `gh pr checks 201` reports a verdict. Re-run /cepa:handoff then.
+```
+
+Several conditions hold → list them all, **earliest-clearing last**, so the
+operator finishes reading on the binding constraint.
+
+**Report the verdict even when it is `GO`.** A silent `GO` is
+indistinguishable from a check that never ran.
+
+#### The verdict is data, never control flow
+
+A `WAIT` **must not block this command.** Still write the document, still
+file every residual, still emit the prompt. The operator may have good
+reason to switch anyway, and the durable record has to exist either way —
+a session that ends without a handoff *because* it was a bad time to end
+has lost exactly the context the verdict was worried about.
+
+This is structural, not a warning. The verdict is **computed once here and
+rendered twice** — into the document header below and the report in
+Step 7. Nothing in this command branches on it. There is no `if WAIT`
+anywhere, so there is nothing for an implementation to turn into an early
+return.
+
+### Then write the document
+
 Write the handoff document with these sections. Omit a section only when
 it is genuinely empty, and say so in the report when omitted.
 
@@ -253,8 +416,26 @@ it is genuinely empty, and say so in the report when omitted.
 **From session:** <date> | **Repo:** <abs path> | **Branch:** <branch> @ <SHA>
 **Tree:** clean | dirty (<n> paths — see Resume) | **Trunk:** <trunk> (rung <n>)
 
+**Session change:** GO | WAIT | GO WITH CARE
+<Reason + Clears lines when not GO, per the format above.>
+
 ## Start here
 <The single next action, in one or two sentences.>
+
+## Branch and worktree state
+<The current branch's disposition from Step 2, in prose: which of the five
+states, and for a merged branch the PR number and the squash SHA. This is
+the durable copy — Step 7's prompt is only the transport.
+
+When merged, say plainly that the next session must not build on it, and
+that the branch is deleted only AFTER the new one is checked out.
+
+When another worktree holds a branch that would otherwise be listed, say
+it was skipped and why.
+
+Cite the operator's CLAUDE.md rule that a merged branch is not a finished
+worktree — do not restate it here. The emitted prompt is the one place it
+IS restated, because the next session may not have that file loaded.>
 
 ## What shipped this session
 <Merged PRs, commits, artifacts. Each with its identifier.>
@@ -450,6 +631,17 @@ coverage lines with any `unverifiable` reasons, residuals filed with their
 sinks, stripped-content count, git state changes, and the numbered
 `## Next steps` tail.
 
+**Include the readiness verdict as a body section** — the `Session change:`
+block resolved in Step 5, verbatim, on every run including `GO`. §6 admits
+command-specific body sections ("include each that applies"); this one
+applies to `/cepa:handoff` only and is deliberately **not** added to §6's
+shared list, which eight other commands would then carry without ever
+emitting it.
+
+**Include the branch disposition** — the classification, and for a merged
+branch the PR number and squash SHA. `unknown` is reported as
+`unverifiable (<reason>)`, never omitted.
+
 **Then emit the handoff prompt in a single fenced code block** — the thing
 the operator actually pastes into a fresh session. Requirements:
 
@@ -470,6 +662,100 @@ the operator actually pastes into a fresh session. Requirements:
   Count the longest run of backticks in the content and use at least one
   more (four is normally enough).
 - The saved path is stated **outside** the block, so pasting stays clean.
+- **Opens with the branch preamble** when the disposition calls for one —
+  see below. It goes above the task description, because it must run
+  before any work.
+
+### The branch preamble
+
+A worktree hands the next session whatever branch is checked out. If that
+branch is already merged, the session's first commit lands on a dead
+branch — this has happened and cost real time. So a merged, clean, or
+detached disposition (Step 2) opens the prompt with the commands that fix
+it, and an **unmerged branch with commits** opens with an explicit "stay on
+this branch" instead. Say it either way: silence is what produced the
+incident.
+
+#### The ordering constraint — this is the load-bearing part
+
+**Never instruct a session to delete a branch before both (a) its PR is
+confirmed `MERGED` and (b) the new branch has been created and checked
+out.** Two independent reasons, and only the first is enforced by git:
+
+1. Git refuses to delete a branch a worktree holds —
+   `error: cannot delete branch 'X' used by worktree at '<path>'`. A
+   deletion emitted before the checkout simply fails, so the prompt is
+   wrong on its face.
+2. Git does **not** protect against `-D` on an unmerged branch that nothing
+   holds. `-D` is unconditional — it does not consult merge state and does
+   not refuse. So an unverified "merged" claim plus a `-D` destroys work
+   silently. That is why (a) is a hard precondition, and why an `unknown`
+   classification emits no deletion line at all.
+
+The prompt uses exactly this shape, comment included, so a session reading
+it does not "tidy" the two lines into the wrong order:
+
+```bash
+git fetch origin
+git checkout -b <new-branch> origin/<trunk>   # create + check out FIRST
+git branch -D <old-branch>                    # only AFTER, and only if MERGED
+```
+
+`-D` rather than `-d` is correct **only** for a confirmed-merged branch:
+`-d` consults `--merged`, which under-reports on a squash-merge repo and
+refuses. State that inline in the emitted prompt, or a future editor
+"fixes" it to `-d` and the instruction stops working.
+
+**`<new-branch>` is resolved, never left as a placeholder.** Derive it as
+`<prefix>/slug(subject)` using `cepa:autonomy` §5's `slug(x)` — the same
+function Step 1 uses for the handoff path — with the prefix matching the
+work (`feat/`, `fix/`, `refactor/`, `chore/`). Emit the resolved value with
+a comment saying it was derived from the subject and may be renamed. A
+literal `<new-branch>` in an executed prompt produces a branch actually
+named `<new-branch>`.
+
+**Compose it as a value, never by splicing** (§5's never-splice rule):
+branch names and the subject are repo-derived and operator-typed inputs,
+and this block is executed by the next session.
+
+#### Shape for a merged branch
+
+```
+FIRST, before any work — this worktree is on <branch>, which is already
+merged (PR #<n>, squash <sha>). Do not build on it:
+
+  git fetch origin
+  git checkout -b <derived-branch> origin/<trunk>   # rename if the topic shifted
+  git branch -D <branch>    # only AFTER the checkout above; git refuses
+                            # to delete a branch a worktree is standing on.
+                            # -D not -d: -d consults --merged, which
+                            # under-reports on a squash-merge repo.
+
+Branch off origin/<trunk> — the REMOTE ref. The main checkout holds the
+local trunk branch, and git allows a local branch in only one worktree.
+
+KEEP this worktree. Its Docker stack is initialized and its test database
+is warm. Do not run worktree-clean or worktree remove.
+```
+
+**That last paragraph is restated in full here on purpose**, though this
+command cites rather than restates elsewhere: the next session may not have
+the operator's CLAUDE.md loaded, and the prompt is transport rather than
+documentation. A merged branch is not a finished worktree — deleting the
+branch is right, tearing down the worktree usually is not, because the
+Docker stack, applied migrations and warm test database are the expensive
+part and the next task normally reuses them. A session that had just merged
+a PR once recommended teardown *and* "start a fresh session in this
+worktree" in the same breath — two steps that cancel out. No document told
+it to; it pattern-matched "merged" onto the nearest teardown procedure it
+knew. Naming the distinction is what prevents it.
+
+#### When the classification is `unknown`
+
+Emit the `git fetch` and the branch-off line if they apply, and **no
+deletion line whatsoever**. Say the merge state could not be determined and
+name the reason. Fail closed: a wrong "merged" verdict deletes work, and
+per (2) above git will not stop it.
 
 Emit it in this turn. Never promise it (§6: "the report is emitted, never
 promised") — under `claude -p` there is no next turn, and a promised
@@ -479,6 +765,12 @@ handoff is destroyed along with the session it was meant to preserve.
 
 - **Nothing in flight** → still write the handoff (state, trunk, what
   shipped) and say the session ended clean. Silence is never the output.
+- **Readiness resolved to `WAIT`** → **not a stopping condition.** Write
+  the document, file the residuals, emit the prompt, report the verdict.
+  `WAIT` advises the operator against switching; it never withholds the
+  artifacts that make switching survivable. An implementation that returns
+  early here has inverted the feature: the run most worth recording is the
+  one interrupted mid-flight.
 - **Sink unresolvable** (both the docs path and the shard fail to write) →
   emit the prompt in the response regardless, and report the failure as a
   `no_sink` item per §5. A handoff that exists only in the response beats
