@@ -1,5 +1,5 @@
 ---
-description: Scheduled residual sweep — drain cepa's own sinks (deferred findings, memory/tasks.d/ shards + legacy memory/tasks.md, PR residuals, hygiene routes) through the lfg pipeline and close each item in every sink it lives in. Use only on explicit user request or a scheduled invocation.
+description: Scheduled residual sweep — drain cepa's own sinks (deferred findings, memory/tasks.d/ shards + legacy memory/tasks.md, PR residuals, hygiene routes) through the lfg pipeline and close each item in every sink it lives in, and report merged local branches no worktree holds. Use only on explicit user request or a scheduled invocation.
 disable-model-invocation: true
 argument-hint: "[max items] [mode:headless]"
 ---
@@ -118,16 +118,90 @@ matched copies):
    `detection_signals.backfill_candidates` → one
    `/cepa:compound-refresh mode:headless` dispatch (scope hint from the
    affected areas).
+5. **Merged local branches** — an enumeration, never a work item. See
+   below; it produces report lines only and consumes no cap slot.
 
 A `gh` error while enumerating any source = **"source: unverifiable
 (reason)" + a residual** — never an empty queue; a source the sweep
 could not read is a named coverage gap, never a clean pass.
 
+### Source 5: merged local branches (report-only)
+
+Nothing in the workflow deletes a local branch — `gh pr merge` squashes on
+GitHub, a ship is a ref-to-ref push, and `git fetch --prune` touches only
+remote-tracking refs. So every merged PR leaves its branch behind forever.
+Measured across the operator's repos on 2026-09-06: **147** local branches
+in one, 87 in another. It does not self-correct, and no other command in
+this plugin looks.
+
+**One bulk query, never one call per branch.** At 147 branches the
+per-branch shape is 147 round-trips in a scheduled run:
+
+```bash
+gh pr list --state merged --limit <N> \
+  --json number,headRefName,headRefOid,baseRefName,mergedAt
+```
+
+Measured at 0.4s, and it carries every field the conditions below need.
+Match it against `git branch` locally.
+
+**Detect a saturated window.** `--limit` bounds the result: verified, with
+`--limit 5` a genuinely-merged PR falls outside and its branch reads as
+unmerged. The direction is safe — truncation causes under-reporting, never
+a wrong deletion proposal — but it is silent, which is this command's
+named failure mode. If the returned count **equals** the requested limit,
+report `coverage: partial (N of limit N — window may be truncated)` rather
+than presenting the list as complete. Raise the limit and re-query when
+the run can afford it.
+
+**A branch is listed only when all four conditions hold** — the same
+conditions `/cepa:handoff` Step 2 established for its branch disposition.
+**Cited, not restated:** read them there, including why condition 3
+compares against `headRefOid` and must never be an ancestry test.
+
+Two of them need restating *only* as to how this source evaluates them in
+bulk:
+
+- Condition 2 (`baseRefName` equals the resolved trunk) uses the §8-resolved
+  trunk, not `main`.
+- Condition 3 compares the **local** tip (`git rev-parse <branch>`) to the
+  PR's `headRefOid`. A branch worked on after its merge fails here — that
+  is the case the condition exists for, and it is the ordinary one.
+
+**Exclude the trunk itself by rule, before any condition is evaluated.**
+The §8-resolved trunk, and any long-lived integration branch named under a
+`protected_branches:` key in `cepa.local.md`'s `## Conventions`, are never
+listed whatever the conditions say. In practice the trunk is doubly
+protected today — it has no merged PR with itself as head, and this command
+runs checked out on it — but both are accidents of the common case, not
+guarantees: a repo whose trunk once appeared as a PR head, or a run whose
+`git worktree list` read failed, loses them silently. A rule that protects
+the trunk only by coincidence is the shape this plugin's own review history
+keeps finding.
+
+A branch failing any condition is **omitted from the list**, with the count
+of omissions and the reason class reported. Never list a branch this run
+could not fully verify.
+
+**This source proposes; it never deletes.** `git branch -D` is
+unconditional and irreversible — verified: it destroys an unmerged branch
+with exit 0 and no refusal. This command runs unattended, so the
+destructive half stays with the human. The report carries a ready-to-run
+block per branch (see Step 6) so acting on it is one paste, and that block
+**re-verifies rather than trusting this run's snapshot** — the operator
+acts later, and a branch can gain commits in between.
+
 ## Step 3: Prioritize and Cap
 
 **The cap bounds ALL work items** — lfg builds, any approved resolve-pr
 dispatches, and the compound-refresh run each consume a slot. Default 3;
-the argument overrides. Severity-ordered; tight clusters sharing files
+the argument overrides.
+
+**Source 5 is not a work item and consumes no slot.** It enumerates and
+reports; it builds nothing, dispatches nothing, and mutates nothing.
+Routing it through the cap would starve a real build to spend a slot on a
+list — and at the default cap of 3 that is one third of the run's capacity
+for zero work performed. Severity-ordered; tight clusters sharing files
 may merge into one item. Overflow is reported as "queued, over cap" and
 carries to the next scheduled run — the sinks are the durable queue.
 
@@ -189,7 +263,47 @@ choice; the human answers it later, not synchronously), ending with a
 write-back — a cron report nobody reads is a no_sink violation in
 spirit; the awaiting-human list in particular must survive the run
 (§5: "a residual that produces no durable artifact and no report line
-is data loss").
+is data loss"). **The merged-branch section below is part of that written
+report**, for the same reason: a scheduled run's list that exists only on
+a dead stdout is the failure this whole command is built against.
+
+### `## Merged local branches` — a report section, never an action
+
+Present when source 5 enumerated anything, and present as a coverage line
+even when it found nothing (`none — N branches checked against M merged
+PRs`). Silence is indistinguishable from a source that failed.
+
+Each entry: branch name, PR number, merge SHA, merge date. **Cap the
+displayed list at 20 with a remainder count** — 147 entries would bury
+every other section of the report. Sort oldest-merged first; those are the
+least likely to be wanted.
+
+State two things alongside the list, always:
+
+- The **coverage line** — `complete` or
+  `partial (N of limit N — window may be truncated)` per source 5.
+- The **omission count** with its reason class — branches that failed a
+  condition (worktree-held, tip moved past `headRefOid`, non-trunk base).
+  An omitted branch is a deliberate exclusion; an unreported omission is
+  indistinguishable from a branch that does not exist.
+
+Close the section with one ready-to-run block. It re-verifies rather than
+trusting this run's snapshot, and it never runs `-D` on an unverified
+branch — the operator may act days later:
+
+```bash
+# Verify, then delete. Never -D without the check: it is unconditional
+# and does not refuse an unmerged branch.
+b=<branch>
+[ "$(git rev-parse "$b")" = "<headRefOid>" ] \
+  && git branch -D "$b" \
+  || echo "SKIP $b — tip moved since the sweep; it has unmerged work"
+```
+
+This section is **not** part of the `## Next steps` tail. The tail carries
+decisions awaiting a human answer; this is a standing list the operator
+acts on when convenient, and putting 20 branches into a numbered choice
+list would drown the decisions that actually need answering.
 
 ## When to Stop
 

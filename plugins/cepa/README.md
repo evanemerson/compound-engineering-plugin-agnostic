@@ -50,7 +50,7 @@ Plan → Work → Review → Compound
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
 | `/cepa:plan-review` | Persona-panel review of a plan before build; findings in the standard todos/ format (supports `mode:headless`) |
-| `/cepa:sweep` | Scheduled residual sweep — drains the sinks through lfg runs and closes items everywhere they're filed (supports `mode:headless`) |
+| `/cepa:sweep` | Scheduled residual sweep — drains the sinks through lfg runs, closes items everywhere they're filed, and reports merged local branches no worktree holds (supports `mode:headless`) |
 | `/cepa:resolve-pr` | Judge and resolve human PR review feedback per the autonomy rubric (supports `mode:headless`) |
 | `/cepa:review` | Run all active review agents in parallel, collect findings in `todos/` (supports `mode:headless`) |
 | `/cepa:triage` | Triage findings — batch auto-apply by default, `interactive` for one-at-a-time |
