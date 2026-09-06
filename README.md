@@ -26,7 +26,7 @@ Each cycle produces solution documents. The next cycle's planning phase searches
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
 | `/cepa:plan-review` | Persona-panel review of a plan document before build — conditional activation, confidence anchors, findings in the standard todos/ format. Supports `mode:headless` |
-| `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.d/ residual shards (+ legacy memory/tasks.md), and hygiene routes through full lfg runs, then closes each item in every sink. Supports `mode:headless` |
+| `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.d/ residual shards (+ legacy memory/tasks.md), and hygiene routes through full lfg runs, then closes each item in every sink. Also reports merged local branches no worktree holds. Supports `mode:headless` |
 | `/cepa:resolve-pr` | Resolve human PR review feedback — fetch once, judge centrally, fix per the autonomy rubric, reply and resolve after push. Supports `mode:headless` |
 | `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` and `cadence:weekly` (the debt tier — see [Review cadence](#review-cadence)) |
 | `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
