@@ -5,9 +5,17 @@
   — **DONE 2026-09-06** (feat/sweep-merged-branch-inventory). Shipped as
   sweep Step 2 source 5, report-only, with a single bulk `gh` query and
   saturation detection. Scale was worse than recorded here: 147 local
-  branches in dpc-insider-www, 87 in dpc-pro. The suggested shape below was
-  followed, including the "never emit a deletion for an unverified branch"
-  rule — the four conditions are cited from `/cepa:handoff`, not restated.
+  branches in dpc-insider-www, 87 in dpc-pro.
+
+  **The first cut of that PR did NOT uphold the four conditions it cited** —
+  review caught it. `--state merged` returns only MERGED rows, so an open PR
+  on the same head was structurally invisible and condition 1 was vacuously
+  true in exactly the case it exists for; and "match against `git branch`"
+  silently dropped the `+` worktree marker, defeating condition 4. Both were
+  fixed on the branch (`--state all` grouped by head; `for-each-ref` plus
+  `worktree list --porcelain`). Recorded because citing a condition is not
+  the same as being able to evaluate it — the citation was correct and the
+  query underneath it was not.
   The source prompt asked `/cepa:handoff` to list every merged local branch no
   worktree holds (capped ~20, worktree-held skipped), as a cleanup byproduct.
   Motivation is measured and real: one operator repo had **88 local branches,
