@@ -1,7 +1,13 @@
 ## 2026-09-01 — feat/handoff-readiness-and-branch-disposition
 
-- **Deferred from the handoff change (decision D2): the merged-local-branch
-  inventory belongs in `/cepa:sweep`, not `/cepa:handoff`.**
+- ~~**Deferred from the handoff change (decision D2): the merged-local-branch
+  inventory belongs in `/cepa:sweep`, not `/cepa:handoff`.**~~
+  — **DONE 2026-09-06** (feat/sweep-merged-branch-inventory). Shipped as
+  sweep Step 2 source 5, report-only, with a single bulk `gh` query and
+  saturation detection. Scale was worse than recorded here: 147 local
+  branches in dpc-insider-www, 87 in dpc-pro. The suggested shape below was
+  followed, including the "never emit a deletion for an unverified branch"
+  rule — the four conditions are cited from `/cepa:handoff`, not restated.
   The source prompt asked `/cepa:handoff` to list every merged local branch no
   worktree holds (capped ~20, worktree-held skipped), as a cleanup byproduct.
   Motivation is measured and real: one operator repo had **88 local branches,
