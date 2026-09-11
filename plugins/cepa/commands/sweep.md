@@ -138,7 +138,7 @@ this plugin looks.
 per-branch shape is 147 round-trips in a scheduled run:
 
 ```bash
-gh pr list --state all --limit 201 \
+gh pr list --state all --limit 501 \
   --json number,state,headRefName,headRefOid,baseRefName,mergedAt
 ```
 
@@ -173,12 +173,24 @@ unmerged. The direction is safe — truncation causes under-reporting, never
 a wrong deletion proposal — but it is silent, which is this command's named
 failure mode.
 
-Request **one more than the intended window** (`--limit 201` for a window
-of 200) and report `partial` only when the count **exceeds** 200. Testing
+Request **one more than the intended window** (`--limit 501` for a window
+of 500) and report `partial` only when the count **exceeds** 500. Testing
 `count == limit` instead reports `partial` on a window that is exactly
 full — verified: this repo has exactly 48 merged PRs, so `--limit 48`
 returns 48 and a warning that fires on a complete window trains the
 operator to ignore it.
+
+**500, not 200** — the default is sized from the repos this feature exists
+for, not from the one it was written in. Measured 2026-09-06 via the
+GitHub API: `dpc-pro` has **207** PRs all-states and `dpc-insider-www`
+**291**, so a 200 window reports `partial` on both and pushes the oldest
+out of view — and the oldest entries are exactly the stale branches worth
+cleaning, per the truncation-order note below. A default that fails on the
+second repo it meets is not a default.
+
+Still one call, and the cost stays small: 0.3s at this repo's 51 PRs, 1.0s
+at dpc-pro's 207. Raise it further on a repo that reports `partial`; 500
+covers every repo measured.
 
 **Truncation removes the oldest, which is what the report ranks first.**
 `gh pr list` returns newest-merged first — verified — so a truncated window
