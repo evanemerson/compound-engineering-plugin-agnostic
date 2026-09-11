@@ -245,6 +245,32 @@ condition 1 was left vacuous in this source's first cut:
   group the `--state all` result by `headRefName`. List only when that
   group holds exactly one `MERGED` and **zero** `OPEN`. This is the
   condition the merged-only query could not see.
+
+  **More than one MERGED on a head is its own reported class, never a
+  silent pick.** A long-lived branch merged in successive rounds is
+  ordinary — found on 5 heads across the portfolio, one carrying three
+  merges into the trunk. "Exactly one" states the condition but says
+  nothing about the failure, and an implementation left to infer it either
+  crashes on `merged[0]` or takes whichever PR the API happened to list
+  first. That second outcome is the quiet one: `gh` returns newest-number
+  first, **not** merge-time order — verified — so "the first merged PR"
+  silently means "highest number," and condition 3 then compares the local
+  tip against *that* PR's `headRefOid`. The branch is usually still
+  omitted, but under `tip moved past headRefOid` — the right verdict for
+  the wrong reason, and a reason string that sends the operator looking for
+  unmerged commits that may not exist.
+
+  Report it as `multiple merged PRs on one head`, naming every PR number,
+  and never list the branch. Resolving which merge is authoritative is a
+  human judgment this command does not make.
+
+  **Three classes cannot be exercised by any repo in this portfolio** —
+  this one, `non-trunk base`'s negative path, and `open PR on the same
+  head`. Checked across eight repos: zero heads carry both a MERGED and an
+  OPEN PR, and no surviving local branch has a merged non-trunk-base PR.
+  They are covered by fixtures in `scripts/check-sweep-branch-classes.sh`
+  instead. Run it when this classification changes; a class with neither a
+  real occurrence nor a fixture is untested, whatever the field reports say.
 - **Condition 2** (`baseRefName` equals the resolved trunk): use the
   §8-resolved trunk, **normalized per §8** — rung 3 returns `origin/main`
   where rung 2 returns `main`, and an unnormalized comparison protects the
@@ -269,6 +295,15 @@ condition 1 was left vacuous in this source's first cut:
   **this clone**, so a second independent clone holds a branch invisibly.
   Say so in the coverage line rather than implying coverage the probe does
   not have.
+
+  **A detached worktree contributes nothing to the held set, correctly.**
+  `--porcelain` emits no `branch` line for one, so the held set is smaller
+  than the worktree count whenever a worktree is parked — the normal state
+  under this operator's CLAUDE.md, which prescribes
+  `git checkout --detach origin/<trunk>` for parking. That is right: a
+  detached worktree holds no branch hostage. State the two numbers
+  separately (`N worktrees, M holding a branch`) so the gap reads as
+  expected rather than as a missed probe.
 
 **Exclude the trunk itself by rule, before any condition is evaluated.**
 The §8-resolved trunk — **normalized per §8**, which strips a leading
@@ -305,6 +340,7 @@ The reason classes, **in evaluation order**:
 | `closed PR only` | every PR on this head was CLOSED, none merged | the work was rejected — delete after a look |
 | `no PR ever opened` | no PR exists for this head at all | scaffolding or unfinished local work — inspect |
 | `open PR on the same head` | an OPEN PR shares the head | in flight; never touch |
+| `multiple merged PRs on one head` | a long-lived branch merged more than once | ambiguous — resolve by hand |
 | `non-trunk base` | merged into something other than the trunk | stacked work; verify by hand |
 | `tip moved past headRefOid` | local commits the merge does not contain | **real unmerged work** — never delete |
 | `condition unverifiable — <command> failed` | a check could not run | a tooling failure, not a result |

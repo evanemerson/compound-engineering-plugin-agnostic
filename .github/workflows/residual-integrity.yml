@@ -58,3 +58,11 @@ jobs:
       - name: Check residual-integrity checker controls
         if: always()
         run: bash scripts/check-residual-integrity-controls.sh
+      # Fixtures for the three sweep branch-classes no repo in the portfolio
+      # can produce: multiple merged PRs on one head, non-trunk base's
+      # negative path, and MERGED+OPEN on one head. Field runs cannot cover
+      # them, so a regression here is invisible without this. Static command,
+      # no workflow-context interpolation.
+      - name: Check sweep branch classification
+        if: always()
+        run: bash scripts/check-sweep-branch-classes.sh
