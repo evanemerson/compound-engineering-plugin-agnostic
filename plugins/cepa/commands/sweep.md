@@ -189,8 +189,17 @@ cleaning, per the truncation-order note below. A default that fails on the
 second repo it meets is not a default.
 
 Still one call, and the cost stays small: 0.3s at this repo's 51 PRs, 1.0s
-at dpc-pro's 207. Raise it further on a repo that reports `partial`; 500
-covers every repo measured.
+at dpc-pro's 207, 1.25s at dpc-insider-www's 291 (60 KB JSON). The bulk
+query is not the bottleneck and does not become one before the window
+ceiling does. Raise it on a repo that reports `partial`.
+
+**500 is a ceiling with a date, not a permanent answer.** It covers every
+repo measured, but a repo that opens roughly one PR per day — the measured
+rate on `dpc-insider-www`, which is at 291 — crosses it in about 18 months
+and then reports `partial` forever. That is the designed behavior and it is
+safe (truncation under-reports), but "500 is enough" is a claim with an
+expiry. The saturation line is what surfaces it; act on a `partial` rather
+than treating it as background noise.
 
 **Truncation removes the oldest, which is what the report ranks first.**
 `gh pr list` returns newest-merged first — verified — so a truncated window
@@ -212,6 +221,22 @@ conditions `/cepa:handoff` Step 2 established for its branch disposition.
 **Cited, not restated:** read them there, including why condition 3
 compares against `headRefOid` and must never be an ancestry test.
 
+**Subtract the worktree-held set FIRST, before any PR condition.**
+Condition 4 is written last for continuity with handoff's numbering, but
+**the numbering is not the evaluation order** and reading it as one is a
+defect found in the field: a branch with no PR at all gets rejected by
+condition 1 and never reaches the worktree check, so a branch standing in
+a live worktree is reported as `no merged PR` — indistinguishable from
+abandoned scaffolding. Verified against a real repo: of two worktree-held
+branches, only the one that also had a merged PR was labeled
+`worktree-held`.
+
+Report-only mode makes that harmless to the *tree*, never to the *human* —
+the reason string is the only thing an operator reads before deciding
+whether an omission is safe to override, and "abandoned" versus "a live
+session is standing on it" are opposite answers. The worktree set is
+already in hand before the first PR condition runs; subtract it there.
+
 **Each of the four needs its bulk form stated** — none of them translates
 unchanged from handoff's per-branch shape, and assuming any does is how
 condition 1 was left vacuous in this source's first cut:
@@ -227,6 +252,12 @@ condition 1 was left vacuous in this source's first cut:
 - **Condition 3** compares the **local** tip (`git rev-parse <branch>`) to
   the PR's `headRefOid`. A branch worked on after its merge fails here —
   that is the case the condition exists for, and it is the ordinary one.
+
+  Field evidence that it earns its keep: in one real run it rejected four
+  branches, three of them trivial post-merge drift — and one squash-merged
+  branch that had since absorbed **120 commits** of unrelated work, with
+  neither its tip nor the PR's recorded head SHA an ancestor of the trunk.
+  Deleting that one would have destroyed all 120.
 - **Condition 4** (no worktree holds it): the `git worktree list
   --porcelain` set above, not a `git branch` marker. **A failed worktree
   read makes this condition unverifiable, never "not held"** — a branch
@@ -266,10 +297,30 @@ A branch failing any condition is **omitted from the list**, with the count
 of omissions and the reason class reported. Never list a branch this run
 could not fully verify.
 
-The reason classes are: `no merged PR`, `open PR on the same head`,
-`non-trunk base`, `tip moved past headRefOid`, `worktree-held`, and
-**`condition unverifiable — <command> failed`**. That last class is not
-optional padding: a branch whose `git rev-parse` or worktree read errored
+The reason classes, **in evaluation order**:
+
+| Class | Means | Typical response |
+|---|---|---|
+| `worktree-held` | a live session is standing on it | leave it alone |
+| `closed PR only` | every PR on this head was CLOSED, none merged | the work was rejected — delete after a look |
+| `no PR ever opened` | no PR exists for this head at all | scaffolding or unfinished local work — inspect |
+| `open PR on the same head` | an OPEN PR shares the head | in flight; never touch |
+| `non-trunk base` | merged into something other than the trunk | stacked work; verify by hand |
+| `tip moved past headRefOid` | local commits the merge does not contain | **real unmerged work** — never delete |
+| `condition unverifiable — <command> failed` | a check could not run | a tooling failure, not a result |
+
+**`closed PR only` and `no PR ever opened` are deliberately separate**, and
+collapsing them into one `no merged PR` class was a field-reported defect.
+At 36 entries it was the largest bucket in a real run and it merged three
+incompatible situations: 22 editorially-rejected drafts, 9 pieces of
+abandoned tooling scaffolding sitting at zero commits ahead, and 5 branches
+holding genuine unfinished work. Those want different human answers, and a
+single class forces the operator to re-derive the split by hand on every
+entry. **The split needs no extra query** — `state` is already in the bulk
+response.
+
+`condition unverifiable` is not optional padding: a branch whose
+`git rev-parse` or worktree read errored
 has no other bucket, and without it a tooling failure is filed as an
 ordinary omission or dropped from the tally entirely — a parse bug wearing
 the costume of a normal result. One branch's failed check omits **that
