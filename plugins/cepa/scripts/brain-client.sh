@@ -125,23 +125,27 @@ _curl() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   health)
+    [ $# -eq 0 ] || _die "health takes no arguments, got $#"
     _load_env
     _curl GET /health
     ;;
   recall)
     [ -f "${1:-}" ] || _die "recall needs a payload file"
+    [ $# -eq 1 ] || _die "recall takes exactly 1 argument, got $#"
     _assert_envelope "$1" recall
     _load_env
     _curl POST /recall "$1"
     ;;
   writeback)
     [ -f "${1:-}" ] || _die "writeback needs a payload file"
+    [ $# -eq 1 ] || _die "writeback takes exactly 1 argument, got $#"
     _assert_envelope "$1" writeback
     _load_env
     _curl POST /writeback "$1"
     ;;
   review)
     [ -n "${1:-}" ] && [ -n "${2:-}" ] || _die "review needs <memory_id> <action>"
+    [ $# -eq 2 ] || _die "review takes exactly 2 arguments, got $# — <memory_id> <action> are LITERALS, not a payload file"
     case "$2" in confirm|evidence_only|reject|supersede|mark_stale) ;; *) _die "bad review action: $2" ;; esac
     _load_env
     local_body="$(mktemp)"; chmod 600 "$local_body"
@@ -158,6 +162,7 @@ case "$cmd" in
     # the operator's no-real-PHI certification (names are not caught — see
     # the cepa:brain skill's stated scope).
     [ -f "${1:-}" ] && [ -n "${2:-}" ] || _die "scrub needs <infile> <outfile>"
+    [ $# -eq 2 ] || _die "scrub takes exactly 2 arguments, got $#"
     sed -E \
       -e 's/[0-9]{3}[ .-][0-9]{2}[ .-][0-9]{4}/[REDACTED-PHI-SSN]/g' \
       -e 's/\b[0-9]{7,12}\b/[REDACTED-PHI-ID]/g' \
@@ -166,6 +171,7 @@ case "$cmd" in
       "$1" > "$2"
     ;;
   participants)
+    [ $# -eq 0 ] || _die "participants takes no arguments, got $#"
     # Resolve + emit the brain participant registry, fail-closed. The manifest
     # lives with the brain-ops setup repo, NOT inside any consuming repo, so the
     # path is resolved in a fixed order and NEVER guessed:
@@ -207,6 +213,17 @@ case "$cmd" in
     # appends its own row index (<key>:<n>) per atom, so this is the base.
     # Pair with `review <id> mark_stale` on the prior memories for the path.
     [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ -f "${3:-}" ] || _die "idkey needs <repo> <docpath> <payloadfile>"
+    [ $# -eq 3 ] || _die "idkey takes exactly 3 arguments, got $# — arg 3 is the payload FILE and there is no 4th (the API appends its own row index per atom)"
+    # Arg 3 must be the payload writeback will SEND, not the source doc. A
+    # readable-file check alone accepts `idkey <repo> doc.md doc.md`, which
+    # hashes content that does not change when the extracted atoms do — so a
+    # re-run reuses the key and, with no upsert, the improved atoms are
+    # SKIPPED rather than written. That exact call shipped to 7 brain-ops
+    # sites (fixed 2026-08-23) and to compound.md (finding 4 of the
+    # 2026-08-22 review). Same envelope check writeback runs, so a doc, an
+    # empty builder output, or a recall payload all fail here instead of
+    # silently producing a plausible key.
+    _assert_envelope "$3" writeback
     _sha="$(sha256sum "$3" | cut -c1-12)"
     printf '%s:%s:%s\n' "$1" "$2" "$_sha"
     ;;
