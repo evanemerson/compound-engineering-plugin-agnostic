@@ -66,3 +66,13 @@ jobs:
       - name: Check sweep branch classification
         if: always()
         run: bash scripts/check-sweep-branch-classes.sh
+      # brain-client.sh's argument guards. Same rationale as the step above —
+      # a field run cannot cover these, because the failure they prevent is
+      # SILENT: the three recorded incidents (2026-08-06, 08-22, 08-23) each
+      # returned a plausible result and no error, and were found by humans
+      # noticing missing rows weeks later. Offline and read-only: every case
+      # stops at a guard, which runs before any credential load. Static
+      # command, no workflow-context interpolation.
+      - name: Check brain-client argument guards
+        if: always()
+        run: bash scripts/check-brain-client-args.sh
