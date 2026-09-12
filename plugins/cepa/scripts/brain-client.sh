@@ -21,7 +21,7 @@
 #   brain-client.sh review   <memory_id> <confirm|evidence_only|reject|supersede|mark_stale>
 #   brain-client.sh participants                        # resolve + emit registry (fail-closed, exit 3 if unresolved)
 #   brain-client.sh scrub    <infile> <outfile>     # PHI redaction pass
-#   brain-client.sh idkey    <repo> <docpath> <index>   # stable idempotency_key
+#   brain-client.sh idkey    <repo> <docpath> <payloadfile>  # stable idempotency_key (hashes the payload)
 # Bodies are passed as FILES, never as argv, so untrusted content is never
 # spliced into a shell line (cepa:autonomy §7).
 set -euo pipefail
