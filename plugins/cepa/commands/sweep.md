@@ -138,7 +138,7 @@ this plugin looks.
 per-branch shape is 147 round-trips in a scheduled run:
 
 ```bash
-gh pr list --state all --limit 501 \
+gh pr list --state all --limit 1001 \
   --json number,state,headRefName,headRefOid,baseRefName,mergedAt
 ```
 
@@ -173,33 +173,45 @@ unmerged. The direction is safe — truncation causes under-reporting, never
 a wrong deletion proposal — but it is silent, which is this command's named
 failure mode.
 
-Request **one more than the intended window** (`--limit 501` for a window
-of 500) and report `partial` only when the count **exceeds** 500. Testing
+Request **one more than the intended window** (`--limit 1001` for a window
+of 1000) and report `partial` only when the count **exceeds** 1000. Testing
 `count == limit` instead reports `partial` on a window that is exactly
 full — verified: this repo has exactly 48 merged PRs, so `--limit 48`
 returns 48 and a warning that fires on a complete window trains the
 operator to ignore it.
 
-**500, not 200** — the default is sized from the repos this feature exists
-for, not from the one it was written in. Measured 2026-09-06 via the
-GitHub API: `dpc-pro` has **207** PRs all-states and `dpc-insider-www`
-**291**, so a 200 window reports `partial` on both and pushes the oldest
-out of view — and the oldest entries are exactly the stale branches worth
-cleaning, per the truncation-order note below. A default that fails on the
-second repo it meets is not a default.
+**1000, not 200 or 500** — the default is sized from the repos this feature
+exists for, not from the one it was written in. Measured via the GitHub API
+across an 18-repo portfolio:
+
+| Repo | PRs (all states) |
+|---|---|
+| `artist-360` | **511** |
+| `dpc-insider-www` | 291 |
+| `dpc-pro` | 208 |
+| this repo | 51 |
+
+A 200 window reports `partial` on three of those, and **a 500 window fails
+on `artist-360` today** — it returned exactly 501 at `--limit 501`,
+saturated on the first repo checked after the default was set. Truncation
+drops the oldest, which are exactly the stale branches worth cleaning, so
+the failure mode is "hides its own highest-value output."
+
+**Both earlier defaults were sized against whatever repo had been measured
+most recently**, which is how a default gets set twice and is wrong twice.
+1000 carries roughly 2× headroom over the largest known repo rather than
+tracking it; when a repo passes ~800, raise it again rather than waiting
+for `partial`.
 
 Still one call, and the cost stays small: 0.3s at this repo's 51 PRs, 1.0s
-at dpc-pro's 207, 1.25s at dpc-insider-www's 291 (60 KB JSON). The bulk
-query is not the bottleneck and does not become one before the window
-ceiling does. Raise it on a repo that reports `partial`.
+at dpc-pro's 208, 1.25s at dpc-insider-www's 291 (60 KB JSON), 2.0s at
+artist-360's 511 under the 1001 window. The bulk query is not the
+bottleneck and does not become one before the window ceiling does.
 
-**500 is a ceiling with a date, not a permanent answer.** It covers every
-repo measured, but a repo that opens roughly one PR per day — the measured
-rate on `dpc-insider-www`, which is at 291 — crosses it in about 18 months
-and then reports `partial` forever. That is the designed behavior and it is
-safe (truncation under-reports), but "500 is enough" is a claim with an
-expiry. The saturation line is what surfaces it; act on a `partial` rather
-than treating it as background noise.
+**A `partial` line is a signal to act on, never background noise.** It means
+the oldest branches are invisible to this run — and a repo that has crossed
+the window once will keep crossing it, so raising the limit is the fix, not
+re-running.
 
 **Truncation removes the oldest, which is what the report ranks first.**
 `gh pr list` returns newest-merged first — verified — so a truncated window
