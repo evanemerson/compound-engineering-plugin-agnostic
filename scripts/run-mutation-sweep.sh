@@ -793,6 +793,7 @@ EOF
   capture_controls "$ST_HANG_DIR" "$ST_HANG_DIR/controls.sh" \
                    "$ST_HANG_DIR/controls.out" "$ST_GRACE" "$ST_BOUND" 'the hang selftest'
   st_file_elapsed=$CAP_ELAPSED
+  st_file_rc=$CAP_RC
   st_orphan=$(cat "$ST_HANG_DIR/orphan.pid" 2>/dev/null || printf '')
 
   # Liveness AFTER the capture returned is itself the escape proof: a descendant
@@ -805,6 +806,25 @@ EOF
   if [ "$st_file_elapsed" -lt $((ST_NAP / 2)) ]; then ok=0; else ok=1; fi
   st_assert 'file capture returns at its own bound, not the hung checker s' "$ok" \
     "elapsed ${st_file_elapsed}s, expected < $((ST_NAP / 2))s"
+
+  # CAP_RC is capture_controls' OTHER declared output, and this is the only
+  # place in the file positioned to observe it. Elapsed time cannot separate
+  # "timeout fired the bound" from "the suite exited on its own, quickly" — a
+  # fixture that stopped hanging returns fast and keeps the assertion above
+  # green. The status is the direct evidence for that separation.
+  #
+  # BOTH codes are accepted, and neither is the "right" one: which appears is a
+  # property of the FIXTURE, not of the guard. 124 is timeout's own timed-out
+  # status when TERM at the bound ends the child; 137 is what GNU coreutils
+  # reports after -k's KILL, which it delivers by re-raising the signal on
+  # itself. This fixture's `trap '' TERM` makes 137 the value observed here.
+  # Pinning one would pin the case to a platform instead of to the bound.
+  case "$st_file_rc" in
+    124|137) ok=0 ;;
+    *)       ok=1 ;;
+  esac
+  st_assert 'the file capture returned because its bound fired' "$ok" \
+    "capture returned $st_file_rc, expected 124 (TERM at the bound) or 137 (KILL after -k)"
 
   # Positive, not merely "it errored": the transcript the fixture wrote must be
   # PRESENT and TRUNCATED. Present proves the fixture ran and wrote through the
