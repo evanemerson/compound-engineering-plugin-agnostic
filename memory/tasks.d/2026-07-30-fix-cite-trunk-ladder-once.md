@@ -198,6 +198,28 @@ findings #11 and #12 (#12 partially — see below).
   finding #1 documents. The plan shape still has no backstop (plan-review
   finding #10, confidence 50).
 
+- [ ] P2 — `scripts/check-model-pins.sh:540` — **an ordinary numbered
+  procedure in any skill silently registers policy anchors and disarms the
+  wrong-owner check.** The index now accepts `## N.` with no owning-skill
+  restriction. `### 9c.` is a shape nobody writes by accident; `## 1.` is a
+  shape ordinary step documentation writes constantly. Adding `## 1.`/`## 2.`/
+  `## 3.` headings to `grounding/SKILL.md` makes a wrong-owner citation
+  (`grounding` §3) resolve clean — measured, both directions, on identical
+  trees: 1 MISS without them, 0 MISS with. **And `anchors defined` stays at
+  16 either way**, because autonomy already owns 1/2/3 — so there is no INFO
+  delta and the coverage loss is invisible in the diff and the log.
+  §9f's does-NOT-cover row says "zero instances today — only this file defines
+  numbered sections at either heading level"; that premise was cheap to hold
+  when only `### N<letter>.` counted, and the widening makes one ordinary
+  contribution break it. **Deferred because** it is a design call about what
+  "owns an anchor" means — options: restrict the level-2 arm to the
+  policy-owning skill; reject a level-2 heading in a skill defining no
+  lettered anchors; or make a second owner of an already-owned anchor a MISS,
+  turning a silent collision into the loud failure this leg exists to produce.
+  The third is most in keeping with the checker's philosophy. Found and
+  reproduced by `adversarial-reviewer` on the PR-60 review
+  (`todos/review-2026-09-14-105453.md` finding #2, confidence 92).
+
 ### Applied this run (recorded so a future run does not re-derive it)
 
 - All four §8 restatement sites reduced to citations. `review.md` lost both

@@ -253,9 +253,19 @@ reg B2 'a renumbered `## N.` section breaks its bare citations' '+' 0 \
 reg B3 'a wrong-owner BARE citation is a MISS' 1 0 \
   "$(qual_miss_bare grounding 7)" '' \
   'kills: skipping the qualified branch for bare anchors, which would let a bare anchor 7 qualified by the grounding skill resolve against autonomy instead of missing'
-reg B4 'hyphenated English after a BARE anchor stays clean' 0 0 '' \
+# B4 plants a bare anchor followed by a hyphen and a YEAR — a shape absent
+# from the live tree, which is what makes the case non-vacuous. Its first cut
+# planted the letter-suffixed shapes instead (a bare anchor then `-style`,
+# then `-guarded`); both already occur in the tree seven times over, so the
+# fixture added nothing the baseline did not already exercise and the case
+# passed identically with its plant deleted. That is the S3 vacuous-arm shape,
+# and it mattered more than its severity suggests: B4 is the FALSE-POSITIVE
+# guard, which autonomy §9f names as the only kind of case that can kill a
+# loosened predicate. The digit-tail shape it now plants is the exact
+# regression the first cut of the bare-anchor widening shipped.
+reg B4 'a bare anchor followed by a hyphen and a year stays clean' 0 0 '' \
   "$SS[0-9]+ is cited" \
-  'kills: relaxing the range tail to allow an unnumbered second endpoint, which would parse `§5-style` as a range and fail the build on innocent prose'
+  'kills: relaxing the range tail letter to optional — the anchor letter is optional but the TAIL letter is the guard, and dropping it makes a bare anchor plus hyphen plus year parse as a range that misses on a phantom four-digit anchor'
 
 reg 26 'broken citation under the `plugins` root' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping `plugins` from CITE_ROOTS'
@@ -615,7 +625,10 @@ ${SS}9c." ;;
         grep -q '^## 7\. Untrusted Content' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
         : ;;
     B3) printf '\nSee `grounding` %s7 for this.\n' "$SS" >> "$d/README.md" ;;
-    B4) printf '\nThe %s5-style sink and the %s7-guarded relay.\n' "$SS" "$SS" >> "$d/README.md" ;;
+    # A year after a bare anchor (absent from the tree) AND the two
+    # letter-suffixed shapes (present, kept so the case covers both tails).
+    B4) printf '\nDiscussed in the %s7-2026 cycle; the %s5-style sink and the %s7-guarded relay.\n' \
+          "$SS" "$SS" "$SS" >> "$d/README.md" ;;
     26) printf '# zzcite\n\nThe rule is %s9q here.\n' "$SS" > "$d/plugins/cepa/commands/zzcite.md" ;;
     27) printf '#!/usr/bin/env bash\n# The rule is %s9q here.\n' "$SS" > "$d/scripts/zzcite.sh" ;;
     28) printf '\n# The rule is %s9q here.\n' "$SS" >> "$d/.github/workflows/model-pins.yml" ;;

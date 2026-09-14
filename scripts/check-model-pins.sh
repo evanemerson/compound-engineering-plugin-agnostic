@@ -467,9 +467,8 @@ done
 # That premise was wrong, and the mistake is worth recording because it is
 # cheap to repeat: it conflates THIS leg with a DIFFERENT one that does not
 # exist. §9f's does-NOT-cover table rules out a leg that would flag *prose
-# restatement* near a citation, because that leg would flag §7's required
-# instantiations and its cheapest remedy would be deleting a guard. Resolution
-# is not restatement. A `§7` citation resolving to `## 7.` reads no surrounding
+# restatement* near a citation, and gives the reason there — read it there.
+# Resolution is not restatement. A `§7` citation resolving to `## 7.` reads no surrounding
 # prose and can never ask for a clause to be removed — it makes a future
 # renumber of §7 fail LOUDLY instead of silently invalidating all 57 of its
 # citations. Excluding §7 here would have been the only way to weaken those
@@ -486,26 +485,40 @@ CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
 # a two-letter anchor to its first letter, so a typo'd anchor validates against
 # the wrong heading.
 #
-# The range tail is `-[0-9]+[A-Za-z]*`, NUMBERED on both sides. An unnumbered
-# tail swallowed ordinary hyphenated English: an anchor followed by a hyphen
-# and a plain word (as in "the ...9c-style ladder") parsed as a range whose
-# second endpoint was that word, inventing an anchor that resolves to nothing
-# and failing the build on innocent prose. So the convention this enforces is
-# that ranges are written fully numbered; a range whose tail omits the number
-# checks only its first anchor.
+# The range tail is `-[0-9]+[A-Za-z]+`, NUMBERED AND LETTERED on both sides.
+# An unnumbered tail swallowed ordinary hyphenated English: an anchor followed
+# by a hyphen and a plain word (as in "the ...9c-style ladder") parsed as a
+# range whose second endpoint was that word, inventing an anchor that resolves
+# to nothing and failing the build on innocent prose. So the convention this
+# enforces is that ranges are written fully numbered AND lettered; a range
+# whose tail omits either checks only its first anchor. The one real range in
+# this repo is `§9c-9d`, which satisfies both.
 #
-# THE LETTER IS OPTIONAL — `[A-Za-z]*`, not `[A-Za-z]+` — which is what brings
-# bare `§N` into scope. Keeping the leading digits MANDATORY on every range
-# endpoint is what makes that safe: the seven live hyphenated-English shapes
-# (`§7-stripped`, `§5-defensible`, `§8-resolved`, `§7-guarded`, `§7-grade`)
-# have no digit after the hyphen, so the tail does not match and only the
-# first anchor is checked — the same protection the lettered form already had.
+# THE ANCHOR'S LETTER IS OPTIONAL — `§[0-9]+[A-Za-z]*` — which is what brings
+# bare `§N` into scope. THE TAIL'S LETTER IS NOT, and the asymmetry is the
+# whole guard. The first cut of the bare-`§N` widening relaxed BOTH, reasoning
+# that mandatory leading digits were enough because the seven live
+# hyphenated-English shapes (`§7-stripped`, `§5-defensible`, `§8-resolved`,
+# `§7-guarded`, `§7-grade`) carry no digit after the hyphen. True, and
+# irrelevant: it ruled out the letter-after-hyphen shape while the same edit
+# opened the DIGIT-after-hyphen shape: a bare anchor, a hyphen, then a year.
+# That parsed as a range and MISSed on a phantom four-digit anchor — a merge
+# gate failing on ordinary prose, in a repo that dates everything `YYYY-MM-DD`
+# and writes bare section 7 constantly. The error even named an anchor absent
+# from the author's text. Reproduced, then closed by restoring the tail's `+`;
+# pinned by control B4.
+#
+# The examples above are spelled in words on purpose. Writing that year shape
+# with a literal section sign makes it a REAL citation — this file is under
+# `scripts/`, a citation root scanned whole, and leg 4 has no prose hatch. The
+# first draft of this very comment did exactly that and MISSed on the phantom
+# anchor it was describing. The checker caught its own documentation.
 #
 # NOTE for anyone documenting this leg: it has no prose-suppression hatch (legs
 # 2 and 3 do). Every root is scanned whole, so an example anchor written with a
 # literal section sign becomes a real citation and MISSes. Describe such
 # examples in words. Recorded in autonomy §9f.
-CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]*)*'
+CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'
 declare -A ANCHOR_OWNERS
 declare -A SKILL_NAMES
 skill_files=0
