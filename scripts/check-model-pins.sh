@@ -34,9 +34,9 @@
 #   belonging to an unrelated neighbouring block counted toward the pair.
 #   Counting tokens in prose cannot express "these two, in this direction."
 #
-#   Leg 4: every section citation of the form (section-sign, number, letter)
-#   resolves to a heading in the skill that owns it. Scope and stated limits
-#   live in autonomy §9f — read them there.
+#   Leg 4: every section citation — `§N` or `§N<letter>` — resolves to a
+#   heading in the skill that owns it. Scope and stated limits live in
+#   autonomy §9f — read them there.
 #
 # All four legs fail the run. A warning channel that can never fail is not
 # enforcement — so leg 2's escape hatch is an explicit, diff-reviewable
@@ -448,7 +448,7 @@ for d in "${SCAN_DIRS[@]+"${SCAN_DIRS[@]}"}"; do
   done < <(printf '%s\n' "${DIR_FILES[@]+"${DIR_FILES[@]}"}" | grep -v '^$' | sort)
 done
 
-# --- Leg 4: §N<letter> citations resolve ------------------------------------
+# --- Leg 4: section citations resolve ------------------------------------
 # Cross-cutting policy is cited by sub-letter from ~10 files. Nothing verified
 # that a cited §9c still names the thing the citing file assumes, so a future
 # reorder or insert in the owning skill would silently invalidate the
@@ -458,10 +458,22 @@ done
 # SCOPE and STATED LIMITS live in `cepa:autonomy` §9f's does-NOT-cover table —
 # read them there, not here. The one fact that belongs at this site because it
 # constrains the CODE below: leg 4 checks that a citation RESOLVES to a
-# heading, and matches only `§N<letter>`. Bare `§N` (§7 among them) is out of
-# scope by construction. Widening to bare `§N` is a deliberate decision, not a
-# tidy-up: §7's relay-point clauses are required instantiations, so a widened
-# leg must exclude §7 by NUMBER and say why, inline.
+# heading — nothing more. Both anchor shapes are in scope: `§N<letter>` against
+# a `### N<letter>.` heading, and bare `§N` against a `## N.` heading.
+#
+# §7 IS CHECKED, AND DELIBERATELY SO. The residual that deferred this widening
+# for six weeks framed the open question as "how is §7 excluded by NUMBER",
+# on the premise that §7's relay-point clauses need protecting from the leg.
+# That premise was wrong, and the mistake is worth recording because it is
+# cheap to repeat: it conflates THIS leg with a DIFFERENT one that does not
+# exist. §9f's does-NOT-cover table rules out a leg that would flag *prose
+# restatement* near a citation, because that leg would flag §7's required
+# instantiations and its cheapest remedy would be deleting a guard. Resolution
+# is not restatement. A `§7` citation resolving to `## 7.` reads no surrounding
+# prose and can never ask for a clause to be removed — it makes a future
+# renumber of §7 fail LOUDLY instead of silently invalidating all 57 of its
+# citations. Excluding §7 here would have been the only way to weaken those
+# guards, not the way to protect them.
 #
 # Ownership is RESOLVED, not assumed. The anchor->skill index is built from
 # every skill's own headings, so a second skill introducing lettered sections
@@ -474,7 +486,7 @@ CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
 # a two-letter anchor to its first letter, so a typo'd anchor validates against
 # the wrong heading.
 #
-# The range tail is `-[0-9]+[A-Za-z]+`, NUMBERED on both sides. An unnumbered
+# The range tail is `-[0-9]+[A-Za-z]*`, NUMBERED on both sides. An unnumbered
 # tail swallowed ordinary hyphenated English: an anchor followed by a hyphen
 # and a plain word (as in "the ...9c-style ladder") parsed as a range whose
 # second endpoint was that word, inventing an anchor that resolves to nothing
@@ -482,11 +494,18 @@ CITE_ROOTS='plugins CLAUDE.md README.md .github scripts'
 # that ranges are written fully numbered; a range whose tail omits the number
 # checks only its first anchor.
 #
+# THE LETTER IS OPTIONAL — `[A-Za-z]*`, not `[A-Za-z]+` — which is what brings
+# bare `§N` into scope. Keeping the leading digits MANDATORY on every range
+# endpoint is what makes that safe: the seven live hyphenated-English shapes
+# (`§7-stripped`, `§5-defensible`, `§8-resolved`, `§7-guarded`, `§7-grade`)
+# have no digit after the hyphen, so the tail does not match and only the
+# first anchor is checked — the same protection the lettered form already had.
+#
 # NOTE for anyone documenting this leg: it has no prose-suppression hatch (legs
 # 2 and 3 do). Every root is scanned whole, so an example anchor written with a
 # literal section sign becomes a real citation and MISSes. Describe such
 # examples in words. Recorded in autonomy §9f.
-CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'
+CITE_RE='(`?[A-Za-z0-9_.:-]+`?[[:space:]]+)?§[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]*)*'
 declare -A ANCHOR_OWNERS
 declare -A SKILL_NAMES
 skill_files=0
@@ -505,13 +524,25 @@ while IFS= read -r sk; do
     [ -n "$a" ] || continue
     [ -n "${ANCHOR_OWNERS["$a"]:-}" ] || anchor_count=$((anchor_count + 1))
     ANCHOR_OWNERS["$a"]="${ANCHOR_OWNERS["$a"]:-} $sname"
+  # BOTH heading levels, because both anchor shapes are cited. `### N<letter>.`
+  # defines a lettered sub-anchor; `## N.` defines the bare section it hangs
+  # under. Matching only the first is what made every bare `§N` citation in the
+  # repo — 75 §5, 57 §7, 25 §4, 21 §6 at the time this was widened — resolve
+  # through nothing at all.
+  #
+  # The TRAILING PERIOD is load-bearing on both arms, and the level-2 arm
+  # additionally forbids a letter. Together they keep the index to real policy
+  # sections: `file-todos/SKILL.md` numbers its example findings `### 1` and
+  # `### 2` with no period, which would otherwise register that skill as a
+  # second owner of anchors 1 and 2 and make a genuinely broken `§1` resolve
+  # against an example.
   done < <(sed $'1s/^\xEF\xBB\xBF//; s/\r$//' "$sk" 2>/dev/null |
-    grep -aoE '^### [0-9]+[A-Za-z]+\.' 2>/dev/null |
-    sed 's/^### //; s/\.$//' | tr '[:upper:]' '[:lower:]')
+    grep -aoE '^(### [0-9]+[A-Za-z]+|## [0-9]+)\.' 2>/dev/null |
+    sed 's/^#* //; s/\.$//' | tr '[:upper:]' '[:lower:]')
 done < <(printf '%s\n' "${SKILL_FILES[@]+"${SKILL_FILES[@]}"}" | grep -v '^$' | sort)
 
 if [ "$skill_files" -eq 0 ]; then
-  miss "model-pin: no plugins/*/skills/*/SKILL.md found — §N<letter> citation targets unverifiable"
+  miss "model-pin: no plugins/*/skills/*/SKILL.md found — section citation targets unverifiable"
   misses=$((misses + 1))
 fi
 
@@ -611,6 +642,15 @@ while IFS= read -r m; do
     [ -n "$p" ] || continue
     case "$p" in
       [0-9]*[a-z]) first_num=$(printf '%s' "$p" | sed 's/[a-z]*$//') ;;
+      # All digits — a BARE anchor (`§7`, `§5`). This arm is what makes the
+      # widened CITE_RE actually reach the check, and its absence is not a
+      # theoretical hazard: the first cut of that widening changed only the
+      # regex, and every bare anchor then fell through to `*) continue` below
+      # and was DISCARDED before the lookup. The run reported `0 MISS` with an
+      # INFO line claiming 34 pairs, while the checking loop received exactly
+      # one — a green build that verified almost nothing. Caught only by
+      # planting a broken bare anchor and watching it pass.
+      *[0-9]) first_num="$p" ;;
       # STATED LIMIT — this bare-letter arm is unreachable from CITE_RE, which
       # requires digits on BOTH sides of every hyphen, so every part arriving
       # here begins with a digit. Verified by instrumenting the arm and running
@@ -639,19 +679,28 @@ while IFS='|' read -r q a; do
   [ -n "${a:-}" ] || continue
   checked=$((checked + 1))
   owners="${ANCHOR_OWNERS["$a"]:-}"
+  # Name the heading the author actually has to write. A bare anchor lives at
+  # `## N.` and a lettered one at `### N<letter>.`, so a fixed '###' in this
+  # message would hand every bare-anchor MISS the wrong remedy — and being
+  # wrong in the failure path is where it costs the most, since that text is
+  # the only instruction the person reading a red build gets.
+  case "$a" in
+    *[a-z]) want="### ${a}." ;;
+    *)      want="## ${a}." ;;
+  esac
   if [ -n "$q" ] && [ -n "${SKILL_NAMES["$q"]:-}" ]; then
     # Qualified: the citation names its owner, so check THAT skill.
     case " $owners " in
       *" $q "*) : ;;
       *)
-        miss "model-pin: §${a} is cited as \`${q}\` §${a} but ${q}/SKILL.md has no '### ${a}.' heading — a citation that resolves to nothing"
+        miss "model-pin: §${a} is cited as \`${q}\` §${a} but ${q}/SKILL.md has no '${want}' heading — a citation that resolves to nothing"
         misses=$((misses + 1)) ;;
     esac
   else
     # Unqualified: any skill defining the anchor resolves it (autonomy §9f
     # records the ambiguity this accepts).
     if [ -z "$owners" ]; then
-      miss "model-pin: §${a} is cited but no plugins/*/skills/*/SKILL.md has a '### ${a}.' heading — a citation that resolves to nothing"
+      miss "model-pin: §${a} is cited but no plugins/*/skills/*/SKILL.md has a '${want}' heading — a citation that resolves to nothing"
       misses=$((misses + 1))
     fi
   fi
@@ -661,11 +710,11 @@ done <<< "$cite_pairs"
 # set — an INFO line that counts rows nothing looked at is how a coverage hole
 # reports as coverage.
 if [ "$checked" -eq 0 ] && [ "$skill_files" -gt 0 ]; then
-  miss "model-pin: leg 4 checked no §N<letter> citation — a scan that verifies nothing is not a pass"
+  miss "model-pin: leg 4 checked no section citation — a scan that verifies nothing is not a pass"
   misses=$((misses + 1))
 fi
 
-info "§N<letter> citations checked: ${checked} distinct (qualifier, anchor) pairs across ${roots_scanned} of $(printf '%s\n' $CITE_ROOTS | grep -c .) roots; ${anchor_count} anchors defined by ${skill_files} skill files"
+info "section citations checked: ${checked} distinct (qualifier, anchor) pairs across ${roots_scanned} of $(printf '%s\n' $CITE_ROOTS | grep -c .) roots; ${anchor_count} anchors defined by ${skill_files} skill files"
 
 # --- verdict ---------------------------------------------------------------
 echo "-- ${misses} MISS, ${warns} WARN --"
