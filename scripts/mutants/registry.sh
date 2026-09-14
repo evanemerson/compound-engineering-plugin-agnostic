@@ -460,7 +460,7 @@ mut l4-range-split "$CHK" \
 survivor l4-range-inherit "$CHK" \
   "      [a-z]*) p=\"\${first_num}\${p}\" ;;" \
   "      [a-z]*) continue ;;" \
-  scripts/check-model-pins.sh:614 \
+  scripts/check-model-pins.sh:654 \
   'declared survivor: the arm is unreachable from CITE_RE, which numbers both sides of every hyphen, so no part arriving here can start with a letter. Instrumented and measured at zero firings over this repo entire citation set. Kept as the correct handling for a widened range tail; a control becomes possible the day that widening lands.'
 
 mut l4-qualified-branch "$CHK" \
