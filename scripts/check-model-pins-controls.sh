@@ -132,6 +132,16 @@ UNQUAL_9Q=$(unqual_miss 9q)
 qual_miss() { printf "%s%s is cited as .%s. %s%s but %s/SKILL\\.md has no '### %s\\.' heading" \
   "$SS" "$2" "$1" "$SS" "$2" "$1" "$2"; }
 
+# BARE-anchor variants. A bare `%sN` lives at a `## N.` heading, so the remedy
+# the checker names differs by one `#` from the lettered form — and asserting
+# the WRONG one is how a case passes while the message sends the reader to an
+# invalid fix. Separate helpers rather than a loosened `#*` pattern, so a
+# regression that swapped the two levels still goes red.
+unqual_miss_bare() { printf "%s%s is cited but no .* has a '## %s\\.' heading" "$SS" "$1" "$1"; }
+qual_miss_bare() { printf "%s%s is cited as .%s. %s%s but %s/SKILL\\.md has no '## %s\\.' heading" \
+  "$SS" "$2" "$1" "$SS" "$2" "$1" "$2"; }
+UNQUAL_77=$(unqual_miss_bare 77)
+
 # --- Leg 4: citation shapes (the round-1 class) -----------------------------
 # Cases 1-5 are the unqualified shapes. Case 6 is their control: a plain
 # English word before the anchor must NOT take the qualified branch.
@@ -227,6 +237,36 @@ reg 19 'NUL byte in a leg-4 scanned file' 1 0 "$UNQUAL_9Q" '' \
   'kills: removal of -a from the leg-4 grep (GNU grep calls the file binary and exits 0)'
 reg 20 'empty anchor index' '+' 0 '(^| )0 anchors defined by' 'unbound variable' \
   'kills: a crash on set -u with an empty associative array; must degrade, not die'
+# --- Leg 4: BARE `§N` anchors (the widening these cases landed with) ------
+# Leg 4 matched only `§N<letter>` until 2026-09-14, so every bare citation in
+# the repo — 75 §5, 57 §7, 25 §4, 21 §6 — resolved through nothing at all.
+# These four pin the widened behavior. Case B1 is the one that matters most:
+# the first cut of the widening changed CITE_RE alone, and bare anchors then
+# fell through a `case` arm that DISCARDED them, so the run reported 0 MISS
+# while the checking loop received one row out of 110. A green build that
+# verifies nothing is exactly the class this suite exists to catch.
+reg B1 'a broken BARE anchor is a MISS' 1 0 "$UNQUAL_77" '' \
+  'kills: the all-digit arm of the range-expansion case, whose absence silently drops every bare anchor before the lookup (0 MISS, verifying nothing)'
+reg B2 'a renumbered `## N.` section breaks its bare citations' '+' 0 \
+  "$(unqual_miss_bare 7)" '' \
+  'kills: dropping `## [0-9]+` from the anchor index build — the whole point of the widening is that a silent renumber of §7 fails LOUDLY instead of invalidating 57 citations'
+reg B3 'a wrong-owner BARE citation is a MISS' 1 0 \
+  "$(qual_miss_bare grounding 7)" '' \
+  'kills: skipping the qualified branch for bare anchors, which would let a bare anchor 7 qualified by the grounding skill resolve against autonomy instead of missing'
+# B4 plants a bare anchor followed by a hyphen and a YEAR — a shape absent
+# from the live tree, which is what makes the case non-vacuous. Its first cut
+# planted the letter-suffixed shapes instead (a bare anchor then `-style`,
+# then `-guarded`); both already occur in the tree seven times over, so the
+# fixture added nothing the baseline did not already exercise and the case
+# passed identically with its plant deleted. That is the S3 vacuous-arm shape,
+# and it mattered more than its severity suggests: B4 is the FALSE-POSITIVE
+# guard, which autonomy §9f names as the only kind of case that can kill a
+# loosened predicate. The digit-tail shape it now plants is the exact
+# regression the first cut of the bare-anchor widening shipped.
+reg B4 'a bare anchor followed by a hyphen and a year stays clean' 0 0 '' \
+  "$SS[0-9]+ is cited" \
+  'kills: relaxing the range tail letter to optional — the anchor letter is optional but the TAIL letter is the guard, and dropping it makes a bare anchor plus hyphen plus year parse as a range that misses on a phantom four-digit anchor'
+
 reg 26 'broken citation under the `plugins` root' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping `plugins` from CITE_ROOTS'
 reg 27 'broken citation under the `scripts` root' 1 0 "$UNQUAL_9Q" '' \
@@ -558,14 +598,37 @@ ${SS}9c." ;;
     19) printf '\n%s\n' "${SS}9q applies here." >> "$d/CLAUDE.md"
         printf '\0' >> "$d/CLAUDE.md"
         has_nul "$d/CLAUDE.md" || return 1 ;;
-    # autonomy/SKILL.md is the only skill defining lettered sections; blanking
+    # autonomy/SKILL.md is the only skill defining numbered sections; blanking
     # its headings empties the whole anchor index.
-    20) before=$(grep -c '^### [0-9][0-9]*[A-Za-z][A-Za-z]*\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" || true)
+    #
+    # BOTH heading levels are mangled, and that is the whole point of the case
+    # after leg 4 was widened to bare `§N`. The index now reads `## N.` as well
+    # as `### N<letter>.`, so stripping only the `###` form leaves nine anchors
+    # standing — the index is not empty, `0 anchors defined` never prints, and
+    # the case stops exercising the empty-array path it exists for. Updated
+    # here rather than relaxed: the assertion was right, the fixture went stale.
+    20) before=$(grep -c '^\(### [0-9][0-9]*[A-Za-z][A-Za-z]*\|## [0-9][0-9]*\)\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" || true)
         [ "${before:-0}" -gt 0 ] || return 1
-        sed -i 's/^### \([0-9][0-9]*[A-Za-z][A-Za-z]*\)\./### x\1./' \
+        sed -i 's/^### \([0-9][0-9]*[A-Za-z][A-Za-z]*\)\./### x\1./; s/^## \([0-9][0-9]*\)\./## x\1./' \
           "$d/plugins/cepa/skills/autonomy/SKILL.md"
-        grep -q '^### [0-9][0-9]*[A-Za-z][A-Za-z]*\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
+        grep -q '^\(### [0-9][0-9]*[A-Za-z][A-Za-z]*\|## [0-9][0-9]*\)\.' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
         : ;;
+    # Bare-anchor cases. B1/B3/B4 plant into README.md (a citation root that
+    # already carries live bare citations); B2 mutates the OWNING heading
+    # instead of the citing text, which is the realistic shape — nobody edits
+    # 57 call sites, they renumber one section.
+    B1) printf '\nA stray citation to %s77 here.\n' "$SS" >> "$d/README.md" ;;
+    B2) before=$(grep -c '^## 7\. Untrusted Content' "$d/plugins/cepa/skills/autonomy/SKILL.md" || true)
+        [ "${before:-0}" -eq 1 ] || return 1
+        sed -i 's/^## 7\. Untrusted Content/## 77. Untrusted Content/' \
+          "$d/plugins/cepa/skills/autonomy/SKILL.md"
+        grep -q '^## 7\. Untrusted Content' "$d/plugins/cepa/skills/autonomy/SKILL.md" && return 1
+        : ;;
+    B3) printf '\nSee `grounding` %s7 for this.\n' "$SS" >> "$d/README.md" ;;
+    # A year after a bare anchor (absent from the tree) AND the two
+    # letter-suffixed shapes (present, kept so the case covers both tails).
+    B4) printf '\nDiscussed in the %s7-2026 cycle; the %s5-style sink and the %s7-guarded relay.\n' \
+          "$SS" "$SS" "$SS" >> "$d/README.md" ;;
     26) printf '# zzcite\n\nThe rule is %s9q here.\n' "$SS" > "$d/plugins/cepa/commands/zzcite.md" ;;
     27) printf '#!/usr/bin/env bash\n# The rule is %s9q here.\n' "$SS" > "$d/scripts/zzcite.sh" ;;
     28) printf '\n# The rule is %s9q here.\n' "$SS" >> "$d/.github/workflows/model-pins.yml" ;;

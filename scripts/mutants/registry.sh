@@ -377,23 +377,23 @@ mut l4-grep-rc "$CHK" \
   'kills: distinguishing grep exit 1 from a read error in the per-root scan. Expected killer: 34.'
 
 mut l4-cite-re-truncate "$CHK" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z](-[0-9]+[A-Za-z]+)*'" \
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'" \
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]?(-[0-9]+[A-Za-z]+)*'" \
   'kills: the quantifier on the anchor letters — grep -o truncates a two-letter anchor to its first letter, so a typo validates against the wrong heading. Expected killer: 11.'
 
 mut l4-cite-re-range "$CHK" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]+(-[0-9]*[A-Za-z]+)*'" \
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'" \
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]*[A-Za-z]+)*'" \
   'LOOSENING. kills: the NUMBERED range tail — ordinary hyphenated English after an anchor parses as a range endpoint and invents an anchor that resolves to nothing. Expected killer: 15.'
 
 mut l4-cite-re-qual "$CHK" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)${SS}[0-9]+[A-Za-z]+(-[0-9]+[A-Za-z]+)*'" \
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'" \
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'" \
   'kills: the optionality of the qualifier group — every UNQUALIFIED citation stops matching at all, which is silent rather than red. Expected killers: 1, 2, 3, 4, 5.'
 
 mut l4-index-anchored "$CHK" \
-  "    grep -aoE '^### [0-9]+[A-Za-z]+\\.' 2>/dev/null |" \
-  "    grep -aoE '### [0-9]+[A-Za-z]+\\.' 2>/dev/null |" \
+  "    grep -aoE '^(### [0-9]+[A-Za-z]+|## [0-9]+)\\.' 2>/dev/null |" \
+  "    grep -aoE '(### [0-9]+[A-Za-z]+|## [0-9]+)\\.' 2>/dev/null |" \
   'LOOSENING. kills: the line anchor on the heading index — a mid-line mention of a heading would DEFINE that anchor, so citations resolve against prose. Expected killer: 40.'
 
 mut l4-index-bom "$CHK" \
@@ -402,8 +402,8 @@ mut l4-index-bom "$CHK" \
   'kills: BOM/CRLF normalization when building the anchor index — a BOM-led skill file defines no anchors, so every citation into it MISSes. Expected killer: 41, whose heading sits on line 1 because that is the only line a BOM can reach.'
 
 mut l4-index-lowercase "$CHK" \
-  "    sed 's/^### //; s/\\.\$//' | tr '[:upper:]' '[:lower:]')" \
-  "    sed 's/^### //; s/\\.\$//')" \
+  "    sed 's/^#* //; s/\\.\$//' | tr '[:upper:]' '[:lower:]')" \
+  "    sed 's/^#* //; s/\\.\$//')" \
   'kills: lowercasing the INDEX side of the anchor lookup. Expected killer: 42. Case 12 lowercases the CITATION, so it passes either way — the two sides are separate constructs.'
 
 mut l4-skillfiles-zero "$CHK" \
@@ -460,7 +460,7 @@ mut l4-range-split "$CHK" \
 survivor l4-range-inherit "$CHK" \
   "      [a-z]*) p=\"\${first_num}\${p}\" ;;" \
   "      [a-z]*) continue ;;" \
-  scripts/check-model-pins.sh:614 \
+  scripts/check-model-pins.sh:667 \
   'declared survivor: the arm is unreachable from CITE_RE, which numbers both sides of every hyphen, so no part arriving here can start with a letter. Instrumented and measured at zero firings over this repo entire citation set. Kept as the correct handling for a widened range tail; a control becomes possible the day that widening lands.'
 
 mut l4-qualified-branch "$CHK" \
