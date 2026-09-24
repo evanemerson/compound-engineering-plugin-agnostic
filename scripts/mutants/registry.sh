@@ -396,6 +396,16 @@ mut l4-index-anchored "$CHK" \
   "    grep -aoE '(### [0-9]+[A-Za-z]+|## [0-9]+)\\.' 2>/dev/null |" \
   'LOOSENING. kills: the line anchor on the heading index — a mid-line mention of a heading would DEFINE that anchor, so citations resolve against prose. Expected killer: 40.'
 
+mut l4-owner-collision "$CHK" \
+  '        if [ -n "${ANCHOR_OWNERS["$a"]:-}" ]; then' \
+  '        if false; then' \
+  'kills: the cross-skill owner check — an ordinary `## N.` procedure in any skill silently co-owns a policy anchor, and a wrong-owner citation naming it resolves clean. Silent by construction: `anchors defined` is unchanged, so no INFO delta betrays it. Expected killer: C1.'
+
+mut l4-owner-same-skill "$CHK" \
+  '      *" $sname "*) : ;;' \
+  '      *" $sname ZZNEVER "*) : ;;' \
+  'kills: the same-owner arm, turning the collision check into a second-APPEND check — one skill repeating its own heading would then fail the build on legitimate content. Expected killer: C2.'
+
 mut l4-index-bom "$CHK" \
   "sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$sk\" 2>/dev/null |" \
   "cat \"\$sk\" 2>/dev/null |" \
@@ -460,7 +470,7 @@ mut l4-range-split "$CHK" \
 survivor l4-range-inherit "$CHK" \
   "      [a-z]*) p=\"\${first_num}\${p}\" ;;" \
   "      [a-z]*) continue ;;" \
-  scripts/check-model-pins.sh:667 \
+  scripts/check-model-pins.sh:697 \
   'declared survivor: the arm is unreachable from CITE_RE, which numbers both sides of every hyphen, so no part arriving here can start with a letter. Instrumented and measured at zero firings over this repo entire citation set. Kept as the correct handling for a widened range tail; a control becomes possible the day that widening lands.'
 
 mut l4-qualified-branch "$CHK" \

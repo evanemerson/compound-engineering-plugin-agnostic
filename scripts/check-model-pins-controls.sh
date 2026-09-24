@@ -314,6 +314,19 @@ reg 40 'a mid-line heading mention does not define an anchor' 1 0 \
 # A BOM is only observable on line 1, so this fixture puts the heading there.
 # Prepending one to a real SKILL.md is invisible to this construct: line 1 is
 # the frontmatter delimiter and the headings are further down.
+# A second skill claiming an anchor another skill already owns must be a MISS.
+# C1 is the regression that made this guard necessary: widening the index to
+# `## N.` means an ordinary numbered procedure in any skill registers policy
+# anchors, and a wrong-owner citation naming that skill then RESOLVES. C2 is
+# its false-positive guard — one skill repeating its own heading owns nothing
+# new and must stay silent, so the guard keys on a DIFFERENT owner rather than
+# on a second append.
+reg C1 'a second skill claiming an owned anchor is a MISS' 1 0 \
+  'anchor 7 is defined by more than one skill' '' \
+  'kills: dropping the cross-skill owner check in the index build — an ordinary `## N.` procedure in any skill silently co-owns a policy anchor, with NO change to the `anchors defined` count, so the coverage loss is invisible in the diff and the log'
+reg C2 'one skill repeating its own heading is not a collision' 0 0 '' \
+  'defined by more than one skill' \
+  'kills: keying the collision check on a second APPEND instead of a different OWNER — a duplicate heading inside one file would then fail the build on legitimate content'
 reg 41 'a BOM before a line-1 heading still defines its anchor' 0 0 '' '^MISS ' \
   'kills: the BOM/CRLF normalization when building the index — a BOM-led skill file would define no anchors, so every citation into it MISSes'
 reg 42 'heading letters are matched case-insensitively' 0 0 '' '^MISS ' \
@@ -701,6 +714,21 @@ ${SS}9c." ;;
     # The heading is on LINE 1 because that is the only line a BOM can reach.
     # A printf that silently dropped the BOM would leave a working skill file
     # behind and this case would pass forever, so the bytes are asserted.
+    # A throwaway skill that claims `## 7.` — an anchor autonomy already owns.
+    C1) mkdir -p "$d/plugins/cepa/skills/zzskillcollide"
+        printf '## 7. Ordinary numbered step\n\nBody.\n' \
+          > "$d/plugins/cepa/skills/zzskillcollide/SKILL.md"
+        grep -q '^## 7\.' "$d/plugins/cepa/skills/zzskillcollide/SKILL.md" || return 1
+        : ;;
+    # The SAME skill defining one anchor twice. Owns nothing new -> no MISS.
+    # Anchor 77 is owned by NO skill, so the only thing that could MISS here
+    # is the duplicate itself. Using an owned anchor (7) would MISS for the
+    # collision instead, and the case would pass for the wrong reason.
+    C2) mkdir -p "$d/plugins/cepa/skills/zzskilldup"
+        printf '## 77. First\n\nBody.\n\n## 77. Second\n\nBody.\n' \
+          > "$d/plugins/cepa/skills/zzskilldup/SKILL.md"
+        [ "$(grep -c '^## 77\.' "$d/plugins/cepa/skills/zzskilldup/SKILL.md")" -eq 2 ] || return 1
+        : ;;
     41) mkdir -p "$d/plugins/cepa/skills/zzskillbom"
         printf '\xEF\xBB\xBF### 9zy. Control heading\n\nBody.\n' \
           > "$d/plugins/cepa/skills/zzskillbom/SKILL.md"
