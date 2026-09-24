@@ -198,9 +198,20 @@ findings #11 and #12 (#12 partially — see below).
   finding #1 documents. The plan shape still has no backstop (plan-review
   finding #10, confidence 50).
 
-- [ ] P2 — `scripts/check-model-pins.sh:540` — **an ordinary numbered
+- [x] ~~P2 — `scripts/check-model-pins.sh:540` — **an ordinary numbered
   procedure in any skill silently registers policy anchors and disarms the
-  wrong-owner check.** The index now accepts `## N.` with no owning-skill
+  wrong-owner check.**~~ **CLOSED 2026-09-14** on
+  `fix/anchor-owner-collision-is-a-miss`. Option 3 chosen, as recommended: a
+  second skill claiming an anchor another already owns is now a MISS naming
+  both skills, so the checker REFUSES the ambiguity rather than resolving it
+  silently. Verified three ways — the regression now fails at 3 MISS; the
+  wrong-owner citation it used to hide is caught with it; and a duplicate
+  heading inside ONE skill stays silent, so legitimate content is unaffected.
+  Controls C1/C2 pin both directions (81 controls, was 79) and each kills its
+  own registered mutant (`l4-owner-collision`, `l4-owner-same-skill`) while
+  the checker's baseline stays at 0 MISS — the silent shape. §9f's
+  does-NOT-cover row updated: the premise it rested on is now enforced rather
+  than hoped for. Original: The index now accepts `## N.` with no owning-skill
   restriction. `### 9c.` is a shape nobody writes by accident; `## 1.` is a
   shape ordinary step documentation writes constantly. Adding `## 1.`/`## 2.`/
   `## 3.` headings to `grounding/SKILL.md` makes a wrong-owner citation

@@ -536,6 +536,36 @@ while IFS= read -r sk; do
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     [ -n "${ANCHOR_OWNERS["$a"]:-}" ] || anchor_count=$((anchor_count + 1))
+    # A SECOND SKILL claiming an anchor another skill already owns is a MISS,
+    # not a silently accepted co-owner. Same skill twice is fine (a duplicate
+    # heading in one file owns nothing new); a DIFFERENT skill is the defect.
+    #
+    # Why this is a hard failure rather than a warning. Widening the index to
+    # `## N.` changed what a heading has to look like to become a policy
+    # anchor. `### 9c.` is a shape nobody writes by accident. `## 1.` is a
+    # shape ordinary numbered-step documentation writes constantly — so any
+    # skill that adds a plain procedure silently registers as an owner of
+    # anchors 1, 2, 3, and a wrong-owner citation naming that skill then
+    # RESOLVES instead of missing. Measured both directions on identical
+    # trees: a `grounding`-qualified bare citation MISSed at 1, then passed at
+    # 0 once three `## N.` step headings were added to that skill.
+    #
+    # The reason a warning would not do: `anchors defined` is unchanged by the
+    # collision — autonomy already owns 1/2/3, so the count stays at 16 either
+    # way. There is no INFO delta, nothing in the diff, and nothing in the log.
+    # The coverage loss is invisible by construction, which is precisely the
+    # silent-pass class this checker exists to prevent. §9f's does-NOT-cover
+    # row rests on "only this file defines numbered sections at either heading
+    # level"; this guard is what keeps that premise true instead of merely
+    # hoped for, and it fails loudly the moment it stops being true.
+    case " ${ANCHOR_OWNERS["$a"]:-} " in
+      *" $sname "*) : ;;
+      *)
+        if [ -n "${ANCHOR_OWNERS["$a"]:-}" ]; then
+          miss "model-pin: anchor ${a} is defined by more than one skill (${ANCHOR_OWNERS["$a"]# } and ${sname}) — an unqualified citation to §${a} becomes ambiguous and a wrong-owner citation naming either one resolves clean; rename the heading, or give the section a lettered anchor"
+          misses=$((misses + 1))
+        fi ;;
+    esac
     ANCHOR_OWNERS["$a"]="${ANCHOR_OWNERS["$a"]:-} $sname"
   # BOTH heading levels, because both anchor shapes are cited. `### N<letter>.`
   # defines a lettered sub-anchor; `## N.` defines the bare section it hangs
