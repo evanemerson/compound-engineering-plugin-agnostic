@@ -383,8 +383,8 @@ mut l4-cite-re-truncate "$CHK" \
 
 mut l4-cite-re-range "$CHK" \
   "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'" \
-  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]*[A-Za-z]+)*'" \
-  'LOOSENING. kills: the NUMBERED range tail — ordinary hyphenated English after an anchor parses as a range endpoint and invents an anchor that resolves to nothing. Expected killer: 15.'
+  "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]*)*'" \
+  'LOOSENING. kills: the range tail LETTER. Re-anchored 2026-09-14 from the unnumbered-tail form, which became BASELINE-DIRTY: widening leg 4 to bare anchors made that mutation reparse all seven live hyphenated-English shapes at once, so the checker reddened on the clean tree and the harness aborted before running a control. This form is the silent sibling — every live shape still parses identically, and only a bare anchor followed by a hyphen and digits changes meaning. Expected killer: B4 (was 15, which can no longer be reached).'
 
 mut l4-cite-re-qual "$CHK" \
   "CITE_RE='(\`?[A-Za-z0-9_.:-]+\`?[[:space:]]+)?${SS}[0-9]+[A-Za-z]*(-[0-9]+[A-Za-z]+)*'" \
