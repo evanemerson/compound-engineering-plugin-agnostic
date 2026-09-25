@@ -1,6 +1,6 @@
 # cepa
 
-Compound engineering plugin for Claude Code. Orchestrates the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, batch-first triage, and optional hands-off execution (autonomy contract + /cepa:lfg).
+An orchestration layer that runs as a Claude Code plugin. Drives the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, batch-first triage, and optional hands-off execution (autonomy contract + /cepa:lfg).
 
 ## The Compound Engineering Loop
 
@@ -45,7 +45,7 @@ Plan → Work → Review → Compound
 
 ## What's Included
 
-### Commands (11)
+### Commands
 | Command | Purpose |
 |---|---|
 | `/cepa:task` | Full compound engineering loop orchestrator (Plan → Work → Review → Compound), gated or autonomous |
@@ -60,12 +60,15 @@ Plan → Work → Review → Compound
 | `/cepa:setup` | Project health check + scaffold/CI bootstrap (`fix` to apply) |
 | `/cepa:handoff` | Wrap up a session — judge whether the change is timely (`GO`/`WAIT`/`GO WITH CARE`), inventory work in flight, file residuals, resolve the next session's branch, save a handoff doc, emit a paste-ready next-session prompt (supports `mode:headless`) |
 
-### Research Agents (1)
+### Research Agents
 | Agent | Purpose |
 |---|---|
 | `learnings-researcher` | Search `docs/solutions/` for relevant past learnings before new work |
 
-### Review Agents (11 — 8 roster + 3 conditional)
+### Review Agents
+
+The roster below runs on every review. A conditional tier follows it.
+
 | Agent | Purpose |
 |---|---|
 | `security-sentinel` | OWASP top 10, compliance checks, PHI/PII exposure |
@@ -95,7 +98,7 @@ watermark (`reviewed_through:`), skips the researcher and conditional tier,
 and files `status: deferred` findings that `/cepa:sweep` drains. See
 CONFIGURATION.md.
 
-### Skills (8)
+### Skills
 | Skill | Purpose |
 |---|---|
 | `compound-docs` | Solution document format (mandatory Detection sections), categories, plan-solution linking, CONCEPTS.md vocabulary map |

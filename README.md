@@ -1,12 +1,26 @@
 # CEPA — Compound Engineering Plugin Agnostic
 
-Every bug you fix, every feature you ship, every review finding you address — what if each one made the next task easier?
+CEPA is an orchestration layer that runs your whole engineering loop and keeps
+what it learns. Audit the git state, research past work, plan, build with tests
+first, review with parallel agents, then write down what the work taught you.
+One command does all of it. It runs as a plugin for
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
-That's compound engineering. Instead of treating each unit of work as isolated, you capture what you learned — what broke, why, how you fixed it, how to prevent it — and feed it back into the system. The next time you start a task, the system searches those learnings and surfaces relevant past experience before you write a line of code. Over time, your codebase accumulates institutional knowledge that prevents repeated mistakes and accelerates new work.
+It fits any stack, because every agent reads its conventions from one file in
+your project instead of having Rails or Django baked in.
 
-CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orchestrates this loop. One command — `/cepa:task` — runs the complete cycle: audit your git state, research past learnings, brainstorm and plan, build with TDD, review with parallel agents (11 from cepa — 8 roster + 3 signal-dispatched — plus 5 from pr-review-toolkit), document what you learned, and propose system updates to prevent recurrence. It works with any framework — Django, Next.js, FastAPI, Rails, or anything else — by reading a single per-project configuration file (`cepa.local.md`) that tells every agent what stack, compliance rules, and conventions to use.
+The part that compounds is the last step. Each finished task leaves a solution
+doc behind: what broke, why, the fix, and the code pattern that would catch it
+again. The next task searches those docs before design starts, and review agents
+load the detection patterns from the ones that match your diff. Fix something
+once and the system starts watching for it. Put `/cepa:sweep` on a schedule and
+even deferred work drains back through the pipeline on its own.
 
-## The Loop
+Claims like that are cheap, so this repo checks itself. Every subagent dispatch
+must declare its model tier, and a script in CI flags any that doesn't. A second
+script proves that checker still catches what its record says it catches. A
+mutation sweep then sabotages the checker on purpose to confirm the proof would
+notice. Details are in [Verification](#verification).
 
 ```
 Plan → Work → Review → Compound
@@ -14,149 +28,53 @@ Plan → Work → Review → Compound
   └────── learnings ───────┘
 ```
 
-Each cycle produces solution documents. The next cycle's planning phase searches those documents before you start. The more you use it, the smarter it gets. And with `/cepa:sweep` on a schedule, the loop closes itself: deferred findings and residual work drain back through the pipeline without anyone kicking them off.
-
 ---
 
-## What's Included
+## Start here
 
-### Commands (11)
+Three commands cover most of the work. The rest are in the
+[Commands](#commands) table below.
 
-| Command | What It Does |
-|---|---|
-| `/cepa:task` | Full compound engineering loop orchestrator — runs all 5 phases end-to-end (gated or autonomous via `autonomy:` config) |
-| `/cepa:plan-review` | Persona-panel review of a plan document before build — conditional activation, confidence anchors, findings in the standard todos/ format. Supports `mode:headless` |
-| `/cepa:sweep` | Scheduled residual sweep — drains deferred findings, memory/tasks.d/ residual shards (+ legacy memory/tasks.md), and hygiene routes through full lfg runs, then closes each item in every sink. Also reports merged local branches no worktree holds. Supports `mode:headless` |
-| `/cepa:resolve-pr` | Resolve human PR review feedback — fetch once, judge centrally, fix per the autonomy rubric, reply and resolve after push. Supports `mode:headless` |
-| `/cepa:review` | Spawn review agents in parallel (8 roster + 3 conditional cepa agents + 5 pr-review-toolkit), collect findings with P1/P2/P3 severity + confidence scoring. Loads Detection sections from matching solution docs. Supports `mode:headless` and `cadence:weekly` (the debt tier — see [Review cadence](#review-cadence)) |
-| `/cepa:triage` | Triage findings: batch mode (default) auto-applies safe verified fixes and presents the rest as one table; `interactive` for one-at-a-time |
-| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Seeds the CONCEPTS.md vocabulary map. Supports `mode:headless` |
-| `/cepa:compound-refresh` | Refresh `docs/solutions/` against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md. Supports `mode:headless` |
-| `/cepa:lfg` | **BETA** — the loop, hands-off: build everything, review + fix until clean, PR, watch CI until green, compound, then one report |
-| `/cepa:setup` | Health-check a project's cepa scaffold (read-only) or `fix` it: create missing dirs/config and install a stack-matched CI template |
-| `/cepa:handoff` | Wrap up a session without losing anything — judge whether a session change is timely (`GO`/`WAIT`/`GO WITH CARE`), inventory the work in flight, make residuals durable, resolve which branch the next session belongs on, save a handoff doc, and emit a self-contained prompt for the next session. Supports `mode:headless` |
+**`/cepa:task <what you want>`** runs the loop end to end, stopping at decision
+points. Start here if you are new.
 
-### Agents (12)
+**`/cepa:review`** runs the review agents against your current changes and
+writes the findings to `todos/`. Useful on its own, no loop required.
 
-**Research:**
-
-| Agent | What It Does |
-|---|---|
-| `learnings-researcher` | Search `docs/solutions/`, `CLAUDE.md`, `memory/tasks.d/` (+ legacy `memory/tasks.md`), and plans for relevant past learnings |
-
-**Review:**
-
-| Agent | What It Does |
-|---|---|
-| `security-sentinel` | OWASP top 10, compliance (HIPAA/SOC2/PCI), auth patterns, data exposure, input validation, secrets scanning |
-| `performance-oracle` | N+1 queries, missing indexes, caching, task queue, frontend perf |
-| `python-reviewer` | Pythonic patterns, framework conventions, logging compliance, testing |
-| `data-integrity-guardian` | Migration safety, transactions, referential integrity, encryption |
-| `architecture-reviewer` | Module boundaries, service layers, URL conventions, task queue placement |
-| `schema-drift-detector` | Model/migration/serializer/admin alignment, missing migrations, index consistency |
-| `frontend-reviewer` | Race conditions, event listener lifecycle, polling conflicts, CSS consistency, template correctness |
-| `deployment-verifier` | Container config, env vars, static assets, backwards compatibility — ends in a Go/No-Go verdict with a rollback plan |
-
-**Review — conditional tier** (dispatched automatically by diff signals; opt out per project with `- !agent-name` in `cepa.local.md`):
-
-| Agent | Dispatch signal | What It Does |
-|---|---|---|
-| `adversarial-reviewer` | Large diff (~300+ lines) or risky paths (payments, auth, PHI, data migrations) | Constructs concrete failure scenarios — hostile sequencing, partial failure, TOCTOU — and traces the code through them |
-| `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
-| `previous-comments-reviewer` | Any prior `todos/review-*.md` in the project, residual-sink entries (`memory/tasks.d/` or legacy `memory/tasks.md`) touching the diff, or human PR review threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
-
-### Skills (8)
-
-| Skill | What It Does |
-|---|---|
-| `compound-docs` | Solution document format (with mandatory Detection sections for review agents), 8-category taxonomy, plan-solution bidirectional linking, CONCEPTS.md vocabulary-map format |
-| `file-todos` | YAML frontmatter format for review findings in `todos/`, including confidence + action-class scoring |
-| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution (parallel safety within and across runs, idempotency), verification evidence, safe auto-apply, residual durability, trunk resolution, dispatch-model declaration (§9 — the tier ladder every subagent dispatch cites) |
-| `implementation-units` | Canonical plan-task format: `### U<N>.` units with stable IDs, per-unit test scenarios, verification split, plan-warranted gate |
-| `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
-| `pr-feedback` | The PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, and the vendored gh scripts |
-| `grounding` | Optional graphify code-graph provider: availability checks, single refresh path, invocation discipline (timeout, sanitization, budgets), consumer table, compliance rules — degrades to grep when absent |
-| `brain` | Optional OB1 cross-repo memory provider (opt-in per repo): recall/writeback over the Agent Memory API, evidence-only governance, content-level PHI scrub, §7 relay, budgets — degrades to grep when absent |
-
-#### Grounding provider (optional)
-
-Repos may configure `grounding: graphify` under `## Integrations` in
-`cepa.local.md` to accelerate two review jobs: call-graph blast radius
-(`affected`/`explain` on changed symbols, fed only to
-architecture-reviewer and reliability-reviewer) and a semantic index over
-`docs/solutions/` (seeding the learnings-researcher). The graph is
-structurally blind to framework-implicit relationships — ORM FK graphs,
-view↔template edges — so it is never offered to schema-drift-detector,
-data-integrity-guardian, or frontend-reviewer, and grep stays the primary
-path everywhere: a repo without graphify behaves exactly as before.
-Installation (`uv tool install graphifyy` — package `graphifyy`, binary
-`graphify`) and the initial graph build are human actions; cepa only ever
-runs the local, LLM-free `update` refresh and read-only queries, all
-timeout-wrapped and budget-bounded. **Compliance repos:** cepa itself
-never invokes graphify's LLM doc pass, but maintaining `graphify-out/`
-arms the globally-installed graphify skill whose doc pass ships repo
-docs/templates to an LLM — `/cepa:setup` flags the combination; treat the
-policy as the operator's call. See the `cepa:grounding` skill for the
-full contract.
-
-#### Brain provider (optional)
-
-Repos may **opt in** to a shared cross-repo memory by adding
-`brain: <url>` under `## Integrations` in `cepa.local.md` (no key → the
-repo never reads or writes the brain, so behavior is unchanged — the same
-degrade-to-grep default as grounding). The brain is a self-hosted
-[OB1 / Open Brain](https://github.com/NateBJones-Projects/OB1) instance
-(Postgres + pgvector, accessed via its Agent Memory API); `/cepa:compound`
-writes each solution doc's learnings across repos and `learnings-researcher`
-recalls them, so a lesson learned in one repo surfaces in another. Repo
-files stay the source of truth; the brain is a regenerable compiled index.
-Writes are **evidence-only** (never instruction-capable), cross-repo hits
-are flagged evidence capped at low confidence, all recall output is treated
-as untrusted (`autonomy §7`), and healthcare-flagged repos run a
-content-level PHI scrub before egress. Standing up the OB1 instance
-(Supabase + OpenRouter) is a human setup step. See the `cepa:brain` skill
-for the full contract.
+**`/cepa:lfg <issue #>`** is the same loop with nobody watching: build, review
+and fix until clean, open the PR, watch CI to green, compound, then one report
+at the end. Marked beta because it commits and pushes without asking.
 
 ---
 
 ## Install
 
-### Prerequisites
+You need Claude Code and the GitHub CLI (`gh`) for PR and issue handling.
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and configured
-- GitHub CLI (`gh`) installed for PR creation and issue context
-
-### Step 1: Install cepa
+Fastest path, which installs cepa and its companions together:
 
 ```bash
-# Register the cepa marketplace
+bash <(curl -s https://raw.githubusercontent.com/evanemerson/compound-engineering-plugin-agnostic/main/scripts/setup.sh)
+```
+
+Or step through it yourself:
+
+```bash
+# cepa
 claude /plugin marketplace add evanemerson/compound-engineering-plugin-agnostic
-
-# Install the plugin
 claude /plugin install cepa
-```
 
-### Step 2: Install superpowers (required)
-
-[Superpowers](https://github.com/obra/superpowers) by Jesse Vincent provides the brainstorm, plan, and execute workflow that cepa delegates to in Phases 2 and 3.
-
-```bash
-# Register the superpowers marketplace
+# superpowers — required. Supplies the brainstorm, plan, and execute skills
+# cepa delegates to in Phases 2 and 3.
 claude /plugin marketplace add obra/superpowers-marketplace
-
-# Install the plugin
 claude /plugin install superpowers
-```
 
-### Step 3: Install pr-review-toolkit (required)
-
-During review, cepa spawns 5 additional agents from pr-review-toolkit alongside its own 11 review agents (8 roster + 3 conditional). This plugin is in the built-in `claude-plugins-official` marketplace — no marketplace registration needed.
-
-```bash
+# pr-review-toolkit — required. Five more review agents. Already in the
+# built-in claude-plugins-official marketplace, so no registration needed.
 claude /plugin install pr-review-toolkit
 ```
 
-### Step 4: Install recommended plugins (optional)
+Recommended, not required:
 
 ```bash
 claude /plugin install commit-commands      # /commit, /commit-push-pr
@@ -164,25 +82,14 @@ claude /plugin install claude-md-management # /revise-claude-md
 claude /plugin install code-review          # GitHub PR review
 ```
 
-### Shortcut
-
-To install everything at once, run `scripts/setup.sh` from this repo:
-
-```bash
-bash <(curl -s https://raw.githubusercontent.com/evanemerson/compound-engineering-plugin-agnostic/main/scripts/setup.sh)
-```
-
-### Update
-
-```bash
-claude /plugin update cepa
-```
+Update with `claude /plugin update cepa`.
 
 ---
 
-## Quick Start
+## Quick start
 
-### 1. Create `cepa.local.md` in your project root
+Write `cepa.local.md` in your project root. This is the file that makes cepa
+stack-agnostic, and every agent reads it.
 
 ```markdown
 # cepa Project Configuration
@@ -205,195 +112,226 @@ claude /plugin update cepa
 - deployment-verifier
 ```
 
-See [CONFIGURATION.md](CONFIGURATION.md) for the full reference with examples for Next.js, FastAPI, Rails, and more.
-
-### 2. Create project directories
+Create the directories cepa writes to:
 
 ```bash
 mkdir -p docs/brainstorms docs/plans docs/solutions todos
 ```
 
-### 3. Run your first task
+Then run it:
 
 ```
 /cepa:task add user authentication to the portal
 ```
 
-cepa will: audit your git state → search past learnings → brainstorm the approach → write a plan → build with TDD → push and create a PR → review with parallel agents → document what was learned → propose system updates.
+Or let `/cepa:setup` do the scaffolding. It health-checks what you have, and
+`/cepa:setup fix` creates what's missing and installs a CI template matched to
+your stack.
 
-You can also use each command independently:
-
-- `/cepa:review` — just run the review agents on your current changes
-- `/cepa:compound` — just document a solved problem
-- `/cepa:triage` — just review findings from a previous `/cepa:review`
+[CONFIGURATION.md](CONFIGURATION.md) has the full reference, including examples
+for Next.js, FastAPI, and Rails.
 
 ---
 
-## The 5 Phases
+## How the loop works
 
-When you run `/cepa:task`, it orchestrates the complete compound engineering loop across 5 phases. A Phase 0 first resolves gated vs. full autonomy (in-prompt flag → remembered preference → `cepa.local.md` `autonomy:` key); the walkthrough below describes the gated default — in `full` autonomy the marked gates resolve silently per the `autonomy` skill and the build executes the whole plan directly. Here's exactly what happens in each phase.
+Five phases. [LOOP.md](LOOP.md) documents each step in detail, including the
+exact commands and hand-offs.
 
-### Phase 1: Git Safety Audit + Context Gathering
+**Phase 1 — Git safety audit.** cepa won't start work in a confused git state.
+It inspects your tree, stashes, and unpushed branches, reports anything
+unresolved as numbered choices, then branches from the latest trunk. Pass an
+issue number and it pulls those requirements first.
 
-**Purpose:** Never start new work in a confused git state.
+**Phase 2 — Research and design.** `learnings-researcher` searches
+`docs/solutions/`, `CLAUDE.md`, your residual shards, and past plans, then puts
+what it found in front of you before design starts. Design itself goes to
+`superpowers:brainstorming`, which asks questions one at a time and proposes a
+few approaches with trade-offs.
 
-1. Runs `git status`, `git branch`, `git stash list`, `git diff --staged/unstaged`, checks for unpushed branches
-2. Presents a status report with any issues found
-3. If issues exist, presents numbered choices: stash, commit, abandon, or stay on current branch
-4. If a GitHub issue number is provided, pulls requirements, comments, and linked PRs via `gh issue view`
-5. Creates a branch from latest main with a descriptive prefix (`feat/`, `fix/`, `refactor/`, `chore/`)
+**Phase 3 — Plan and build.** The plan gets written as Implementation Units with
+stable ids and per-unit test scenarios, then committed. A persona panel reviews
+it before any code exists, because a design flaw caught here costs a paragraph
+instead of a refactor. Build runs task by task with tests written first.
 
-**Delegates to:** git CLI, GitHub CLI
+**Phase 4 — Ship and review.** Tests and linter run, the PR opens, and up to 16
+review agents go out in parallel. Findings are deduplicated into `todos/` with
+P1/P2/P3 severity and confidence scores. P1s get fixed on the spot. P2s and P3s
+either become numbered choices or flow through the auto-apply rubric, depending
+on your autonomy setting.
 
-### Phase 2: Research + Design (PLAN)
+**Phase 5 — Compound.** Always runs. The work becomes a solution doc with a
+Detection section written for the review agents that will read it next time.
+Prevention strategies become proposed CLAUDE.md rules. Anything skipped goes
+into a residual shard rather than getting lost.
 
-**Purpose:** Surface institutional knowledge, then design the approach.
+---
 
-**Step 2.1 — Surface Past Learnings**
+## Verification
 
-Dispatches the `learnings-researcher` agent, which searches:
-- `docs/solutions/` — past problems and fixes
-- `CLAUDE.md` — existing rules and patterns
-- `memory/tasks.d/` (+ legacy `memory/tasks.md`) — deferred items from prior tasks
-- `docs/plans/` — plans that touched the same areas
-- Git history (optional) — blame and commit messages for files being modified
+Most of this plugin is prose that tells a model what to do, which is exactly the
+kind of thing that rots quietly. The scripts in `scripts/` push back, and every
+one of them is read-only.
 
-Presents relevant findings before design begins so past mistakes aren't repeated. If no relevant learnings are found, says so and moves on.
+**`check-model-pins.sh`** is the one that matters most. An omitted `model:` key
+on a dispatch isn't a neutral default: the subagent inherits whatever tier
+launched the session, so cost becomes a property of the caller. An audit in July
+2026 traced roughly 91% of weighted spend to unpinned dispatches. This script
+walks every dispatch site in the plugin and fails on any that could fall
+through.
 
-**Step 2.2 — Design**
+It runs in CI on every pull request and every push to `main`
+([model-pins.yml](.github/workflows/model-pins.yml)), so you don't have to
+remember it. One caveat worth stating plainly: `main` is deliberately not
+branch-protected here, so a red check reports loudly but does not physically
+block a merge. Treat it as blocking anyway.
 
-Delegates to `superpowers:brainstorming`, which:
-1. Explores project context enriched with past learnings and issue context
-2. Asks clarifying questions one at a time
-3. Proposes 2-3 approaches with trade-offs
-4. Presents design sections for approval
-5. Saves design doc to `docs/plans/YYYY-MM-DD-<topic>-design.md`
+**`check-model-pins-controls.sh`** proves the checker still works. It feeds
+known-bad input and confirms each MISS still fires, so the pin check can't rot
+into a green light that means nothing.
 
-Even "simple" tasks get a brief design pass.
+**`run-mutation-sweep.sh`** sabotages the checker deliberately and confirms the
+controls notice. This one is too slow for a per-PR check, so it runs weekly on a
+schedule ([mutation-sweep.yml](.github/workflows/mutation-sweep.yml)) and on
+demand. Takes about 43 minutes locally, and it refuses a tree that changed
+mid-run, so don't edit tracked files while it works.
 
-### Phase 3: Plan + Build (WORK)
+**`check-residual-integrity.sh`** catches a narrower failure. A findings file can
+say "resolved" in its prose while the frontmatter field a consumer parses still
+says open. This checks that the parsed field agrees with the body, in both
+findings files and residual shards. Also wired into CI per PR
+([residual-integrity.yml](.github/workflows/residual-integrity.yml)).
 
-**Purpose:** Create an implementation plan, then execute it.
+There is also `check-sweep-branch-classes.sh`, which fixtures branch shapes no
+real repo in the portfolio produces (a non-trunk base, multiple merged PRs on one
+head), and `check-brain-client-args.sh` for the brain client's argument guards.
 
-**Step 3.1 — Implementation Plan**
+CI pins its actions and Dependabot keeps them current.
+[CHANGELOG.md](CHANGELOG.md) is generated from GitHub Releases rather than
+hand-written.
 
-Delegates to `superpowers:writing-plans`, which:
-1. Creates a detailed TDD implementation plan
-2. Breaks work into bite-sized tasks (2-5 minutes each)
-3. Saves to `docs/plans/YYYY-MM-DD-<feature-name>.md`
+---
 
-The saved plan is structured as Implementation Units (the
-`implementation-units` skill — stable `U<N>` ids, per-unit files, test
-scenarios, and verification), then committed before implementation starts:
-```bash
-git add docs/plans/
-git commit -m "docs: add implementation plan for <feature>"
-```
+## Commands
 
-**Step 3.1b — Plan Review**
+| Command | What It Does |
+|---|---|
+| `/cepa:task` | Full loop orchestrator, all 5 phases end to end, gated or autonomous via the `autonomy:` config |
+| `/cepa:lfg` | **BETA** — the loop hands-off: build, review and fix until clean, PR, watch CI to green, compound, one report |
+| `/cepa:review` | Review agents in parallel (8 roster + 3 conditional + 5 pr-review-toolkit), P1/P2/P3 severity with confidence scores. Loads Detection sections from matching solution docs. Supports `mode:headless` and `cadence:weekly` |
+| `/cepa:triage` | Triage findings. Batch mode auto-applies safe verified fixes and tables the rest. Pass `interactive` to go one at a time |
+| `/cepa:plan-review` | Persona-panel review of a plan before build, with conditional activation and confidence anchors. Supports `mode:headless` |
+| `/cepa:compound` | Document a solved problem with 5 parallel sub-agents. Seeds the CONCEPTS.md vocabulary map. Supports `mode:headless` |
+| `/cepa:compound-refresh` | Refresh `docs/solutions/` against the current code: update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md. Supports `mode:headless` |
+| `/cepa:sweep` | Scheduled residual sweep. Drains deferred findings, residual shards, and hygiene through full lfg runs, then closes each item in every sink. Reports merged local branches no worktree holds. Supports `mode:headless` |
+| `/cepa:resolve-pr` | Resolve human PR feedback: fetch once, judge centrally, fix per the autonomy rubric, reply and resolve after push. Supports `mode:headless` |
+| `/cepa:handoff` | End a session without losing state. Judges whether switching is timely (`GO`/`WAIT`/`GO WITH CARE`), inventories work in flight, makes residuals durable, resolves the next session's branch, and emits a self-contained prompt. Supports `mode:headless` |
+| `/cepa:setup` | Health-check a project's cepa scaffold, or `fix` it: create missing dirs and config, install a stack-matched CI template |
 
-Runs `/cepa:plan-review` on the committed plan — a small persona panel
-(coherence and feasibility always; scope, security, product, and
-adversarial lenses activate on signals) reviews the plan before any code
-is written. Eligible fixes are applied to the plan and committed;
-judgment calls surface as numbered choices (gated) or go durable
-(autonomous). Never build from an unreviewed plan.
+## Agents
 
-**Step 3.2 — Build**
+`learnings-researcher` handles research, searching `docs/solutions/`,
+`CLAUDE.md`, `memory/tasks.d/` (plus the legacy `memory/tasks.md`), and past
+plans for anything relevant to the task at hand.
 
-Delegates to `superpowers:subagent-driven-development` (same session, default) or `superpowers:executing-plans` (parallel session). The user chooses.
+The eight roster review agents run on every review:
 
-These skills handle task-by-task implementation with TDD (test first, then implement), spec compliance review, code quality review, and commits per task.
+| Agent | What It Does |
+|---|---|
+| `security-sentinel` | OWASP top 10, compliance (HIPAA/SOC2/PCI), auth patterns, data exposure, input validation, secrets |
+| `performance-oracle` | N+1 queries, missing indexes, caching, task queue, frontend perf |
+| `python-reviewer` | Pythonic patterns, framework conventions, logging compliance, testing |
+| `data-integrity-guardian` | Migration safety, transactions, referential integrity, encryption |
+| `architecture-reviewer` | Module boundaries, service layers, URL conventions, task queue placement |
+| `schema-drift-detector` | Model, migration, serializer, and admin alignment. Missing migrations, index consistency |
+| `frontend-reviewer` | Race conditions, event listener lifecycle, polling conflicts, CSS consistency, template correctness |
+| `deployment-verifier` | Container config, env vars, static assets, backwards compatibility. Ends in a Go/No-Go verdict with a rollback plan |
 
-### Phase 4: Ship + Review (REVIEW)
+Three more are dispatched only when the diff calls for them. Opt out per project
+with `- !agent-name` in `cepa.local.md`.
 
-**Purpose:** Verify, push, create PR, run automated review, fix critical issues.
+| Agent | Dispatch signal | What It Does |
+|---|---|---|
+| `adversarial-reviewer` | Large diff (~300+ lines) or risky paths: payments, auth, PHI, data migrations | Builds concrete failure scenarios (hostile sequencing, partial failure, TOCTOU) and traces the code through them |
+| `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
+| `previous-comments-reviewer` | Any prior `todos/review-*.md`, residual-sink entries touching the diff, or human PR threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
-**Step 4.1 — Final Verification**
+## Skills
 
-Runs the project's test suite and linter. If either fails, fixes before proceeding.
+| Skill | What It Does |
+|---|---|
+| `autonomy` | The autonomy contract: gate resolution, run-to-completion execution, parallel safety, idempotency, verification evidence, safe auto-apply, residual durability, trunk resolution, and the §9 dispatch-model tier ladder |
+| `compound-docs` | Solution doc format with mandatory Detection sections, the 8-category taxonomy, plan-solution bidirectional linking, CONCEPTS.md vocabulary-map format |
+| `file-todos` | YAML frontmatter format for findings in `todos/`, including confidence and action-class scoring |
+| `implementation-units` | Plan-task format: `### U<N>.` units with stable ids, per-unit test scenarios, verification split, plan-warranted gate |
+| `plan-review` | Persona roster, activation signals, confidence anchors, and synthesis rules for pre-build plan review |
+| `pr-feedback` | PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, vendored gh scripts |
+| `grounding` | Optional graphify code-graph provider. Availability checks, single refresh path, invocation discipline, consumer table, compliance rules. Degrades to grep when absent |
+| `brain` | Optional OB1 cross-repo memory, opt-in per repo. Recall and writeback over the Agent Memory API, evidence-only governance, PHI scrub, §7 relay, budgets. Degrades to grep when absent |
 
-**Step 4.2 — Push and Create PR**
+[CONCEPTS.md](CONCEPTS.md) is the shared vocabulary map: the entities and named
+processes above, defined once, accreting as solutions get documented.
 
-```bash
-git push -u origin <branch-name>
-gh pr create --title "<concise title>" --body "<summary from design/plan>"
-```
+---
 
-**Step 4.3 — Auto-Review**
-
-If `cepa.local.md` exists in the project, runs `/cepa:review`, which spawns up to 17 agents in parallel:
-
-- **8 roster cepa agents:** security-sentinel, performance-oracle, python-reviewer, data-integrity-guardian, architecture-reviewer, schema-drift-detector, frontend-reviewer, deployment-verifier
-- **3 conditional cepa agents (signal-dispatched):** adversarial-reviewer, reliability-reviewer, previous-comments-reviewer
-- **5 pr-review-toolkit agents:** silent-failure-hunter, pr-test-analyzer, comment-analyzer, type-design-analyzer, code-simplifier
-
-The `learnings-researcher` runs first and feeds its findings as additional context to all review agents. Findings are deduplicated and written to `todos/review-YYYY-MM-DD-HHMMSS.md` with P1/P2/P3 severity.
-
-If `cepa.local.md` doesn't exist, falls back to `/pr-review-toolkit:review-pr`.
+## Advanced
 
 ### Review cadence
 
-Not every agent's findings need to block a merge. Simplification
-opportunities, comment rot, and type-design drift are accumulated debt — a
-finding is as valid a week later as it is on the PR — while a missing
-migration or a PHI leak is a defect that costs far more to catch after
-merge.
+Not every finding should block a merge. Simplification opportunities, comment
+rot, and type-design drift are debt, and a debt finding is as valid a week later
+as it is today. A missing migration or a PHI leak is a defect, and those get
+much more expensive after merge.
 
-`/cepa:review` supports two rosters in `cepa.local.md`:
+So `/cepa:review` reads two rosters:
 
 | Section | Runs | Dispatched by |
 |---|---|---|
 | `## Review Agents (Active)` | every PR | `/cepa:review` (default) |
 | `## Review Agents (Weekly)` | on a schedule | `/cepa:review cadence:weekly` |
 
-A weekly run reviews trunk commits since the last weekly run — it records the
-tip it scoped to as `reviewed_through:` and the next run starts there, so a
-missed week is absorbed rather than falling into an unreviewed gap (the first
-run, with no watermark yet, falls back to a 7-day window). It skips the
-`learnings-researcher` and the conditional tier — both are defect-review
-machinery a debt pass doesn't use — and writes its findings to
-`todos/review-weekly-*.md` with `scope: weekly:<date>` and
-`status: deferred`.
-
-That status is the point: `/cepa:sweep` already drains deferred
-`mechanical`/`corroborated` findings whose branch is merged, so weekly debt
-findings flow into the existing sweep queue with no new machinery. Stagger
-the two — debt review Sunday, sweep Monday — and the sweep drains what the
-review filed a day earlier.
-
 ```bash
 # suggested cron
 claude -p "/cepa:review cadence:weekly mode:headless"
 ```
 
-The run creates a throwaway `git worktree` detached at trunk and reviews from
-there, so it is safe to schedule against a working developer clone — your
-checkout, branch, and uncommitted changes are untouched. It resolves the trunk
-from `cepa.local.md`'s `trunk:` key first, then `gh repo view`,
-`git symbolic-ref`, and `main` — rather than assuming a branch name. Set
-`trunk:` on any repo where work lands somewhere other than the GitHub default
-branch (a `dev` integration branch with an auto-deploying `main`, say);
-nothing but the project can state that.
+A weekly run reviews trunk commits since the last weekly run. It records the tip
+it scoped to as `reviewed_through:` and the next run starts there, so a missed
+week gets absorbed instead of falling into a gap. The first run has no watermark
+and falls back to a 7-day window. It skips `learnings-researcher` and the
+conditional tier, since both are defect-review machinery a debt pass doesn't
+need, and writes to `todos/review-weekly-*.md` with `scope: weekly:<date>` and
+`status: deferred`.
 
-If `cadence:weekly` is passed and no `## Review Agents (Weekly)` section
-exists, the run reports `no weekly roster configured`, appends a dated
-one-line record to the run's residual shard in `memory/tasks.d/`, and exits
-without writing a findings
-file. It never falls back to the Active roster — a scheduled job that
-silently ran the full per-PR roster on every repo every week is the cost
-failure this tier exists to prevent. Every weekly exit that skips the
-findings file leaves that durable one-liner, so a misconfigured cron is
-never indistinguishable from a quiet week.
+That status is the whole trick. `/cepa:sweep` already drains deferred
+`mechanical` and `corroborated` findings on merged branches, so weekly debt
+flows into the existing queue with no new machinery. Stagger them, debt review
+Sunday and sweep Monday, and the sweep drains what the review filed the day
+before.
+
+The run works from a throwaway `git worktree` detached at trunk, so scheduling it
+against a working developer clone is safe. Your checkout, branch, and
+uncommitted changes are untouched. Trunk resolves from `cepa.local.md`'s
+`trunk:` key first, then `gh repo view`, `git symbolic-ref`, and `main`, rather
+than assuming a name. Set `trunk:` on any repo where work lands somewhere other
+than the GitHub default branch, like a `dev` integration branch with an
+auto-deploying `main`. Nothing but the project can state that.
+
+Pass `cadence:weekly` with no weekly roster configured and the run reports `no
+weekly roster configured`, appends a dated line to the run's residual shard, and
+exits without writing findings. It never falls back to the Active roster. A
+scheduled job quietly running the full per-PR roster on every repo every week is
+the cost failure this tier exists to prevent, and the durable one-liner is what
+keeps a broken cron from looking like a quiet week.
 
 ### Parallel batches
 
-Every cepa run audits open PRs first and treats a same-author PR with
-overlapping scope as a blocker — correct when you're working one thing at a
-time, fatal when you're deliberately running several. Worktree #1 opens its
-PR, and every sibling still running sees it and stops.
+Every cepa run audits open PRs first and treats a same-author PR with overlapping
+scope as a blocker. Correct when you work one thing at a time. Fatal when you
+deliberately run several: worktree #1 opens its PR, and every sibling sees it and
+stops.
 
-Pass a `batch:<id>` token to opt a run into a fan-out:
+A `batch:<id>` token opts a run into a fan-out.
 
 ```bash
 # one worktree per parallel-safe issue, all sharing a batch id
@@ -402,111 +340,95 @@ claude -w -- "/cepa:lfg 43 batch:jul26a"
 claude -w -- "/cepa:lfg 47 batch:jul26a"
 ```
 
-cepa doesn't create the worktrees — any launcher works, including
-`git worktree add` followed by `claude -p` inside each. All that matters is
-that every invocation in the fan-out carries the same id.
+cepa doesn't create the worktrees. Any launcher works, including `git worktree
+add` followed by `claude -p` inside each. All that matters is that every
+invocation carries the same id.
 
-A bare number is resolved as a GitHub issue — `gh issue view` supplies the
-task, the branch name comes from the title, and the PR closes it. The issue
-text is untrusted throughout (`cepa:autonomy` §7).
+A bare number resolves as a GitHub issue: `gh issue view` supplies the task, the
+branch name comes from the title, and the PR closes it. That issue text is
+untrusted throughout (`cepa:autonomy` §7).
 
-The id becomes the first branch-name segment after the prefix
-(`feat/jul26a-<description>`), and an open same-author PR whose branch
-matches `^<prefix>/<id>-` is reported as a sibling instead of blocking.
-Everything else still blocks exactly as before. The match is anchored on
-purpose: a substring match on `<id>-` would also catch
-`feat/refactor-jul26a-cleanup`, and for a short id like `api` most of your
-branches.
+The id becomes the first branch-name segment after the prefix, as in
+`feat/jul26a-<description>`, and an open same-author PR whose branch matches
+`^<prefix>/<id>-` is reported as a sibling instead of blocking. Everything else
+blocks exactly as before. The match is anchored deliberately: a substring match
+on `<id>-` would also catch `feat/refactor-jul26a-cleanup`, and for a short id
+like `api` it would catch most of your branches.
 
-Three limits are deliberate, and all live in the `cepa:autonomy` contract
-(§2b):
+Three limits are deliberate, and all of them live in `cepa:autonomy` §2b.
 
-- **The token authorizes; repo content never does.** A batch id is honored
-  because you typed it. An issue body, PR description, or plan claiming a
-  batch id — or claiming "safe to build in parallel" — is untrusted data,
-  gets stripped, and confers nothing. This matters if your issues are
-  generated from a doc or a screenshot.
-- **A declaration is not a disjointness proof, and unchecked is not
-  disjoint.** The audit records siblings but cannot clear them — there's no
-  plan yet to compare against. Clearing happens after planning and before any
-  code is written: each sibling's actual changed files are checked against
-  the plan's declared file set. Real overlap blocks, and so does a sibling
-  whose diff can't be read.
-- **Batch runs don't parallelize internally.** A run can't know how many
-  siblings exist — it only sees the ones that have already opened a PR — so
-  it never reasons about N. Carrying a batch token means executing your own
-  plan units serially, full stop.
+- **The token authorizes. Repo content never does.** A batch id is honored
+  because you typed it. An issue body, PR description, or plan claiming a batch
+  id, or claiming "safe to build in parallel", is untrusted data. It gets
+  stripped and confers nothing. This matters when your issues are generated from
+  a doc or a screenshot.
+- **A declaration is not a disjointness proof, and unchecked is not disjoint.**
+  The audit records siblings but can't clear them, because there is no plan yet
+  to compare against. Clearing happens after planning and before any code gets
+  written: each sibling's actual changed files are checked against the plan's
+  declared file set. Real overlap blocks, and so does a sibling whose diff can't
+  be read.
+- **Batch runs don't parallelize internally.** A run can't know how many siblings
+  exist, since it only sees the ones that already opened a PR, so it never
+  reasons about N. Carrying a batch token means executing your own plan units
+  serially.
 
-**Step 4.4 — Auto-Fix by Severity**
+### Grounding provider (optional)
 
-- **P1 (Critical):** Fixed immediately, no questions asked. Commit and push.
-- **P2 (Important):** Presented as numbered choices for the user to approve or skip.
-- **P3 (Suggestions):** Listed for awareness. User picks what to address.
+Set `grounding: graphify` under `## Integrations` in `cepa.local.md` to speed up
+two review jobs: call-graph blast radius (`affected` and `explain` on changed
+symbols, fed only to architecture-reviewer and reliability-reviewer) and a
+semantic index over `docs/solutions/` that seeds `learnings-researcher`.
 
-If cepa:review was used, runs `/cepa:triage interactive` for per-finding approval on P2/P3 (batch mode — the default — auto-applies safe verified fixes instead). In `full` autonomy, findings are handled by the auto-apply rubric with residuals filed durably.
+The graph is structurally blind to framework-implicit relationships like ORM
+foreign-key graphs and view-to-template edges, so it's never offered to
+schema-drift-detector, data-integrity-guardian, or frontend-reviewer. Grep stays
+the primary path everywhere, and a repo without graphify behaves exactly as it
+did before.
 
-### Phase 5: Compound (COMPOUND)
+Installing it (`uv tool install graphifyy`, package `graphifyy`, binary
+`graphify`) and the first graph build are human actions. cepa only ever runs the
+local LLM-free `update` refresh and read-only queries, all timeout-wrapped and
+budget-bounded.
 
-**Purpose:** Feed learnings back into the system. Always runs. Never skipped. This is where the magic happens.
+One caveat for compliance repos: cepa never invokes graphify's LLM doc pass, but
+keeping `graphify-out/` around arms the globally-installed graphify skill, whose
+doc pass does ship repo docs and templates to an LLM. `/cepa:setup` flags the
+combination. The policy call is yours. Full contract is in the `cepa:grounding`
+skill.
 
-**Step 5.1 — Capture Learnings** (scaled by task size)
+### Brain provider (optional)
 
-- **Small tasks (bug fixes, config changes):** Quick inline capture — what went wrong, what was the fix, any surprises, should a rule be added?
-- **Medium/large tasks (features, refactors):** Runs `/cepa:compound`, which spawns 5 parallel sub-agents (context analyzer, solution extractor, related docs finder, prevention strategist, category classifier). Assembles a solution doc and saves to `docs/solutions/<category>/<filename>.md` with bidirectional links to the originating plan.
+Add `brain: <url>` under `## Integrations` in `cepa.local.md` to opt into shared
+cross-repo memory. No key means the repo never reads or writes the brain, so
+behavior is unchanged, same degrade-to-grep default as grounding.
 
-**Step 5.2 — Auto-Propose System Updates**
+The brain is a self-hosted [OB1 / Open Brain](https://github.com/NateBJones-Projects/OB1)
+instance: Postgres with pgvector, reached through its Agent Memory API.
+`/cepa:compound` writes each solution doc's learnings across repos and
+`learnings-researcher` recalls them, so a lesson from one repo surfaces in
+another. Repo files stay the source of truth. The brain is a regenerable
+compiled index, and you can throw it away.
 
-Based on learnings, immediately proposes concrete updates:
-
-- **CLAUDE.md rules:** If a prevention strategy was identified, drafts the rule and presents numbered choices (apply / modify / skip)
-- **Review agent rules:** If a pattern should be caught by review agents, proposes adding it to `cepa.local.md`
-- **Test guards:** If a class of bug could be caught by a test, notes it for the next task's planning phase
-
-**Step 5.3 — Save Undone Items**
-
-Skipped P2/P3 findings and deferred plan items are saved to a per-run shard
-in `memory/tasks.d/` (one file per date + branch, so parallel worktree runs
-never merge-conflict — see `cepa:autonomy` §5) and nothing gets lost between
-sessions. The legacy single-file `memory/tasks.md` is still read but no
-longer written.
-
-**Step 5.4 — Final Status**
-
-```
-## Loop Complete
-
-PR: #<number> — <title>
-Branch: <branch-name>
-Findings: X fixed, Y deferred (saved to the memory/tasks.d/ shard)
-Learnings: <summary of what was documented>
-System updates: X rules added to CLAUDE.md, Y items deferred
-
-Next steps:
-1. Merge the PR on GitHub
-2. Start next task (/cepa:task)
-3. Address deferred items
-```
-
-### Resuming a Task
-
-If you invoke `/cepa:task` on an existing feature branch (not main):
-1. Skips branch creation
-2. Checks for an existing plan in `docs/plans/`
-3. If a plan exists, asks which phase to resume at
-4. If no plan, starts from Phase 2 (design)
+Writes are evidence-only and never instruction-capable. Cross-repo hits are
+flagged as evidence and capped at low confidence. All recall output is treated as
+untrusted per `autonomy §7`, and healthcare-flagged repos run a content-level PHI
+scrub before anything leaves. Standing up the OB1 instance (Supabase plus
+OpenRouter) is a human setup step. Full contract is in the `cepa:brain` skill.
 
 ---
 
 ## Dependencies
 
-CEPA delegates to companion plugins for planning, execution, and additional review agents. These must be installed separately.
+cepa delegates planning, execution, and five review agents to companion plugins.
+Install them separately.
 
 | Plugin | Source | What cepa uses |
 |---|---|---|
-| **superpowers** | [obra/superpowers-marketplace](https://github.com/obra/superpowers) | `brainstorming`, `writing-plans`, `subagent-driven-development`, `executing-plans` skills |
-| **pr-review-toolkit** | claude-plugins-official | `review-pr` command (fallback), `silent-failure-hunter`, `pr-test-analyzer`, `comment-analyzer`, `type-design-analyzer`, `code-simplifier` agents |
+| **superpowers** | [obra/superpowers-marketplace](https://github.com/obra/superpowers) | `brainstorming`, `writing-plans`, `subagent-driven-development`, `executing-plans` |
+| **pr-review-toolkit** | claude-plugins-official | `review-pr` as fallback, plus `silent-failure-hunter`, `pr-test-analyzer`, `comment-analyzer`, `type-design-analyzer`, `code-simplifier` |
 
-Optional but recommended:
+Optional:
 
 | Plugin | Source | What it provides |
 |---|---|---|
@@ -516,53 +438,15 @@ Optional but recommended:
 
 ---
 
-## Per-Project Configuration
-
-Create `cepa.local.md` in your project root. Every agent reads it and adapts to your stack.
-
-```markdown
-# cepa Project Configuration
-
-## Stack
-- framework: Django 5.x
-- frontend: HTMX, vanilla JS, Tailwind CSS
-- database: PostgreSQL 18
-- async: Celery + Redis
-- containers: Docker Compose
-- testing: pytest-django
-- linting: ruff
-
-## Compliance
-- hipaa: true
-- phi_fields: [body_encrypted, notes]
-- audit_model: AuditLog
-
-## Review Agents (Active)
-- security-sentinel
-- performance-oracle
-- python-reviewer
-- data-integrity-guardian
-- architecture-reviewer
-- schema-drift-detector
-- frontend-reviewer
-- deployment-verifier
-```
-
-For the full reference with examples for Next.js, FastAPI, Rails, and a section-by-section guide, see [CONFIGURATION.md](CONFIGURATION.md).
-
----
-
-## Project Directory Structure
-
-Create these directories in your project:
+## Project layout
 
 ```
 your-project/
-├── cepa.local.md          # Per-project config (commit to git)
+├── cepa.local.md          # Per-project config (commit it)
 ├── docs/
-│   ├── brainstorms/       # Design brainstorm docs
+│   ├── brainstorms/       # Design brainstorms
 │   ├── plans/             # Implementation plans
-│   └── solutions/         # Solution docs (auto-categorized)
+│   └── solutions/         # Solution docs, auto-categorized
 │       ├── build-errors/
 │       ├── database-issues/
 │       ├── runtime-errors/
@@ -574,7 +458,6 @@ your-project/
 └── todos/                 # Review findings
 ```
 
-Quick setup:
 ```bash
 mkdir -p docs/brainstorms docs/plans docs/solutions todos
 touch docs/brainstorms/.gitkeep docs/plans/.gitkeep docs/solutions/.gitkeep todos/.gitkeep
@@ -582,12 +465,33 @@ touch docs/brainstorms/.gitkeep docs/plans/.gitkeep docs/solutions/.gitkeep todo
 
 ---
 
-## Acknowledgments
+## Who built this, and what it's built on
 
-This plugin is built on the ideas from [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin) by [Kieran Klaassen](https://github.com/kieranklaassen). His original plugin introduced the compound engineering workflow — the plan/work/review/compound loop, the parallel review agents, the solution documentation pattern, and the concept that each unit of work should make subsequent work easier. The agent architectures, review categories, and documentation format in CEPA are directly adapted from his work.
+cepa is written and maintained by [Evan Emerson](https://github.com/evanemerson).
+It's an independent project, not an Anthropic product, though it runs inside
+Claude Code and uses it heavily to build itself.
 
-I came across the original plugin while working on a Django project and found that many of the agents were built around Ruby on Rails conventions — `schema.rb` drift detection, DHH-style code review, StandardRB linting, Hotwire/Turbo race conditions. Rather than fork and rewrite, I wanted an agnostic version where a single configuration file (`cepa.local.md`) could tell every agent what stack, compliance rules, and conventions to use. Same ideas, any framework.
+The ideas come from [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
+by [Kieran Klaassen](https://github.com/kieranklaassen). His original introduced
+the plan/work/review/compound loop, the parallel review agents, the solution
+documentation pattern, and the idea that each unit of work should make the next
+one easier. The agent architectures, review categories, and doc format here are
+adapted directly from that work.
 
-I also wanted to lean on companion plugins for everything they already cover well — [Superpowers](https://github.com/obra/superpowers) for brainstorming, planning, execution, and TDD; the [official Anthropic plugins](https://github.com/anthropics/claude-plugins-official) for PR review, commits, and CLAUDE.md management — and only build custom agents for the gaps. CEPA handles the review-triage-document cycle and the orchestration loop. The companion plugins handle everything else. Together they cover the full compound engineering workflow without reinventing what already exists.
+I found it while working on a Django project, and most of the agents turned out
+to be built around Rails conventions: `schema.rb` drift detection, DHH-style
+code review, StandardRB linting, Hotwire and Turbo race conditions. Rather than
+fork and rewrite for Django, I wanted a version where one config file could tell
+every agent what stack and rules to use. Same ideas, any framework.
 
-As for the name: **C**ompound **E**ngineering **P**lugin **A**gnostic. I needed something short enough that `/cepa:task` wouldn't wear out my keyboard, and descriptive enough that I'd remember what it stands for in six months. Acronyms are better, right? 
+I also wanted to lean on companion plugins for everything they already do well.
+[Superpowers](https://github.com/obra/superpowers) handles brainstorming,
+planning, execution, and TDD. The [official Anthropic plugins](https://github.com/anthropics/claude-plugins-official)
+handle PR review, commits, and CLAUDE.md management. cepa builds custom agents
+only for the gaps, and owns the review-triage-document cycle and the
+orchestration loop.
+
+The name is just **C**ompound **E**ngineering **P**lugin **A**gnostic. I needed
+something short enough that typing `/cepa:task` all day wouldn't wear out my
+keyboard, and obvious enough that I'd still remember what it stood for in six
+months.

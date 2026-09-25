@@ -82,9 +82,14 @@ count of open boxes had stopped being evidence about anything.
 
 Each was re-read at its cited construct, not taken from its own description:
 
-- **Leg 4 still scopes to `§N<letter>` by construction** — bare `§N` (§7 among
+- ~~**Leg 4 still scopes to `§N<letter>` by construction** — bare `§N` (§7 among
   them) is out of scope, stated inline in the checker. The `§8`/`§5`/`§4`
-  citations still do not resolve.
+  citations still do not resolve.~~ **CLOSED 2026-09-14** on
+  `fix/cite-leg4-bare-anchors`: leg 4 indexes `## N.` headings too, so every
+  bare anchor resolves and `§7` is checked rather than excluded. Canonical
+  reasoning — including why the "how is §7 excluded" framing was itself the
+  blocker — lives in
+  `memory/tasks.d/2026-07-30-fix-cite-trunk-ladder-once.md`, cited not restated.
 - **The line-wrapped-qualifier hole is live** — `CITE_RE` is still matched by
   line-based `grep`.
 - **`--selftest` is still wired only to `mutation-sweep.yml`**, never to

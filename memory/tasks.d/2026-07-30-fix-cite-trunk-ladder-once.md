@@ -9,17 +9,52 @@ findings #11 and #12 (#12 partially — see below).
 
 ### Deferred
 
-- [ ] P1 — `scripts/check-model-pins.sh` leg 4 — **bare-`§N` anchors remain
-  uncheckable, including `§8` itself.** `plugins/cepa/skills/autonomy/SKILL.md:501`
-  is `## 8. Trunk Resolution` — no letter — so none of the repo's 10 `§8`
-  citations resolve through leg 4, including the four this PR just created.
-  The same gap covers `§5` (×54), `§4` (×25), `§6` (×12) and bare `§2` (×9).
-  **Deferred because** the invocation scoped leg 4 to "every `§N<letter>`
-  anchor", and widening to bare `§N` requires deciding how `§7` is excluded —
-  by number rather than by suffix shape — which changes what protects the six
-  relay-point guards from a future consolidation. That is a design call, and
-  it pairs with the `policy-owner` marker below (plan-review finding #5,
-  confidence 75).
+- [x] ~~P1 — `scripts/check-model-pins.sh` leg 4 — **bare-`§N` anchors remain
+  uncheckable, including `§8` itself.**~~ **CLOSED 2026-09-14** on
+  `fix/cite-leg4-bare-anchors`. Leg 4 now indexes `## N.` headings alongside
+  `### N<letter>.` and `CITE_RE` makes the letter optional. Coverage went from
+  23 to 110 distinct (qualifier, anchor) pairs; 7 anchors to 16.
+
+  **The blocking question was malformed, and that is the durable lesson.** It
+  asked how `§7` gets EXCLUDED, on the premise that leg 4 would endanger the six
+  relay-point guards. It does not, and §7 is now CHECKED like every other
+  section. The premise conflated this leg with a different one that does not
+  exist: §9f's does-NOT-cover table rules out a leg flagging prose RESTATEMENT
+  near a citation, because that leg would flag §7's required instantiations and
+  its cheapest remedy would be deleting a guard. **Resolution is not
+  restatement.** A `§7` citation resolving to `## 7.` reads no surrounding prose
+  and can never ask for a clause to be removed — it makes a future renumber of
+  §7 fail LOUDLY instead of silently invalidating all 57 of its citations.
+  Excluding §7 would have been the only way to WEAKEN those guards. Six weeks of
+  deferral bought nothing; re-reading the cited table answered it in one pass.
+
+  **A false green shipped mid-run and was caught only by planting a defect.**
+  The first cut changed `CITE_RE` alone. Bare anchors then reached a `case`
+  arm matching `[0-9]*[a-z]` or `[a-z]*` and fell through to `*) continue` —
+  DISCARDED before the lookup. The run printed `0 MISS` with an INFO line
+  claiming 34 pairs while the checking loop received exactly ONE row. A green
+  build verifying nothing is precisely the class this checker exists to catch,
+  and the green run itself was not evidence — only the planted `§77` was. Fixed
+  with an all-digit arm that also preserves `first_num` for range expansion.
+
+  Control cases **B1-B4** pin the widened behavior (79 controls, was 75).
+  Verified by mutation: disabling the all-digit arm turns B1, B2 and B3 red
+  while the checker's own baseline stays at `0 MISS` — the silent shape. B4 is
+  the false-positive guard (hyphenated English such as the seven live
+  `§5`-style and `§7`-guarded constructs must stay clean); keeping the range
+  endpoints numbered on BOTH sides is what makes that safe.
+
+  **Case 20 went red and was repaired, not relaxed** (§9f: a red control is a
+  defect or a deliberate behavior change). Its fixture mangled only `###`
+  headings, which no longer empties the index; it now strips both levels, so it
+  again exercises the `set -u` empty-array path it exists for.
+
+  **Leg 4's no-hatch hazard bit this very change.** A wrong-owner example
+  written with a literal section sign inside a control's rationale string
+  became a REAL citation and failed the checker — `scripts/` is a citation root
+  scanned whole. Described in words instead, per the convention the controls
+  file already states: a literal is correct when it SHOULD resolve, and must be
+  runtime-built from `$SS` when it is a deliberately-broken example.
 
 - [x] ~~P3 — `.github/workflows/model-pins.yml` — **the renovate/dependabot half
   of PR #25 finding #12 was declined, not done.**~~ **CLOSED 2026-08-09 —
@@ -163,6 +198,39 @@ findings #11 and #12 (#12 partially — see below).
   finding #1 documents. The plan shape still has no backstop (plan-review
   finding #10, confidence 50).
 
+- [x] ~~P2 — `scripts/check-model-pins.sh:540` — **an ordinary numbered
+  procedure in any skill silently registers policy anchors and disarms the
+  wrong-owner check.**~~ **CLOSED 2026-09-14** on
+  `fix/anchor-owner-collision-is-a-miss`. Option 3 chosen, as recommended: a
+  second skill claiming an anchor another already owns is now a MISS naming
+  both skills, so the checker REFUSES the ambiguity rather than resolving it
+  silently. Verified three ways — the regression now fails at 3 MISS; the
+  wrong-owner citation it used to hide is caught with it; and a duplicate
+  heading inside ONE skill stays silent, so legitimate content is unaffected.
+  Controls C1/C2 pin both directions (81 controls, was 79) and each kills its
+  own registered mutant (`l4-owner-collision`, `l4-owner-same-skill`) while
+  the checker's baseline stays at 0 MISS — the silent shape. §9f's
+  does-NOT-cover row updated: the premise it rested on is now enforced rather
+  than hoped for. Original: The index now accepts `## N.` with no owning-skill
+  restriction. `### 9c.` is a shape nobody writes by accident; `## 1.` is a
+  shape ordinary step documentation writes constantly. Adding `## 1.`/`## 2.`/
+  `## 3.` headings to `grounding/SKILL.md` makes a wrong-owner citation
+  (`grounding` §3) resolve clean — measured, both directions, on identical
+  trees: 1 MISS without them, 0 MISS with. **And `anchors defined` stays at
+  16 either way**, because autonomy already owns 1/2/3 — so there is no INFO
+  delta and the coverage loss is invisible in the diff and the log.
+  §9f's does-NOT-cover row says "zero instances today — only this file defines
+  numbered sections at either heading level"; that premise was cheap to hold
+  when only `### N<letter>.` counted, and the widening makes one ordinary
+  contribution break it. **Deferred because** it is a design call about what
+  "owns an anchor" means — options: restrict the level-2 arm to the
+  policy-owning skill; reject a level-2 heading in a skill defining no
+  lettered anchors; or make a second owner of an already-owned anchor a MISS,
+  turning a silent collision into the loud failure this leg exists to produce.
+  The third is most in keeping with the checker's philosophy. Found and
+  reproduced by `adversarial-reviewer` on the PR-60 review
+  (`todos/review-2026-09-14-105453.md` finding #2, confidence 92).
+
 ### Applied this run (recorded so a future run does not re-derive it)
 
 - All four §8 restatement sites reduced to citations. `review.md` lost both
@@ -231,6 +299,10 @@ findings #11 and #12 (#12 partially — see below).
   mentions `§7` zero times. This is a dated observation, not a standing exemption — re-verify if
   leg 4's citation pattern ever gains bare-`§N` coverage, which is exactly
   what the first deferred item above proposes.
+  **That trigger FIRED on 2026-09-14** and was re-verified: leg 4 now checks
+  `§7`, and all 57 of its citations resolve to `## 7. Untrusted Content`. The
+  six relay-point clauses are untouched — leg 4 tests resolution only and never
+  reads the prose around a citation.
 - Counts rule not triggered: no file added, removed, or renamed under
   `plugins/cepa/commands/`, `agents/`, or `skills/`. The moved script is under
   `plugins/cepa/scripts/`, which no count claim covers.
