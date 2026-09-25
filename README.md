@@ -1,7 +1,7 @@
 # CEPA — Compound Engineering Plugin Agnostic
 
-CEPA is an engineering workflow system that runs your whole loop and keeps what
-it learns. Audit the git state, research past work, plan, build with tests
+CEPA is an orchestration layer that runs your whole engineering loop and keeps
+what it learns. Audit the git state, research past work, plan, build with tests
 first, review with parallel agents, then write down what the work taught you.
 One command does all of it. It runs as a plugin for
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code).

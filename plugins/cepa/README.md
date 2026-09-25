@@ -1,6 +1,6 @@
 # cepa
 
-An engineering workflow system that runs as a Claude Code plugin. Orchestrates the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, batch-first triage, and optional hands-off execution (autonomy contract + /cepa:lfg).
+An orchestration layer that runs as a Claude Code plugin. Drives the full engineering loop — Plan, Work, Review, Compound — with parallel review agents, solution documentation, batch-first triage, and optional hands-off execution (autonomy contract + /cepa:lfg).
 
 ## The Compound Engineering Loop
 
