@@ -20,13 +20,30 @@ with `fix` it applies all non-destructive repairs and reports what it did.
 ## Step 1: Run the Health Script
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-health.sh"
+# ${CLAUDE_PLUGIN_ROOT} is NOT exported into the shell this block runs in, so
+# "${CLAUDE_PLUGIN_ROOT}/scripts/check-health.sh" expands to
+# "/scripts/check-health.sh" and exits 127. Resolve the root instead.
+for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+         "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+         "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+         "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh"; do
+  [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+done
+bash "$CEPA_ROOT/scripts/check-health.sh"
 ```
 
 The script is read-only and prints `OK` / `MISS` / `INFO` facts: config
 sections, scaffold dirs, git tracking of plans/todos, CI presence, installed
-plugin version. If the script is unavailable, perform the same checks
-manually (it's short — read it for the list).
+plugin version.
+
+**"Unavailable" means you resolved a path and the file is genuinely absent.**
+A 127 / "No such file or directory" from an EMPTY `$CEPA_ROOT` is a
+resolution failure, not an absent script — and falling through to the manual
+checks on one turns a broken path into a silently hand-waved health check,
+which is how this step degraded unnoticed. If `$CEPA_ROOT` is empty, say the
+plugin root could not be resolved and name `CEPA_PLUGIN_ROOT` as the fix.
+Only when `$CEPA_ROOT` resolved and the script is still missing should you
+perform the same checks manually (it's short — read it for the list).
 
 ## Step 2: Interpret + Extend
 
@@ -186,7 +203,9 @@ Apply, in order — all idempotent, none destructive:
    exists but lacks `## Autonomy`/`## Integrations`, append commented
    examples — never change existing values.
 3. **CI template:** when the CI check reported none/deploy-only, install the
-   stack-matched template from `${CLAUDE_PLUGIN_ROOT}/templates/ci/`:
+   stack-matched template from `$CEPA_ROOT/templates/ci/` (the root resolved
+   in Step 1 — `${CLAUDE_PLUGIN_ROOT}` is unset here and would make the `cp`
+   read from `/templates/ci/`):
    - Django/Python backend → `django.yml`
    - Astro/static site → `astro.yml`
    Copy to `.github/workflows/ci.yml` (never overwrite an existing file of

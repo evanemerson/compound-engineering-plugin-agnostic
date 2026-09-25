@@ -252,7 +252,7 @@ doc, never to a delete whose prerequisites failed.
 **Brain sync (participating repos only).** When `cepa.local.md` has a
 `brain:` key and this run OWNS the branch, mirror each executed action into
 the cross-repo brain per the **`cepa:brain` skill**, via
-`bash "${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"` (reads the key from
+`bash "$CEPA_ROOT/scripts/brain-client.sh"` (reads the key from
 `.env.local`, never inline): a Delete or stale-mark → `mark_stale` the
 memories for that source path; a Replace/Update → `mark_stale` the prior
 memories for that path (OB1's `supersede` is a no-op without a related id),
@@ -264,6 +264,30 @@ call that FAILS when configured → degrade (`status: degraded — <verb>
 failed`) and continue; files stay source-of-truth, so a miss loses nothing,
 but it is never silent. Record counts/status in the `brain` Run Metadata
 block.
+
+`$CEPA_ROOT` comes from the resolver — source it once before the first brain
+call. **Do not spell `"${CLAUDE_PLUGIN_ROOT}/scripts/…"`**: that variable is
+NOT exported into the shell these blocks run in, so it expands to
+`/scripts/brain-client.sh` and exits 127 with "No such file or directory",
+which is how brain sync here was dead rather than degraded.
+
+```bash
+for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+         "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+         "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+         "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh"; do
+  [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+done
+```
+
+**A failure to RESOLVE is not a brain failure.** If `$CEPA_ROOT` is empty,
+record `status: degraded — plugin root unresolved` and say the client path
+could not be resolved. Never write `unreachable`, `unavailable`, or `outage`
+for a 127: that is a path bug, and mislabelling it is the documented
+misdiagnosis in
+`docs/solutions/integration-issues/false-unavailable-from-missing-cli-path-and-untracked-credential.md`
+(42 review files carried a false "unreachable" claim while the service was
+live). Verify with `brain-client.sh health` before ever claiming an outage.
 
 ## Phase 4: Vocabulary Reconciliation (CONCEPTS.md)
 
