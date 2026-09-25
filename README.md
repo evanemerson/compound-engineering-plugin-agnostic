@@ -1,9 +1,11 @@
 # CEPA — Compound Engineering Plugin Agnostic
 
-CEPA is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin
-that runs your whole engineering loop and keeps what it learns. Audit the git
-state, research past work, plan, build with tests first, review with parallel
-agents, then write down what the work taught you. One command does all of it.
+CEPA is an engineering workflow system that runs your whole loop and keeps what
+it learns. Audit the git state, research past work, plan, build with tests
+first, review with parallel agents, then write down what the work taught you.
+One command does all of it. It runs as a plugin for
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+
 It fits any stack, because every agent reads its conventions from one file in
 your project instead of having Rails or Django baked in.
 
@@ -454,9 +456,13 @@ touch docs/brainstorms/.gitkeep docs/plans/.gitkeep docs/solutions/.gitkeep todo
 
 ---
 
-## Acknowledgments
+## Who built this, and what it's built on
 
-This plugin is built on ideas from [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
+cepa is written and maintained by [Evan Emerson](https://github.com/evanemerson).
+It's an independent project, not an Anthropic product, though it runs inside
+Claude Code and uses it heavily to build itself.
+
+The ideas come from [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin)
 by [Kieran Klaassen](https://github.com/kieranklaassen). His original introduced
 the plan/work/review/compound loop, the parallel review agents, the solution
 documentation pattern, and the idea that each unit of work should make the next
