@@ -168,8 +168,8 @@ into a residual shard rather than getting lost.
 ## Verification
 
 Most of this plugin is prose that tells a model what to do, which is exactly the
-kind of thing that rots quietly. Four scripts in `scripts/` push back, and they
-are all read-only.
+kind of thing that rots quietly. The scripts in `scripts/` push back, and every
+one of them is read-only.
 
 **`check-model-pins.sh`** is the one that matters most. An omitted `model:` key
 on a dispatch isn't a neutral default: the subagent inherits whatever tier
