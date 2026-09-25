@@ -21,8 +21,14 @@ Do not add new count claims; prefer wording that doesn't restate totals.
 the moment the count changes — in-page anchors resolve in the reader's browser,
 so nothing in git, CI, or a markdown renderer fails. This is the anchor-shaped
 sibling of the count-drift rule above: same root cause, different failure
-surface. Drop counts from headings, and never point a link at a slug carrying a
-bare integer.
+surface. Drop counts from headings that are link targets.
+
+The hazard is a **count**, not a digit. `## Step 3` → `#step-3` and
+`## Django 5.2` → `#django-52` are stable, because nothing about adding a step
+renumbers step 3 — an ordinal or a version is fixed once written. `## Commands
+(11)` is not: the number is derived from something that changes. Test a heading
+by asking whether its number would have to be edited if the repo grew, not by
+looking for digits.
 
 Prose counts merely read stale, and the rule above catches them by re-verifying
 against `ls`. That re-verification does not help here — a correct count in the
@@ -32,14 +38,20 @@ the link is the half nobody re-reads.
 PR #64 is the proof it survives a careful author: `85ac5d9` wrote
 `[the full table](#commands-11)` pointing at its own new `## Commands (11)`
 heading, in the same restructure that was *removing* count claims elsewhere.
-`df36b9f`, a review-findings commit in that same PR, deleted both. Nothing
-mechanical caught it — human review did. #65 then swept the four latent
-count-bearing headings out of `plugins/cepa/README.md`.
+`df36b9f` deleted both — one of three unrelated doc fixes in that commit, whose
+subject names a different defect, so read the diff rather than the message when
+verifying this. A review agent caught it, not a script. #65 then swept the four
+latent count-bearing headings out of `plugins/cepa/README.md`.
 
-Two related claims are NOT gateable, so do not read a clean grep as coverage of
-them: whether prose correctly characterizes a CI trigger (interpretation, not
-arithmetic), and whether a branch-protection claim still holds (mutable GitHub
-state that drifts with no commit — `main` here is deliberately unprotected).
+**Nothing enforces this rule today** — no checker, no CI job, and `main` is
+deliberately unprotected. It holds by review alone, which is what caught the
+#64 instance. A checker for the heading half is filed in
+`memory/tasks.d/2026-09-25-main.md`; when it lands, the scope limits belong in
+its header, and this paragraph should shrink to a pointer rather than grow a
+second copy. Two sibling claims are not gateable even then: whether prose
+correctly characterizes a CI trigger (interpretation, not arithmetic), and
+whether a branch-protection claim still holds (mutable platform state that
+drifts with no commit).
 
 ### Manifests move together
 `plugins/cepa/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
