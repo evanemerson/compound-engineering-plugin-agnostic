@@ -77,10 +77,14 @@ same class elsewhere in the tooling, plus 2 proposals needing a decision).
   (finding #27, conf 50). Correct citations with a one-clause gloss, but this
   policy's history is "seven longhand copies with two divergent rationales".
 
-- [ ] P3 — **`CAP_RC` is a declared output nothing reads** (finding #28,
+- [x] ~~P3 — **`CAP_RC` is a declared output nothing reads** (finding #28,
   conf 85). Either assert it in arm 1 — the guarded capture returns 124/137 when
   the bound fires, separating "returned at the bound" from "the suite exited on
-  its own" — or drop it, or comment it as deliberately unread.
+  its own" — or drop it, or comment it as deliberately unread.~~
+  — **DONE 2026-09-25** (fix/cap-rc-unread-output, PR #59 → `62273dc`).
+  Asserted in arm 1, accepting both 124 and 137 because which one appears is a
+  property of the fixture, not the guard. Verified load-bearing by narrowing the
+  accepted set to an impossible status: 38/39, exit 1.
 
 - [ ] P3 — **process-substitution capture is green but unproven** (finding #31,
   conf 40). `> >(cat > "$out_file")` stays green and a read-after-write race is
