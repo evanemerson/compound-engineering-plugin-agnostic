@@ -17,10 +17,10 @@ once and the system starts watching for it. Put `/cepa:sweep` on a schedule and
 even deferred work drains back through the pipeline on its own.
 
 Claims like that are cheap, so this repo checks itself. Every subagent dispatch
-must declare its model tier, and a script fails the build if one doesn't. A
-second script proves that checker still catches what its record says it catches.
-A mutation sweep then sabotages the checker on purpose to confirm the proof
-would notice. Details are in [Verification](#verification).
+must declare its model tier, and a script in CI flags any that doesn't. A second
+script proves that checker still catches what its record says it catches. A
+mutation sweep then sabotages the checker on purpose to confirm the proof would
+notice. Details are in [Verification](#verification).
 
 ```
 Plan → Work → Review → Compound
@@ -32,8 +32,8 @@ Plan → Work → Review → Compound
 
 ## Start here
 
-Three commands cover most of the work. The other eight are in
-[the full table](#commands-11).
+Three commands cover most of the work. The rest are in the
+[Commands](#commands) table below.
 
 **`/cepa:task <what you want>`** runs the loop end to end, stopping at decision
 points. Start here if you are new.
@@ -178,20 +178,29 @@ on a dispatch isn't a neutral default: the subagent inherits whatever tier
 launched the session, so cost becomes a property of the caller. An audit in July
 2026 traced roughly 91% of weighted spend to unpinned dispatches. This script
 walks every dispatch site in the plugin and fails on any that could fall
-through. Run it before you merge.
+through.
+
+It runs in CI on every pull request and every push to `main`
+([model-pins.yml](.github/workflows/model-pins.yml)), so you don't have to
+remember it. One caveat worth stating plainly: `main` is deliberately not
+branch-protected here, so a red check reports loudly but does not physically
+block a merge. Treat it as blocking anyway.
 
 **`check-model-pins-controls.sh`** proves the checker still works. It feeds
 known-bad input and confirms each MISS still fires, so the pin check can't rot
 into a green light that means nothing.
 
 **`run-mutation-sweep.sh`** sabotages the checker deliberately and confirms the
-controls notice. Takes about 43 minutes locally, and it refuses a tree that
-changed mid-run, so don't edit tracked files while it works.
+controls notice. This one is too slow for a per-PR check, so it runs weekly on a
+schedule ([mutation-sweep.yml](.github/workflows/mutation-sweep.yml)) and on
+demand. Takes about 43 minutes locally, and it refuses a tree that changed
+mid-run, so don't edit tracked files while it works.
 
 **`check-residual-integrity.sh`** catches a narrower failure. A findings file can
 say "resolved" in its prose while the frontmatter field a consumer parses still
 says open. This checks that the parsed field agrees with the body, in both
-findings files and residual shards.
+findings files and residual shards. Also wired into CI per PR
+([residual-integrity.yml](.github/workflows/residual-integrity.yml)).
 
 There is also `check-sweep-branch-classes.sh`, which fixtures branch shapes no
 real repo in the portfolio produces (a non-trunk base, multiple merged PRs on one
@@ -203,7 +212,7 @@ hand-written.
 
 ---
 
-## Commands (11)
+## Commands
 
 | Command | What It Does |
 |---|---|
@@ -219,7 +228,7 @@ hand-written.
 | `/cepa:handoff` | End a session without losing state. Judges whether switching is timely (`GO`/`WAIT`/`GO WITH CARE`), inventories work in flight, makes residuals durable, resolves the next session's branch, and emits a self-contained prompt. Supports `mode:headless` |
 | `/cepa:setup` | Health-check a project's cepa scaffold, or `fix` it: create missing dirs and config, install a stack-matched CI template |
 
-## Agents (12)
+## Agents
 
 `learnings-researcher` handles research, searching `docs/solutions/`,
 `CLAUDE.md`, `memory/tasks.d/` (plus the legacy `memory/tasks.md`), and past
@@ -247,7 +256,7 @@ with `- !agent-name` in `cepa.local.md`.
 | `reliability-reviewer` | Task queues, webhooks, scheduled jobs, transactions with side effects, external calls, locks, cache invalidation | Retries, timeouts, idempotency, dispatch-in-atomic, read-then-write races |
 | `previous-comments-reviewer` | Any prior `todos/review-*.md`, residual-sink entries touching the diff, or human PR threads | Verifies prior findings weren't lost, silently reverted, or re-broken |
 
-## Skills (8)
+## Skills
 
 | Skill | What It Does |
 |---|---|
