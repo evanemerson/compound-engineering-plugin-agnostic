@@ -464,6 +464,26 @@ companion's frontmatter `model:` field before dispatch, pass an explicit
 override when it pins a specific model. As of pr-review-toolkit today,
 `code-simplifier` pins `opus` and the other four ship `inherit` — re-verify
 that by reading their frontmatter whenever the plugin is updated, per §9a.
+
+**Read the frontmatter by its `---` fences, never a fixed line window.**
+A companion's `description:` is often a multi-line block holding several
+`<example>` blocks, which pushes `model:` far down the file —
+`code-simplifier`'s sits at line 40. `sed -n '1,12p' | grep '^model:'`
+therefore returns nothing and reads as "no `model:` key", which inverts the
+rule: it invents an override for an agent that is correctly pinned. Use
+
+```bash
+awk '/^---$/{n++; next} n==1' <file> | grep -E '^model:'
+```
+
+A negative result from a truncated window is indistinguishable from a real
+absence. This misfired on 2026-09-25 and produced a false finding against
+this very paragraph; `scripts/check-model-pins.sh` leg 1 has parsed by fences
+(plus BOM/CRLF normalization) since it was written, for the same reason.
+Also note the plugin exists in more than one on-disk tree
+(`~/.claude/plugins/cache/…` and `~/.claude/plugins/marketplaces/…`); a
+`find … | head -1` picks one arbitrarily, so confirm the trees agree rather
+than trusting whichever sorts first.
 - `silent-failure-hunter` — Silent error swallowing, inadequate error handling
 - `pr-test-analyzer` — Test coverage gaps, missing behavioral tests
 - `comment-analyzer` — Comment accuracy, comment rot, WHAT-vs-WHY hygiene
