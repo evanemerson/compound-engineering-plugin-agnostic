@@ -98,6 +98,13 @@ The condition where a correctly fail-closed filter keyed on the wrong field disc
 ### Instruction without mechanism
 Prose directing a caller to verify something — that counts match, that every returned id was promoted — with no counter, comparison, or status check in the accompanying code. It reads as a safeguard and enforces nothing; the condition it warns about occurs silently and the reader believes it was checked.
 
+The documentation form is the same shape: prose stating that a mechanism blocks,
+gates, or runs, where the mechanism does something weaker or runs on a different
+trigger. A README saying a check "fails the build" on a repo whose trunk has no
+branch protection enforces nothing and reads as a gate.
+
+*Avoid:* promise-vs-mechanism gap.
+
 ## Autonomy
 
 ### Residual
@@ -384,6 +391,27 @@ implemented and never had the population in reach at all.
 
 *Avoid:* scope gap, coverage hole.
 
+### Inventory-closed verification
+A verification pass whose evidence source is limited to the document's own text
+and the repo's file tree, so it confirms internal consistency — banned words
+absent, counts matching `ls`, links resolving, JSON valid — but cannot reach a
+claim about how a system outside those files behaves, such as whether a red
+check blocks a merge, when a scheduled job fires, or how a platform derives an
+anchor from a heading. The pass runs, passes, and is reported as verification
+while the claim it was meant to support stays unexamined.
+
+It is the method a repo adopts after shipping inventory defects, which is why it
+feels sufficient: it is the correct instrument for the previous failure and has
+no reach over the current one. The tell is that the claim's ground truth lives in
+an artifact the pass never opens — a workflow trigger block, a platform API, a
+slug algorithm applied to a value that will change later.
+
+Distinguished from [population blindness](#population-blindness), which is a gap
+over *which artifacts* are enumerated; this is a gap over *which claim types* are
+answerable from the artifacts already in scope, however many are enumerated.
+
+*Avoid:* self-consistency check, internal-only verification.
+
 ## Fix authoring
 
 ### One-layer-down regression
@@ -413,3 +441,4 @@ that generator given its own name.
 - A verification tool had been treated as outside the class it verifies — it is not: the harness built to catch silent passes shipped five of its own across three review rounds, and the freshness detector built to catch a silently disabled job had a silent-pass path in its own fall-through.
 - A document describing a remote API had been treated as verifiable by review — it is not: the repository contains no copy of the contract, so a coherent, reviewed description can be wrong in a way only a live call can detect. Five consecutive brain-provider fixes were all found by calling the service and none by reading the prose.
 - Recording closure in prose had been treated as equivalent to closing an item — it is not: only the status field a consumer parses closes it for automated readers, so prose closure leaves a phantom residual, and the inverse — open work carrying no status syntax at all — is invisible to the same scan rather than miscounted by it.
+- A count inside a heading had been treated as the same hazard as a count in prose — it may not be: a heading is a link target, so the count becomes load-bearing in the slug and a drifted count 404s the link silently rather than merely reading stale. One occurrence so far (README.md's own `[the full table]` link into `#commands-11`, PR #64), which is thin evidence for minting a term; revisit if a second appears. Four latent instances sit in `plugins/cepa/README.md` with no links pointing at them yet.
