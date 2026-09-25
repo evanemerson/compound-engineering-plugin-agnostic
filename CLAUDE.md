@@ -16,6 +16,31 @@ numeric count against `ls` output before merge:
 
 Do not add new count claims; prefer wording that doesn't restate totals.
 
+### Anchors must not encode a count that can drift
+`## Commands (11)` slugifies to `#commands-11`, so a link to it 404s **silently**
+the moment the count changes — in-page anchors resolve in the reader's browser,
+so nothing in git, CI, or a markdown renderer fails. This is the anchor-shaped
+sibling of the count-drift rule above: same root cause, different failure
+surface. Drop counts from headings, and never point a link at a slug carrying a
+bare integer.
+
+Prose counts merely read stale, and the rule above catches them by re-verifying
+against `ls`. That re-verification does not help here — a correct count in the
+heading and a correct count in the link still both have to move together, and
+the link is the half nobody re-reads.
+
+PR #64 is the proof it survives a careful author: `85ac5d9` wrote
+`[the full table](#commands-11)` pointing at its own new `## Commands (11)`
+heading, in the same restructure that was *removing* count claims elsewhere.
+`df36b9f`, a review-findings commit in that same PR, deleted both. Nothing
+mechanical caught it — human review did. #65 then swept the four latent
+count-bearing headings out of `plugins/cepa/README.md`.
+
+Two related claims are NOT gateable, so do not read a clean grep as coverage of
+them: whether prose correctly characterizes a CI trigger (interpretation, not
+arithmetic), and whether a branch-protection claim still holds (mutable GitHub
+state that drifts with no commit — `main` here is deliberately unprotected).
+
 ### Manifests move together
 `plugins/cepa/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
 versions are bumped in the same commit, always.
