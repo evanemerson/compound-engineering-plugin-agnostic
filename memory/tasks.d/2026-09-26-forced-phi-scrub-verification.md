@@ -30,7 +30,9 @@
    reports "no brain key" on both — it is wrong. Match `^[[:space:]]*-?[[:space:]]*brain:`.
 
 1. **`/cepa:compound-refresh` writes to the brain with NO PHI scrub step.**
-   P1. This is the defect this verification found.
+   P1. This is the defect this verification found. **FIXED in v1.26.6
+   (`1dbd1bc`, this branch)** — citation form, per the recommendation below.
+   Retained here as the record of what was wrong and why it survived.
 
    `compound-refresh.md` is one of exactly two command files that call
    `brain-client.sh writeback` (the other is `compound.md`). `compound.md`
@@ -94,6 +96,20 @@
      writeback the PREVIOUS atom's scrubbed content, not unscrubbed content —
      wrong data, not a PHI leak. Low severity, but it is the reason the
      "empty file" backstop alone is not a complete argument.
+
+2a. **`scrub f f` destroys the payload and exits 0.** Measured while testing
+   the v1.26.6 gate. The shell truncates the redirect target before `sed`
+   reads it, so passing one path as both arguments empties the file — and
+   the exit status is 0, because the redirect itself succeeded. A `||` gate
+   cannot catch it; only `_assert_envelope`'s empty-file check stops the run,
+   one verb later and with the payload already gone.
+
+   Documented at the call site in `compound-refresh.md`, which now scrubs to
+   a sidecar and `mv`s it over. **`compound.md` does not carry that warning**
+   and says only "run `brain-client.sh scrub` over every string" — worth a
+   look when someone next touches its writeback phase. Hardening the client
+   to refuse `infile == outfile` outright would close it for every caller at
+   once; that is the better fix if item 4 below is taken up.
 
 3. **`brain-backfill.sh` names the scrub only in a comment.** P3, informational.
    Line 6 documents the procedure as `decompose → PHI-scrub → writeback →
