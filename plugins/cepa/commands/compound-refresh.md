@@ -259,23 +259,50 @@ successor's `memory_payload` strings (new content hash → new rows — the
 payload is an object of typed string arrays, NOT a list of typed atom
 objects; the skill's call contract has the envelope).
 
-**PHI scrub — run `brain-client.sh scrub` over every successor string before
+**PHI scrub — run `brain-client.sh scrub` over the built payload FILE before
 egress, and SUPPRESS the writeback if it cannot run.** When the scrub is
 forced, the conditions that force it, and what it does and does not redact
-are the `cepa:brain` skill's Compliance section — read it there. Two points
+are the `cepa:brain` skill's Compliance section — read it there. Four points
 that bind *this* command specifically:
 
 - Refresh rewrites drifted docs, so its payloads carry freshly re-quoted code
   and log lines. That is where numeric PHI actually appears, which makes this
   the higher-risk of the two writeback paths, not the lower.
+- **The scrub is a numeric-only backstop and does NOT discharge the
+  operator's no-real-PHI certification.** It does not redact names, emails,
+  phone numbers, written-month dates (`March 14, 1982`), MRNs under 7 digits,
+  or digit runs over 12. For a PII repo like `helm` — whose declared
+  `pii_fields` are emails and phone numbers — it redacts almost nothing it
+  declares, while Run Metadata still reports that the scrub ran. Never read a
+  completed scrub as "this payload is now safe".
+- **It scrubs the whole FILE, and `sed` cannot tell content from envelope.**
+  Ordinary engineering prose is collateral: `Celery task 4567890 ... see PR
+  #1234567` becomes two `[REDACTED-PHI-ID]`s, and a memory written that way is
+  permanently degraded. Worse, a numeric `BRAIN_WORKSPACE_ID` is itself
+  rewritten to `[REDACTED-PHI-ID]`, which 400s the call and then disables the
+  brain for the rest of the run. Both measured 2026-09-26. Keep envelope
+  values non-numeric, and expect the tradeoff: whole-file scrubbing cannot
+  forget a string, at the cost of mangling innocent digits.
 - The word "scrub" appears elsewhere in this file meaning CONCEPTS.md
   vocabulary pruning. That is an unrelated sense. A `grep` for it will look
   reassuring whether or not this step is present, so verify by reading the
   writeback phase.
 
+**Suppression is PER-DOC, not per-run.** A scrub or `mv` failure on one doc
+suppresses that doc's writeback and continues to the next — the same rule
+this command already states for actions ("Continue" always means continue to
+the next doc). Run one payload per block so the gate's `exit 1` ends that
+doc's writeback only; a block looping over every doc would abort the phase on
+the first failure and leave the remaining docs neither written nor counted,
+reporting one suppression where there were six.
+
 Count redactions into `scrubbed:` in the Run Metadata block, and count a
 suppressed atom into `suppressed_writebacks:` — a suppression is recorded,
-never silent.
+never silent. Both counts are **self-reported by the executing agent**:
+`scrub` prints no redaction count, so nothing machine-verifies these fields.
+Read them as a claim about the run, not as a measurement — and do not cite
+`scrubbed: N` as evidence that scrubbing occurred. Making the count real
+means teaching `brain-client.sh scrub` to emit one; that is filed, not done.
 
 **`mark_stale` needs `memory_id`s you already hold — "the memories for that
 source path" is not a query you can issue.** Per the `cepa:brain` skill's
@@ -333,48 +360,45 @@ remembering the paragraph above:
 
 ```bash
 set -euo pipefail
-# $CEPA_ROOT resolved and health-gated as above, in THIS block.
+# PASTE THIS AFTER the resolver loop + health gate above, in ONE block. It is
+# not a standalone snippet: each fenced block is its own shell, so a
+# $CEPA_ROOT resolved earlier is already gone. Run alone, `set -u` aborts on
+# the unbound $CEPA_ROOT — fail-closed, but it reports as a resolver failure
+# rather than the assembly slip it is.
 # $PAYLOAD is the envelope built for THIS doc. Create it fresh per document —
-# never reuse one path across Phase 3's loop, or a sidecar left by an earlier
-# iteration can be mv'd onto a later doc's payload and posted under the wrong
-# doc's identity. That substitution is rc=0 end to end and invisible.
+# never reuse one path across Phase 3's loop, or a stale sidecar can be posted
+# under the wrong doc's identity, rc=0 end to end and invisible.
 PAYLOAD="$(mktemp "${TMPDIR:-/tmp}/cepa-writeback-XXXXXX.json")"
 # ... build the envelope into "$PAYLOAD" with the Write tool ...
 
 bash "$CEPA_ROOT/scripts/brain-client.sh" scrub "$PAYLOAD" "$PAYLOAD.scrubbed" || {
-  echo "brain sync: scrub failed — SUPPRESS this writeback, do not send" >&2
-  echo "  unscrubbed. Record it in suppressed_writebacks:." >&2
+  echo "brain sync: scrub failed — SUPPRESS this doc's writeback, do not" >&2
+  echo "  send unscrubbed. Record it in suppressed_writebacks: and go on" >&2
+  echo "  to the next doc." >&2
   exit 1
 }
-# GATE THE mv TOO. On failure $PAYLOAD still holds the PRE-SCRUB original —
-# intact and non-empty, so _assert_envelope's empty-file check passes it and
-# the unscrubbed content egresses with every exit code reading 0.
-mv "$PAYLOAD.scrubbed" "$PAYLOAD" || {
-  echo "brain sync: mv of the scrubbed payload failed — SUPPRESS this" >&2
-  echo "  writeback. \$PAYLOAD still holds the PRE-SCRUB original; sending" >&2
-  echo "  it is the leak. Record it in suppressed_writebacks:." >&2
-  exit 1
-}
-bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD"
+# Post the SIDECAR. Do not mv it over $PAYLOAD first: a failed mv leaves
+# $PAYLOAD holding the PRE-SCRUB original — intact and non-empty, so
+# _assert_envelope passes it and the unscrubbed content egresses with every
+# exit code reading 0. Writing back the sidecar directly deletes that entire
+# failure class instead of guarding it.
+bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD.scrubbed"
 ```
 
-Write to a separate file and move it over, as above. **Never pass the same
-path as both arguments.** The shell truncates `out` before `sed` reads `in`,
-so `scrub f f` empties `f` — and it exits **0** while doing so, because the
-redirect succeeded. The `||` gate above cannot catch it; only
-`_assert_envelope`'s empty-file check downstream stops the run, one verb
-later and with the payload already gone. Verified 2026-09-26.
+**Scrub to a sidecar and post the sidecar.** Two failure modes make this the
+shape to use, both measured 2026-09-26:
 
-**Gate the `mv` as well as the scrub — the empty-file backstop does not cover
-it.** A failed `mv` leaves `$PAYLOAD` holding the pre-scrub original: intact,
-well-formed, and NON-empty, so `_assert_envelope` passes it and the unscrubbed
-content egresses with every exit code reading 0. `mv` fails for ordinary
-reasons — the sidecar removed by a concurrent run, an unwritable destination,
-`EXDEV` across a container mount, a full disk. Reproduced 2026-09-26: with the
-`mv` ungated, `writeback` was handed a payload still containing
-`123-45-6789`. This is why the block sets `set -euo pipefail` AND gates
-explicitly; the two are not redundant, because `-e` is exactly what a copied
-fragment loses first.
+- Passing one path as both arguments empties it and exits **0** — the shell
+  truncates the redirect target before `sed` reads the input, so no `||` gate
+  and no `set -e` can catch it. `brain-client.sh` now refuses that outright
+  (it compares resolved paths, so `f` and `./f` are caught too), which is the
+  durable fix; the shape here means callers never reach the refusal.
+- Moving the sidecar over the payload first adds a step that can fail and
+  leave the pre-scrub original in place — intact and non-empty, so
+  `_assert_envelope` passes it and the unscrubbed content egresses with every
+  exit code reading 0. Reproduced: with an ungated `mv`, `writeback` was
+  handed a payload still containing `123-45-6789`. Posting the sidecar
+  directly removes the step and the failure class with it.
 
 **A failure to RESOLVE is not a brain failure.** If `$CEPA_ROOT` is empty,
 record `status: degraded — plugin root unresolved` and say the client path

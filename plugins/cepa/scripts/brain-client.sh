@@ -163,6 +163,20 @@ case "$cmd" in
     # the cepa:brain skill's stated scope).
     [ -f "${1:-}" ] && [ -n "${2:-}" ] || _die "scrub needs <infile> <outfile>"
     [ $# -eq 2 ] || _die "scrub takes exactly 2 arguments, got $#"
+    # REFUSE infile == outfile. The shell truncates the redirect target before
+    # sed ever opens the input, so `scrub f f` empties f and exits 0 — the
+    # redirect succeeded, so no `||` gate at any call site can catch it, and
+    # `set -euo pipefail` does not fire either. The caller loses the payload it
+    # just built and the failure surfaces one verb later as a confusing empty-
+    # envelope rejection. Refuse here so the whole class dies for every caller
+    # (compound, compound-refresh, brain-backfill) instead of relying on each
+    # one to carry a warning. Compare the resolved paths, not the strings: a
+    # caller composing "$P" and "./$P" means the same file.
+    _in_real="$(cd "$(dirname -- "$1")" 2>/dev/null && pwd -P)/$(basename -- "$1")"
+    _out_dir="$(cd "$(dirname -- "$2")" 2>/dev/null && pwd -P)"
+    [ -n "$_out_dir" ] || _die "scrub outfile directory does not exist: '$2'"
+    [ "$_in_real" != "$_out_dir/$(basename -- "$2")" ] \
+      || _die "scrub infile and outfile must differ — '$1' and '$2' resolve to the same file; the shell would truncate it before sed reads it (exit 0, payload gone). Scrub to a sidecar, then move it over."
     sed -E \
       -e 's/[0-9]{3}[ .-][0-9]{2}[ .-][0-9]{4}/[REDACTED-PHI-SSN]/g' \
       -e 's/\b[0-9]{7,12}\b/[REDACTED-PHI-ID]/g' \
