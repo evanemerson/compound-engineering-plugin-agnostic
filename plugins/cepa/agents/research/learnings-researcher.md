@@ -97,7 +97,7 @@ available (see the `cepa:brain` skill), also seed cross-repo learnings:
    for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
-            "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh"; do
+            "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
      [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
    done
    bash "${CEPA_ROOT:?cepa plugin root unresolved — set CEPA_PLUGIN_ROOT}/scripts/brain-client.sh" recall "$P"

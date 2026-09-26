@@ -26,11 +26,23 @@ with `fix` it applies all non-destructive repairs and reports what it did.
 for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
          "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
          "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
-         "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh"; do
+         "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
   [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
 done
+[ -n "${CEPA_ROOT:-}" ] || {
+  echo "cepa:setup: plugin root unresolved — set CEPA_PLUGIN_ROOT to the" >&2
+  echo "  absolute path of plugins/cepa. This is PATH RESOLUTION, not an" >&2
+  echo "  absent script: do NOT fall through to the manual checks." >&2
+  exit 1
+}
 bash "$CEPA_ROOT/scripts/check-health.sh"
 ```
+
+**`$CEPA_ROOT` does not survive to the next step.** Each fenced block runs in
+its own shell, so a variable set here is gone by Step 4 — that is the same
+class as the `${CLAUDE_PLUGIN_ROOT}` bug this resolver exists to fix. Any
+later step needing the root re-runs the loop above in its own block; never
+write `$CEPA_ROOT` in a block that did not resolve it.
 
 The script is read-only and prints `OK` / `MISS` / `INFO` facts: config
 sections, scaffold dirs, git tracking of plans/todos, CI presence, installed
@@ -203,9 +215,22 @@ Apply, in order — all idempotent, none destructive:
    exists but lacks `## Autonomy`/`## Integrations`, append commented
    examples — never change existing values.
 3. **CI template:** when the CI check reported none/deploy-only, install the
-   stack-matched template from `$CEPA_ROOT/templates/ci/` (the root resolved
-   in Step 1 — `${CLAUDE_PLUGIN_ROOT}` is unset here and would make the `cp`
-   read from `/templates/ci/`):
+   stack-matched template from the plugin's `templates/ci/`. **Re-resolve the
+   root in this block** — Step 1's `$CEPA_ROOT` is gone, because each block is
+   a separate shell, and `${CLAUDE_PLUGIN_ROOT}` is unset here and would make
+   the `cp` read from `/templates/ci/`:
+
+   ```bash
+   for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+            "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+     [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+   done
+   [ -n "${CEPA_ROOT:-}" ] || { echo "cepa:setup: plugin root unresolved — CI template not installed" >&2; exit 1; }
+   cp "$CEPA_ROOT/templates/ci/<django|astro>.yml" .github/workflows/ci.yml
+   ```
+
    - Django/Python backend → `django.yml`
    - Astro/static site → `astro.yml`
    Copy to `.github/workflows/ci.yml` (never overwrite an existing file of

@@ -271,23 +271,42 @@ NOT exported into the shell these blocks run in, so it expands to
 `/scripts/brain-client.sh` and exits 127 with "No such file or directory",
 which is how brain sync here was dead rather than degraded.
 
+Resolve it in the SAME block as the brain call — each fenced block is its own
+shell, so a `$CEPA_ROOT` set in an earlier block is gone here:
+
 ```bash
 for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
          "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
          "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
-         "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh"; do
+         "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
   [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
 done
+# GATE every brain call on this, in code — not on remembering the paragraph
+# below. An empty $CEPA_ROOT makes the call `bash "/scripts/brain-client.sh"`,
+# which exits 127 and reads as an outage; that is the misdiagnosis this whole
+# resolver exists to prevent, so it must not be reachable.
+[ -n "${CEPA_ROOT:-}" ] || {
+  echo "brain sync: plugin root unresolved — record 'degraded — plugin root" >&2
+  echo "  unresolved', NEVER 'unreachable'. Set CEPA_PLUGIN_ROOT." >&2
+  exit 1
+}
+bash "$CEPA_ROOT/scripts/brain-client.sh" health >/dev/null || {
+  echo "brain sync: client resolved but health failed — degrade per the skill" >&2
+  exit 1
+}
 ```
+
+Every later `brain-client.sh` verb in this phase (`mark_stale`, the successor
+writeback) runs in a block that repeats that loop and that gate. A verb call
+emitted without them is the defect, not a shortcut.
 
 **A failure to RESOLVE is not a brain failure.** If `$CEPA_ROOT` is empty,
 record `status: degraded — plugin root unresolved` and say the client path
 could not be resolved. Never write `unreachable`, `unavailable`, or `outage`
-for a 127: that is a path bug, and mislabelling it is the documented
-misdiagnosis in
+for a 127: that is a path bug. The failure mode is documented in artist360's
 `docs/solutions/integration-issues/false-unavailable-from-missing-cli-path-and-untracked-credential.md`
-(42 review files carried a false "unreachable" claim while the service was
-live). Verify with `brain-client.sh health` before ever claiming an outage.
+— 42 review files there carried a false "unreachable" claim while the service
+was live. Verify with `brain-client.sh health` before ever claiming an outage.
 
 ## Phase 4: Vocabulary Reconciliation (CONCEPTS.md)
 

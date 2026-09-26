@@ -22,7 +22,12 @@
 # or capture it:
 #   CEPA_ROOT="$(bash "<abs>/plugins/cepa/scripts/resolve-plugin-root.sh")" || exit 1
 #
-# Override with CEPA_PLUGIN_ROOT (operator) — it wins over everything.
+# Override with CEPA_PLUGIN_ROOT (operator) — it wins over everything. It must
+# be an ABSOLUTE path; a relative one is refused (see the trap note below).
+#
+# Developing cepa itself? Export CEPA_DEV=1 so the repo-local plugins/cepa wins
+# over your installed copy. It is opt-in because the cwd is attacker-controlled
+# — leg 3b explains the concrete attack.
 
 # Resolution order mirrors scripts/capture.py:817-851, deliberately: explicit
 # override, then the sibling of a known plugin file, then PATH. capture.py's
@@ -102,21 +107,50 @@ _cepa_resolve_plugin_root() {
     case "$cand" in *'*'*) ;; *) tried+=("$cand (marketplace)") ;; esac
   done
 
-  local gitroot
-  if gitroot="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-    if resolved="$(_cepa_abs "$gitroot/plugins/cepa")" \
-       && _cepa_is_root "$resolved"; then
-      printf '%s\n' "$resolved"; return 0
+  # 3b. The CURRENT REPO's plugins/cepa -- OPT-IN ONLY, via CEPA_DEV=1.
+  #
+  #     This leg exists for one case: hacking on cepa's own source, where the
+  #     working copy must beat the installed clone. It is gated because the cwd
+  #     is attacker-controlled in a way the legs above are not. Demonstrated
+  #     2026-09-25: stage any git repo with plugins/cepa/scripts/{resolve-plugin
+  #     -root.sh,brain-client.sh}, run a cepa command with the cwd inside it,
+  #     and the caller's bootstrap loop sources the repo's resolver, which
+  #     self-locates (leg 2) into that repo and returns it as CEPA_ROOT. The
+  #     command then EXECUTES its brain-client.sh. Reviewing an untrusted clone
+  #     is an ordinary thing to do, so "cwd happens to be here" must not be
+  #     enough to win.
+  #
+  #     No in-repo marker can gate this instead: a name in plugin.json, a
+  #     marketplace.json, a directory layout are all trivially forgeable by the
+  #     same attacker who planted the scripts. Only a signal from OUTSIDE the
+  #     repo is trustworthy, so the gate is an env var the operator sets.
+  if [ "${CEPA_DEV:-}" = "1" ]; then
+    local gitroot
+    if gitroot="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+      if resolved="$(_cepa_abs "$gitroot/plugins/cepa")" \
+         && _cepa_is_root "$resolved"; then
+        printf '%s\n' "$resolved"; return 0
+      fi
+      tried+=("$gitroot/plugins/cepa (repo, CEPA_DEV=1)")
     fi
-    tried+=("$gitroot/plugins/cepa (repo)")
+  else
+    tried+=("<current repo>/plugins/cepa (SKIPPED: set CEPA_DEV=1 to allow the repo-local copy)")
   fi
 
-  # 4. PATH — brain-client.sh's grandparent. Last because a stray copy on PATH
-  #    may be a different version of the contract than the rest of the plugin.
+  # 4. PATH -- brain-client.sh's grandparent. Last, and it ANNOUNCES itself.
+  #    Two reasons it is the weakest leg: a stray copy may be a different
+  #    version of the contract than the rest of the plugin, and any directory
+  #    earlier on PATH than the real install can supply it. It stays because an
+  #    operator who deliberately symlinks the client onto PATH should not be
+  #    told the plugin is missing -- but a root resolved this way is worth
+  #    seeing, so it is never silent.
   local onpath
   if onpath="$(command -v brain-client.sh 2>/dev/null)" && [ -n "$onpath" ]; then
     if resolved="$(_cepa_abs "$(dirname -- "$onpath")/..")" \
        && _cepa_is_root "$resolved"; then
+      printf 'cepa: plugin root resolved from PATH (%s), not a known install location.\n' \
+        "$onpath" >&2
+      printf 'cepa: set CEPA_PLUGIN_ROOT if that is not the copy you intended.\n' >&2
       printf '%s\n' "$resolved"; return 0
     fi
     tried+=("$onpath (PATH)")

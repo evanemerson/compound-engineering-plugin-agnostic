@@ -218,16 +218,17 @@ and authoritative either way.
    # here. That variable is NOT exported into the shell this block runs in, so
    # the expansion becomes "/scripts/brain-client.sh" and the call exits 127
    # with "No such file or directory". That signature reads as a MISSING
-   # BINARY, and reporting it as one is how 42 review files came to carry a
-   # false "brain unreachable" claim while the service was live (see
-   # docs/solutions/integration-issues/false-unavailable-from-missing-cli-path-and-untracked-credential.md).
+   # BINARY, and reporting it as one is how 42 review files in artist360 came
+   # to carry a false "brain unreachable" claim while the service was live
+   # (artist360: docs/solutions/integration-issues/
+   #  false-unavailable-from-missing-cli-path-and-untracked-credential.md).
    # resolve-plugin-root.sh is self-locating, so the ONLY absolute path needed
    # is the resolver's own; find it the same way, then let it do the rest.
    for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
-            "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh"; do
-     [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT, or returns nonzero
+            "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+     [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
    done
    # Fail LOUDLY and STOP. An unresolved client must never be reported as a
    # brain outage, and must never fall through to "wrote 0 rows" at exit 0.
