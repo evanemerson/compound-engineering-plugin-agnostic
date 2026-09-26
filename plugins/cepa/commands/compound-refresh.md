@@ -332,14 +332,29 @@ Gate the writeback on the scrub in code, in the same block — not on
 remembering the paragraph above:
 
 ```bash
+set -euo pipefail
 # $CEPA_ROOT resolved and health-gated as above, in THIS block.
-# $PAYLOAD is the built envelope; scrub it in place before it can be posted.
+# $PAYLOAD is the envelope built for THIS doc. Create it fresh per document —
+# never reuse one path across Phase 3's loop, or a sidecar left by an earlier
+# iteration can be mv'd onto a later doc's payload and posted under the wrong
+# doc's identity. That substitution is rc=0 end to end and invisible.
+PAYLOAD="$(mktemp "${TMPDIR:-/tmp}/cepa-writeback-XXXXXX.json")"
+# ... build the envelope into "$PAYLOAD" with the Write tool ...
+
 bash "$CEPA_ROOT/scripts/brain-client.sh" scrub "$PAYLOAD" "$PAYLOAD.scrubbed" || {
   echo "brain sync: scrub failed — SUPPRESS this writeback, do not send" >&2
   echo "  unscrubbed. Record it in suppressed_writebacks:." >&2
   exit 1
 }
-mv "$PAYLOAD.scrubbed" "$PAYLOAD"
+# GATE THE mv TOO. On failure $PAYLOAD still holds the PRE-SCRUB original —
+# intact and non-empty, so _assert_envelope's empty-file check passes it and
+# the unscrubbed content egresses with every exit code reading 0.
+mv "$PAYLOAD.scrubbed" "$PAYLOAD" || {
+  echo "brain sync: mv of the scrubbed payload failed — SUPPRESS this" >&2
+  echo "  writeback. \$PAYLOAD still holds the PRE-SCRUB original; sending" >&2
+  echo "  it is the leak. Record it in suppressed_writebacks:." >&2
+  exit 1
+}
 bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD"
 ```
 
@@ -349,6 +364,17 @@ so `scrub f f` empties `f` — and it exits **0** while doing so, because the
 redirect succeeded. The `||` gate above cannot catch it; only
 `_assert_envelope`'s empty-file check downstream stops the run, one verb
 later and with the payload already gone. Verified 2026-09-26.
+
+**Gate the `mv` as well as the scrub — the empty-file backstop does not cover
+it.** A failed `mv` leaves `$PAYLOAD` holding the pre-scrub original: intact,
+well-formed, and NON-empty, so `_assert_envelope` passes it and the unscrubbed
+content egresses with every exit code reading 0. `mv` fails for ordinary
+reasons — the sidecar removed by a concurrent run, an unwritable destination,
+`EXDEV` across a container mount, a full disk. Reproduced 2026-09-26: with the
+`mv` ungated, `writeback` was handed a payload still containing
+`123-45-6789`. This is why the block sets `set -euo pipefail` AND gates
+explicitly; the two are not redundant, because `-e` is exactly what a copied
+fragment loses first.
 
 **A failure to RESOLVE is not a brain failure.** If `$CEPA_ROOT` is empty,
 record `status: degraded — plugin root unresolved` and say the client path
