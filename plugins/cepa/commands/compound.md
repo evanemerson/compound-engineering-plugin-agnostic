@@ -314,10 +314,34 @@ and authoritative either way.
 
    The full contract is in the `cepa:brain` skill; this is its writeback
    half made copyable. If the two ever disagree, the skill governs.
-5. **Retire prior versions on edit → `mark_stale` (not supersede):** if this
-   doc's source path already has active memories (edited doc), `PATCH review
-   mark_stale` on them so recall stops serving the pre-edit version, THEN
-   write the current strings (their new content hash makes them new rows).
+5. **Retire prior versions on edit → `mark_stale` (not supersede) — but only
+   from ids you already hold.** `mark_stale` takes a `memory_id`, and
+   **recall cannot give you one by source path**: per the `cepa:brain` skill's
+   response-shape rule, `source_refs` is never projected into a recall
+   response and `source.uri` is null on every hit, so there is nothing
+   path-scoped to select on. Re-measured 2026-09-26 against the deployed
+   service: 5 hits, `source_refs` absent on all, `source.uri` null on all,
+   `scope.project_id` the only provenance returned.
+
+   So:
+   - **Ids in hand** (this run posted them, or they are recorded in the doc's
+     own Run Metadata / residual shard): `PATCH review mark_stale` each one,
+     THEN write the current strings (their new content hash makes them new
+     rows).
+   - **No ids** (the usual case for a doc edited by a later run): you CANNOT
+     retire the pre-edit rows. Write the new strings anyway — recall serving
+     both versions beats losing the current one — and record
+     `mark_stale: skipped — no path-identifiable prior rows` in the `brain`
+     Run Metadata block. Never report the write as clean: an unretired
+     pre-edit row keeps being served, which is the staleness this step exists
+     to prevent.
+
+   **Do not invent a lookup to work around this.** A recall filtered on
+   `scope.project_id` returns every memory this repo ever wrote, not this
+   doc's — stale-marking those would retire unrelated rows. Until the API
+   projects provenance or exposes a by-source query, partial retirement is
+   the honest ceiling.
+
    (OB1's `supersede` action is a no-op without a related id — use `mark_stale`.)
 6. Record the outcome in the `brain` Run Metadata block; for interactive
    runs with no findings file, append a one-line record to the run's

@@ -253,12 +253,22 @@ doc, never to a delete whose prerequisites failed.
 `brain:` key and this run OWNS the branch, mirror each executed action into
 the cross-repo brain per the **`cepa:brain` skill**, via
 `bash "$CEPA_ROOT/scripts/brain-client.sh"` (reads the key from
-`.env.local`, never inline): a Delete or stale-mark → `mark_stale` the
-memories for that source path; a Replace/Update → `mark_stale` the prior
-memories for that path (OB1's `supersede` is a no-op without a related id),
-then write the successor's `memory_payload` strings (new content hash → new
-rows — the payload is an object of typed string arrays, NOT a list of typed
-atom objects; the skill's call contract has the envelope). No `brain:` key or
+`.env.local`, never inline): a Delete or stale-mark → `mark_stale` the prior
+memories; a Replace/Update → `mark_stale` the prior memories, then write the
+successor's `memory_payload` strings (new content hash → new rows — the
+payload is an object of typed string arrays, NOT a list of typed atom
+objects; the skill's call contract has the envelope).
+
+**`mark_stale` needs `memory_id`s you already hold — "the memories for that
+source path" is not a query you can issue.** Per the `cepa:brain` skill's
+response-shape rule, recall never projects `source_refs` and returns
+`source.uri: null`, so no recall can select the rows belonging to one doc.
+Re-measured 2026-09-26 against the deployed service. Use ids recorded in the
+doc's Run Metadata or this run's own writeback response; with none, SKIP the
+stale-marking, still write the successor strings, and record
+`mark_stale: skipped — no path-identifiable prior rows`. Do not substitute a
+`scope.project_id` recall — that returns every memory this repo ever wrote,
+and stale-marking those retires unrelated rows. No `brain:` key or
 report-only mode → no brain calls (not configured — not a failure). A brain
 call that FAILS when configured → degrade (`status: degraded — <verb>
 failed`) and continue; files stay source-of-truth, so a miss loses nothing,
