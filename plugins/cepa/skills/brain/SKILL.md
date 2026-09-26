@@ -145,11 +145,26 @@ the mistake costs one script exit rather than the run's whole brain.
   doing anything else.
 - **Retire on edit/prune → `mark_stale` (NOT `supersede`):** an edited doc, or a
   compound-refresh delete/stale-mark → `PATCH /memories/:id/review`
-  `{action:"mark_stale"}` on the prior memories for that source path. OB1's
+  `{action:"mark_stale"}` on the prior memories. OB1's
   `supersede` action does NOT set `lifecycle_status` without a `related_memory_id`,
   and recall does not drop on it; `mark_stale` is the only action that sets
   `lifecycle_status='stale'`, which recall's scope filter drops. Keeps the brain from
   serving stale/contradicted knowledge (files are source-of-truth; the brain is a copy).
+
+  **It is `:id`-addressed, and NO query returns the ids for a source path.**
+  This is the response-shape rule above stated as its operational consequence:
+  recall never projects `source_refs` and returns `source.uri: null`, so
+  "the prior memories for that doc" is not a set any caller can resolve.
+  Producers therefore retire only ids they ALREADY HOLD — from this run's own
+  writeback response, or recorded in the doc's Run Metadata / residual shard.
+  With no ids: skip the retirement, still write the new strings (recall
+  serving two versions beats losing the current one), and record
+  `mark_stale: skipped — no path-identifiable prior rows`. Never substitute a
+  `scope.project_id` recall to "find" them — that returns every memory the
+  repo ever wrote, so stale-marking its hits retires unrelated knowledge.
+  Partial retirement is the honest ceiling until the API projects provenance
+  or exposes a by-source query. (Measured 2026-08-22 and re-measured
+  2026-09-26 against the deployed Edge Function.)
 - **Health:** `GET /health` → `{ok:true}` (liveness, free).
 - **Never call:** any DELETE (none exists) from a command; hard-deletion is the
   separate `service_role` remediation script (compliance retraction only), never a
@@ -292,7 +307,15 @@ brain:
   scrubbed: 0            # PHI patterns redacted before egress
   args_skipped: 0        # recall-query candidates rejected by sanitization
   suspect_stripped: 0    # stripped recall blocks (each also a corrupted-input finding)
+  retired: 0             # prior memories mark_stale'd this run (from ids held)
+  mark_stale: n/a        # n/a (first write) | done | skipped — no path-identifiable prior rows
   pre_step: ok           # researcher pre-step status line, verbatim
 ```
+
+`mark_stale` is REQUIRED on any producer run over a doc that already had
+memories. There is no query that returns a doc's prior ids (see the retire
+rule above), so `skipped` is a normal, expected outcome — but it means recall
+still serves the pre-edit version, and that must be visible rather than
+inferred from a `retired: 0` that also matches a clean first write.
 
 Absent block = repo not participating (no `brain:` key) — existing files stay valid.
