@@ -117,7 +117,12 @@
    once; that is the better fix if item 4 below is taken up.
 
 2b. **`compound.md`'s PHI scrub is PROSE ONLY — there is no executable scrub
-   call anywhere in it.** P1, filed not fixed. Found by the PR #71 review and
+   call anywhere in it.** P1. **FIXED in v1.26.8 (`86db93c`).** The gate is
+   now executable and the forcing condition is detected in code. One thing
+   that did NOT carry over from the sibling fix: `idkey` hashes the payload
+   file, so the scrub must run BEFORE it or the key describes content never
+   sent. `compound-refresh.md` has no idkey step, so this was new work, not a
+   port. Retained below as the record of what was wrong. Found by the PR #71 review and
    verified directly: `grep` for `brain-client.sh` in `compound.md` returns
    exactly ONE hit, line 170, inside a narrative instruction. Its executable
    writeback block (lines ~227-245) resolves `$CEPA_ROOT`, sets
