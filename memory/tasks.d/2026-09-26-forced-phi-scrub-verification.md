@@ -117,7 +117,29 @@
    once; that is the better fix if item 4 below is taken up.
 
 2b. **`compound.md`'s PHI scrub is PROSE ONLY — there is no executable scrub
-   call anywhere in it.** P1, filed not fixed. Found by the PR #71 review and
+   call anywhere in it.** P1. **FIXED in v1.26.9 (`b51ab8e`).**
+
+   **Correction — v1.26.8 (`86db93c`) did NOT close this, and this shard
+   briefly claimed it did.** That commit made the gate executable but set
+   `P="$P.scrubbed"` in one fenced block while `writeback "$P"` runs in a
+   LATER block — a different shell, where `$P` is unset. The post therefore
+   fell back to the unscrubbed original: the same leak, one block later.
+   Three review agents found it independently. The claim was wrong for one
+   commit; it is recorded here because a future session reading a bare
+   "FIXED" would not have re-checked.
+
+   v1.26.9 installs the scrubbed bytes at the SAME path, so nothing has to
+   survive a shell boundary, and the unscrubbed copy is removed rather than
+   left at rest. Also fixed there: the re-Write step could re-emit pre-scrub
+   strings from the agent's context; `cepa.local.md` was read relative to
+   cwd (false on any subdirectory, silently disabling the scrub); and the
+   heading regex missed `## Compliance: HIPAA`, `##Compliance`, lowercase,
+   and indented forms.
+
+   One thing that did NOT carry over from the sibling fix: `idkey` hashes the
+   payload file, so the scrub must run BEFORE it or the key describes content
+   never sent. `compound-refresh.md` has no idkey step, so this was new work,
+   not a port. Retained below as the record of what was wrong. Found by the PR #71 review and
    verified directly: `grep` for `brain-client.sh` in `compound.md` returns
    exactly ONE hit, line 170, inside a narrative instruction. Its executable
    writeback block (lines ~227-245) resolves `$CEPA_ROOT`, sets
@@ -135,6 +157,42 @@
    operates on `$P`. Its block already sets `set -euo pipefail`, so only the
    explicit gates are needed. Not done here to keep the PHI-leak fix
    reviewable; this is the immediate next PR.
+
+2g. **A fenced-block instruction file must never carry state across a block
+   boundary in a shell variable.** P2, filed — and this is the most
+   generalizable finding of the whole investigation. This is now the THIRD
+   instance on the brain-writeback surface alone:
+
+   1. `${CLAUDE_PLUGIN_ROOT}` is not exported into the Bash tool's shell
+      (PR #69).
+   2. `$CEPA_ROOT` must be re-resolved in every block that uses it
+      (documented in `compound-refresh.md`).
+   3. `P="$P.scrubbed"` did not reach the writeback block (v1.26.8, fixed
+      v1.26.9).
+
+   The rule: state crosses blocks only through the FILESYSTEM — the same
+   path, or an explicit re-read — never through a variable. The reviewable
+   form: every variable used in block N was either assigned in block N or is
+   a documented literal. Worth a `docs/solutions/` entry via
+   `/cepa:compound`, and worth a checker leg — this is mechanically
+   detectable by extracting fenced blocks and diffing assigned-vs-used
+   variable names per block.
+
+2h. **The two sibling commands now scrub under different conditions.** P2,
+   filed — needs an operator decision, not a drive-by fix.
+   `compound-refresh.md` scrubs unconditionally on every writeback;
+   `compound.md` scrubs only when `FORCE_SCRUB=1`. So a participating repo
+   that is neither flagged nor `## Compliance` gets scrubbed by refresh and
+   not by compound. `cepa:brain`'s Compliance section only specifies the
+   forced case and is silent on the non-forced participant, so it is genuinely
+   ambiguous which behavior is correct.
+
+   Resolve it in SKILL.md first, then make both commands match — ideally by
+   moving detection into `brain-client.sh` (e.g. a `scrub-required` verb) so
+   the RULE lives in one executable place instead of being re-derived by each
+   caller's own regexes. That also answers the reviewer's objection that
+   detecting the condition in a command body re-implements the rule rather
+   than instantiating it.
 
 2c. **The `cepa:brain` Compliance citation has no resolves-check.** P2.
    `check-model-pins.sh` Leg 4 resolves anchors only for the `§9<letter>`

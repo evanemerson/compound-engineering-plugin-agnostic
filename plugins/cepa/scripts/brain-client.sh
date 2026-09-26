@@ -177,6 +177,16 @@ case "$cmd" in
     [ -n "$_out_dir" ] || _die "scrub outfile directory does not exist: '$2'"
     [ "$_in_real" != "$_out_dir/$(basename -- "$2")" ] \
       || _die "scrub infile and outfile must differ — '$1' and '$2' resolve to the same file; the shell would truncate it before sed reads it (exit 0, payload gone). Scrub to a sidecar, then move it over."
+    # Create the outfile mode-600 BEFORE any content lands in it. A bare `>`
+    # redirect creates at the umask (0644 on a default box), so the scrubbed
+    # doc content — which still holds every non-numeric identifier the scrub
+    # does not catch — is world-readable for the duration of the sed. Refuse
+    # to follow a pre-existing symlink while we are here: the outfile path is
+    # predictable (`<payload>.scrubbed`), so a planted link would otherwise
+    # redirect the write to a target of someone else's choosing.
+    [ ! -L "$2" ] || _die "scrub outfile '$2' is a symlink — refusing to write through it"
+    : > "$2" || _die "scrub cannot create outfile '$2'"
+    chmod 600 "$2"
     sed -E \
       -e 's/[0-9]{3}[ .-][0-9]{2}[ .-][0-9]{4}/[REDACTED-PHI-SSN]/g' \
       -e 's/\b[0-9]{7,12}\b/[REDACTED-PHI-ID]/g' \
