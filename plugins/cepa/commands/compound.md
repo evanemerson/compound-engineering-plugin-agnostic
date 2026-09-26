@@ -167,11 +167,17 @@ and authoritative either way.
    (also `decisions`, `outputs`, `unresolved_questions`, `next_steps`). It
    is **NOT** a list of `{"type":…,"content":…}` objects; that shape is
    rejected. The API turns each string into one memory row.
-2. **PHI scrub** — run `brain-client.sh scrub` over every string before egress
-   (count redactions) when `brain_phi_scrub: true` OR the repo's
-   `cepa.local.md` has a `## Compliance` section (the scrub is FORCED for
-   compliance repos — see the skill; if the scrub tool can't run, SUPPRESS
-   the writeback, do not send unscrubbed).
+2. **PHI scrub** — the gate is in the step-3 block below, and it is
+   executable: it detects the forced-on condition, scrubs the payload FILE,
+   and suppresses the writeback if the scrub cannot run. Do not re-implement
+   it here or treat this step as a separate manual pass. When the scrub is
+   forced and what it does and does not redact are the `cepa:brain` skill's
+   Compliance section — read it there. Two things worth knowing at this step:
+   it redacts numeric patterns ONLY (no names, emails, phones, or
+   written-month dates), so a completed scrub never means "this payload is
+   safe"; and it runs over the whole file, so ordinary digits in engineering
+   prose are redacted as collateral. Count redactions into `scrubbed:` —
+   that count is self-reported, as `scrub` emits none.
 3. **Write via the vendored client** (never inline the key on a command
    line). Build the payload file with the literal envelope below, then post
    it. **Every field shown is required and the API 400s without it** —
@@ -241,7 +247,34 @@ and authoritative either way.
    CLIENT="$CEPA_ROOT/scripts/brain-client.sh"
    [ -x "$CLIENT" ] || { echo "brain writeback ABORTED: $CLIENT is not executable" >&2; exit 1; }
    chmod 600 "$P"                              # payload holds doc content
+
+   # PHI SCRUB — executable, not a reminder. Decide it in code: a repo that
+   # forgot `brain_phi_scrub:` but declares `## Compliance` is still forced
+   # (see the cepa:brain skill). Leaving this to judgment is the defect this
+   # gate closes.
+   FORCE_SCRUB=0
+   if [ -f cepa.local.md ]; then
+     grep -Eq '^[[:space:]]*-?[[:space:]]*brain_phi_scrub:[[:space:]]*true' cepa.local.md && FORCE_SCRUB=1
+     grep -Eq '^#{1,6}[[:space:]]+Compliance([[:space:]]|$)' cepa.local.md && FORCE_SCRUB=1
+   fi
+   if [ "$FORCE_SCRUB" = 1 ]; then
+     # Scrub to a sidecar and ADOPT it as $P. Do not mv it over the original:
+     # a failed mv leaves the pre-scrub payload in place — intact and
+     # non-empty, so _assert_envelope passes it and unscrubbed content
+     # egresses with every exit code reading 0 (measured 2026-09-26).
+     bash "$CLIENT" scrub "$P" "$P.scrubbed" || {
+       echo "brain writeback SUPPRESSED: PHI scrub failed; not sending" >&2
+       echo "  unscrubbed. Record it in suppressed_writebacks:." >&2
+       exit 1
+     }
+     chmod 600 "$P.scrubbed"
+     P="$P.scrubbed"                           # every later step uses this
+   fi
+
    git hash-object "$DOC"                      # blob SHA for the source_refs uri
+   # idkey AFTER the scrub — it hashes $P's bytes, and the scrub changes them.
+   # Keyed on pre-scrub bytes, the key would describe content never sent and
+   # the dedup it exists for would break.
    bash "$CLIENT" idkey "$REPO" "$DOC" "$P"    # -> idempotency_key (hashes $P)
    ```
 
