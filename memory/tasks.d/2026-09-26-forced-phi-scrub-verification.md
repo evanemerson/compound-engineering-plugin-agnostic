@@ -97,8 +97,13 @@
      wrong data, not a PHI leak. Low severity, but it is the reason the
      "empty file" backstop alone is not a complete argument.
 
-2a. **`scrub f f` destroys the payload and exits 0.** Measured while testing
-   the v1.26.6 gate. The shell truncates the redirect target before `sed`
+2a. **`scrub f f` destroys the payload and exits 0.** **FIXED in v1.26.7
+   (`1d56e83`)** — `brain-client.sh scrub` now refuses `infile == outfile`,
+   comparing resolved paths so `f` and `./f` are caught too. That closes the
+   class for every caller at once, which is why the per-call-site warning was
+   not the right fix. Retained below as the record of the behavior.
+
+   Measured while testing the v1.26.6 gate. The shell truncates the redirect target before `sed`
    reads it, so passing one path as both arguments empties the file — and
    the exit status is 0, because the redirect itself succeeded. A `||` gate
    cannot catch it; only `_assert_envelope`'s empty-file check stops the run,
@@ -110,6 +115,65 @@
    look when someone next touches its writeback phase. Hardening the client
    to refuse `infile == outfile` outright would close it for every caller at
    once; that is the better fix if item 4 below is taken up.
+
+2b. **`compound.md`'s PHI scrub is PROSE ONLY — there is no executable scrub
+   call anywhere in it.** P1, filed not fixed. Found by the PR #71 review and
+   verified directly: `grep` for `brain-client.sh` in `compound.md` returns
+   exactly ONE hit, line 170, inside a narrative instruction. Its executable
+   writeback block (lines ~227-245) resolves `$CEPA_ROOT`, sets
+   `CLIENT=`, `chmod 600`s the payload, and calls `idkey` — but never `scrub`.
+
+   This is the same defect class PR #71 just fixed in the sibling, still live
+   in the file that was used as the reference implementation. The
+   plugin-root residual's ruling applies verbatim: "a guard expressed as
+   prose in a command contract is not enforcement." `compound.md` is the
+   PRIMARY writeback path — it runs on every `/cepa:compound` — so the forced
+   scrub is currently code-enforced only in refresh.
+
+   Fix: add the same gated block (scrub → gated `mv` → writeback) to
+   `compound.md`'s writeback block, next to the `idkey` call that already
+   operates on `$P`. Its block already sets `set -euo pipefail`, so only the
+   explicit gates are needed. Not done here to keep the PHI-leak fix
+   reviewable; this is the immediate next PR.
+
+2c. **The `cepa:brain` Compliance citation has no resolves-check.** P2.
+   `check-model-pins.sh` Leg 4 resolves anchors only for the `§9<letter>`
+   autonomy family; nothing resolves a `cepa:brain` section-name citation
+   against `SKILL.md`'s actual heading. Rename or reorder that heading and
+   every pointer rots silently — no CI failure, nothing visible in a diff.
+
+   This is the known cost of citation-over-restatement, recorded in
+   `docs/solutions/logic-errors/cross-cutting-policy-must-be-cited-once-not-restated-at-every-site.md`.
+   It is not an argument for restating. Fix: a second anchor-resolution leg
+   covering skill-section citations.
+
+2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
+   Because it runs over the whole payload file, ordinary engineering prose is
+   collateral: `Celery task 4567890 ... PR #1234567` becomes two
+   `[REDACTED-PHI-ID]`s, and that memory is permanently degraded in the brain
+   with `scrubbed: N` reporting it as protection. A numeric
+   `BRAIN_WORKSPACE_ID` is redacted too, which 400s the call and then disables
+   the brain for the rest of the run — the current value survives only
+   because it contains letters. Both measured 2026-09-26.
+
+   v1.26.7 documents the tradeoff at the call site. The real fix is a
+   structure-aware scrub that walks `memory_payload`'s string arrays and
+   leaves envelope keys alone — a `brain-client.sh` change needing a JSON
+   parser, and this repo cannot assume `jq`.
+
+2f. **The scrub does not cover what `helm` actually declares.** P2, filed.
+   It redacts numeric patterns only. `helm`'s 11 `pii_fields` are emails and
+   phone numbers; `dpc-pro` also carries names. Neither is matched. So for a
+   PII repo the forced scrub is close to a no-op while Run Metadata reports
+   it ran. v1.26.7 states this at the call site; whether the scrub should
+   grow email/phone patterns is an operator judgment, not a drive-by.
+
+2d. **`scrubbed:` and `suppressed_writebacks:` are unverifiable.** P3.
+   `brain-client.sh scrub` emits no redaction count, so both Run Metadata
+   fields are whatever the agent writes. v1.26.6 now labels them
+   self-reported at the call site; making them real means teaching `scrub`
+   to print a count (e.g. compare match counts before substitution) and
+   summing it mechanically.
 
 3. **`brain-backfill.sh` names the scrub only in a comment.** P3, informational.
    Line 6 documents the procedure as `decompose → PHI-scrub → writeback →
