@@ -259,6 +259,24 @@ successor's `memory_payload` strings (new content hash → new rows — the
 payload is an object of typed string arrays, NOT a list of typed atom
 objects; the skill's call contract has the envelope).
 
+**PHI scrub — run `brain-client.sh scrub` over every successor string before
+egress, and SUPPRESS the writeback if it cannot run.** When the scrub is
+forced, the conditions that force it, and what it does and does not redact
+are the `cepa:brain` skill's Compliance section — read it there. Two points
+that bind *this* command specifically:
+
+- Refresh rewrites drifted docs, so its payloads carry freshly re-quoted code
+  and log lines. That is where numeric PHI actually appears, which makes this
+  the higher-risk of the two writeback paths, not the lower.
+- The word "scrub" appears elsewhere in this file meaning CONCEPTS.md
+  vocabulary pruning. That is an unrelated sense. A `grep` for it will look
+  reassuring whether or not this step is present, so verify by reading the
+  writeback phase.
+
+Count redactions into `scrubbed:` in the Run Metadata block, and count a
+suppressed atom into `suppressed_writebacks:` — a suppression is recorded,
+never silent.
+
 **`mark_stale` needs `memory_id`s you already hold — "the memories for that
 source path" is not a query you can issue.** Per the `cepa:brain` skill's
 response-shape rule, recall never projects `source_refs` and returns
@@ -306,9 +324,31 @@ bash "$CEPA_ROOT/scripts/brain-client.sh" health >/dev/null || {
 }
 ```
 
-Every later `brain-client.sh` verb in this phase (`mark_stale`, the successor
-writeback) runs in a block that repeats that loop and that gate. A verb call
-emitted without them is the defect, not a shortcut.
+Every later `brain-client.sh` verb in this phase (`scrub`, `mark_stale`, the
+successor writeback) runs in a block that repeats that loop and that gate. A
+verb call emitted without them is the defect, not a shortcut.
+
+Gate the writeback on the scrub in code, in the same block — not on
+remembering the paragraph above:
+
+```bash
+# $CEPA_ROOT resolved and health-gated as above, in THIS block.
+# $PAYLOAD is the built envelope; scrub it in place before it can be posted.
+bash "$CEPA_ROOT/scripts/brain-client.sh" scrub "$PAYLOAD" "$PAYLOAD.scrubbed" || {
+  echo "brain sync: scrub failed — SUPPRESS this writeback, do not send" >&2
+  echo "  unscrubbed. Record it in suppressed_writebacks:." >&2
+  exit 1
+}
+mv "$PAYLOAD.scrubbed" "$PAYLOAD"
+bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD"
+```
+
+Write to a separate file and move it over, as above. **Never pass the same
+path as both arguments.** The shell truncates `out` before `sed` reads `in`,
+so `scrub f f` empties `f` — and it exits **0** while doing so, because the
+redirect succeeded. The `||` gate above cannot catch it; only
+`_assert_envelope`'s empty-file check downstream stops the run, one verb
+later and with the payload already gone. Verified 2026-09-26.
 
 **A failure to RESOLVE is not a brain failure.** If `$CEPA_ROOT` is empty,
 record `status: degraded — plugin root unresolved` and say the client path
