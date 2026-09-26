@@ -158,6 +158,24 @@
    explicit gates are needed. Not done here to keep the PHI-leak fix
    reviewable; this is the immediate next PR.
 
+2i. **The re-Write step's protection is prose, not enforcement.** P1, filed.
+   After `idkey`, `compound.md` tells the agent to write the SHA and key into
+   the payload and re-Write it. An agent doing that from the payload it still
+   holds in context re-emits the PRE-scrub strings, undoing the redaction.
+   v1.26.9 added an instruction to read the file back and check
+   `grep -c REDACTED-PHI` does not fall — but nothing executes that check.
+
+   This was briefly marked `applied`. It is not: "a guard expressed as prose
+   in a command contract is not enforcement" is this repo's own rule, and
+   this is the one step where the agent's own context is the contamination
+   source. Reclassified `deferred` on re-review.
+
+   The executable form: capture the count before the re-Write, assert it
+   after, immediately before `writeback`, and suppress if it fell. Note the
+   flag and the count must cross a fenced-block boundary — so they go through
+   the filesystem, not variables, per 2g below. That coupling is why this is
+   filed rather than patched in: it is the first real test of 2g's rule.
+
 2g. **A fenced-block instruction file must never carry state across a block
    boundary in a shell variable.** P2, filed — and this is the most
    generalizable finding of the whole investigation. This is now the THIRD
