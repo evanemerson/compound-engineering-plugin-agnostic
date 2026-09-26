@@ -70,8 +70,14 @@ available (see the `cepa:brain` skill), also seed cross-repo learnings:
    # linked git worktree that file does NOT exist — it lives only in the main
    # checkout — so resolve it via git-common-dir rather than assuming `./`.
    # (brain-client.sh applies the same fallback for its own credentials.)
-   ENVF=".env.local"
-   [ -f "$ENVF" ] || ENVF="$(git rev-parse --path-format=absolute --git-common-dir)/../.env.local"
+   # BRAIN_ENV_FILE wins when set, matching brain-client.sh's _load_env
+   # precedence (scripts/brain-client.sh:78) and compound.md's block. Diverging
+   # here sources DIFFERENT credentials than the client uses on the same run.
+   ENVF="${BRAIN_ENV_FILE:-}"
+   if [ -z "$ENVF" ]; then
+     ENVF=".env.local"
+     [ -f "$ENVF" ] || ENVF="$(git rev-parse --path-format=absolute --git-common-dir)/../.env.local"
+   fi
    set -a; . "$ENVF"; set +a
    [ -n "$BRAIN_WORKSPACE_ID" ] || { echo "brain pre-step: skipped — no BRAIN_WORKSPACE_ID"; }
    P="$(mktemp)"
@@ -83,7 +89,18 @@ available (see the `cepa:brain` skill), also seed cross-repo learnings:
     "scope":{"project_only":false},
     "limits":{"max_items":10}}
    EOF
-   bash "<abs-path>/plugins/cepa/scripts/brain-client.sh" recall "$P"
+   # `<abs-path>` is substituted by the invoking command. Its defined source is
+   # the resolver — NOT `${CLAUDE_PLUGIN_ROOT}`, which is unset in this shell
+   # and silently expands to `/scripts/…` (rc=127, reads as a missing binary).
+   # If the invoker did not substitute a real absolute path, report a
+   # resolution failure; never report the brain as unreachable.
+   for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+            "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+     [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+   done
+   bash "${CEPA_ROOT:?cepa plugin root unresolved — set CEPA_PLUGIN_ROOT}/scripts/brain-client.sh" recall "$P"
    ```
 
    **All four envelope fields are mandatory and the API 400s without them.**

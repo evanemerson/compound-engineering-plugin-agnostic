@@ -214,7 +214,32 @@ and authoritative either way.
      [ -f "$ENVF" ] || ENVF="$(git rev-parse --path-format=absolute --git-common-dir)/../.env.local"
    fi
    set -a; . "$ENVF"; set +a
-   CLIENT="${CLAUDE_PLUGIN_ROOT}/scripts/brain-client.sh"
+   # Resolve the plugin root — do NOT spell "${CLAUDE_PLUGIN_ROOT}/scripts/…"
+   # here. That variable is NOT exported into the shell this block runs in, so
+   # the expansion becomes "/scripts/brain-client.sh" and the call exits 127
+   # with "No such file or directory". That signature reads as a MISSING
+   # BINARY, and reporting it as one is how 42 review files in artist360 came
+   # to carry a false "brain unreachable" claim while the service was live
+   # (artist360: docs/solutions/integration-issues/
+   #  false-unavailable-from-missing-cli-path-and-untracked-credential.md).
+   # resolve-plugin-root.sh is self-locating, so the ONLY absolute path needed
+   # is the resolver's own; find it the same way, then let it do the rest.
+   for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+            "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+     [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+   done
+   # Fail LOUDLY and STOP. An unresolved client must never be reported as a
+   # brain outage, and must never fall through to "wrote 0 rows" at exit 0.
+   [ -n "${CEPA_ROOT:-}" ] || {
+     echo "brain writeback ABORTED: cannot resolve the cepa plugin root." >&2
+     echo "  This is PATH RESOLUTION, not a service outage. Do not record the" >&2
+     echo "  brain as unavailable. Set CEPA_PLUGIN_ROOT and re-run." >&2
+     exit 1
+   }
+   CLIENT="$CEPA_ROOT/scripts/brain-client.sh"
+   [ -x "$CLIENT" ] || { echo "brain writeback ABORTED: $CLIENT is not executable" >&2; exit 1; }
    chmod 600 "$P"                              # payload holds doc content
    git hash-object "$DOC"                      # blob SHA for the source_refs uri
    bash "$CLIENT" idkey "$REPO" "$DOC" "$P"    # -> idempotency_key (hashes $P)
