@@ -172,11 +172,28 @@ case "$cmd" in
     # (compound, compound-refresh, brain-backfill) instead of relying on each
     # one to carry a warning. Compare the resolved paths, not the strings: a
     # caller composing "$P" and "./$P" means the same file.
-    _in_real="$(cd "$(dirname -- "$1")" 2>/dev/null && pwd -P)/$(basename -- "$1")"
+    # Compare the FILES, not the spellings. An earlier version compared
+    # dirname+basename strings, which a symlinked infile or a hardlinked
+    # outfile walks straight past: the guard passes, the redirect truncates
+    # the target, sed then reads the now-empty file through the link, and
+    # scrub EXITS 0 having destroyed the payload — the exact failure this
+    # guard exists to stop, in a different spelling. Both measured.
     _out_dir="$(cd "$(dirname -- "$2")" 2>/dev/null && pwd -P)"
     [ -n "$_out_dir" ] || _die "scrub outfile directory does not exist: '$2'"
-    [ "$_in_real" != "$_out_dir/$(basename -- "$2")" ] \
+    _out_path="$_out_dir/$(basename -- "$2")"
+    _in_real="$(readlink -f -- "$1" 2>/dev/null || printf '%s' "$1")"
+    _out_real="$(readlink -f -- "$_out_path" 2>/dev/null || printf '%s' "$_out_path")"
+    [ "$_in_real" != "$_out_real" ] \
       || _die "scrub infile and outfile must differ — '$1' and '$2' resolve to the same file; the shell would truncate it before sed reads it (exit 0, payload gone). Scrub to a sidecar, then move it over."
+    # Hardlinks share an inode while resolving to different paths, so the
+    # path compare above cannot see them. Only meaningful if the outfile
+    # already exists.
+    if [ -e "$_out_path" ] && [ -r "$1" ]; then
+      _in_ino="$(stat -c %i -- "$1" 2>/dev/null || echo x)"
+      _out_ino="$(stat -c %i -- "$_out_path" 2>/dev/null || echo y)"
+      [ "$_in_ino" != "$_out_ino" ] \
+        || _die "scrub infile and outfile are the same inode (hardlinked) — writing the outfile would destroy the input. Scrub to a fresh sidecar path."
+    fi
     # Create the outfile mode-600 BEFORE any content lands in it. A bare `>`
     # redirect creates at the umask (0644 on a default box), so the scrubbed
     # doc content — which still holds every non-numeric identifier the scrub

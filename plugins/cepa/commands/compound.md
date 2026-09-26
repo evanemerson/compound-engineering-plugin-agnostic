@@ -258,8 +258,14 @@ and authoritative either way.
    # false in both cases, which silently sets FORCE_SCRUB=0 on a HIPAA repo —
    # a clean-looking run that skipped the mandatory scrub. Same defect class
    # this block already defends against twice.
+   # Use --git-common-dir, exactly as .env.local does above — NOT
+   # --show-toplevel. cepa.local.md is gitignored, so in a linked worktree it
+   # exists ONLY in the main checkout; --show-toplevel returns the worktree's
+   # own root, where the file is absent, and the ABORT below then fires on
+   # every worktree run. Measured 2026-09-26: common-dir resolves, toplevel
+   # does not.
    CEPA_LOCAL="cepa.local.md"
-   [ -f "$CEPA_LOCAL" ] || CEPA_LOCAL="$(git rev-parse --show-toplevel 2>/dev/null)/cepa.local.md"
+   [ -f "$CEPA_LOCAL" ] || CEPA_LOCAL="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../cepa.local.md"
    FORCE_SCRUB=0
    if [ -f "$CEPA_LOCAL" ]; then
      # Match PERMISSIVELY. A miss here fails OPEN — it sends unscrubbed PHI —
@@ -267,8 +273,13 @@ and authoritative either way.
      # leading space for indentation, `\b` rather than a space-or-EOL anchor
      # (`## Compliance: HIPAA` and `##Compliance` are both declarations and
      # both missed by a stricter pattern), and quoted/`yes` flag values.
-     grep -Eiq '^[[:space:]]*-?[[:space:]]*brain_phi_scrub:[[:space:]]*["'\'']?(true|yes)' "$CEPA_LOCAL" && FORCE_SCRUB=1
-     grep -Eiq '^[[:space:]]*#{1,6}[[:space:]]*compliance\b' "$CEPA_LOCAL" && FORCE_SCRUB=1
+     # `cmd && VAR=1` returns 1 when cmd does not match. Under `set -e` that
+     # is fatal wherever the statement is LAST in its enclosing block — so the
+     # trailing `|| true` is load-bearing, not noise: without it, a future
+     # edit that moves this `if` to the end of the block turns a correct
+     # no-match into an aborted run. Keep it.
+     grep -Eiq '^[[:space:]]*-?[[:space:]]*brain_phi_scrub:[[:space:]]*["'\'']?(true|yes)' "$CEPA_LOCAL" && FORCE_SCRUB=1 || true
+     grep -Eiq '^[[:space:]]*#{1,6}[[:space:]]*compliance\b' "$CEPA_LOCAL" && FORCE_SCRUB=1 || true
    else
      # Writeback only runs for a repo whose cepa.local.md declares `brain:`,
      # so reaching here means the file was readable a moment ago and is not
@@ -289,16 +300,28 @@ and authoritative either way.
        exit 1
      }
      chmod 600 "$P.scrubbed"
-     # Replace the original with the scrubbed bytes and KEEP THE SAME PATH.
-     # Re-pointing a variable instead would not survive: the writeback runs in
-     # a LATER fenced block, i.e. a different shell, where $P is unset — so
-     # the post would fall back to the unscrubbed path. Same-path also means
-     # the unscrubbed original cannot linger at rest on a HIPAA repo's disk.
-     cat "$P.scrubbed" > "$P" || {
-       echo "brain writeback SUPPRESSED: could not install scrubbed payload" >&2
+     # An EMPTY sidecar means the scrub produced nothing while still exiting
+     # 0. Check BEFORE installing: `cat empty > "$P"` succeeds, so the || gate
+     # cannot see it, and the payload is silently destroyed. _assert_envelope
+     # would reject it one verb later as a confusing empty-envelope error,
+     # after the sidecar is deleted and the evidence is gone.
+     [ -s "$P.scrubbed" ] || {
+       echo "brain writeback SUPPRESSED: the scrub produced an EMPTY payload." >&2
+       echo "  The payload was removed; regenerate from $DOC to retry." >&2
        rm -f "$P" "$P.scrubbed"; exit 1
      }
-     rm -f "$P.scrubbed"
+     # Install with mv, and KEEP THE SAME PATH. Two reasons for each half:
+     # mv is atomic within a directory, so it can never leave a truncated
+     # payload the way a `cat >` redirect can; and the same path means the
+     # writeback — which runs in a LATER fenced block, a different shell
+     # where $P is unset — still finds the scrubbed bytes. It also leaves no
+     # unscrubbed copy at rest on a HIPAA repo's disk.
+     mv -f "$P.scrubbed" "$P" || {
+       echo "brain writeback SUPPRESSED: could not install scrubbed payload." >&2
+       echo "  The payload was removed; regenerate from $DOC to retry." >&2
+       rm -f "$P" "$P.scrubbed"; exit 1
+     }
+     chmod 600 "$P"                            # mv carries the mode; be explicit
    fi
 
    git hash-object "$DOC"                      # blob SHA for the source_refs uri
