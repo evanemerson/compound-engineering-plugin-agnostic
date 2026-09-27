@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*)
 ---
 
 # Compound Documentation
@@ -167,11 +167,17 @@ and authoritative either way.
    (also `decisions`, `outputs`, `unresolved_questions`, `next_steps`). It
    is **NOT** a list of `{"type":…,"content":…}` objects; that shape is
    rejected. The API turns each string into one memory row.
-2. **PHI scrub** — run `brain-client.sh scrub` over every string before egress
-   (count redactions) when `brain_phi_scrub: true` OR the repo's
-   `cepa.local.md` has a `## Compliance` section (the scrub is FORCED for
-   compliance repos — see the skill; if the scrub tool can't run, SUPPRESS
-   the writeback, do not send unscrubbed).
+2. **PHI scrub** — the gate is in the step-3 block below, and it is
+   executable: it detects the forced-on condition, scrubs the payload FILE,
+   and suppresses the writeback if the scrub cannot run. Do not re-implement
+   it here or treat this step as a separate manual pass. When the scrub is
+   forced and what it does and does not redact are the `cepa:brain` skill's
+   Compliance section — read it there. Two things worth knowing at this step:
+   it redacts numeric patterns ONLY (no names, emails, phones, or
+   written-month dates), so a completed scrub never means "this payload is
+   safe"; and it runs over the whole file, so ordinary digits in engineering
+   prose are redacted as collateral. Count redactions into `scrubbed:` —
+   that count is self-reported, as `scrub` emits none.
 3. **Write via the vendored client** (never inline the key on a command
    line). Build the payload file with the literal envelope below, then post
    it. **Every field shown is required and the API 400s without it** —
@@ -241,12 +247,101 @@ and authoritative either way.
    CLIENT="$CEPA_ROOT/scripts/brain-client.sh"
    [ -x "$CLIENT" ] || { echo "brain writeback ABORTED: $CLIENT is not executable" >&2; exit 1; }
    chmod 600 "$P"                              # payload holds doc content
+
+   # PHI SCRUB — executable, not a reminder. Decide it in code: a repo that
+   # forgot `brain_phi_scrub:` but declares `## Compliance` is still forced
+   # (see the cepa:brain skill). Leaving this to judgment is the defect this
+   # gate closes.
+   # Resolve cepa.local.md the SAME way .env.local is resolved above: in a
+   # linked worktree it lives only in the main checkout, and the command can
+   # be invoked from a subdirectory. A bare `[ -f cepa.local.md ]` returns
+   # false in both cases, which silently sets FORCE_SCRUB=0 on a HIPAA repo —
+   # a clean-looking run that skipped the mandatory scrub. Same defect class
+   # this block already defends against twice.
+   # Use --git-common-dir, exactly as .env.local does above — NOT
+   # --show-toplevel. cepa.local.md is gitignored, so in a linked worktree it
+   # exists ONLY in the main checkout; --show-toplevel returns the worktree's
+   # own root, where the file is absent, and the ABORT below then fires on
+   # every worktree run. Measured 2026-09-26: common-dir resolves, toplevel
+   # does not.
+   CEPA_LOCAL="cepa.local.md"
+   [ -f "$CEPA_LOCAL" ] || CEPA_LOCAL="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../cepa.local.md"
+   FORCE_SCRUB=0
+   if [ -f "$CEPA_LOCAL" ]; then
+     # Match PERMISSIVELY. A miss here fails OPEN — it sends unscrubbed PHI —
+     # while a false positive only costs one needless scrub. So: -i for case,
+     # leading space for indentation, `\b` rather than a space-or-EOL anchor
+     # (`## Compliance: HIPAA` and `##Compliance` are both declarations and
+     # both missed by a stricter pattern), and quoted/`yes` flag values.
+     # `cmd && VAR=1` returns 1 when cmd does not match. Under `set -e` that
+     # is fatal wherever the statement is LAST in its enclosing block — so the
+     # trailing `|| true` is load-bearing, not noise: without it, a future
+     # edit that moves this `if` to the end of the block turns a correct
+     # no-match into an aborted run. Keep it.
+     grep -Eiq '^[[:space:]]*-?[[:space:]]*brain_phi_scrub:[[:space:]]*["'\'']?(true|yes)' "$CEPA_LOCAL" && FORCE_SCRUB=1 || true
+     grep -Eiq '^[[:space:]]*#{1,6}[[:space:]]*compliance\b' "$CEPA_LOCAL" && FORCE_SCRUB=1 || true
+   else
+     # Writeback only runs for a repo whose cepa.local.md declares `brain:`,
+     # so reaching here means the file was readable a moment ago and is not
+     # now. Never fall through to FORCE_SCRUB=0: that is the unscrubbed path.
+     echo "brain writeback ABORTED: cepa.local.md not resolvable, so the" >&2
+     echo "  forced-scrub condition cannot be evaluated. Refusing to send." >&2
+     exit 1
+   fi
+   if [ "$FORCE_SCRUB" = 1 ]; then
+     # Scrub to a sidecar. Do NOT mv it over the original: a failed mv leaves
+     # the pre-scrub payload in place — intact and non-empty, so
+     # _assert_envelope passes it and unscrubbed content egresses with every
+     # exit code reading 0 (measured 2026-09-26).
+     bash "$CLIENT" scrub "$P" "$P.scrubbed" || {
+       echo "brain writeback SUPPRESSED: PHI scrub failed; not sending" >&2
+       echo "  unscrubbed. Record it in suppressed_writebacks:." >&2
+       rm -f "$P"                              # unscrubbed bytes must not linger
+       exit 1
+     }
+     chmod 600 "$P.scrubbed"
+     # An EMPTY sidecar means the scrub produced nothing while still exiting
+     # 0. Check BEFORE installing: `cat empty > "$P"` succeeds, so the || gate
+     # cannot see it, and the payload is silently destroyed. _assert_envelope
+     # would reject it one verb later as a confusing empty-envelope error,
+     # after the sidecar is deleted and the evidence is gone.
+     [ -s "$P.scrubbed" ] || {
+       echo "brain writeback SUPPRESSED: the scrub produced an EMPTY payload." >&2
+       echo "  The payload was removed; regenerate from $DOC to retry." >&2
+       rm -f "$P" "$P.scrubbed"; exit 1
+     }
+     # Install with mv, and KEEP THE SAME PATH. Two reasons for each half:
+     # mv is atomic within a directory, so it can never leave a truncated
+     # payload the way a `cat >` redirect can; and the same path means the
+     # writeback — which runs in a LATER fenced block, a different shell
+     # where $P is unset — still finds the scrubbed bytes. It also leaves no
+     # unscrubbed copy at rest on a HIPAA repo's disk.
+     mv -f "$P.scrubbed" "$P" || {
+       echo "brain writeback SUPPRESSED: could not install scrubbed payload." >&2
+       echo "  The payload was removed; regenerate from $DOC to retry." >&2
+       rm -f "$P" "$P.scrubbed"; exit 1
+     }
+     chmod 600 "$P"                            # mv carries the mode; be explicit
+   fi
+
    git hash-object "$DOC"                      # blob SHA for the source_refs uri
+   # idkey AFTER the scrub — it hashes $P's bytes, and the scrub changes them.
+   # Keyed on pre-scrub bytes, the key would describe content never sent and
+   # the dedup it exists for would break.
    bash "$CLIENT" idkey "$REPO" "$DOC" "$P"    # -> idempotency_key (hashes $P)
    ```
 
    Write the SHA into `source_refs[0].uri` as `<repo>:<doc-path>@<sha>` and
    the idkey into `idempotency_key`, then re-Write the payload file. Its shape:
+
+   > **If the scrub ran, do NOT regenerate this file from the payload you
+   > built earlier.** Those strings are the PRE-scrub ones and you still hold
+   > them; re-emitting them silently undoes the redaction and posts the raw
+   > content. **Read the file back from `$P` first** and edit only the two
+   > fields — everything else must be the bytes the scrub produced. Verify
+   > with `grep -c REDACTED-PHI "$P"` before and after: the count must not
+   > fall. This is the one step where an agent's own context can reintroduce
+   > what the gate just removed.
 
    ```json
    {"schema_version": "openbrain.agent_memory.writeback.v1",
