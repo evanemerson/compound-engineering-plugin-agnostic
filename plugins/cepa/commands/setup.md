@@ -121,22 +121,32 @@ Beyond the script's facts, check:
    projects silently run old contracts; recommend
    `claude plugin update cepa@cepa`.
 
-   **The version string is the weaker signal — prefer the freshness check.**
-   When running in the cepa repo itself, run
-   `bash scripts/check-plugin-freshness.sh` and report its verdict: it
-   compares the loaded copy's recorded commit SHA against the repo's last
-   `plugins/`-touching commit, which catches two cases a version compare
-   cannot. First, repo-root docs deliberately do not bump the manifests, so
-   versions can match while plugin commits sit unshipped. Second, and this is
-   the one that bit on 2026-09-27, **there are TWO hops** — repo → marketplace
-   clone → versioned cache — and only the cache is loaded. A clone that has
-   been pulled looks current while the cache behind it is releases old:
-   measured 2026-09-28, the clone was at v1.26.10 and the loaded cache was
-   still the v1.26.5 tree, whose `compound.md` carried the PHI scrub as prose
-   only. Name the hop that is stale, because the two have different fixes
-   (`git -C ~/.claude/plugins/marketplaces/cepa pull --ff-only` vs
-   `claude plugin update cepa@cepa`). `UNKNOWN` is not a pass — report it as
-   unverified, the same way check 5 treats `NOT CHECKED`.
+   **The version string is the weaker signal.** It compares two manifests;
+   what matters is whether the copy Claude Code LOADS carries the commits that
+   have landed. Prefer the freshness check where it exists:
+
+   ```bash
+   # Only the cepa SOURCE repo ships this script — it is repo tooling, not
+   # plugin content, so do NOT resolve it through $CEPA_ROOT.
+   if [ -f "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/check-plugin-freshness.sh" ]; then
+     bash "$(git rev-parse --show-toplevel)/scripts/check-plugin-freshness.sh"
+   else
+     echo "freshness check unavailable — not the cepa source repo"
+   fi
+   ```
+
+   When it ran, report its verdict verbatim and **name which hop is stale** —
+   the two have different fixes, and the script prints the right one. When it
+   was unavailable (any other project), say so explicitly and fall back to the
+   version-string comparison above, labelled as the weaker signal — an absent
+   script is an unverified answer, never a pass.
+
+   `UNKNOWN` is not a pass either: report it as unverified, the same way
+   check 5 treats `NOT CHECKED`.
+
+   The script's header owns the reasoning — the two-hop pipeline, why SHAs beat
+   version strings, and the 2026-09-27 incident. Do not restate it here or in
+   the report; cite it.
 5. **CI reality** — the script only reports FACTS (which workflow files
    mention a test/build command, whether any triggers on `pull_request`);
    classification is YOUR job: **read each matched workflow file**. A match

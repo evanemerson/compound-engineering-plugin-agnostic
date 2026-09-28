@@ -101,18 +101,40 @@ REF_SUBJ=$(git -C "$TOP" log -1 --format=%s "$REF_SHA")
 info "repo: $BASE last touched plugins/ at ${REF_SHA:0:7} — $REF_SUBJ"
 
 # --- hop 1: the marketplace clone ------------------------------------------
+# ERROR IS NOT "BEHIND". `merge-base --is-ancestor` has THREE outcomes: 0
+# ancestor, 1 not-ancestor, 128 error (bad object, not a repo, corrupt clone).
+# An `if`/`else` collapses 1 and 128 into the same arm, so a clone that cannot
+# answer the question at all reports the confident sentence "is BEHIND" — a
+# checker built to stop false confidence, emitting false confidence. Measured:
+# `merge-base --is-ancestor <sha-from-another-repo> HEAD` returns 128.
+# So resolve HEAD and verify the object is PRESENT first, and branch on the
+# exact status afterwards. This mirrors hop 2's `cat-file -e` guard below; the
+# asymmetry between the two was the defect.
 if [ ! -d "$MARKET/.git" ]; then
   unknown "no git marketplace clone at $MARKET — non-git install, or cepa installed from elsewhere"
+elif ! CLONE_HEAD_FULL=$(git -C "$MARKET" rev-parse HEAD 2>/dev/null); then
+  unknown "marketplace clone at $MARKET has no resolvable HEAD (empty, bare, or corrupt) — hop 1 unverified"
+elif ! git -C "$MARKET" cat-file -e "$REF_SHA^{commit}" 2>/dev/null; then
+  # The commit is not an object in the clone at all. That is NOT the same as
+  # "behind": a clone of a different remote, or one that has never fetched,
+  # cannot be compared. Saying BEHIND here is a false alarm, and false alarms
+  # are what teach an operator to ignore the check.
+  unknown "marketplace clone does not contain object ${REF_SHA:0:7} — unfetched, or cloned from a different remote; hop 1 unverified"
+elif git -C "$MARKET" merge-base --is-ancestor "$REF_SHA" "$CLONE_HEAD_FULL" 2>/dev/null; then
+  ok "marketplace clone contains ${REF_SHA:0:7}"
 else
-  if git -C "$MARKET" merge-base --is-ancestor "$REF_SHA" HEAD 2>/dev/null; then
-    ok "marketplace clone contains ${REF_SHA:0:7}"
-  else
-    CLONE_HEAD=$(git -C "$MARKET" rev-parse --short HEAD 2>/dev/null || echo '?')
-    BEHIND=$(git -C "$TOP" rev-list --count "$REF_SHA" --not \
-               $(git -C "$MARKET" rev-parse HEAD 2>/dev/null) -- plugins/ 2>/dev/null || echo '?')
-    warn "marketplace clone is BEHIND: HEAD $CLONE_HEAD lacks ${REF_SHA:0:7} ($BEHIND plugin commit(s))"
-    info "  refresh hop 1:  git -C $MARKET pull --ff-only"
-  fi
+  # Count from the clone's resolved HEAD, captured above. The earlier form
+  # inlined `$(git -C "$MARKET" rev-parse HEAD)` UNQUOTED as a `--not` operand:
+  # when that inner call failed it expanded to nothing, leaving the valid
+  # command `rev-list --count <sha> --not -- plugins/`, which exits 0 and
+  # prints a real-looking total. So `|| echo '?'` could never fire on the
+  # failure it was written for — measured: it printed 66. Resolving HEAD into
+  # a variable first, and failing the whole check if that resolution fails,
+  # is what makes the count either right or absent.
+  BEHIND=$(git -C "$TOP" rev-list --count "$REF_SHA" --not "$CLONE_HEAD_FULL" -- plugins/ 2>/dev/null) \
+    || BEHIND='?'
+  warn "marketplace clone is BEHIND: HEAD ${CLONE_HEAD_FULL:0:7} lacks ${REF_SHA:0:7} ($BEHIND plugin commit(s))"
+  info "  refresh hop 1:  git -C $MARKET pull --ff-only"
 fi
 
 # --- hop 2: the versioned cache — this is what actually loads ---------------
@@ -126,30 +148,72 @@ if ! command -v python3 >/dev/null 2>&1; then
 elif [ ! -f "$INSTALLED_JSON" ]; then
   unknown "no $INSTALLED_JSON — LOADED copy unverified"
 else
-  read -r INST_VER INST_SHA <<EOF
-$(python3 - "$INSTALLED_JSON" <<'PYEOF'
+  # Capture first and CHECK THE EXIT STATUS, rather than reading a
+  # process-substitution's stdout and trusting it. python3 can die outside its
+  # own try/except (kill, OOM, a SIGPIPE) and print nothing at all; a bare
+  # `read` off that yields two empty variables that then flow into the
+  # wildcard arm below and print `loaded copy: v` — a reassuring-looking line
+  # describing nothing.
+  #
+  # Fields are TAB-separated, not space-separated. `read -r a b` splits on
+  # IFS whitespace, so a version string containing a space desynchronizes the
+  # two variables and shifts part of the version into the SHA. The values come
+  # from installed_plugins.json — written by the Claude Code runtime, not by
+  # this repo — so their shape is not ours to assume.
+  if ! INST_RAW=$(python3 - "$INSTALLED_JSON" <<'PYEOF'
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
 except Exception:
-    print("PARSE-ERROR -"); raise SystemExit
+    print("PARSE-ERROR\t-"); raise SystemExit
 try:
     e = d["plugins"]["cepa@cepa"][0]
 except (KeyError, IndexError, TypeError):
-    print("NOT-INSTALLED -"); raise SystemExit
-print(e.get("version", "?"), e.get("gitCommitSha") or "-")
+    print("NOT-INSTALLED\t-"); raise SystemExit
+# Strip whitespace so a padded value cannot smuggle a field separator.
+v = str(e.get("version") or "?").strip() or "?"
+s = str(e.get("gitCommitSha") or "-").strip() or "-"
+print("%s\t%s" % (v, s))
 PYEOF
-)
+  ); then
+    unknown "python3 failed reading $INSTALLED_JSON (exit $?) — LOADED copy unverified"
+    INST_VER='' INST_SHA=''
+  else
+    IFS=$'\t' read -r INST_VER INST_SHA <<EOF
+$INST_RAW
 EOF
+  fi
 
-  case "$INST_VER" in
+  case "${INST_VER:-}" in
+    '')
+      # Empty means python3 emitted nothing, or the failure arm above already
+      # reported. Never fall through to the version/SHA compare on an empty
+      # value — that is how a garbled "v" line gets printed as if it were data.
+      [ -n "$INST_RAW" ] && unknown "unparseable output from $INSTALLED_JSON reader — LOADED copy unverified" || true ;;
     PARSE-ERROR)
       unknown "could not parse $INSTALLED_JSON — format may have changed; LOADED copy unverified" ;;
     NOT-INSTALLED)
       unknown "cepa not listed in installed_plugins.json — LOADED copy unverified" ;;
+    -*)
+      # A leading dash would reach `git` as an option rather than a revision.
+      unknown "implausible version '$INST_VER' in $INSTALLED_JSON — LOADED copy unverified" ;;
     *)
       info "loaded copy: v$INST_VER (cache $CACHE_ROOT/$INST_VER)"
-      if [ "$INST_SHA" = "-" ]; then
+      # Shape-check the SHA before it reaches a git revision argument. Two
+      # distinct rejects, kept distinct on purpose:
+      #   `-` (exactly)  = no SHA recorded -> the documented version-compare
+      #                    fallback below, which announces its own weakness.
+      #   anything else non-hex = a value we cannot use. Report UNKNOWN rather
+      #                    than rewriting it to `-`: collapsing garbage into
+      #                    the "none recorded" sentinel would make a corrupt
+      #                    record indistinguishable from an absent one, and
+      #                    the fallback would then print a confident
+      #                    version-based verdict off a field it had silently
+      #                    discarded. A leading dash also reaches git as an
+      #                    OPTION, not a revision (measured: exit 129).
+      if [ "$INST_SHA" != "-" ] && ! printf '%s' "$INST_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+        unknown "gitCommitSha in $INSTALLED_JSON is not a hex SHA ('$INST_SHA') — LOADED copy unverified"
+      elif [ "$INST_SHA" = "-" ]; then
         # No recorded SHA: fall back to comparing the cached tree's own
         # manifest version against the repo's. Weaker than a SHA — it cannot
         # see plugin commits that did not bump the manifest — so say so

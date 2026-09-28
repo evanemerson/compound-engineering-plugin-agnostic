@@ -134,36 +134,25 @@ the duplication that let the sites diverge stayed live.
 
 ### A merged fix is not a live fix — check the LOADED plugin copy
 
-`bash scripts/check-plugin-freshness.sh` before claiming any plugin change is
-in effect, and after every merge. Merging moves GitHub; `git pull` moves this
-checkout; **neither moves the copy Claude Code loads.** On 2026-09-27 a session
-merged two PHI-scrub fixes (#71, #72), verified them on `main`, reported them
-shipped — and ran the whole session on v1.26.5, which carried the very defect
-those PRs closed. It was caught only because someone compared two HEADs by hand.
+Run `bash scripts/check-plugin-freshness.sh` before claiming any plugin change
+is in effect, and after every merge. Merging moves GitHub; `git pull` moves this
+checkout; **neither moves the copy Claude Code loads.**
 
-**The install path has TWO hops, and only the second one is loaded:**
+**`UNKNOWN` is not a pass** — it means the check could not tell, and the answer
+is still owed. A `WARN` means a merged fix is not running, so any claim
+"verified against the installed copy" made while it warns is a claim about code
+that is not executing.
 
-```
-this repo (origin/main)
-   │  git -C ~/.claude/plugins/marketplaces/cepa pull --ff-only    ← hop 1
-   ▼
-marketplace clone   ~/.claude/plugins/marketplaces/cepa
-   │  claude plugin update cepa@cepa                               ← hop 2
-   ▼
-CACHE  ~/.claude/plugins/cache/cepa/cepa/<version>/     ← what actually LOADS
-```
+The script's header is the single owner of the rest: the two-hop install
+pipeline, which hop to refresh with which command, why it compares commit SHAs
+instead of version strings, and the 2026-09-27 incident that cost a full
+session of work. Read it there rather than restating it here — this repo has
+already paid for restatement three times (see "Every dispatch declares its
+model" above, and
+`docs/solutions/logic-errors/cross-cutting-policy-must-be-cited-once-not-restated-at-every-site.md`).
 
-The residual that prompted this check named only hop 1, and a check scoped to
-it would have passed clean on the state measured 2026-09-28: clone fully caught
-up at v1.26.10, loaded cache still the v1.26.5 tree. **A pulled clone is not an
-updated plugin.** Report which hop is stale — they have different fixes.
-
-Compare commit SHAs, not version strings. Repo-root docs do not bump the
-manifests (see Conventions below), so matching versions prove nothing. The
-script does this, excludes docs-only commits so a handoff at the tip of `main`
-does not false-warn, and reports `UNKNOWN` rather than a pass when it cannot
-tell. Nothing enforces it: it measures one machine's local state, which no CI
-runner has and no commit can fix, so it holds by habit and by `/cepa:setup`.
+Nothing enforces this: it measures one machine's local install state, which no
+CI runner has and no commit can fix. It holds by habit and by `/cepa:setup`.
 
 ## Conventions
 
