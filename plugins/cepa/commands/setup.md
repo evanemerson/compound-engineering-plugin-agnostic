@@ -120,6 +120,23 @@ Beyond the script's facts, check:
    INFO line) against the marketplace's latest. Stale installs are how
    projects silently run old contracts; recommend
    `claude plugin update cepa@cepa`.
+
+   **The version string is the weaker signal — prefer the freshness check.**
+   When running in the cepa repo itself, run
+   `bash scripts/check-plugin-freshness.sh` and report its verdict: it
+   compares the loaded copy's recorded commit SHA against the repo's last
+   `plugins/`-touching commit, which catches two cases a version compare
+   cannot. First, repo-root docs deliberately do not bump the manifests, so
+   versions can match while plugin commits sit unshipped. Second, and this is
+   the one that bit on 2026-09-27, **there are TWO hops** — repo → marketplace
+   clone → versioned cache — and only the cache is loaded. A clone that has
+   been pulled looks current while the cache behind it is releases old:
+   measured 2026-09-28, the clone was at v1.26.10 and the loaded cache was
+   still the v1.26.5 tree, whose `compound.md` carried the PHI scrub as prose
+   only. Name the hop that is stale, because the two have different fixes
+   (`git -C ~/.claude/plugins/marketplaces/cepa pull --ff-only` vs
+   `claude plugin update cepa@cepa`). `UNKNOWN` is not a pass — report it as
+   unverified, the same way check 5 treats `NOT CHECKED`.
 5. **CI reality** — the script only reports FACTS (which workflow files
    mention a test/build command, whether any triggers on `pull_request`);
    classification is YOUR job: **read each matched workflow file**. A match
@@ -177,6 +194,7 @@ Beyond the script's facts, check:
 **Roster:** N agents valid | flagged: [...]
 **CI:** real gate | deploy-only | none — [recommendation]
 **Plugin:** installed vX.Y.Z (latest vX.Y.Z) [drift warning]
+**Loaded copy:** current | BEHIND at hop <1 clone|2 cache> — N plugin commit(s) | unverified
 
 **Repairs available (run `/cepa:setup fix`):** [numbered list]
 ```
@@ -267,4 +285,6 @@ final report.
 - CI templates must be adapted before committing — filling the TODOs is part
   of the fix, not the user's homework.
 - Version drift is a warning, not something setup fixes (updating the plugin
-  is a user-scope action; name the exact command instead).
+  is a user-scope action; name the exact command instead). The same holds for
+  a stale loaded copy: both refresh hops are user-scope, so fix mode reports
+  them and never runs them.
