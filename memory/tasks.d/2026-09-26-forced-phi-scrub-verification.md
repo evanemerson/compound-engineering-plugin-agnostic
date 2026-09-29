@@ -7,9 +7,17 @@
    shard records the one real defect found plus the measurements behind it, so
    a later session does not have to re-derive them.
 
-   Measured against the installed copy
-   (`~/.claude/plugins/marketplaces/cepa/plugins/cepa`, v1.26.5 @ `a815590`)
-   on 2026-09-26. No command was ever run with another repo as the working
+   Measured against the installed copy at v1.26.5 @ `a815590` on 2026-09-26.
+
+   **Path label corrected 2026-09-28 (v1.26.11).** This line originally named
+   `~/.claude/plugins/marketplaces/cepa/plugins/cepa` — the marketplace clone,
+   which is NOT the copy Claude Code loads (see
+   `scripts/check-plugin-freshness.sh`, and item 1 of
+   `memory/tasks.d/2026-09-27-main.md`). The **measurements stand**: the loaded
+   cache was independently confirmed to be v1.26.5 @ `a815590`, `lastUpdated`
+   2026-09-26, so this shard did read the live artifact. Only the path was
+   mislabelled — and that conflation is precisely what the freshness check now
+   exists to prevent, so it is corrected rather than left to mislead. No command was ever run with another repo as the working
    directory; both `cepa.local.md` files were read through `gh api`.
 
    **Which repos force the scrub — BOTH, and for two independent reasons.**

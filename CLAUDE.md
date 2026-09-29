@@ -132,6 +132,28 @@ rest of the construct live. 1.15.0 closed the *documentation* half of the
 same class — the rule had been fixed at each site it was reported at while
 the duplication that let the sites diverge stayed live.
 
+### A merged fix is not a live fix — check the LOADED plugin copy
+
+Run `bash scripts/check-plugin-freshness.sh` before claiming any plugin change
+is in effect, and after every merge. Merging moves GitHub; `git pull` moves this
+checkout; **neither moves the copy Claude Code loads.**
+
+**`UNKNOWN` is not a pass** — it means the check could not tell, and the answer
+is still owed. A `WARN` means a merged fix is not running, so any claim
+"verified against the installed copy" made while it warns is a claim about code
+that is not executing.
+
+The script's header is the single owner of the rest: the two-hop install
+pipeline, which hop to refresh with which command, why it compares commit SHAs
+instead of version strings, and the 2026-09-27 incident that cost a full
+session of work. Read it there rather than restating it here — this repo has
+already paid for restatement three times (see "Every dispatch declares its
+model" above, and
+`docs/solutions/logic-errors/cross-cutting-policy-must-be-cited-once-not-restated-at-every-site.md`).
+
+Nothing enforces this: it measures one machine's local install state, which no
+CI runner has and no commit can fix. It holds by habit and by `/cepa:setup`.
+
 ## Conventions
 
 - `docs/` is deliberately gitignored — plans stay local; the durable records

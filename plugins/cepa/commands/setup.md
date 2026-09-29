@@ -120,6 +120,33 @@ Beyond the script's facts, check:
    INFO line) against the marketplace's latest. Stale installs are how
    projects silently run old contracts; recommend
    `claude plugin update cepa@cepa`.
+
+   **The version string is the weaker signal.** It compares two manifests;
+   what matters is whether the copy Claude Code LOADS carries the commits that
+   have landed. Prefer the freshness check where it exists:
+
+   ```bash
+   # Only the cepa SOURCE repo ships this script — it is repo tooling, not
+   # plugin content, so do NOT resolve it through $CEPA_ROOT.
+   if [ -f "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/check-plugin-freshness.sh" ]; then
+     bash "$(git rev-parse --show-toplevel)/scripts/check-plugin-freshness.sh"
+   else
+     echo "freshness check unavailable — not the cepa source repo"
+   fi
+   ```
+
+   When it ran, report its verdict verbatim and **name which hop is stale** —
+   the two have different fixes, and the script prints the right one. When it
+   was unavailable (any other project), say so explicitly and fall back to the
+   version-string comparison above, labelled as the weaker signal — an absent
+   script is an unverified answer, never a pass.
+
+   `UNKNOWN` is not a pass either: report it as unverified, the same way
+   check 5 treats `NOT CHECKED`.
+
+   The script's header owns the reasoning — the two-hop pipeline, why SHAs beat
+   version strings, and the 2026-09-27 incident. Do not restate it here or in
+   the report; cite it.
 5. **CI reality** — the script only reports FACTS (which workflow files
    mention a test/build command, whether any triggers on `pull_request`);
    classification is YOUR job: **read each matched workflow file**. A match
@@ -177,6 +204,7 @@ Beyond the script's facts, check:
 **Roster:** N agents valid | flagged: [...]
 **CI:** real gate | deploy-only | none — [recommendation]
 **Plugin:** installed vX.Y.Z (latest vX.Y.Z) [drift warning]
+**Loaded copy:** current | BEHIND at hop <1 clone|2 cache> — N plugin commit(s) | unverified
 
 **Repairs available (run `/cepa:setup fix`):** [numbered list]
 ```
@@ -267,4 +295,6 @@ final report.
 - CI templates must be adapted before committing — filling the TODOs is part
   of the fix, not the user's homework.
 - Version drift is a warning, not something setup fixes (updating the plugin
-  is a user-scope action; name the exact command instead).
+  is a user-scope action; name the exact command instead). The same holds for
+  a stale loaded copy: both refresh hops are user-scope, so fix mode reports
+  them and never runs them.
