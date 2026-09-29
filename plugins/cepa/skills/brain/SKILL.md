@@ -245,11 +245,17 @@ is not free, so it is applied where it is owed.
 caller ASKS; no caller re-derives the condition with its own regexes. Exit `0`
 required, `1` not required, `2` **cannot decide — refuse to send**. That third
 status is load-bearing: an unresolvable or unreadable `cepa.local.md` must never
-collapse into "not required", because that is the unscrubbed path. `cepa.local.md`
-is gitignored, so the verb resolves it via `--git-common-dir` (it exists only in
-the main checkout of a linked worktree, and `--show-toplevel` returns the wrong
-root) and matches permissively — a miss fails OPEN, a false positive costs one
-needless scrub. Changing the policy means editing that one block.
+collapse into "not required", because that is the unscrubbed path — and neither
+may a *failure to look*, so the verb reports exit 2 with a stated reason when it
+is run outside a git work tree rather than dying silently. `cepa.local.md` is
+gitignored, so the verb resolves it via `--git-common-dir` (it exists only in the
+main checkout of a linked worktree, and `--show-toplevel` returns the wrong root)
+and matches permissively — a miss fails OPEN, a false positive costs one needless
+scrub. **One known resolution gap, shared with `.env.local`:** under
+`git init --separate-git-dir` the auto-resolution lands on the gitdir rather than
+the work tree and returns exit 2; such a repo passes the path explicitly. That
+fails closed — a suppressed writeback, never an unscrubbed send. Changing the
+policy means editing that one block.
 
 The scrub (`brain-client.sh scrub`) redacts **numeric PHI patterns only**: SSN
 (dash/space/dot-separated), MRN/account-shaped digit runs, and DOB dates in both

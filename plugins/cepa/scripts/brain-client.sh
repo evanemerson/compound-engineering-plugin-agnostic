@@ -244,16 +244,45 @@ case "$cmd" in
     [ $# -le 1 ] || _die "scrub-required takes at most 1 argument (<cepa.local.md>), got $#"
     _cl="${1:-}"
     if [ -z "$_cl" ]; then
-      # Resolve exactly as the writeback call sites resolve .env.local, and
-      # for the same measured reason: cepa.local.md is GITIGNORED, so in a
-      # linked worktree it exists ONLY in the main checkout. Use
-      # --git-common-dir, NOT --show-toplevel: toplevel returns the
-      # worktree's own root where the file is absent, which would make this
-      # verb answer "not required" on a HIPAA repo. Measured 2026-09-26:
-      # common-dir resolves, toplevel does not. A bare relative path also
-      # fails whenever the command is invoked from a subdirectory.
+      # Resolve the way `_load_env` above resolves .env.local — same helper,
+      # same `%/.git` strip, same captured status — for the same measured
+      # reason: cepa.local.md is GITIGNORED, so in a linked worktree it exists
+      # ONLY in the main checkout. Use --git-common-dir, NOT --show-toplevel:
+      # toplevel returns the worktree's own root where the file is absent,
+      # which would make this verb answer "not required" on a HIPAA repo.
+      # Measured 2026-09-26: common-dir resolves, toplevel does not. A bare
+      # relative path also fails whenever the command is invoked from a
+      # subdirectory.
       _cl="cepa.local.md"
-      [ -f "$_cl" ] || _cl="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../cepa.local.md"
+      if [ ! -f "$_cl" ]; then
+        # CAPTURE the status; do not let the assignment carry it. `git
+        # rev-parse` exits 128 outside a work tree, and as the last command of
+        # a `||` list the assignment INHERITS that 128 — so `set -euo pipefail`
+        # killed the script here, at exit 128 with completely EMPTY output,
+        # before either _die below could run. Measured 2026-09-29: rc=128,
+        # stdout+stderr both empty. Callers do fail closed on 128, so it was
+        # never a leak — but a bare 128 with no message reads as "the client is
+        # broken" rather than "you are not in a git repo", which is this repo's
+        # documented misdiagnosis class (a 127/128 is a path bug, never an
+        # outage). The two _die messages exist to say that; they have to be
+        # reachable.
+        _common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _common=""
+        [ -n "$_common" ] || _die "scrub-required cannot resolve cepa.local.md: not in a git work tree and no ./cepa.local.md — the forced-scrub condition cannot be evaluated; refuse to send rather than treating this as not-required"
+        # Strip `/.git` exactly as _load_env does, so a normal repo and a
+        # linked worktree both land on the main checkout's root.
+        #
+        # KNOWN GAP, shared with _load_env and deliberately not papered over:
+        # under `git init --separate-git-dir` the common-dir has no `.git`
+        # component, so `%/.git` strips nothing and this resolves to the
+        # gitdir instead of the work tree. Measured 2026-09-29: rc=2 on such a
+        # repo whose cepa.local.md sits in the work tree. That fails CLOSED —
+        # a suppressed writeback, never an unscrubbed send — which is why it is
+        # recorded rather than guessed at: inventing untested resolution logic
+        # on a PHI gate is the larger risk. A separate-gitdir repo that
+        # participates in the brain passes the path explicitly:
+        #   brain-client.sh scrub-required /path/to/cepa.local.md
+        _cl="${_common%/.git}/cepa.local.md"
+      fi
     fi
     # NOT FOUND IS NOT "NO". Writeback only runs for a repo whose
     # cepa.local.md declares `brain:`, so an unreadable file here means the

@@ -223,10 +223,36 @@
    Exit 2 is the load-bearing part. An unresolvable `cepa.local.md` must never
    collapse into "not required" — that is the unscrubbed-egress path — so it
    has its own case in `scripts/check-brain-client-args.sh` (`sr_undecidable`)
-   rather than resting on the arity check. 20/20 there. Both emitted blocks
-   were extracted and run under `bash -e` across all three statuses; the
-   required path posts the `.scrubbed` sidecar, the not-required path posts the
-   original, and the undecidable path suppresses and removes the payload.
+   rather than resting on the arity check. Both emitted blocks were extracted
+   and run under `bash -e` across all three statuses; the required path posts
+   the `.scrubbed` sidecar, the not-required path posts the original, and the
+   undecidable path suppresses and removes the payload.
+
+   **Reviewed (`todos/review-2026-09-29-101500.md`) — and item 3's warning held
+   again, for a fourth round.** The consolidation itself shipped a defect of
+   the class it was closing: `_cl="$(git rev-parse ... )/.."` let the
+   assignment inherit git's **exit 128** outside a work tree, so under
+   `set -e` the verb died at rc=128 with **completely empty output** — both
+   `_die` messages unreachable. Not a leak (callers fail closed on 128,
+   verified across rc 0/1/2/3/126/127/128/130) but the exact
+   "a tool error is not a finding" misdiagnosis shape. Fixed in this PR by
+   capturing the status, plus a new `sr_nongit` control that was
+   mutation-tested: restoring the old line reddens only that case (20/21), and
+   21/21 on restore.
+
+   Also corrected there: the comment claimed resolution "exactly as"
+   `.env.local` when it used a bare `/..` instead of `_load_env`'s
+   `${common%/.git}`. **Known gap now recorded rather than papered over:**
+   under `git init --separate-git-dir` auto-resolution lands on the gitdir and
+   returns exit 2 — fails CLOSED, shared with `_load_env`, and such a repo
+   passes the path explicitly.
+
+   **The PHI-egress delta is empty for the real portfolio.** `dpc-pro` and
+   `helm` each declare `## Compliance` AND the flag, so both still scrub; this
+   repo declares neither, so it is the only participant whose refresh behavior
+   changes, and its payloads are cepa's own solution docs. The
+   `## Compliance`-only branch is still unexercised in isolation by a real run
+   — only by fixture.
 
    Retained below as the record of the ambiguity and why it existed.
    `compound-refresh.md` scrubs unconditionally on every writeback;
