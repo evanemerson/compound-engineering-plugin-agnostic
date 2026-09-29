@@ -204,8 +204,57 @@
    detectable by extracting fenced blocks and diffing assigned-vs-used
    variable names per block.
 
-2h. **The two sibling commands now scrub under different conditions.** P2,
-   filed — needs an operator decision, not a drive-by fix.
+2h. **The two sibling commands now scrub under different conditions.** P2.
+   **RESOLVED in v1.27.0** — operator decision taken 2026-09-28: unify on
+   **forced-only**, and move detection into `brain-client.sh scrub-required`
+   so the RULE has one executable home instead of being re-derived by each
+   caller's own regexes.
+
+   What shipped: the new verb (exit `0` required / `1` not required / `2`
+   cannot decide → refuse to send), both call sites converted to ask it, the
+   inline regex pair deleted from both command files, and the policy written
+   into `cepa:brain`'s `## Compliance` section — which previously specified
+   only the forced case and was the reason the two commands could each guess
+   differently. `compound-refresh.md` changed behavior: it no longer scrubs
+   unconditionally, because the scrub is numeric-only and content-blind
+   (residual 2e) and would permanently degrade non-PHI memories while
+   reporting protection that was never owed.
+
+   Exit 2 is the load-bearing part. An unresolvable `cepa.local.md` must never
+   collapse into "not required" — that is the unscrubbed-egress path — so it
+   has its own case in `scripts/check-brain-client-args.sh` (`sr_undecidable`)
+   rather than resting on the arity check. Both emitted blocks were extracted
+   and run under `bash -e` across all three statuses; the required path posts
+   the `.scrubbed` sidecar, the not-required path posts the original, and the
+   undecidable path suppresses and removes the payload.
+
+   **Reviewed (`todos/review-2026-09-29-101500.md`) — and item 3's warning held
+   again, for a fourth round.** The consolidation itself shipped a defect of
+   the class it was closing: `_cl="$(git rev-parse ... )/.."` let the
+   assignment inherit git's **exit 128** outside a work tree, so under
+   `set -e` the verb died at rc=128 with **completely empty output** — both
+   `_die` messages unreachable. Not a leak (callers fail closed on 128,
+   verified across rc 0/1/2/3/126/127/128/130) but the exact
+   "a tool error is not a finding" misdiagnosis shape. Fixed in this PR by
+   capturing the status, plus a new `sr_nongit` control that was
+   mutation-tested: restoring the old line reddens only that case (20/21), and
+   21/21 on restore.
+
+   Also corrected there: the comment claimed resolution "exactly as"
+   `.env.local` when it used a bare `/..` instead of `_load_env`'s
+   `${common%/.git}`. **Known gap now recorded rather than papered over:**
+   under `git init --separate-git-dir` auto-resolution lands on the gitdir and
+   returns exit 2 — fails CLOSED, shared with `_load_env`, and such a repo
+   passes the path explicitly.
+
+   **The PHI-egress delta is empty for the real portfolio.** `dpc-pro` and
+   `helm` each declare `## Compliance` AND the flag, so both still scrub; this
+   repo declares neither, so it is the only participant whose refresh behavior
+   changes, and its payloads are cepa's own solution docs. The
+   `## Compliance`-only branch is still unexercised in isolation by a real run
+   — only by fixture.
+
+   Retained below as the record of the ambiguity and why it existed.
    `compound-refresh.md` scrubs unconditionally on every writeback;
    `compound.md` scrubs only when `FORCE_SCRUB=1`. So a participating repo
    that is neither flagged nor `## Compliance` gets scrubbed by refresh and

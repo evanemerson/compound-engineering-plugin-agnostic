@@ -112,6 +112,20 @@ EOF
 cat > "$FIX/payload2.json" <<'EOF'
 {"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"evan-portfolio","project_id":"helm","memory_payload":{"lessons":["atoms v2 improved"]}}
 EOF
+# A cepa.local.md for the `scrub-required` arity case. It must EXIST, or that
+# case would pass on the file-missing guard instead of the arity guard it names
+# — a test green for the wrong reason. Contents are deliberately a plain
+# participant (no flag, no `## Compliance`), so arity is the only thing left to
+# fail on.
+cat > "$FIX/cepa.local.md" <<'EOF'
+## Integrations
+- brain: enabled
+EOF
+# cwd for the `sr_nongit` case: a directory with NO cepa.local.md and, with
+# GIT_CEILING_DIRECTORIES set by the runner, no reachable .git above it. Both
+# conditions are required — the silent-128 path needs the local file absent AND
+# git to fail, so a fixture holding either one would pass vacuously.
+mkdir -p "$FIX/nongit"
 # A recall payload: valid JSON, valid envelope, WRONG KIND. `idkey` builds a
 # writeback key, so this must be refused — a readable-file check accepts it.
 cat > "$FIX/recall.json" <<'EOF'
@@ -213,6 +227,29 @@ reg arity_he 'health rejects any argument' 2 'health takes no arguments, got 1' 
 reg arity_pa 'participants rejects any argument' 2 'participants takes no arguments, got 1' \
   'kills: removal of participants arity' \
   participants EXTRA
+reg arity_sr 'scrub-required rejects a stray 2nd argument' 2 'scrub-required takes at most 1 argument' \
+  'kills: removal of scrub-required arity' \
+  scrub-required "$FIX/cepa.local.md" EXTRA
+# THE ONE THAT MATTERS MOST for this verb: an unresolvable config must exit 2
+# ("cannot decide"), never 1 ("not required"). Collapsing those two is the
+# unscrubbed-egress path, so it gets its own case rather than resting on the
+# arity check above.
+reg sr_undecidable 'scrub-required exits 2 (not 1) on an unresolvable config' 2 'cannot resolve cepa.local.md' \
+  'kills: a mutant that treats a missing cepa.local.md as not-required' \
+  scrub-required "$FIX/definitely-absent-cepa.local.md"
+# A non-git cwd must exit 2 WITH A MESSAGE. Shipped once as exit 128 and
+# completely silent output: `git rev-parse` exits 128 outside a work tree, and
+# as the last command of a `||` list the assignment inherited it, so
+# `set -euo pipefail` killed the script before either _die could run. Callers
+# fail closed on 128 so it was never a leak — but a bare 128 with no text reads
+# as a broken client rather than "you are not in a git repo". This case asserts
+# the DIAGNOSTIC, which is the half that regressed; `expect 2` alone would have
+# passed on the silent form via a different code path.
+# Runs with cwd inside $FIX/nongit — see the `*_nongit` arm in the runner,
+# following the same id-suffix convention the `*_noenv` cases use.
+reg sr_nongit 'scrub-required exits 2 with a message outside a git work tree' 2 'not in a git work tree' \
+  'kills: letting git rev-parse status carry into the assignment (silent 128)' \
+  scrub-required
 
 # --- guards must run BEFORE credentials -------------------------------------
 # THE ORDERING INVARIANT, and it is the subtle one. Every guard above sits
@@ -288,7 +325,18 @@ for i in $(seq 0 $((N - 1))); do
   # Both forms point BRAIN_ENV_FILE at a path that cannot exist, so no case
   # can reach the network via a real .env.local. That is a hard property of
   # this suite, not a convention: it must stay read-only and offline.
-  if case "$id" in *_noenv) true ;; *) false ;; esac; then
+  if case "$id" in *_nongit) true ;; *) false ;; esac; then
+    # cwd OUTSIDE any git work tree. $FIX is a mktemp dir, but mktemp's parent
+    # may itself sit inside a repo on some boxes, so the fixture sets
+    # GIT_CEILING_DIRECTORIES to stop the upward .git search at $FIX — without
+    # it this case could silently find an unrelated repo and pass for the wrong
+    # reason. $CLIENT is absolute, so cd'ing away cannot break the invocation.
+    out=$(cd "$FIX/nongit" && env -u BRAIN_URL -u MCP_ACCESS_KEY \
+            GIT_CEILING_DIRECTORIES="$FIX" \
+            BRAIN_ENV_FILE="$FIX/nonexistent.env" \
+            bash "$CLIENT" "${args[@]}" 2>&1)
+    rc=$?
+  elif case "$id" in *_noenv) true ;; *) false ;; esac; then
     out=$(env -u BRAIN_URL -u MCP_ACCESS_KEY -u BRAIN_WORKSPACE_ID \
             BRAIN_ENV_FILE="$FIX/nonexistent.env" \
             bash "$CLIENT" "${args[@]}" 2>&1)

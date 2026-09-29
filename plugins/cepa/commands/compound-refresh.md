@@ -371,18 +371,45 @@ set -euo pipefail
 PAYLOAD="$(mktemp "${TMPDIR:-/tmp}/cepa-writeback-XXXXXX.json")"
 # ... build the envelope into "$PAYLOAD" with the Write tool ...
 
-bash "$CEPA_ROOT/scripts/brain-client.sh" scrub "$PAYLOAD" "$PAYLOAD.scrubbed" || {
-  echo "brain sync: scrub failed — SUPPRESS this doc's writeback, do not" >&2
-  echo "  send unscrubbed. Record it in suppressed_writebacks: and go on" >&2
-  echo "  to the next doc." >&2
+# ASK THE CLIENT whether the scrub is required — do not re-derive the rule
+# here, and do not scrub unconditionally. This block used to scrub on EVERY
+# writeback while compound.md scrubbed only when forced, so two sibling
+# commands treated the same repo differently (residual 2h). `scrub-required`
+# is now the one executable home of the rule.
+#   0 = required   1 = not required   2 = CANNOT DECIDE -> suppress this doc
+# Never treat 2 as "not required": an unresolvable cepa.local.md is precisely
+# the state that must not reach the unscrubbed path.
+set +e
+bash "$CEPA_ROOT/scripts/brain-client.sh" scrub-required >/dev/null 2>&1
+SR_RC=$?
+set -e
+if [ "$SR_RC" -ge 2 ]; then
+  echo "brain sync: scrub-required could not evaluate the forced-scrub" >&2
+  echo "  condition (rc=$SR_RC) — SUPPRESS this doc's writeback. Record it in" >&2
+  echo "  suppressed_writebacks: and go on to the next doc." >&2
+  rm -f "$PAYLOAD"
   exit 1
-}
-# Post the SIDECAR. Do not mv it over $PAYLOAD first: a failed mv leaves
-# $PAYLOAD holding the PRE-SCRUB original — intact and non-empty, so
-# _assert_envelope passes it and the unscrubbed content egresses with every
-# exit code reading 0. Writing back the sidecar directly deletes that entire
-# failure class instead of guarding it.
-bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD.scrubbed"
+fi
+if [ "$SR_RC" -eq 0 ]; then
+  bash "$CEPA_ROOT/scripts/brain-client.sh" scrub "$PAYLOAD" "$PAYLOAD.scrubbed" || {
+    echo "brain sync: scrub failed — SUPPRESS this doc's writeback, do not" >&2
+    echo "  send unscrubbed. Record it in suppressed_writebacks: and go on" >&2
+    echo "  to the next doc." >&2
+    exit 1
+  }
+  # Post the SIDECAR. Do not mv it over $PAYLOAD first: a failed mv leaves
+  # $PAYLOAD holding the PRE-SCRUB original — intact and non-empty, so
+  # _assert_envelope passes it and the unscrubbed content egresses with every
+  # exit code reading 0. Writing back the sidecar directly deletes that entire
+  # failure class instead of guarding it.
+  bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD.scrubbed"
+else
+  # Not a compliance repo and no brain_phi_scrub flag: post the payload as
+  # built. The scrub is numeric-only and content-blind, so running it here
+  # would permanently degrade non-PHI engineering memories (`PR #1234567`
+  # becomes a redaction) while reporting protection that was never needed.
+  bash "$CEPA_ROOT/scripts/brain-client.sh" writeback "$PAYLOAD"
+fi
 ```
 
 **Scrub to a sidecar and post the sidecar.** Two failure modes make this the
