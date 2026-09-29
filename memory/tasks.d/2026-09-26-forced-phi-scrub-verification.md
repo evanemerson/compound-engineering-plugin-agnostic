@@ -204,8 +204,31 @@
    detectable by extracting fenced blocks and diffing assigned-vs-used
    variable names per block.
 
-2h. **The two sibling commands now scrub under different conditions.** P2,
-   filed — needs an operator decision, not a drive-by fix.
+2h. **The two sibling commands now scrub under different conditions.** P2.
+   **RESOLVED in v1.27.0** — operator decision taken 2026-09-28: unify on
+   **forced-only**, and move detection into `brain-client.sh scrub-required`
+   so the RULE has one executable home instead of being re-derived by each
+   caller's own regexes.
+
+   What shipped: the new verb (exit `0` required / `1` not required / `2`
+   cannot decide → refuse to send), both call sites converted to ask it, the
+   inline regex pair deleted from both command files, and the policy written
+   into `cepa:brain`'s `## Compliance` section — which previously specified
+   only the forced case and was the reason the two commands could each guess
+   differently. `compound-refresh.md` changed behavior: it no longer scrubs
+   unconditionally, because the scrub is numeric-only and content-blind
+   (residual 2e) and would permanently degrade non-PHI memories while
+   reporting protection that was never owed.
+
+   Exit 2 is the load-bearing part. An unresolvable `cepa.local.md` must never
+   collapse into "not required" — that is the unscrubbed-egress path — so it
+   has its own case in `scripts/check-brain-client-args.sh` (`sr_undecidable`)
+   rather than resting on the arity check. 20/20 there. Both emitted blocks
+   were extracted and run under `bash -e` across all three statuses; the
+   required path posts the `.scrubbed` sidecar, the not-required path posts the
+   original, and the undecidable path suppresses and removes the payload.
+
+   Retained below as the record of the ambiguity and why it existed.
    `compound-refresh.md` scrubs unconditionally on every writeback;
    `compound.md` scrubs only when `FORCE_SCRUB=1`. So a participating repo
    that is neither flagged nor `## Compliance` gets scrubbed by refresh and

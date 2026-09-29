@@ -248,46 +248,32 @@ and authoritative either way.
    [ -x "$CLIENT" ] || { echo "brain writeback ABORTED: $CLIENT is not executable" >&2; exit 1; }
    chmod 600 "$P"                              # payload holds doc content
 
-   # PHI SCRUB — executable, not a reminder. Decide it in code: a repo that
-   # forgot `brain_phi_scrub:` but declares `## Compliance` is still forced
-   # (see the cepa:brain skill). Leaving this to judgment is the defect this
-   # gate closes.
-   # Resolve cepa.local.md the SAME way .env.local is resolved above: in a
-   # linked worktree it lives only in the main checkout, and the command can
-   # be invoked from a subdirectory. A bare `[ -f cepa.local.md ]` returns
-   # false in both cases, which silently sets FORCE_SCRUB=0 on a HIPAA repo —
-   # a clean-looking run that skipped the mandatory scrub. Same defect class
-   # this block already defends against twice.
-   # Use --git-common-dir, exactly as .env.local does above — NOT
-   # --show-toplevel. cepa.local.md is gitignored, so in a linked worktree it
-   # exists ONLY in the main checkout; --show-toplevel returns the worktree's
-   # own root, where the file is absent, and the ABORT below then fires on
-   # every worktree run. Measured 2026-09-26: common-dir resolves, toplevel
-   # does not.
-   CEPA_LOCAL="cepa.local.md"
-   [ -f "$CEPA_LOCAL" ] || CEPA_LOCAL="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../cepa.local.md"
+   # PHI SCRUB — executable, not a reminder. ASK THE CLIENT; do not re-derive
+   # the condition here. `brain-client.sh scrub-required` is the single
+   # executable home of the rule the cepa:brain skill's `## Compliance`
+   # section defines — including the permissive matching and the
+   # gitignored-in-a-worktree path resolution, both of which have their own
+   # measured history. This command and compound-refresh.md each carried their
+   # own copy of that logic and DIVERGED (residual 2h); the verb exists so
+   # there is one answer, not two.
+   #
+   # THREE outcomes, and the third is the one that matters:
+   #   0 = required   1 = not required   2 = CANNOT DECIDE -> refuse to send
+   # Never collapse 2 into 1. An unresolvable cepa.local.md is exactly the
+   # state that must not fall through to the unscrubbed path.
    FORCE_SCRUB=0
-   if [ -f "$CEPA_LOCAL" ]; then
-     # Match PERMISSIVELY. A miss here fails OPEN — it sends unscrubbed PHI —
-     # while a false positive only costs one needless scrub. So: -i for case,
-     # leading space for indentation, `\b` rather than a space-or-EOL anchor
-     # (`## Compliance: HIPAA` and `##Compliance` are both declarations and
-     # both missed by a stricter pattern), and quoted/`yes` flag values.
-     # `cmd && VAR=1` returns 1 when cmd does not match. Under `set -e` that
-     # is fatal wherever the statement is LAST in its enclosing block — so the
-     # trailing `|| true` is load-bearing, not noise: without it, a future
-     # edit that moves this `if` to the end of the block turns a correct
-     # no-match into an aborted run. Keep it.
-     grep -Eiq '^[[:space:]]*-?[[:space:]]*brain_phi_scrub:[[:space:]]*["'\'']?(true|yes)' "$CEPA_LOCAL" && FORCE_SCRUB=1 || true
-     grep -Eiq '^[[:space:]]*#{1,6}[[:space:]]*compliance\b' "$CEPA_LOCAL" && FORCE_SCRUB=1 || true
-   else
-     # Writeback only runs for a repo whose cepa.local.md declares `brain:`,
-     # so reaching here means the file was readable a moment ago and is not
-     # now. Never fall through to FORCE_SCRUB=0: that is the unscrubbed path.
-     echo "brain writeback ABORTED: cepa.local.md not resolvable, so the" >&2
-     echo "  forced-scrub condition cannot be evaluated. Refusing to send." >&2
-     exit 1
-   fi
+   set +e
+   bash "$CLIENT" scrub-required >/dev/null 2>&1
+   _sr_rc=$?
+   set -e
+   case "$_sr_rc" in
+     0) FORCE_SCRUB=1 ;;
+     1) FORCE_SCRUB=0 ;;
+     *) echo "brain writeback ABORTED: scrub-required could not evaluate the" >&2
+        echo "  forced-scrub condition (rc=$_sr_rc). Refusing to send." >&2
+        rm -f "$P"                            # do not leave the payload at rest
+        exit 1 ;;
+   esac
    if [ "$FORCE_SCRUB" = 1 ]; then
      # Scrub to a sidecar. Do NOT mv it over the original: a failed mv leaves
      # the pre-scrub payload in place — intact and non-empty, so

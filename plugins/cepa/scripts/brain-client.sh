@@ -21,6 +21,11 @@
 #   brain-client.sh review   <memory_id> <confirm|evidence_only|reject|supersede|mark_stale>
 #   brain-client.sh participants                        # resolve + emit registry (fail-closed, exit 3 if unresolved)
 #   brain-client.sh scrub    <infile> <outfile>     # PHI redaction pass
+#   brain-client.sh scrub-required [cepa.local.md]  # 0=required 1=no 2=undecidable
+#       The ONE executable home of the forced-scrub rule (cepa:brain skill's
+#       `## Compliance` section). Callers gate on it instead of re-deriving it
+#       with their own regexes — which is how the two writeback commands came
+#       to disagree (residual 2h). Exit 2 means REFUSE TO SEND, never "no".
 #   brain-client.sh idkey    <repo> <docpath> <payloadfile>  # stable idempotency_key (hashes the payload)
 # Bodies are passed as FILES, never as argv, so untrusted content is never
 # spliced into a shell line (cepa:autonomy §7).
@@ -211,6 +216,66 @@ case "$cmd" in
       -e 's/\b(19|20)[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\b/[REDACTED-PHI-DOB]/g' \
       "$1" > "$2"
     ;;
+  scrub-required)
+    # DECIDE the forced-scrub condition in ONE executable place. Before this
+    # verb, compound.md and compound-refresh.md each re-derived it with their
+    # own regexes — and they diverged: refresh scrubbed unconditionally while
+    # compound scrubbed only when forced, so a participating repo that was
+    # neither flagged nor `## Compliance` got opposite treatment from two
+    # commands that are supposed to be siblings (residual 2h,
+    # memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md). A rule
+    # re-implemented per caller is a rule that drifts; the cepa:brain skill's
+    # `## Compliance` section is normative and this verb is its one
+    # instantiation.
+    #
+    # EXIT STATUS IS THE ANSWER — there is no "maybe":
+    #   0 = scrub REQUIRED      1 = not required      2 = cannot decide (_die)
+    # Callers gate on 0, and MUST treat 2 as required-but-unknown (i.e. refuse
+    # to send), never as "not required". An unresolvable config is the one
+    # state that must not fall through to the unscrubbed path.
+    #
+    # POLICY AS OF v1.27.0: forced-only. Required iff `brain_phi_scrub:` is
+    # truthy OR a `## Compliance` heading exists. A brain participant that is
+    # neither gets NO scrub. That preserves memory fidelity for non-PHI repos
+    # (the scrub is numeric-only and content-blind — it mangles `PR #1234567`
+    # into a redaction, residual 2e), and it makes compound.md's prior
+    # behavior the unified one. Changing the policy means editing THIS BLOCK
+    # ONLY — that is the whole point of the verb.
+    [ $# -le 1 ] || _die "scrub-required takes at most 1 argument (<cepa.local.md>), got $#"
+    _cl="${1:-}"
+    if [ -z "$_cl" ]; then
+      # Resolve exactly as the writeback call sites resolve .env.local, and
+      # for the same measured reason: cepa.local.md is GITIGNORED, so in a
+      # linked worktree it exists ONLY in the main checkout. Use
+      # --git-common-dir, NOT --show-toplevel: toplevel returns the
+      # worktree's own root where the file is absent, which would make this
+      # verb answer "not required" on a HIPAA repo. Measured 2026-09-26:
+      # common-dir resolves, toplevel does not. A bare relative path also
+      # fails whenever the command is invoked from a subdirectory.
+      _cl="cepa.local.md"
+      [ -f "$_cl" ] || _cl="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../cepa.local.md"
+    fi
+    # NOT FOUND IS NOT "NO". Writeback only runs for a repo whose
+    # cepa.local.md declares `brain:`, so an unreadable file here means the
+    # condition cannot be evaluated — exit 2 and let the caller refuse.
+    [ -f "$_cl" ] || _die "scrub-required cannot resolve cepa.local.md ('$_cl') — the forced-scrub condition cannot be evaluated; refuse to send rather than treating this as not-required"
+    [ -r "$_cl" ] || _die "scrub-required cannot read '$_cl' — condition unevaluable; refuse to send"
+    # Match PERMISSIVELY: a miss here fails OPEN (it sends unscrubbed PHI),
+    # while a false positive costs one needless scrub. So -i for case, a
+    # leading-space allowance for markdown list indentation, `\b` rather than
+    # a space-or-EOL anchor (`## Compliance: HIPAA` and `##Compliance` are
+    # both declarations, and both missed by a stricter pattern), and
+    # quoted/`yes` flag values. Both greps are guarded so a no-match cannot
+    # abort under `set -e`.
+    if grep -Eiq '^[[:space:]]*-?[[:space:]]*brain_phi_scrub:[[:space:]]*["'"'"']?(true|yes)' "$_cl"; then
+      printf 'required: brain_phi_scrub declared in %s\n' "$_cl"; exit 0
+    fi
+    if grep -Eiq '^[[:space:]]*#{1,6}[[:space:]]*compliance\b' "$_cl"; then
+      printf 'required: ## Compliance section present in %s\n' "$_cl"; exit 0
+    fi
+    printf 'not-required: no brain_phi_scrub flag and no ## Compliance in %s\n' "$_cl"
+    exit 1
+    ;;
   participants)
     [ $# -eq 0 ] || _die "participants takes no arguments, got $#"
     # Resolve + emit the brain participant registry, fail-closed. The manifest
@@ -269,6 +334,6 @@ case "$cmd" in
     printf '%s:%s:%s\n' "$1" "$2" "$_sha"
     ;;
   *)
-    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|idkey)"
+    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|scrub-required|idkey)"
     ;;
 esac

@@ -228,6 +228,29 @@ single forgotten `brain_phi_scrub:` line must never be the only thing between a
 HIPAA repo and cloud egress. (`brain_phi_scrub: true` additionally forces it on
 for a non-`## Compliance` repo the operator judges sensitive.)
 
+**A participant that is NEITHER flagged nor `## Compliance` is NOT scrubbed.**
+This is the deliberate answer to a question this section used to leave open, and
+the silence had a cost: the two writeback commands each guessed, and guessed
+differently — `/cepa:compound-refresh` scrubbed every payload while
+`/cepa:compound` scrubbed only when forced, so the same repo got opposite
+treatment depending on which command ran (filed as residual 2h, resolved
+2026-09-28 in v1.27.0). The rule is forced-only because the scrub is
+**numeric-only and content-blind**: it rewrites whole payload files, so ordinary
+engineering prose is collateral (`Celery task 4567890`, `PR #1234567` → two
+`[REDACTED-PHI-ID]`s), and a non-PHI repo's memories would be permanently
+degraded while Run Metadata reported protection that was never needed. Scrubbing
+is not free, so it is applied where it is owed.
+
+**One executable home: `brain-client.sh scrub-required [cepa.local.md]`.** Every
+caller ASKS; no caller re-derives the condition with its own regexes. Exit `0`
+required, `1` not required, `2` **cannot decide — refuse to send**. That third
+status is load-bearing: an unresolvable or unreadable `cepa.local.md` must never
+collapse into "not required", because that is the unscrubbed path. `cepa.local.md`
+is gitignored, so the verb resolves it via `--git-common-dir` (it exists only in
+the main checkout of a linked worktree, and `--show-toplevel` returns the wrong
+root) and matches permissively — a miss fails OPEN, a false positive costs one
+needless scrub. Changing the policy means editing that one block.
+
 The scrub (`brain-client.sh scrub`) redacts **numeric PHI patterns only**: SSN
 (dash/space/dot-separated), MRN/account-shaped digit runs, and DOB dates in both
 US month-first and ISO-8601 forms. **It does NOT redact patient names** (reliable

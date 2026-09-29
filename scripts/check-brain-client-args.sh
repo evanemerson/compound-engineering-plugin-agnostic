@@ -112,6 +112,15 @@ EOF
 cat > "$FIX/payload2.json" <<'EOF'
 {"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"evan-portfolio","project_id":"helm","memory_payload":{"lessons":["atoms v2 improved"]}}
 EOF
+# A cepa.local.md for the `scrub-required` arity case. It must EXIST, or that
+# case would pass on the file-missing guard instead of the arity guard it names
+# — a test green for the wrong reason. Contents are deliberately a plain
+# participant (no flag, no `## Compliance`), so arity is the only thing left to
+# fail on.
+cat > "$FIX/cepa.local.md" <<'EOF'
+## Integrations
+- brain: enabled
+EOF
 # A recall payload: valid JSON, valid envelope, WRONG KIND. `idkey` builds a
 # writeback key, so this must be refused — a readable-file check accepts it.
 cat > "$FIX/recall.json" <<'EOF'
@@ -213,6 +222,16 @@ reg arity_he 'health rejects any argument' 2 'health takes no arguments, got 1' 
 reg arity_pa 'participants rejects any argument' 2 'participants takes no arguments, got 1' \
   'kills: removal of participants arity' \
   participants EXTRA
+reg arity_sr 'scrub-required rejects a stray 2nd argument' 2 'scrub-required takes at most 1 argument' \
+  'kills: removal of scrub-required arity' \
+  scrub-required "$FIX/cepa.local.md" EXTRA
+# THE ONE THAT MATTERS MOST for this verb: an unresolvable config must exit 2
+# ("cannot decide"), never 1 ("not required"). Collapsing those two is the
+# unscrubbed-egress path, so it gets its own case rather than resting on the
+# arity check above.
+reg sr_undecidable 'scrub-required exits 2 (not 1) on an unresolvable config' 2 'cannot resolve cepa.local.md' \
+  'kills: a mutant that treats a missing cepa.local.md as not-required' \
+  scrub-required "$FIX/definitely-absent-cepa.local.md"
 
 # --- guards must run BEFORE credentials -------------------------------------
 # THE ORDERING INVARIANT, and it is the subtle one. Every guard above sits
