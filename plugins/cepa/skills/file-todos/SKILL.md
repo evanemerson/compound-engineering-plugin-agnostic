@@ -268,12 +268,6 @@ silent zero before it was added:
   sides** of a mandatory `:` rather than making the `:` optional. An over-match
   is as wrong as a zero, and harder to notice: it reads as a plausible count.
 
-A **mid-line** field is out of reach of any line-anchored pattern — e.g.
-`- **Agent:** security-sentinel · **Status:** done`, where `status` follows
-another field on the same line. Treat that as a fourth non-tallyable shape
-alongside the three below, not as a pattern to widen: dropping the `^` anchor
-makes every prose mention of the word "status" a match.
-
 Confirm a replacement pattern the way this one was confirmed: run it across a
 corpus containing every spelling and check that **no file drops to zero except
 files with genuinely no such field.** The rule in this section applies to its own
@@ -281,7 +275,7 @@ grep. Each remaining zero must be explained before the pattern is trusted — in
 that 193-file corpus the six survivors were four files with no `status:` field,
 one prose-only sweep file, and one mid-line file.
 
-**Three shapes are NOT tallyable**, and all must be reported as such rather than
+**Four shapes are NOT tallyable**, and all must be reported as such rather than
 counted as disagreement:
 
 - a **severity suffix** naming a range or batch — `severity: P2/P3 (batch)`;
@@ -292,6 +286,10 @@ counted as disagreement:
   a `(Merges Fx+Fy)` citation and sometimes not. Where the citations are
   present the counts reconcile; where they are absent the file cannot be
   verified from its body at all.
+- a **mid-line** field, out of reach of any line-anchored pattern — e.g.
+  `- **Agent:** security-sentinel · **Status:** done`, where `status` follows
+  another field on the same line. Do NOT widen the pattern to reach it:
+  dropping the `^` anchor makes every prose mention of the word a match.
 
 A file whose counters follow a superseded convention carries
 `counter_convention:` in its frontmatter naming it — `legacy-total-shrink`,
