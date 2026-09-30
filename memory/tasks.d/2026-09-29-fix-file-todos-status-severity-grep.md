@@ -116,3 +116,32 @@ spelling control, or the port ships unverified.
 
 Not done in PR #76 deliberately — a checker change touching CI deserves its own
 review rather than riding along with a docs correction.
+
+### RESOLVED 2026-09-29 — ported in PR #77
+
+All five sites now compose two shared fragments (`FIELD_PRE`, `FIELD_POST`,
+plus `VAL_TAIL` for the value-anchored sites), every call site gained `-i`, and
+the outdated "Two field formats are live" comment is deleted rather than updated
+into a fourth copy — the fragment definition cites the file-todos spec instead.
+
+Measured: bold-spelling files blind to the checker **18 -> 0** of 24. Controls
+30/30. Checker 0 MISS, 2 pre-existing WARN.
+
+**Worth remembering: the naive fix was wrong and the fixture did not catch it.**
+A single-branch prefix allowing a bare leading backtick turned four CORRECT
+files into MISS, because a line-initial `` `status: applied` `` in a **Fix:**
+paragraph is inline-code prose (39 occurrences), not a field (8 occurrences, all
+behind a list marker). The spec's fixture passes that mutant — its backtick line
+carries a marker — so only the corpus run caught it. That is the
+fixture-green-corpus-red lesson from PR #76's solution doc biting in the very
+next PR.
+
+Two controls were added and each was proven to go red against the specific
+mutant it names (`bold` vs the pre-fix pattern, `codeprose` vs the naive
+prefix), verified via `CEPA_RESIDUAL_CHECKER`.
+
+Newly visible and NOT acted on here: `review-2026-08-14-224500.md` reads 6 rows
+against 21 headings. Another repo's file; the checker can now see it, which is
+the point.
+
+**Nothing further owed from this episode.**

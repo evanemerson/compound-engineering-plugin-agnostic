@@ -231,6 +231,27 @@ reg fencerow 'fenced field rows are not findings'                1 0 'must EQUAL
 reg orphan 'a status: row bound to no heading is caught'         1 0 'belongs to no heading' '' \
   'kills: computing headings and never comparing it to anything but zero'
 
+# --- the field-spelling surface ---------------------------------------------
+# These two pin the FIELD_PRE/FIELD_POST fragments from both sides. They exist
+# because the checker carried the pre-fix single-spelling patterns for weeks
+# while the file-todos spec was fixed four times beside it: it saw ZERO status
+# rows on 18 of 24 real bold-spelling files and exited 0. A tally that cannot
+# see a row is indistinguishable from a file that has none.
+#
+# `bold` is the under-match direction: rewrite every field row to the bold
+# spelling and change NOTHING else. A correct checker counts them exactly as
+# before and stays clean; a checker whose pattern misses the spelling sees zero
+# rows and fires the tally-did-not-fire guard.
+reg bold 'bold-spelled field rows are still counted'             0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: dropping -i or the emphasis group — the spelling 24 of 193 real files use'
+# `codeprose` is the over-match direction, and it is the one the spec fixture
+# CANNOT catch: a line-initial `status: x` in backticks is inline-code prose in
+# a **Fix:** paragraph (39 occurrences across two corpora), never a field. A
+# pattern that allows a bare leading backtick with no list marker counts it and
+# turns a correct file into "N headings but N+1 status rows".
+reg codeprose 'line-initial inline-code prose is not a field row' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: allowing a leading backtick with no list marker in FIELD_PRE'
+
 # --- the env-override surface ----------------------------------------------
 # RESIDUAL_TODOS_DIR / RESIDUAL_SHARDS_DIR are real configuration the checker
 # exposes, and without this case they are DEAD SURFACE: every other case runs
@@ -437,6 +458,15 @@ plant() {  # plant <id> <dir>
             # rather than in a fence — so fence-stripping alone cannot catch it.
             sed -i '/^### 3$/,/^Body text.$/d' "$f"
             sed -i 's/^# Fixture findings$/# Fixture findings\n\nLegend:\n- severity: P3\n- status: applied/' "$f" ;;
+    bold)  # Rewrite EVERY field row to the bold spelling, changing nothing
+            # else. Counters, headings and values all stay correct, so the only
+            # way this reports a MISS is a pattern that cannot see the spelling.
+            sed -i -E 's/^- (status|severity): (.+)$/- **\1:** \2/' "$f" ;;
+    codeprose) # Add a line-initial inline-code mention in a prose paragraph —
+            # the shape a **Fix:** line routinely contains. It is NOT a field
+            # row and must not be tallied. Deliberately unfenced and outside any
+            # heading, so neither fence-stripping nor the heading bound hides it.
+            printf '\n**Fix:** assert\n`status: applied`\nbefore the commit.\n' >> "$f" ;;
     trav)  chmod 000 "$d/todos" ;;
     empty) rm -f "$d/$FIX_TODOS" "$d/$FIX_SHARD" ;;
     envdir) # Relocate the whole tree to non-default names. The runner sets the
