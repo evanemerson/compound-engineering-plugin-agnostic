@@ -187,7 +187,43 @@ STATES='pending ready skipped applied deferred completed'
 # `counter_convention:` in frontmatter. This skips on THAT FIELD, never on a
 # filename — a grandfather clause that lives only in prose beside the file is
 # unreadable to every consumer, which is the defect the spec exists to prevent.
-BATCH_RE='^-?[[:space:]]*severity:[[:space:]]*P[123](/P[123])*[[:space:]]*\(batch\)'
+# --- field-spelling fragments -------------------------------------------------
+# EVERY status:/severity: match below composes these. Do NOT hand-roll another
+# anchor at a call site: this script and the file-todos spec both tally the same
+# counters, and the last time they carried independent patterns the script kept
+# the pre-fix ones and saw ZERO status rows on 18 of 24 real bold-spelling files
+# while exiting 0.
+#
+# The authority for WHICH spellings are live, WHY each fragment is load-bearing,
+# and the inherent frontmatter ambiguity is the `cepa:file-todos` skill's
+# "Verify against the body" section — plus its committed fixture,
+# plugins/cepa/skills/file-todos/fixtures/status-spellings.md. Cited, not
+# restated; if the two ever disagree, the spec governs and this is the bug.
+#
+# Every use needs `-i`: the FIELD NAME is capitalised in real files
+# (`- **Status:** FIXED`), so widening the value class alone does not reach it.
+#
+# TWO BRANCHES, and the split is load-bearing. A leading backtick is a real
+# field spelling ONLY behind a list marker:
+#
+#   - `status: applied`     a field. 8 occurrences across two corpora.
+#   `status: applied`       line-initial inline-code PROSE, mid-sentence in a
+#                           **Fix:** paragraph. 39 occurrences, never a field.
+#
+# Allowing a bare leading backtick with no marker over-matches that prose. It is
+# not hypothetical: the first cut of this port did exactly that and turned 4
+# correct files into MISS, each reading "N headings but N+1 status rows" — a
+# uniform off-by-one, which this file's own comment below names as the signature
+# of a broken pattern rather than of real drift. The spec's fixture does not
+# catch it (its backtick line carries a marker), so only the corpus run does.
+FIELD_PRE='^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?)'
+FIELD_POST='[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?'
+# Tail for a VALUE-ANCHORED match: sites that interpolate an expected value and
+# pin it with `$` must still allow the bold form's closing `**`/backtick, or
+# every emphasised row reads as a zero.
+VAL_TAIL='(\*\*|__|\*|_|`)?[[:space:]]*$'
+
+BATCH_RE="${FIELD_PRE}severity${FIELD_POST}P[123](/P[123])*[[:space:]]*\(batch\)"
 RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
 
 # --- leg 1: summary block agrees with the body -------------------------------
@@ -310,14 +346,14 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
     continue
   fi
 
-  # THE LEADING `-` IS OPTIONAL AND THE PATTERN MUST TOLERATE BOTH. Two field
-  # formats are live in this repo — `- severity: P1` and bare `severity: P1` —
-  # and a pattern anchored to one returns ZERO ROWS on the other, SILENTLY. A
-  # zero count is not a clean file; it is a pattern that did not fire.
+  # A pattern anchored to one spelling returns ZERO ROWS on the others,
+  # SILENTLY. A zero count is not a clean file; it is a pattern that did not
+  # fire. The live spellings and the reason each fragment exists are the
+  # `cepa:file-todos` spec's — see FIELD_PRE above.
   headings=$(printf '%s\n' "$body" | grep -cE '^###[[:space:]]+[0-9]' || true)
-  body_status_rows=$(printf '%s\n' "$body" | grep -cE '^-?[[:space:]]*status:[[:space:]]*[a-z]+' || true)
+  body_status_rows=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}[a-z_-]+" || true)
 
-  has_batch=$(printf '%s\n' "$body" | grep -cE "$BATCH_RE" || true)
+  has_batch=$(printf '%s\n' "$body" | grep -ciE "$BATCH_RE" || true)
   has_range=$(printf '%s\n' "$body" | grep -cE "$RANGE_RE" || true)
 
   if [ "$has_batch" -gt 0 ] || [ "$has_range" -gt 0 ]; then
@@ -386,7 +422,7 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   # it. A file with only retained skips has no gap.
   declared_skipped=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*skipped:[[:space:]]*([0-9]+).*/\1/p' | head -1)
   declared_skipped=${declared_skipped:-0}
-  body_skipped=$(printf '%s\n' "$body" | grep -cE '^-?[[:space:]]*status:[[:space:]]*skipped[[:space:]]*$' || true)
+  body_skipped=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}skipped${VAL_TAIL}" || true)
   gap=$((declared_total - body_status_rows))
   removals=$((declared_skipped - body_skipped))
 
@@ -406,7 +442,7 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   for s in $STATES; do
     declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*([0-9]+).*/\1/p" | head -1)
     declared=${declared:-0}
-    actual=$(printf '%s\n' "$body" | grep -cE "^-?[[:space:]]*status:[[:space:]]*${s}[[:space:]]*$" || true)
+    actual=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}${s}${VAL_TAIL}" || true)
     [ "$s" = skipped ] && actual=$((actual + gap))
     if [ "$declared" -ne "$actual" ]; then
       miss "residual: ${f} declares ${s}: ${declared} but the body carries ${actual} — a counter that disagrees with the body is what /cepa:sweep reads"
@@ -423,7 +459,7 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
     for s in p1 p2 p3; do
       declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*([0-9]+).*/\1/p" | head -1)
       up=$(printf '%s' "$s" | tr '[:lower:]' '[:upper:]')
-      actual=$(printf '%s\n' "$body" | grep -cE "^-?[[:space:]]*severity:[[:space:]]*${up}[[:space:]]*$" || true)
+      actual=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}severity${FIELD_POST}${up}${VAL_TAIL}" || true)
       if [ "${declared:-0}" -ne "$actual" ]; then
         miss "residual: ${f} declares ${s}: ${declared} but the body carries ${actual} ${up} finding(s) — a balanced total hides a wrong distribution"
         misses=$((misses + 1))
