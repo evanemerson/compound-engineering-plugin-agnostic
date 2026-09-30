@@ -224,17 +224,99 @@ field, which no consumer has asked for.
 Verify against the body, never against the block's own arithmetic:
 
 ```bash
-grep -oE '^-?[[:space:]]*severity: P[123]'  todos/review-<stamp>.md | sort | uniq -c
-grep -oE '^-?[[:space:]]*status: [a-z]+'    todos/review-<stamp>.md | sort | uniq -c
+grep -oiE '^[[:space:]]*[-*+]?[[:space:]]*(\*\*|__|\*|_|`)?severity[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?P[123]' todos/review-<stamp>.md | sort | uniq -c
+grep -oiE '^[[:space:]]*[-*+]?[[:space:]]*(\*\*|__|\*|_|`)?status[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?[a-z_-]+'   todos/review-<stamp>.md | sort | uniq -c
 ```
 
-**The leading `-` is optional and the pattern must tolerate both.** Two field
-formats are live in this repo — `- severity: P1` and bare `severity: P1` — and a
-pattern anchored to one returns **zero rows on the other, silently**. A zero
+**The list marker, the indentation, the emphasis markers, and the field's case
+are all optional, and the pattern must tolerate every combination.** These field
+spellings are all live in real files:
+
+| Spelling | Where it comes from |
+|---|---|
+| `- severity: P1` | the common per-finding form |
+| `severity: P1` | same, unindented, no marker |
+| `- **status:** applied` | bold — current output from some review runs |
+| `  status: applied` | **indented, no marker** — YAML list-item findings (`- id: 1` with indented fields); 50 of 193 files in one corpus |
+| `` - `status: applied` `` | backticked value |
+| `* status: x` / `+ status: x` | alternative markdown list markers |
+
+A pattern anchored to one returns **zero rows on the others, silently**. A zero
 count is not a clean file; it is a pattern that did not fire. Compare the row
 count against the `### N` headings before reading any tally as a result.
 
-**Three shapes are NOT tallyable**, and all must be reported as such rather than
+**The bold spelling is live, not legacy** — it belongs in the pattern above, not
+behind a `counter_convention:` exemption. That field is for *superseded*
+conventions; bold is current output from some review runs, so exempting a file
+for using it would suppress a real file rather than grandfather an old one. Of
+193 review files in one project corpus, 24 use bold — including files written the
+same week as this paragraph. The pre-fix pattern fired zero on every one of them.
+
+Five details of that pattern are load-bearing, each for a case that returned a
+silent zero — or a silent over-count — before it was added:
+
+- **`-i` on the whole match.** Capitalised fields and uppercase values both
+  occur — `- **Status:** FIXED in this PR`. A case-sensitive pattern drops that
+  line entirely. Widening the value class to `[A-Za-z]+` does **not** fix it,
+  because the *field name* is capitalised too; `-i` is what covers both, and it
+  is why the value class needs no uppercase range.
+- **`[[:space:]]*` BEFORE the optional marker, not only after it.** Indented
+  fields are the single most common non-obvious spelling — 50 of 193 files in
+  one corpus — because YAML list-item findings (`- id: 1` then indented
+  `status:`) put the field two spaces in with no marker of its own. Anchoring as
+  `^-?[[:space:]]*` puts the dash first and silently misses every one of them.
+  Do **not** try to exclude frontmatter by requiring a marker on indented lines:
+  an indented `status: applied` inside a finding and an indented `status: fresh`
+  inside a `brain:` frontmatter block are byte-identical, so no anchor can tell
+  them apart. That is what the `### N` comparison is for, and it is why the
+  comparison is mandatory rather than advisory.
+- **`(\*\*|__|\*|_|`)?` as a group, not `[`*]{0,2}` as a bracket class.** The
+  bracket form matches one `*` of a `**` pair, so it also matches malformed
+  markup, and it still misses the capitalised field. List the emphasis forms
+  explicitly; `_`/`__` are valid markdown a writer may reach for. Verify a
+  candidate against a fixture holding all spellings — do not reason about it.
+- **A backticked value** — `- \`status: applied\`` — needs the trailing `` `? ``.
+- **The colon is required, not optional** (though surrounding space is not —
+  hence `status[[:space:]]*:`). Writing it `status:?` to absorb the bold form's
+  placement makes the pattern match any **wrapped prose line that begins with
+  the word** — `status re-validated under lock)`, `statuses with no status
+  filter`, `Status corrected 2026-07-29 during /cepa:triage` all matched and
+  inflated the tally. The colon sits inside the bold markers (`**status:**`) and
+  outside the plain ones (`status:`), so put the optional marker on **both
+  sides** of a mandatory `:` rather than making the `:` optional. An over-match
+  is as wrong as a zero, and harder to notice: it reads as a plausible count.
+
+**Read the row total, not the per-row counts.** `-o` prints each match as it was
+written, so `uniq -c` buckets by spelling rather than by meaning, in two
+different ways: one status occupies several rows (`- **Status:** FIXED` and
+`- status: fixed` count 1 and 1, never 2), and the value class stops at the first
+character outside it, so two distinct values sharing a prefix merge into one row
+(`not-attempted` and `not-configured` both print as `status: not` under a
+`[a-z]+` class — which is why the class above is `[a-z_-]+`). Neither affects the
+row **total**, which is the only figure the `### N` comparison needs.
+
+**Confirm any replacement pattern against the committed fixture** —
+`fixtures/status-spellings.md`, next to this file. It holds one line per known
+spelling plus the prose lines that must NOT match, so the check is runnable from
+inside this repo with no external corpus. Expected: **13 status rows, 13 severity
+rows, and 0 rows from the "Must NOT match" block.** Anything else means the
+pattern is wrong, however reasonable it looks. Add a line to the fixture *before*
+widening a pattern, never after.
+
+Then run it across a real `todos/` corpus and check that **no file drops to zero
+except files with genuinely no such field.** The rule in this section applies to
+its own grep. Each remaining zero must be explained before the pattern is
+trusted — in the 193-file corpus these patterns were validated against, the six
+survivors were four files with no `status:` field, one prose-only sweep file, and
+one mid-line file.
+
+**Compare old against new, not just new against the fixture.** A widened pattern
+can score full marks on a fixture and still lose rows on real files: requiring a
+list marker on indented lines passed a 13-case fixture while dropping 51 corpus
+files, 17 of them to zero, because it excluded the indented-no-marker form. Count
+rows per file under both patterns and treat **any** loss as a regression.
+
+**Four shapes are NOT tallyable**, and all must be reported as such rather than
 counted as disagreement:
 
 - a **severity suffix** naming a range or batch — `severity: P2/P3 (batch)`;
@@ -245,6 +327,10 @@ counted as disagreement:
   a `(Merges Fx+Fy)` citation and sometimes not. Where the citations are
   present the counts reconcile; where they are absent the file cannot be
   verified from its body at all.
+- a **mid-line** field, out of reach of any line-anchored pattern — e.g.
+  `- **Agent:** security-sentinel · **Status:** done`, where `status` follows
+  another field on the same line. Do NOT widen the pattern to reach it:
+  dropping the `^` anchor makes every prose mention of the word a match.
 
 A file whose counters follow a superseded convention carries
 `counter_convention:` in its frontmatter naming it — `legacy-total-shrink`,
