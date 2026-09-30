@@ -224,15 +224,62 @@ field, which no consumer has asked for.
 Verify against the body, never against the block's own arithmetic:
 
 ```bash
-grep -oE '^-?[[:space:]]*severity: P[123]'  todos/review-<stamp>.md | sort | uniq -c
-grep -oE '^-?[[:space:]]*status: [a-z]+'    todos/review-<stamp>.md | sort | uniq -c
+grep -oiE '^-?[[:space:]]*(\*\*|`)?severity:(\*\*|`)?[[:space:]]*`?P[123]' todos/review-<stamp>.md | sort | uniq -c
+grep -oiE '^-?[[:space:]]*(\*\*|`)?status:(\*\*|`)?[[:space:]]*`?[a-z]+'   todos/review-<stamp>.md | sort | uniq -c
 ```
 
-**The leading `-` is optional and the pattern must tolerate both.** Two field
-formats are live in this repo — `- severity: P1` and bare `severity: P1` — and a
-pattern anchored to one returns **zero rows on the other, silently**. A zero
+**The leading `-`, the bold markers, and the field's case are all optional, and
+the pattern must tolerate every combination.** Three field spellings are live —
+`- severity: P1`, bare `severity: P1`, and bold `- **status:** applied` — and a
+pattern anchored to one returns **zero rows on the others, silently**. A zero
 count is not a clean file; it is a pattern that did not fire. Compare the row
 count against the `### N` headings before reading any tally as a result.
+
+**The bold spelling is live, not legacy** — it belongs in the pattern above, not
+behind a `counter_convention:` exemption. That field is for *superseded*
+conventions; bold is current output from some review runs, so exempting a file
+for using it would suppress a real file rather than grandfather an old one. Of
+193 review files in one project corpus, 24 use bold — including files written the
+same week as this paragraph. The pre-fix pattern fired zero on every one of them.
+
+Four details of that pattern are load-bearing, each for a case that returned a
+silent zero before it was added:
+
+- **`-i` on the whole match.** Capitalised fields and uppercase values both
+  occur — `- **Status:** FIXED in this PR`. A case-sensitive pattern drops that
+  line entirely. Widening the value class to `[A-Za-z]+` does **not** fix it,
+  because the *field name* is capitalised too; `-i` is what covers both, and it
+  is why the value class can stay `[a-z]+`. Note that `-o` prints each match as
+  it was written, so `uniq -c` buckets by spelling, not by meaning: one status
+  can occupy several rows (`- **Status:** FIXED` and `- status: fixed` count 1
+  and 1, never 2). **Read the row total, not the per-row counts**, when
+  comparing against the `### N` headings.
+- **`(\*\*|`)?` as a group, not `[`*]{0,2}` as a bracket class.** The bracket
+  form matches one `*` of a `**` pair, so it also matches malformed markup, and
+  it still misses the capitalised field. Verify a candidate against a fixture
+  holding all spellings — do not reason about it.
+- **A backticked value** — `- \`status: applied\`` — needs the trailing `` `? ``.
+- **The colon is required, not optional.** Writing it `status:?` to absorb the
+  bold form's placement makes the pattern match any **wrapped prose line that
+  begins with the word** — `status re-validated under lock)`, `statuses with no
+  status filter`, `Status corrected 2026-07-29 during /cepa:triage` all matched
+  and inflated the tally. The colon sits inside the bold markers (`**status:**`)
+  and outside the plain ones (`status:`), so put the optional marker on **both
+  sides** of a mandatory `:` rather than making the `:` optional. An over-match
+  is as wrong as a zero, and harder to notice: it reads as a plausible count.
+
+A **mid-line** field is out of reach of any line-anchored pattern — e.g.
+`- **Agent:** security-sentinel · **Status:** done`, where `status` follows
+another field on the same line. Treat that as a fourth non-tallyable shape
+alongside the three below, not as a pattern to widen: dropping the `^` anchor
+makes every prose mention of the word "status" a match.
+
+Confirm a replacement pattern the way this one was confirmed: run it across a
+corpus containing every spelling and check that **no file drops to zero except
+files with genuinely no such field.** The rule in this section applies to its own
+grep. Each remaining zero must be explained before the pattern is trusted — in
+that 193-file corpus the six survivors were four files with no `status:` field,
+one prose-only sweep file, and one mid-line file.
 
 **Three shapes are NOT tallyable**, and all must be reported as such rather than
 counted as disagreement:
