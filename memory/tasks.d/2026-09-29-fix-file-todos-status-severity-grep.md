@@ -37,3 +37,42 @@ All three are `action_class: judgment` — filed rather than auto-applied per
 `cepa:autonomy` §4. Findings #1 and #2 are the same defect class this PR just
 fixed, recurring at a different spelling set; that recurrence is itself the
 argument for the #3 fixture.
+
+## 2026-09-29 — RESOLVED: all three applied in the same session
+
+Applied on `fix/file-todos-status-severity-grep` (PR #75) after the user chose
+to close the class rather than ship the P2s as residuals. Status in
+`todos/review-2026-09-29-203720.md` moved `pending → applied` for all four
+findings; `summary.applied: 4`, `pending: 0`.
+
+**Item 1 was filed with a wrong measurement and a wrong fix — both corrected.**
+The "zero occurrences in the corpus" claim was measured with the wrong probe
+(it tested indented `- status:` WITH a marker, which is absent; the live form is
+indented `status:` with NO marker, present in **50 of 193 files**). So the
+indentation gap was ACTIVE, not latent. Worse, the filed fix — require a list
+marker on indented lines, to exclude frontmatter — passed a 13-case fixture and
+then lost rows on **51 of 193 corpus files, 17 dropping to zero** (one went
+26 → 0). Root cause: an indented `status: applied` in a finding and an indented
+`status: fresh` in a `brain:` frontmatter block are byte-identical, so no anchor
+separates them. The over-match is inherent; the `### N` comparison is the only
+thing that catches it, which the spec now says explicitly.
+
+Shipped pattern (both fields, `-i`):
+`^[[:space:]]*[-*+]?[[:space:]]*(\*\*|__|\*|_|`)?status[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?[a-z_-]+`
+
+Item 2: value class widened to `[a-z_-]+`; the `uniq -c` note promoted to its own
+paragraph covering both bucketing failures and stating that neither moves the row
+total.
+
+Item 3: fixture committed at
+`plugins/cepa/skills/file-todos/fixtures/status-spellings.md` (13/13/0 expected,
+verified), plus a new "compare old against new, not just new against the fixture"
+paragraph carrying the 51-file regression as its evidence.
+
+Verification, against patterns extracted from the shipped file rather than
+retyped: fixture 13/13 positive and 0/0 negative; corpus **0 losses, 0 gains,
+same 6 explained zeros**; YAML-style file back to 26 rows; the three
+originally-broken bold files still 9/9/8.
+
+**Nothing is owed from this shard.** Left in place as the record of a filed fix
+that was wrong and how it was caught.
