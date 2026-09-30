@@ -261,10 +261,20 @@ silent zero — or a silent over-count — before it was added:
   because the *field name* is capitalised too; `-i` is what covers both, and it
   is why the value class needs no uppercase range.
 - **`[[:space:]]*` BEFORE the optional marker, not only after it.** Indented
-  fields are the single most common non-obvious spelling — 50 of 193 files in
-  one corpus — because YAML list-item findings (`- id: 1` then indented
-  `status:`) put the field two spaces in with no marker of its own. Anchoring as
-  `^-?[[:space:]]*` puts the dash first and silently misses every one of them.
+  fields are the most common non-obvious spelling — 50 of 193 files in one
+  corpus — because YAML list-item findings (`- id: 1` then indented `status:`)
+  put the field two spaces in with no marker of its own.
+
+  **Be precise about which sub-case the old anchor broke on, because it is not
+  the obvious one.** `^-?[[:space:]]*` *did* match indented fields with **no**
+  marker: `-?` matches zero dashes, then `[[:space:]]*` eats the indent. What it
+  could not match is an indented field **with** a marker (`  - status: x`),
+  because `-?` is pinned to column 0. Those two sub-cases read as one "indented"
+  case and are not — measured on that corpus, indented-no-marker appears in 50
+  files and indented-with-marker in **zero**, so leading `[[:space:]]*` is
+  defensive here rather than corrective. Claim it as defensive; the 50 files were
+  never broken.
+
   Do **not** try to exclude frontmatter by requiring a marker on indented lines:
   an indented `status: applied` inside a finding and an indented `status: fresh`
   inside a `brain:` frontmatter block are byte-identical, so no anchor can tell
@@ -298,8 +308,10 @@ row **total**, which is the only figure the `### N` comparison needs.
 **Confirm any replacement pattern against the committed fixture** —
 `fixtures/status-spellings.md`, next to this file. It holds one line per known
 spelling plus the prose lines that must NOT match, so the check is runnable from
-inside this repo with no external corpus. Expected: **13 status rows, 13 severity
-rows, and 0 rows from the "Must NOT match" block.** Anything else means the
+inside this repo with no external corpus. Expected: **14 status rows, 14 severity
+rows, and 0 rows from the "Must NOT match" block** (the fixture's own heading
+states the current count — trust it over this sentence if they ever disagree, and
+fix this one). Anything else means the
 pattern is wrong, however reasonable it looks. Add a line to the fixture *before*
 widening a pattern, never after.
 

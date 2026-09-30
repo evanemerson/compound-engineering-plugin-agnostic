@@ -412,6 +412,48 @@ answerable from the artifacts already in scope, however many are enumerated.
 
 *Avoid:* self-consistency check, internal-only verification.
 
+### Non-tallyable shape
+A construct in a findings file that a per-line tally cannot count at all — a
+severity suffix naming a range or batch, one heading spanning several enumerated
+findings, a persona-merged entry, or a field sharing a line with another field —
+and which must therefore be reported as excluded rather than counted as a
+disagreement.
+
+The distinction is load-bearing because the two outcomes look identical in a
+tally: a shape the pattern structurally cannot reach and a genuine
+counter-vs-body mismatch both surface as a number that does not add up. Treating
+the first as the second manufactures drift findings against correct files; a scan
+of this repo once reported twelve bad files when six were bad by counting batch
+suffixes as drift, then shrank a *correct* file's `total` because a heading range
+was invisible to its per-line tally.
+
+An exclusion is only real if a consumer can read it: it belongs in a frontmatter
+field (`counter_convention:`), never in prose beside the file and never inferred
+from a filename.
+
+*Avoid:* uncountable finding, unparseable row.
+
+### Absence measurement
+A claim that something does not occur — "zero occurrences in the corpus" — which
+is a fact about the probe that was run, not about the corpus, and is wrong
+whenever the probe was aimed at the wrong shape.
+
+It is more dangerous than no measurement at all, because it converts "the blast
+radius is unknown" into "there is no blast radius" and so licenses a fix as safe.
+Both bad rounds of one five-round fix were authorized by a confident zero that
+nobody re-derived: the probe tested an indented field *with* a list marker, which
+genuinely appears in no file, while the live shape was the same field *without*
+one, in 50 of 193 files.
+
+The guard is to state the command beside the count and re-run it — not re-reason
+about it — before the fix ships.
+
+Distinct from [silent pass](#silent-pass), where a check reports clean having
+examined nothing; here the check examines real data and answers a question
+adjacent to the one asked.
+
+*Avoid:* negative result, clean sweep.
+
 ## Fix authoring
 
 ### One-layer-down regression
