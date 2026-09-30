@@ -12,7 +12,7 @@ against `## Must NOT match` and expect **0 rows** from the prose block.
 A pattern that scores anything other than 13 / 13 / 0 is wrong, no matter how
 reasonable it looks. Add a line here before widening a pattern, never after.
 
-## Live spellings — all 13 must match
+## Live spellings — all 14 must match
 
 - status: plain-dash-marker
 - severity: P1
@@ -40,10 +40,22 @@ severity: P2
 - severity : P3
 - status: hyphenated-value
 - severity: P1
+- status: `value-only-backtick`
+- severity: `P2`
 
-Note the last pair: `[a-z]+` as a value class would truncate
-`hyphenated-value` to `hyphenated`, which is why the shipped class is
-`[a-z_-]+`. The row total is unaffected either way — see SKILL.md.
+## Notes on two of those lines
+
+`hyphenated-value`: a `[a-z]+` value class would truncate it to `hyphenated`,
+which is why the shipped class is `[a-z_-]+`. The row total is unaffected either
+way — see SKILL.md.
+
+`value-only-backtick`: this is the only line that exercises the trailing
+`` `? ``. The whole-field form (line 29) does **not** — its leading backtick is
+consumed by the pre-field emphasis group, so that line matches identically with
+or without the trailing option. Only a backtick touching the value directly,
+after the colon, reaches it. A fixture claiming to cover "every spelling" must
+exercise each regex **element**, not merely hold a line that looks related; this
+pair was added after an audit found the element unexercised.
 
 ## Must NOT match — prose, frontmatter tails, and non-tallyable shapes
 

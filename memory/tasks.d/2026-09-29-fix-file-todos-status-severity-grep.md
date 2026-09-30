@@ -76,3 +76,43 @@ originally-broken bold files still 9/9/8.
 
 **Nothing is owed from this shard.** Left in place as the record of a filed fix
 that was wrong and how it was caught.
+
+## 2026-09-29 — OPEN: the CI enforcer still carries the pre-fix patterns
+
+Found by /cepa:compound's prevention agent while documenting PR #75, then
+verified directly. **This is the one item still owed from this episode.**
+
+`scripts/check-residual-integrity.sh` tallies the same findings-file counters the
+file-todos spec does, with its own copy of the PRE-FIX patterns:
+
+- line 318 `body_status_rows`   `^-?[[:space:]]*status:[[:space:]]*[a-z]+`
+- line 389 `body_skipped`       `^-?[[:space:]]*status:[[:space:]]*skipped[[:space:]]*$`
+- line 409 per-status `actual`  `^-?[[:space:]]*status:[[:space:]]*${s}[[:space:]]*$`
+- line 426 per-severity `actual` `^-?[[:space:]]*severity:[[:space:]]*${up}[[:space:]]*$`
+
+It also carries, at lines 313-316, a verbatim copy of the now-outdated comment
+"Two field formats are live in this repo" — the restatement drift CLAUDE.md
+documents.
+
+**Measured, not inferred:** the line-318 pattern returns 0 on `- **status:**
+applied` and 0 on `- **Status:** FIXED`. Across the 24 bold-spelling files in the
+dpc-pro corpus it sees ZERO status rows on 18 of them — against 21 and 11 `### N`
+headings in the first two — and `check-residual-integrity.sh` still exits 0
+(`0 MISS, 2 WARN`, both WARNs unrelated).
+
+It runs in CI on every PR via `.github/workflows/residual-integrity.yml:57`.
+
+So the spec is fixed and the enforcer is not: exactly the "fix scoped to the
+reported instance leaves the rest of the construct live" class CLAUDE.md records
+three times (allowed-tools twice on 2026-07-10; hardcoded counts across #6/#7/#8).
+
+**Port:** lift the shipped pattern from `plugins/cepa/skills/file-todos/SKILL.md`
+into all four sites, add `-i`, and replace the stale comment with a citation to
+the spec rather than a fourth copy of the rule. Lines 409/426 interpolate an
+expected value and anchor with `$`, so they need the emphasis group on both sides
+AND a trailing-marker allowance — they are not a straight copy of line 318's
+pattern. Extend `scripts/check-residual-integrity-controls.sh` with a bold-
+spelling control, or the port ships unverified.
+
+Not done in PR #76 deliberately — a checker change touching CI deserves its own
+review rather than riding along with a docs correction.
