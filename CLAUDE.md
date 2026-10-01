@@ -53,6 +53,40 @@ correctly characterizes a CI trigger (interpretation, not arithmetic), and
 whether a branch-protection claim still holds (mutable platform state that
 drifts with no commit).
 
+### An absence claim is a fact about the probe, not about the corpus
+"Zero occurrences" is the output of one command. Aim that command at the wrong
+shape and it returns a confident zero that licenses a fix as *safe* — worse than
+no measurement, because it converts "blast radius unknown" into "blast radius
+none". `CONCEPTS.md` defines the concept (`### Absence measurement`); this is
+the repo rule.
+
+**State the command beside any count that justifies a change, and re-run it —
+never re-reason about it.** A finding, commit message, or PR body that says
+"N occurrences", "zero in the corpus", or "latent, not active" must show the
+probe that produced the number.
+
+Measured cost across #75–#77, one branch, five rounds on two grep patterns:
+
+- A review finding reported five unmatched spellings as "zero occurrences in
+  the 193-file corpus". The probe tested an indented field **with** a list
+  marker (0 files); the live shape was the same field **without** one (**50**
+  files). The gap was active, not latent.
+- Its proposed fix, applied verbatim, scored **13/13** on a hand-built fixture
+  and then lost rows on **51 of 193** corpus files, 17 dropping to zero, one
+  going 26 → 0.
+- The *correction* then shipped its own false count — claiming the old anchor
+  missed all 50 indented files, when it had always matched them.
+
+**A fixture score is necessary, never sufficient.** Diff old against new on real
+data and treat any lost row as a regression: #77's first cut passed a 14-case
+fixture and turned four correct files into MISS, because every backtick line in
+that fixture carries a list marker while the form it over-matched — a
+line-initial `` `status: x` `` in prose — has none.
+
+Nothing enforces this — it is a habit, like the two count rules above. The
+closest mechanism is a committed fixture plus a corpus diff; see
+`plugins/cepa/skills/file-todos/fixtures/status-spellings.md` for the shape.
+
 ### Manifests move together
 `plugins/cepa/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
 versions are bumped in the same commit, always.
