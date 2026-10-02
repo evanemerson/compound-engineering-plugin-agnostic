@@ -26,12 +26,52 @@
 #       `## Compliance` section). Callers gate on it instead of re-deriving it
 #       with their own regexes — which is how the two writeback commands came
 #       to disagree (residual 2h). Exit 2 means REFUSE TO SEND, never "no".
+#   brain-client.sh scrub-seal   <payloadfile>      # record redaction count -> <payloadfile>.phiseal
+#   brain-client.sh scrub-verify <payloadfile>      # 0=redactions intact 1=FELL 2=unevaluable
+#       The re-Write gate (residual 2i). Between the scrub and the writeback an
+#       agent edits the payload by hand, and it still holds the PRE-scrub
+#       strings in context — so re-emitting them silently undoes the redaction.
+#       Seal before that edit, verify after it, and SUPPRESS on exit 1. The
+#       count travels in a FILE because the two calls run in different shells
+#       (residual 2g); a variable is unset by then and compares equal to
+#       nothing.
 #   brain-client.sh idkey    <repo> <docpath> <payloadfile>  # stable idempotency_key (hashes the payload)
 # Bodies are passed as FILES, never as argv, so untrusted content is never
 # spliced into a shell line (cepa:autonomy §7).
 set -euo pipefail
 
 _die() { printf 'brain-client: %s\n' "$1" >&2; exit 2; }
+
+# Count REDACTION MARKER OCCURRENCES in a file. Used by scrub-seal and
+# scrub-verify, which must count identically or the comparison is meaningless.
+#
+# `grep -o | wc -l`, NOT `grep -c`. `grep -c` counts matching LINES: a payload
+# holding `[REDACTED-PHI-SSN] [REDACTED-PHI-ID]` on one line counts 1, so an
+# agent that drops one of the two markers leaves the count unchanged and the
+# gate passes. compound.md emits its payload as single-line JSON, which is the
+# worst case for that — one line holding EVERY marker, where the count can only
+# ever be 0 or 1 and almost any partial reintroduction is invisible. Measured
+# 2026-10-02: the two-marker line gives `grep -c` 1 and `grep -o|wc -l` 2.
+#
+# Status handling: `grep` exits 1 on no-match (legitimate: a payload with no
+# PHI) and >1 on a real error (unreadable file). Those must NOT collapse —
+# treating an unreadable payload as "0 redactions" seals a count that can never
+# fall, which is a gate that passes unconditionally. Capture the status into a
+# variable IMMEDIATELY; do not read `$?` in an `elif`, where the `if` test has
+# already clobbered it (measured: `$?` reads 0 inside the elif regardless of
+# grep's real status, so the error branch fires on a false condition).
+_phi_count() {
+  local f="$1" out rc
+  set +e
+  out="$(grep -o 'REDACTED-PHI' "$f" 2>/dev/null)"
+  rc=$?
+  set -e
+  [ "$rc" -le 1 ] || return 1
+  # A no-match grep prints nothing; `printf '' | wc -l` is 0, but a non-empty
+  # match list needs its trailing newline counted, so wc -l is correct for
+  # both. Guard the empty case explicitly rather than relying on that.
+  if [ -z "$out" ]; then printf '0\n'; else printf '%s\n' "$out" | grep -c ''; fi
+}
 
 # Fail LOCALLY on a payload missing the mandatory envelope, instead of letting
 # the API answer 400. Under the cepa:brain mid-run degrade rule a single non-2xx
@@ -341,6 +381,74 @@ case "$cmd" in
     # "drop-all" registry above), NOT grep's exit 1 which the caller can't read.
     tr -d '\r' < "$_pf" | grep -E $'^[A-Za-z0-9._-]+\t(active|retracted)$' || true
     ;;
+  scrub-seal)
+    # Record the payload's redaction count to a SIDECAR so a later shell can
+    # check it. This is half one of the re-Write gate (residual 2i); the other
+    # half is `scrub-verify`.
+    #
+    # WHY A FILE AND NOT A VARIABLE. The thing being guarded is an agent's
+    # Write between two fenced blocks: the scrub runs in block N, the re-Write
+    # happens in no shell at all, and `writeback` runs in block N+1 — a fresh
+    # process where every variable from block N is unset. A count held in
+    # `$PHI_BEFORE` is therefore empty at the only moment it matters, and an
+    # empty count compares equal to nothing, so the gate passes vacuously. That
+    # is residual 2g's rule and this is its first enforcement: state crosses a
+    # block boundary through the filesystem or not at all. It shipped FOUR
+    # times on this exact surface as a variable that did not survive
+    # (${CLAUDE_PLUGIN_ROOT}, $CEPA_ROOT, P="$P.scrubbed", and this).
+    [ -f "${1:-}" ] || _die "scrub-seal needs <payloadfile>"
+    [ $# -eq 1 ] || _die "scrub-seal takes exactly 1 argument, got $#"
+    # The seal is derived, so a stale one from a previous atom reusing this
+    # path must not be trusted. Writing unconditionally overwrites it; the
+    # `[ ! -L ]` refusal matches `scrub`'s — the path is predictable.
+    [ ! -L "$1.phiseal" ] || _die "scrub-seal refuses to write through the symlink '$1.phiseal'"
+    # Drop any stale seal FIRST, before anything below can fail. A payload path
+    # reused across atoms (residual 2a's shape) otherwise leaves the PREVIOUS
+    # atom's count sitting there, and every failure path below — unreadable
+    # payload, uncreatable seal — then exits nonzero while `scrub-verify` finds
+    # a seal describing different content. Measured 2026-10-02: an unreadable
+    # payload died at rc=2 with a prior atom's seal still in place. Removing it
+    # up front makes the unevaluable case look unevaluable, which is the only
+    # state `scrub-verify` is allowed to fail closed on.
+    rm -f "$1.phiseal"
+    # Counting is _phi_count's job for both verbs — if they counted differently
+    # the comparison would be meaningless. An unreadable payload returns
+    # nonzero rather than "0 redactions": a zero seal can never fall, so
+    # laundering a read error into 0 produces a gate that always passes.
+    _n="$(_phi_count "$1")" || _die "scrub-seal cannot read '$1'"
+    : > "$1.phiseal" || _die "scrub-seal cannot create '$1.phiseal'"
+    chmod 600 "$1.phiseal"
+    printf '%s\n' "$_n" > "$1.phiseal"
+    printf 'sealed: %s redaction markers in %s\n' "$_n" "$1"
+    ;;
+  scrub-verify)
+    # Half two of the re-Write gate. Re-count the payload and compare against
+    # the sealed count. Exit 0 = the redactions survived; exit 1 = they FELL,
+    # meaning the agent re-emitted pre-scrub strings from its own context and
+    # the caller must SUPPRESS the writeback.
+    [ -f "${1:-}" ] || _die "scrub-verify needs <payloadfile>"
+    [ $# -eq 1 ] || _die "scrub-verify takes exactly 1 argument, got $#"
+    # A MISSING seal is not "nothing to check" — it is an unevaluable gate, and
+    # the whole point of this verb is that the unevaluable case must not look
+    # like a pass. Same fail-closed shape as `scrub-required`'s exit 2: the
+    # caller refuses to send rather than assuming the redactions are intact.
+    [ -f "$1.phiseal" ] || _die "scrub-verify cannot find the seal '$1.phiseal' — the pre-re-Write count was never recorded, so redaction survival is UNEVALUABLE. Refuse to send rather than treating it as intact."
+    [ -s "$1.phiseal" ] || _die "scrub-verify found an EMPTY seal '$1.phiseal' — count unevaluable; refuse to send"
+    _want="$(tr -d '[:space:]' < "$1.phiseal")"
+    # Validate the seal's CONTENT. An unvalidated read lets any garbage become
+    # the expected count, and a non-numeric `$_want` makes the `-lt` comparison
+    # below abort under `set -e` with no diagnostic — unevaluable again, but
+    # silently.
+    case "$_want" in
+      ''|*[!0-9]*) _die "scrub-verify found a non-numeric seal ('$_want') in '$1.phiseal' — count unevaluable; refuse to send" ;;
+    esac
+    _have="$(_phi_count "$1")" || _die "scrub-verify cannot read '$1'"
+    if [ "$_have" -lt "$_want" ]; then
+      printf 'brain-client: scrub-verify FAILED — %s has %s redaction markers but %s were sealed before the re-Write. Pre-scrub strings were reintroduced; SUPPRESS the writeback.\n' "$1" "$_have" "$_want" >&2
+      exit 1
+    fi
+    printf 'verified: %s redaction markers intact (sealed %s) in %s\n' "$_have" "$_want" "$1"
+    ;;
   idkey)
     # CONTENT-derived idempotency_key so re-runs of an UNCHANGED doc dedup
     # (agent_memories has no upsert — a repeated key is skipped) while an
@@ -363,6 +471,6 @@ case "$cmd" in
     printf '%s:%s:%s\n' "$1" "$2" "$_sha"
     ;;
   *)
-    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|scrub-required|idkey)"
+    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|scrub-required|scrub-seal|scrub-verify|idkey)"
     ;;
 esac
