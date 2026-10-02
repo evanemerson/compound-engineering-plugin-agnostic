@@ -166,28 +166,65 @@
    explicit gates are needed. Not done here to keep the PHI-leak fix
    reviewable; this is the immediate next PR.
 
-2i. **The re-Write step's protection is prose, not enforcement.** P1, filed.
-   After `idkey`, `compound.md` tells the agent to write the SHA and key into
-   the payload and re-Write it. An agent doing that from the payload it still
-   holds in context re-emits the PRE-scrub strings, undoing the redaction.
-   v1.26.9 added an instruction to read the file back and check
-   `grep -c REDACTED-PHI` does not fall — but nothing executes that check.
+2i. **The re-Write step's protection is prose, not enforcement.** P1.
+   **FIXED in v1.28.0** — `brain-client.sh scrub-seal` / `scrub-verify`, wired
+   into `compound.md` either side of the agent's re-Write.
 
-   This was briefly marked `applied`. It is not: "a guard expressed as prose
-   in a command contract is not enforcement" is this repo's own rule, and
-   this is the one step where the agent's own context is the contamination
-   source. Reclassified `deferred` on re-review.
+   The count crosses the fenced-block boundary in a FILE (`<payload>.phiseal`),
+   per 2g. It had to: measured under the real block split, `$CEPA_ROOT` is
+   unbound in the step-4 shell, and the naive `CLIENT="$CEPA_ROOT/scripts/…"`
+   expands to `/scripts/brain-client.sh` and exits **127** — the signature that
+   reads as a missing binary and put a false "brain unreachable" claim into 42
+   artist360 review files. The first cut of this fix shipped that line. It was
+   caught by running the extracted block, not by reading it, which is the
+   fifth instance of 2g's class on this surface and the reason 2g is now
+   enforced at the top of the step-4 block rather than assumed.
 
-   The executable form: capture the count before the re-Write, assert it
-   after, immediately before `writeback`, and suppress if it fell. Note the
-   flag and the count must cross a fenced-block boundary — so they go through
-   the filesystem, not variables, per 2g below. That coupling is why this is
-   filed rather than patched in: it is the first real test of 2g's rule.
+   Exit semantics mirror `scrub-required`: 0 intact / 1 FELL / 2 unevaluable.
+   A missing, empty, or non-numeric seal is 2 and suppresses — an unevaluable
+   gate must never read as a pass, or the check silently stops existing while
+   every call site still looks gated.
+
+   **Three defects in the fix itself, all found by running it:**
+
+   - **`grep -c` counts LINES, not occurrences.** `compound.md` emits
+     single-line JSON, so every marker shares one line and the count can only
+     be 0 or 1 — dropping one of two markers left it unchanged and the gate
+     passed. Measured: a two-marker line gives `grep -c` 1 and
+     `grep -o | grep -c ''` 2. Both verbs now count through one shared
+     `_phi_count`, so they cannot drift apart and make the comparison
+     meaningless.
+   - **`[ $? -gt 1 ]` in an `elif` reads a status the `if` test already
+     clobbered.** Measured: `$?` is 0 inside the elif regardless of grep's
+     real status. An unreadable payload could therefore seal as "0
+     redactions" — a count that can never fall, i.e. a gate that always
+     passes. The status is now captured immediately.
+   - **A failed seal left the PREVIOUS atom's seal in place** on a reused
+     payload path (2a's shape), so `scrub-verify` would compare against a
+     count describing different content. The stale seal is now removed before
+     anything that can fail.
+
+   **And one defect in the CONTROL for the first of those** — worth more than
+   the fix. `sv_oneline` originally hardcoded its seal as `2`. Under a
+   line-counting mutant, verify reads 1, `1 -lt 2` still fails, and the case
+   passed **for the wrong reason**: it never exercised the counting at all.
+   The seal is now written by `scrub-seal` itself, so both sides use the
+   counter under test; the mutant then seals 1, reads 1, reports "intact", and
+   the case fails as it should. **A fixture that hardcodes the expected side of
+   a comparison cannot test the thing computing it** — the sibling of this
+   file's own rule that a fixture score is necessary but never sufficient.
+
+   Controls: 30/30 (was 21/21). Nine new cases; each mutation-tested to
+   confirm it dies under the mutant it names. Behavior end-to-end was measured
+   by extracting both fenced blocks and running them under `bash -e` in
+   separate processes with a stubbed curl: honest re-Write → `verified: 3
+   intact` then the expected network degrade; contaminating re-Write → 3 → 0
+   caught, suppressed, payload removed; deleted seal → unevaluable, suppressed.
 
 2g. **A fenced-block instruction file must never carry state across a block
-   boundary in a shell variable.** P2, filed — and this is the most
-   generalizable finding of the whole investigation. This is now the THIRD
-   instance on the brain-writeback surface alone:
+   boundary in a shell variable.** P2, still filed as a CHECKER — and this is
+   the most generalizable finding of the whole investigation. This is now the
+   FIFTH instance on the brain-writeback surface alone:
 
    1. `${CLAUDE_PLUGIN_ROOT}` is not exported into the Bash tool's shell
       (PR #69).
@@ -195,14 +232,28 @@
       (documented in `compound-refresh.md`).
    3. `P="$P.scrubbed"` did not reach the writeback block (v1.26.8, fixed
       v1.26.9).
+   4. `compound.md`'s step-4 block used a bare `$CLIENT` assigned in step 3 —
+      latent, since nothing in that block ran before the writeback.
+   5. The first cut of 2i's own fix wrote `CLIENT="$CEPA_ROOT/scripts/…"` in
+      the step-4 block. Measured 2026-10-02: `set -u` → "CEPA_ROOT: unbound
+      variable"; without it → `/scripts/brain-client.sh`, rc=127.
 
    The rule: state crosses blocks only through the FILESYSTEM — the same
    path, or an explicit re-read — never through a variable. The reviewable
    form: every variable used in block N was either assigned in block N or is
-   a documented literal. Worth a `docs/solutions/` entry via
-   `/cepa:compound`, and worth a checker leg — this is mechanically
-   detectable by extracting fenced blocks and diffing assigned-vs-used
-   variable names per block.
+   a documented literal.
+
+   **v1.28.0 is 2g's first enforcement**, and the lesson is that the rule does
+   not survive being known. Instance 5 was written BY the session implementing
+   2i, in the block it was adding, with 2g's text in front of it — and it
+   reproduced the exact 127 signature the rule exists to prevent. Reading the
+   diff did not catch it; running the extracted block did, in one command.
+   **So the checker is the deliverable, not the rule.** Mechanically
+   detectable: extract fenced blocks, diff assigned-vs-used variable names per
+   block. The extraction is ~15 lines of python (it was written ad hoc for
+   this verification — see the PR) and the hard part, deciding which names are
+   documented literals, is a small allowlist. Worth a `docs/solutions/` entry
+   via `/cepa:compound` as well, but the entry is not the fix.
 
 2h. **The two sibling commands now scrub under different conditions.** P2.
    **RESOLVED in v1.27.0** — operator decision taken 2026-09-28: unify on

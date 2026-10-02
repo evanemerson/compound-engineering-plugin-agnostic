@@ -136,6 +136,38 @@ printf '# A solution doc\n\nProse a human wrote.\n' > "$FIX/doc.md"
 # `jq -n ... > f` leaves an EMPTY file when jq is absent (it is absent on the
 # primary dev machine, per CLAUDE.md), and `[ -f ]` happily accepts it.
 : > "$FIX/empty.json"
+# --- re-Write gate fixtures (residual 2i) -----------------------------------
+# A payload with a KNOWN marker count, for the scrub-seal success case.
+printf '{"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"ws","memory_payload":{"lessons":["[REDACTED-PHI-SSN] and [REDACTED-PHI-ID]"]}}' > "$FIX/sealcount.json"
+# A non-numeric seal. The payload must EXIST and be readable, or the case would
+# pass on the file-missing guard instead of the seal-validation guard it names.
+printf '{"a":"[REDACTED-PHI-SSN]"}' > "$FIX/sealed.json"
+printf 'garbage\n' > "$FIX/sealed.json.phiseal"
+# An EMPTY seal — distinct from a missing one, since `[ -f ]` accepts it.
+printf '{"a":"[REDACTED-PHI-SSN]"}' > "$FIX/emptyseal.json"
+: > "$FIX/emptyseal.json.phiseal"
+# The honest path: payload and seal agree. Count the markers rather than
+# hardcoding, so editing the payload above cannot make this green for the wrong
+# reason.
+printf '{"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}' > "$FIX/intact.json"
+printf '%s\n' "$(grep -o 'REDACTED-PHI' "$FIX/intact.json" | grep -c '')" > "$FIX/intact.json.phiseal"
+# THE SINGLE-LINE DEFECT: two markers on ONE line, one then dropped.
+# compound.md emits single-line JSON, so this is the real shape.
+#
+# The seal is written by `scrub-seal` ITSELF, not hardcoded. That distinction
+# is load-bearing and was found by mutation-testing this very case: with a
+# hardcoded `2`, a line-counting mutant reads 1 at verify time, `1 -lt 2` still
+# fails, and the case passes FOR THE WRONG REASON — it never exercises the
+# counting at all. Sealing with the code under test makes both sides use the
+# same counter, so a line-counting mutant seals 1, reads 1, and reports
+# "intact" — which is exactly the blindness being pinned, and this case then
+# fails as it should. A fixture that hardcodes the expected side of a
+# comparison cannot test the thing computing it.
+printf '{"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}' > "$FIX/oneline.json"
+bash "$CLIENT" scrub-seal "$FIX/oneline.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal oneline.json\n' >&2; exit 2; }
+printf '{"a":"123-45-6789","b":"[REDACTED-PHI-ID]"}' > "$FIX/oneline.json"
+
 # Present-but-empty workspace_id: the git-worktree failure mode. `.env.local`
 # is gitignored, so it exists only in the main checkout; a heredoc in a linked
 # worktree interpolates "". A presence check passes and only the API rejects it.
@@ -250,6 +282,61 @@ reg sr_undecidable 'scrub-required exits 2 (not 1) on an unresolvable config' 2 
 reg sr_nongit 'scrub-required exits 2 with a message outside a git work tree' 2 'not in a git work tree' \
   'kills: letting git rev-parse status carry into the assignment (silent 128)' \
   scrub-required
+
+# --- the re-Write gate (residual 2i) ----------------------------------------
+# These pin the half of the gate that is mechanically checkable here: the
+# argument and seal-validation guards. The BEHAVIOR — that a contaminating
+# re-Write is actually caught between two fenced blocks — is not expressible in
+# this suite, which is single-call and offline; it is measured by extracting
+# compound.md's blocks and running them (see the PR body). Both halves are
+# needed: this file would pass with a verb that validated perfectly and counted
+# nothing.
+reg arity_ss 'scrub-seal rejects a stray 2nd argument' 2 'scrub-seal takes exactly 1 argument' \
+  'kills: removal of scrub-seal arity' \
+  scrub-seal "$FIX/payload.json" EXTRA
+reg arity_sv 'scrub-verify rejects a stray 2nd argument' 2 'scrub-verify takes exactly 1 argument' \
+  'kills: removal of scrub-verify arity' \
+  scrub-verify "$FIX/payload.json" EXTRA
+# A MISSING seal must be exit 2 ("unevaluable"), never 0. This is the same
+# shape as sr_undecidable and the same hazard: a gate that cannot be evaluated
+# must not report success, or the re-Write check silently stops existing while
+# every call site still looks gated.
+reg sv_noseal 'scrub-verify exits 2 (not 0) when the seal is absent' 2 'UNEVALUABLE' \
+  'kills: a mutant that treats a missing .phiseal as "nothing to check" and passes — the gate would stop existing while every call site still appears gated' \
+  scrub-verify "$FIX/payload.json"
+# A seal whose content is not a number must be 2, not an abort. `[ x -lt y ]`
+# on non-numeric input dies under set -e with no diagnostic — unevaluable, but
+# silently, which is the failure mode this whole suite exists to catch.
+reg sv_badseal 'scrub-verify exits 2 on a non-numeric seal' 2 'non-numeric seal' \
+  'kills: removal of the seal content validation — a garbage seal aborts the comparison with no message instead of refusing to send' \
+  scrub-verify "$FIX/sealed.json"
+# An EMPTY seal is distinct from a missing one (`[ -f ]` accepts it) and has
+# its own guard, so it gets its own case.
+reg sv_emptyseal 'scrub-verify exits 2 on an empty seal' 2 'EMPTY seal' \
+  'kills: removal of the `[ -s ]` seal check — an empty seal reads as count "" and the comparison aborts silently' \
+  scrub-verify "$FIX/emptyseal.json"
+reg ss_nofile 'scrub-seal rejects a nonexistent payload' 2 'scrub-seal needs' \
+  'kills: removal of the scrub-seal existence check — sealing a missing file would record 0, a count that can never fall' \
+  scrub-seal "$FIX/does-not-exist.json"
+# The false-positive floor for this verb pair: a SUCCESS case. A guard that
+# rejects everything passes every rejection case above while breaking the real
+# call site in compound.md. `scrub-seal` on a valid payload must exit 0 and
+# report a count.
+reg ss_ok 'scrub-seal succeeds on a readable payload' 0 'sealed: [0-9]+ redaction markers' \
+  'kills: over-strict scrub-seal validation that rejects a legitimate payload — compound.md would suppress every writeback while each rejection case still passes' \
+  scrub-seal "$FIX/sealcount.json"
+# And verify must PASS on an untouched sealed payload — the honest-re-Write
+# path. Pinned with a pre-built seal matching the fixture's real marker count.
+reg sv_ok 'scrub-verify passes when the redactions are intact' 0 'redaction markers intact' \
+  'kills: an off-by-one or inverted comparison that suppresses every honest writeback' \
+  scrub-verify "$FIX/intact.json"
+# THE COUNTING DEFECT, pinned. Two markers on ONE line with one dropped: the
+# shipped-and-measured form, since compound.md emits single-line JSON. With
+# `grep -c` (lines) both counts are 1 and this passes as intact; only
+# occurrence counting sees 2 -> 1.
+reg sv_oneline 'scrub-verify catches a dropped marker on a shared line' 1 'has 1 redaction markers but 2 were sealed' \
+  'kills: counting matching LINES instead of occurrences — compound.md emits single-line JSON, so every marker shares one line and partial reintroduction is invisible' \
+  scrub-verify "$FIX/oneline.json"
 
 # --- guards must run BEFORE credentials -------------------------------------
 # THE ORDERING INVARIANT, and it is the subtle one. Every guard above sits

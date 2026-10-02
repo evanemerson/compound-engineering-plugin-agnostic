@@ -315,6 +315,27 @@ and authoritative either way.
    # Keyed on pre-scrub bytes, the key would describe content never sent and
    # the dedup it exists for would break.
    bash "$CLIENT" idkey "$REPO" "$DOC" "$P"    # -> idempotency_key (hashes $P)
+
+   # SEAL the redaction count before the agent's re-Write. This is the gate's
+   # first half; `scrub-verify` in the step-4 block is the second. The next
+   # thing that happens is an agent editing $P by hand while still holding the
+   # PRE-scrub strings in context — the one step where the agent's own context
+   # is the contamination source — and the writeback runs in a LATER fenced
+   # block, a different shell where $P and any count variable are unset. So the
+   # count goes to a FILE ($P.phiseal) and is re-read there. Do not "simplify"
+   # this into a variable: that is residual 2g's class, which has shipped four
+   # times on this exact surface.
+   #
+   # Seal UNCONDITIONALLY, not only under FORCE_SCRUB. On a no-scrub repo the
+   # seal is 0 and verify trivially passes; gating the seal on FORCE_SCRUB
+   # instead leaves NO seal on the scrubbed path if the flag is ever misread,
+   # and a missing seal is what scrub-verify must treat as unevaluable.
+   bash "$CLIENT" scrub-seal "$P" || {
+     echo "brain writeback SUPPRESSED: cannot seal the redaction count, so" >&2
+     echo "  re-Write contamination would be unverifiable. Record it in" >&2
+     echo "  suppressed_writebacks:." >&2
+     rm -f "$P" "$P.phiseal"; exit 1
+   }
    ```
 
    Write the SHA into `source_refs[0].uri` as `<repo>:<doc-path>@<sha>` and
@@ -324,10 +345,13 @@ and authoritative either way.
    > built earlier.** Those strings are the PRE-scrub ones and you still hold
    > them; re-emitting them silently undoes the redaction and posts the raw
    > content. **Read the file back from `$P` first** and edit only the two
-   > fields — everything else must be the bytes the scrub produced. Verify
-   > with `grep -c REDACTED-PHI "$P"` before and after: the count must not
-   > fall. This is the one step where an agent's own context can reintroduce
-   > what the gate just removed.
+   > fields — everything else must be the bytes the scrub produced.
+   >
+   > This is no longer on your honour: the block above sealed the redaction
+   > count to `$P.phiseal`, and the step-4 block re-counts and **suppresses the
+   > writeback if it fell**. Edit only the two fields and the gate passes. Do
+   > not touch or delete `$P.phiseal` — a missing seal is unevaluable, which
+   > suppresses the writeback just as a failed count does.
 
    ```json
    {"schema_version": "openbrain.agent_memory.writeback.v1",
@@ -352,6 +376,52 @@ and authoritative either way.
    re-read the ids spends a second call and discards the first response's ids.
 
    ```bash
+   # THE RE-WRITE GATE, second half. $P was sealed before the agent edited it;
+   # re-count now and refuse to send if the redactions fell. This must run
+   # IMMEDIATELY BEFORE writeback and after every edit to $P — anything between
+   # the check and the call is unchecked, which is the whole defect being
+   # closed. $P and $CLIENT are re-resolved here because this is a DIFFERENT
+   # SHELL from the block above: nothing crosses that boundary except the files
+   # themselves (residual 2g).
+   #
+   # rc=1 means contamination (markers fell); rc=2 means the gate could not be
+   # evaluated (seal missing, empty, or non-numeric). BOTH suppress. Do not
+   # collapse 2 into "nothing to check" — an unevaluable gate that passes is
+   # the unscrubbed-egress path this exists to close.
+   # RE-RESOLVE, do not inherit. `$CEPA_ROOT` and `$CLIENT` were assigned in
+   # the step-3 block and are UNSET here. Writing `CLIENT="$CEPA_ROOT/..."`
+   # expands to "/scripts/brain-client.sh" and exits 127 — the signature that
+   # reads as a missing binary and put a false "brain unreachable" claim into
+   # 42 review files. Measured again 2026-10-02 while writing this block: under
+   # `set -u` it dies "CEPA_ROOT: unbound variable"; without it, rc=127. This
+   # block previously used a bare `$CLIENT` for exactly this reason-shaped
+   # defect, so the resolver is repeated rather than assumed.
+   P="<the same payload file>"
+   for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+            "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+            "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+     [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+   done
+   [ -n "${CEPA_ROOT:-}" ] || {
+     echo "brain writeback ABORTED: cannot resolve the cepa plugin root." >&2
+     echo "  This is PATH RESOLUTION, not a service outage. Do not record the" >&2
+     echo "  brain as unavailable. The payload is left in place; set" >&2
+     echo "  CEPA_PLUGIN_ROOT and re-run this block." >&2
+     exit 1
+   }
+   CLIENT="$CEPA_ROOT/scripts/brain-client.sh"
+   [ -x "$CLIENT" ] || { echo "brain writeback ABORTED: $CLIENT is not executable" >&2; exit 1; }
+   bash "$CLIENT" scrub-verify "$P" || {
+     echo "brain writeback SUPPRESSED: the re-Write reintroduced pre-scrub" >&2
+     echo "  content, or redaction survival could not be evaluated. NOT" >&2
+     echo "  sending. Record it in suppressed_writebacks: and regenerate the" >&2
+     echo "  payload from the scrubbed file rather than from context." >&2
+     rm -f "$P" "$P.phiseal"          # contaminated bytes must not linger
+     exit 1
+   }
+   rm -f "$P.phiseal"                 # consumed; a stale seal must not outlive it
+
    # A non-2xx writes an ERROR BODY to $P.resp and exits nonzero. Without this
    # branch the next line's parse dies on a missing "memories" key, $P.ids
    # ends up empty, and the promote loop runs zero times and exits 0 — a
