@@ -214,12 +214,53 @@
    a comparison cannot test the thing computing it** — the sibling of this
    file's own rule that a fixture score is necessary but never sufficient.
 
-   Controls: 30/30 (was 21/21). Nine new cases; each mutation-tested to
-   confirm it dies under the mutant it names. Behavior end-to-end was measured
-   by extracting both fenced blocks and running them under `bash -e` in
-   separate processes with a stubbed curl: honest re-Write → `verified: 3
-   intact` then the expected network degrade; contaminating re-Write → 3 → 0
-   caught, suppressed, payload removed; deleted seal → unevaluable, suppressed.
+   **FOUR MORE P1s, found by the PR #80 review running the code — and the
+   first cut of this fix was green on all 30 controls while every one of them
+   was live.** That is this file's own "a fixture score is necessary, never
+   sufficient" rule landing on the fix written to honor it.
+
+   - **A marker count detects DELETION only.** The actual threat is an agent
+     re-emitting pre-scrub strings it still holds, which it can do by
+     ADDING them while every sealed marker stays put. Measured: seal 2,
+     append `SSN 987-65-4321`, count still 2, verdict `verified: intact`,
+     raw PHI sent. Found independently by two review agents. Fixed with
+     `_phi_fingerprint` — a canonical-JSON SHA-256 over the payload minus the
+     two authorized fields (`idempotency_key`, `source_refs`), so any byte
+     changed outside them moves the hash. Canonical, not raw bytes: an agent
+     rewrites the whole file, so key order and whitespace legitimately change
+     and a byte hash would suppress every honest run.
+   - **Re-running the setup block LAUNDERED contamination.** `scrub-seal`
+     re-derived the seal from whatever the payload then held, so seal 2 →
+     contaminate → re-seal 0 → `0 >= 0` → pass. Re-running a setup block is
+     an ordinary recovery move. Fixed: `scrub-seal` refuses when a seal
+     already describes different content; an identical-bytes re-seal is still
+     a permitted no-op.
+   - **A seal of 2^63 fell THROUGH to success.** All digits passes the
+     non-numeric check, but bash `test` cannot parse ≥ 2^63, and the failing
+     `[` was an `if` CONDITION — so `set -e` does not fire and execution
+     reached the success `printf`. Measured: exit 0 on a fully contaminated
+     payload; 2^63−1 compares correctly, so the boundary is exact. Fixed with
+     a magnitude guard AND by inverting both comparisons so the pass is
+     explicit (`[ ok ] || _die`), never "no failure branch fired".
+   - **`$P` is agent-chosen, so concurrent runs can collide** on both the
+     payload and the seal — failing in both directions (a clean memory
+     suppressed and deleted; or PHI passing against a sibling's lower seal).
+     NOT fixed here: it is a `compound.md` contract change (derive `$P` from
+     `mktemp` and carry the path through the filesystem, per 2g). Filed as
+     **2j** below.
+
+   Controls: 36/36 (was 21/21). Fifteen new cases. Each of the four
+   P1-guarding cases was mutation-tested: removing the fingerprint comparison
+   reddens only `sv_added`, the re-seal guard only `ss_reseal`, the magnitude
+   guard only `sv_hugeseal`, the legacy-seal refusal only `sv_legacyseal`.
+
+   Behavior end-to-end was measured by extracting both fenced blocks with
+   `scripts/extract-fenced-blocks.py` and running them under `bash -e` in
+   separate processes with a stubbed curl: honest re-Write (reordered keys,
+   reindented) → `verified: 3 intact` then the expected network degrade; PHI
+   added with the count intact → suppressed, payload removed; markers removed
+   → suppressed; re-seal after contamination → block 3 refuses, block 4
+   suppresses; deleted seal → unevaluable, suppressed.
 
 2g. **A fenced-block instruction file must never carry state across a block
    boundary in a shell variable.** P2, still filed as a CHECKER — and this is
@@ -248,12 +289,63 @@
    2i, in the block it was adding, with 2g's text in front of it — and it
    reproduced the exact 127 signature the rule exists to prevent. Reading the
    diff did not catch it; running the extracted block did, in one command.
-   **So the checker is the deliverable, not the rule.** Mechanically
-   detectable: extract fenced blocks, diff assigned-vs-used variable names per
-   block. The extraction is ~15 lines of python (it was written ad hoc for
-   this verification — see the PR) and the hard part, deciding which names are
-   documented literals, is a small allowlist. Worth a `docs/solutions/` entry
-   via `/cepa:compound` as well, but the entry is not the fix.
+   **So the checker is the deliverable, not the rule.**
+
+   **`scripts/extract-fenced-blocks.py` (v1.28.0) is the extraction half**, and
+   it is committed rather than described — the PR #80 review caught this entry
+   claiming "see the PR" for a script that existed only in scrollback, which is
+   this shard's third false-durable-claim after 2b's and 2i's. `--emit` writes
+   each block to a file to be run under `bash -e` in separate processes;
+   `--report` lists, per block, names used but assigned in an EARLIER block.
+   Verified against the reconstructed instance-5 shape: the defect reports
+   `>> 2g DEFECT CANDIDATES: CEPA_ROOT` and the fix reports clean.
+
+   Two things it deliberately does NOT do, so the next session does not
+   over-trust it. It emits **candidates, not verdicts** — it cannot know which
+   names the harness exports (`CLAUDE_PLUGIN_ROOT` is NOT exported into the Bash
+   tool's shell; that is instance 1) nor which are literals the prose tells the
+   agent to substitute (`$P`). That judgment is the small allowlist this item
+   describes, and it is still owed. And it cannot see names set by a sourced
+   script, so it reports sourcing separately instead of claiming the name is
+   assigned — `resolve-plugin-root.sh` sets `$CEPA_ROOT` that way.
+
+   Its own first cut was wrong in the same shape as everything else here: the
+   assignment regex lacked `re.M`, so `^` anchored to the start of the whole
+   block and every assignment except a column-0 one on line 1 was invisible.
+   The deliberately-broken and the fixed shapes of `compound.md` produced
+   IDENTICAL reports. **A checker for 2g that cannot see a re-assignment
+   reports the fix and the defect the same way** — worse than no checker.
+   Caught by running it on both shapes, not by reading the regex.
+
+   Still open: wiring it into CI with the allowlist, and a `docs/solutions/`
+   entry via `/cepa:compound`. The entry is not the fix.
+
+2j. **`$P` is agent-chosen, so two concurrent `/cepa:compound` runs can
+   collide on the payload AND the seal.** P2, filed — found by PR #80's
+   adversarial review, which measured both directions.
+
+   `compound.md` says `P="<payload-file you just wrote>"` and, in the later
+   block, `P="<the same payload file>"`. No `mktemp`, no run id. Two agents
+   reading the same instructions plausibly choose the same conventional name.
+
+   - **False positive, with data loss.** Run A seals 1; run B overwrites the
+     seal with 3; A verifies its own 1-marker payload against 3 → suppressed,
+     and the suppression path `rm -f`s the payload. A correctly-scrubbed
+     memory is discarded and the run reports "re-Write reintroduced pre-scrub
+     content", which is false.
+   - **False negative.** Reverse interleaving: B verifies against A's lower
+     seal while holding raw PHI → passes.
+
+   The `rm -f` in each suppression path also deletes the other run's payload
+   mid-flight.
+
+   Fix: have the setup block derive the path (`P="$(mktemp -t
+   cepa-brain-payload.XXXXXX)"`) and have the later block re-read it from one
+   recorded location rather than from the agent's memory of it. Note the path
+   itself then has to cross the block boundary — so it goes through the
+   filesystem, per 2g. Not done in #80: it is a contract change to
+   `compound.md`'s payload convention, affecting every step that names `$P`,
+   and worth its own reviewable diff.
 
 2h. **The two sibling commands now scrub under different conditions.** P2.
    **RESOLVED in v1.27.0** — operator decision taken 2026-09-28: unify on
