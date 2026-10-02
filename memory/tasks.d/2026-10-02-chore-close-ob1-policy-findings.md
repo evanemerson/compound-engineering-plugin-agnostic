@@ -11,9 +11,10 @@ this branch out mid-wrap-up. Nothing here claims or touches that branch's work.
 - **Subject:** file-todos grep spellings and the CI enforcer
 - **Local-only.** `docs/` is gitignored in this repo, so the handoff is not
   tracked and dies with this disk. This pointer is the only tracked trace of it.
-- **Session change verdict:** GO WITH CARE — another session was live in this
-  checkout during the wrap-up (a commit landed 14 seconds in). Clears when the
-  checkout is idle.
+- **Session change verdict:** GO. It was GO WITH CARE mid-run — another session
+  was live in this checkout (a commit landed 14 seconds in) — and resolved when
+  that session merged its work as PR #79 (`86332d8`), deleted its branch, and
+  checked out `main`. Checkout now idle and clean.
 - **Nothing owed.** All four PRs from that session (#75, #76, #77, #78) are
   merged and verified; its residual shard
   (`2026-09-29-fix-file-todos-status-severity-grep.md`) is closed RESOLVED.
