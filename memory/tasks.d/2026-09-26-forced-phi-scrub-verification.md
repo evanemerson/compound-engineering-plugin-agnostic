@@ -458,3 +458,44 @@
    "agent-driven" framing, so it is not a defect, but it is a second place
    where the guarantee depends on an agent following prose. Worth folding
    into whatever fix item 1 gets.
+
+2k. **The `cepa:brain` skill's `## Compliance` section does not document the
+   seal/verify contract.** P2, filed — from PR #80's review
+   (`todos/review-2026-10-02-143000.md`, finding 7).
+
+   That skill is the documented home of PHI-scrub policy ("One executable
+   home: `brain-client.sh scrub-required`"). v1.28.0 adds a SECOND executable
+   gate whose contract lives only in `brain-client.sh`'s header and
+   `compound.md`'s prose — which makes `compound.md` a second normative home
+   for a policy the skill owns. This is 2h's shape one level up: only one
+   caller exists today, so nothing has diverged yet, but the skill is where a
+   second author looks, and `compound-refresh.md` growing a hand-edit step is
+   a plausible refactor.
+
+   Fix: a `## Re-Write gate` subsection stating that a command which asks the
+   agent to hand-edit a scrubbed payload MUST seal before the edit and verify
+   after, exit codes 0/1/2 mirroring `scrub-required`. Then `compound.md`'s
+   comments cite it instead of re-deriving the rationale. Also worth one
+   sentence in `compound-refresh.md` saying why it is exempt (its envelope is
+   posted in the same block it is built in, so there is no window) — otherwise
+   the next author has no signpost.
+
+2l. **Nothing binds an agent to STOP when a fenced block exits nonzero.** P2,
+   filed — from PR #80's review (finding 8).
+
+   Every gate in `compound.md` is enforced by `exit 1`/`exit 2` from a Bash
+   tool call. That is correct inside a block, but the file is prose consumed by
+   an agent: nothing in it, in `cepa:autonomy`, or in `cepa:brain` says "a
+   fenced block that exits nonzero is a hard stop for this step — do not
+   proceed to the next block, do not retry silently, do not report success."
+   The whole gate rests on the agent voluntarily halting on a nonzero tool
+   result.
+
+   Pre-existing — the `scrub` step already depended on it before v1.28.0 — but
+   that release doubles the number of gates resting on it, which is why it is
+   filed now rather than left implicit.
+
+   Fix: one explicit sentence, in **`cepa:autonomy`'s execution contract**, not
+   in `compound.md`. It governs every gate in every command file, and this
+   repo has already paid three times for restating a cross-cutting rule at
+   each site (see CLAUDE.md § "Every dispatch declares its model").
