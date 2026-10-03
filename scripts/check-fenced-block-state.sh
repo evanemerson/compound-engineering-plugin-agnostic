@@ -228,7 +228,7 @@ for f in "$CMD_DIR"/*.md; do
   }
   # --lang '' selects unlabeled fences. A failure here is a harness error, not
   # an absence: report it rather than letting an empty emit read as "clean".
-  if python3 "$EXTRACT" "$f" --lang '' --emit "$cdir" >/dev/null 2>&1; then
+  if python3 "$EXTRACT" --lang '' --emit "$cdir" -- "$f" >/dev/null 2>&1; then
     for bf in "$cdir"/b*.sh; do
       [ -f "$bf" ] || continue
       if grep -qE "$SHELLISH" "$bf" 2>/dev/null; then
@@ -246,7 +246,7 @@ total_blocks=0
 cand_blocks=0
 
 for f in "$CMD_DIR"/*.md; do
-  report="$(python3 "$EXTRACT" "$f" --report 2>&1)" || {
+  report="$(python3 "$EXTRACT" --report -- "$f" 2>&1)" || {
     # A tool error is not a finding — this repo has a recorded incident for
     # reporting one as the other. Say which it is.
     say_miss "$EXTRACT failed on $f (harness error, not a 2g finding):"
@@ -311,7 +311,7 @@ for f in "$CMD_DIR"/*.md; do
     continue
   }
   emit_err="$fdir/.emit.err"
-  if python3 "$EXTRACT" "$f" --emit "$fdir" >/dev/null 2>"$emit_err"; then
+  if python3 "$EXTRACT" --emit "$fdir" -- "$f" >/dev/null 2>"$emit_err"; then
     for bf in "$fdir"/b*.sh; do
       [ -f "$bf" ] || continue
       bn="$(basename "$bf" .sh)"; bn="${bn#b}"
@@ -461,12 +461,37 @@ done
 # silent-pass shape this whole script exists to gate.
 raw_blocks=0
 for f in "$CMD_DIR"/*.md; do
-  r="$(python3 "$EXTRACT" "$f" --report 2>/dev/null)" || continue
+  r="$(python3 "$EXTRACT" --report -- "$f" 2>/dev/null)" || continue
   n="$(printf '%s\n' "$r" | grep -cE '^block [0-9]+:' || true)"
   raw_blocks=$((raw_blocks + n))
 done
 # And a third probe that does not involve the extractor at all.
-fence_blocks="$(grep -chE '^[ \t]*```bash[ \t]*$' "$CMD_DIR"/*.md 2>/dev/null | paste -sd+ | bc)"
+#
+# PURE BASH ARITHMETIC, NO `bc`. The first cut piped through `paste -sd+ | bc`,
+# and `bc` is an external dependency this repo explicitly must not assume —
+# CLAUDE.md records the same gap for `jq` ("absent on the primary dev
+# machine"). Measured 2026-10-03 with a PATH identical except for `bc`:
+#
+#   line 469: bc: command not found
+#   line 474: [: : integer expression expected
+#   cross-check: 28 via direct grep of the reports,  via fence count
+#   result: 0 MISS, 1 WARN          <- rc=0
+#
+# The failed substitution leaves `fence_blocks` EMPTY rather than unset, so
+# `set -u` cannot see it; the resulting `[` error is swallowed because it is an
+# `if` CONDITION (the same `set -e` blind spot residual 2i records for the 2^63
+# seal); and the cross-check silently stops existing while the `cross-check:`
+# line prints a blank where its count should be. An unevaluable leg reading as
+# a pass, inside the leg added to stop a probe from silently reading nothing.
+#
+# Non-numeric input is skipped rather than coerced, so a grep failure degrades
+# to 0 — which the `-ne` comparison below then reports as a MISS instead of
+# crashing on it.
+fence_blocks=0
+while IFS= read -r n; do
+  case "$n" in ''|*[!0-9]*) continue ;; esac
+  fence_blocks=$((fence_blocks + n))
+done < <(grep -chE '^[ \t]*```bash[ \t]*$' "$CMD_DIR"/*.md 2>/dev/null)
 
 if [ "$total_blocks" -ne "$raw_blocks" ]; then
   say_miss "parse disagreement: the report loop counted $total_blocks block(s) but a direct grep of the same reports found $raw_blocks. The extractor's output format has drifted from what this script parses, so legs 1-3 are reading NOTHING and their silence is meaningless."

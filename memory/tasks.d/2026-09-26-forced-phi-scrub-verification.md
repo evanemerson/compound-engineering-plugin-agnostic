@@ -459,18 +459,33 @@
      nothing acted on it. Leg 4 now cross-checks the parsed count against two
      independent probes (a direct grep of the reports, and a fence count that
      does not involve the extractor). All three must agree.
+   - **And leg 4 itself then shipped the same defect, one layer down.** Its
+     extractor-independent probe summed via `paste -sd+ | bc`, and `bc` is a
+     dependency this repo explicitly must not assume — CLAUDE.md records the
+     identical gap for `jq`. Measured with a PATH identical except for `bc`:
+     `bc: command not found`, then `[: : integer expression expected`, then
+     **`0 MISS`, rc=0** with the `cross-check:` line printing a blank where its
+     count belongs. The failed substitution leaves the value EMPTY rather than
+     unset, so `set -u` cannot see it, and the `[` error is swallowed because
+     it is an `if` CONDITION — residual 2i's 2^63 blind spot exactly. Now pure
+     bash arithmetic that skips non-numeric input, so a grep failure degrades
+     to 0 and the comparison REPORTS it instead of crashing on it. Pinned by
+     `mut_no_bc`, which builds a PATH missing only `bc` and treats its own
+     inability to do so as a failure rather than a pass. This is the
+     `a-detector-is-not-exempt-from-the-class-it-detects` doc landing on the
+     leg added to prevent that class.
 
-   **Mutation-swept: 20 mutants, 17 killed outright; the 3 survivors are
+   **Mutation-swept: 21 mutants, 18 killed outright; the 3 survivors are
    deliberate redundancy, verified individually** — leg 4's two cross-checks
    each catch the drift alone (removing BOTH kills `mut_parse_drift`), and the
    leg-2b scope mutant is killed by `mut_env_scope_exact` rather than by rc.
-   Controls 30/30.
+   Controls 31/31.
 
    Verification commands, per this repo's state-the-probe rule:
 
    ```
    bash scripts/check-fenced-block-state.sh           # 0 MISS, 1 WARN
-   bash scripts/check-fenced-block-state-controls.sh  # 30/30
+   bash scripts/check-fenced-block-state-controls.sh  # 0 failed
    ```
 
    The 1 WARN is `handoff.md`'s unlabeled paste-template block, described

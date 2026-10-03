@@ -966,6 +966,61 @@ p.write_text(s.replace(old, 'print(f"chunk {i}: {len(b[\'lines\'])} lines")', 1)
 PY
 reg mut_parse_drift 1 "leg 4: the gate's label-matching parse silently reading NOTHING. Without the cross-check, a renamed block-header label gives scope:0 / 0 MISS / rc=0 — every leg's silence meaningless, reported as a clean run and cited as evidence." "$d"
 
+# mut_no_bc — leg 4's extractor-independent probe must not need an external
+# calculator. The first cut piped through `paste -sd+ | bc`, and `bc` is a
+# dependency this repo explicitly must not assume (CLAUDE.md records the same
+# gap for `jq`: "absent on the primary dev machine"). Measured 2026-10-03 with
+# a PATH identical except for `bc`:
+#
+#   line 469: bc: command not found
+#   line 474: [: : integer expression expected
+#   cross-check: 28 via direct grep of the reports,  via fence count
+#   result: 0 MISS, 1 WARN        <- rc=0
+#
+# The failed substitution left the count EMPTY rather than unset, so `set -u`
+# could not see it, and the resulting `[` error was swallowed as an `if`
+# CONDITION — residual 2i's 2^63 blind spot exactly. An unevaluable leg reading
+# as a pass, inside the leg added to stop a probe from silently reading
+# nothing. Found by PR #82's security review.
+nobc="$WORK/nobc-path"
+mkdir -p "$nobc"
+# Link every tool on the real PATH EXCEPT bc, so bc-absence is the only delta.
+while IFS= read -r dir; do
+  [ -d "$dir" ] || continue
+  for tool in "$dir"/*; do
+    tname="${tool##*/}"
+    [ "$tname" = bc ] && continue
+    [ -e "$nobc/$tname" ] || ln -sf "$tool" "$nobc/$tname" 2>/dev/null
+  done
+done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+
+if [ -e "$nobc/bc" ]; then
+  # Cannot build the fixture, so the case is UNEVALUABLE — which must never
+  # read as a pass. That is this very control's own subject matter.
+  fail=$((fail + 1))
+  printf 'FAIL %-18s could not build a bc-free PATH; case UNEVALUABLE\n' mut_no_bc
+elif ! env PATH="$nobc" bash -c 'command -v python3 >/dev/null'; then
+  fail=$((fail + 1))
+  printf 'FAIL %-18s bc-free PATH lacks python3; fixture is wrong, not the gate\n' mut_no_bc
+else
+  out="$(env PATH="$nobc" bash "$CHECKER" 2>&1)"; rc=$?
+  # Two independent assertions: no shell-level arithmetic error leaked, and the
+  # cross-check line carries a real number rather than a blank.
+  if printf '%s\n' "$out" | grep -qE 'bc: command not found|integer expression expected'; then
+    fail=$((fail + 1))
+    printf 'FAIL %-18s leg 4 still needs an external calculator\n' mut_no_bc
+    printf '     kills: `paste|bc` in leg 4. Without bc the count goes EMPTY (set -u cannot see it), the `[` error is swallowed as an if-condition, and the cross-check silently stops existing at rc=0.\n'
+    printf '%s\n' "$out" | sed 's/^/       | /'
+  elif ! printf '%s\n' "$out" | grep -qE 'cross-check: [0-9]+ via direct grep of the reports, [0-9]+ via fence count'; then
+    fail=$((fail + 1))
+    printf 'FAIL %-18s cross-check line is missing a numeric count\n' mut_no_bc
+    printf '     kills: a leg-4 probe that prints a blank where its count belongs — the visible evidence of its own failure, with nothing acting on it.\n'
+    printf '%s\n' "$out" | sed 's/^/       | /'
+  else
+    pass=$((pass + 1)); printf 'ok   %-18s rc=%d with no bc on PATH\n' mut_no_bc "$rc"
+  fi
+fi
+
 echo
 echo "=== real tree ==="
 
