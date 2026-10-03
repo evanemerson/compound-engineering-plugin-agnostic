@@ -298,6 +298,13 @@ and authoritative either way.
    printf 'payload path: %s\npointer: %s\n' "$P" "$PTR"
    ```
 
+   **If that block exited non-zero, STOP.** Do not Write a payload, do not run
+   the next block, and do not report a writeback. Every gate in this phase is
+   enforced by a non-zero `exit` from a Bash call, and a non-zero block is a
+   hard stop for the step — never a line of output to read past. (This is the
+   general rule for every fenced block below too; residual 2l tracks stating it
+   once in `cepa:autonomy`'s execution contract rather than per command file.)
+
    Now **Write the payload JSON to the path that block printed** — the
    `mktemp` path, not a name of your own. Then run the block below.
 
