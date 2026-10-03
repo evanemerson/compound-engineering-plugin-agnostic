@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """Extract fenced ```bash blocks from a markdown command file.
 
-This is the extraction half of residual 2g's checker (see
-`memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md`). 2g's rule:
+This is the extraction half of residual 2g's checker. 2g's rule, its shipped
+instances, and the reviewable form are owned by
+`memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md` -- read it there.
+This docstring deliberately does NOT restate the rule: it previously carried a
+copy plus its own instance count, and the count went stale (it said "five"
+after the sixth instance was recorded in the shard) while the restated rule sat
+beside a pointer to the file that owns it. That is the two classes this repo
+has a rule for each of -- count drift, and cross-cutting policy restated at a
+second site -- in one paragraph.
 
-    A fenced-block instruction file must never carry state across a block
-    boundary in a shell variable. State crosses blocks only through the
-    FILESYSTEM -- the same path, or an explicit re-read.
-
-Five instances of that class have shipped on the brain-writeback surface
-alone, and EVERY ONE was found by running the extracted block rather than by
-reading the diff -- including instance 5, which was written by the session
-implementing 2g's first enforcement with 2g's text in front of it. So this
-exists to make "run the block" a one-command operation instead of an ad-hoc
-python snippet retyped per investigation. It was retyped three times during
-the 2026-10-02 verification before being committed, which is the whole reason
-it is a file now.
+What matters here and is NOT in the shard: EVERY instance was found by RUNNING
+the extracted block, never by reading the diff. This script exists to make
+"run the block" one command instead of an ad-hoc python snippet retyped per
+investigation -- it was retyped three times during the 2026-10-02 verification
+before being committed, which is why it is a file.
 
 Two modes:
 
@@ -199,16 +199,68 @@ SOURCE_RE = re.compile(
 )
 
 
+# A HEREDOC BODY IS DATA, NOT CODE, and an assignment-shaped line inside one
+# is the worst kind of false signal this parser can emit. Measured 2026-10-03:
+# a block writing an operator runbook --
+#
+#     cat > /tmp/runbook.md <<'EOF'
+#     To reproduce by hand:
+#     P=/tmp/payload.json
+#     EOF
+#     bash client writeback "$P"
+#
+# -- reported `assigned: P` from the heredoc TEXT, so `$P` stopped being a
+# candidate, leg 1 saw nothing, and the gate passed a block where `$P` is
+# genuinely unset. On compound.md's writeback path that is the v1.26.8 shape:
+# writeback falls back to the unscrubbed original, i.e. a PHI leak. `task.md`
+# block 9 already contains a heredoc, so this is latent rather than theoretical.
+#
+# Masking (blanking the body lines) can only make `assigned` SMALLER, which is
+# the direction this file argues for everywhere else: an under-report costs a
+# second look at a candidate, while a phantom assignment SUPPRESSES every real
+# candidate of that name. Deliberately conservative about what it treats as a
+# terminator -- an unterminated heredoc masks to end of block, since the shell
+# would also swallow the rest.
+HEREDOC_START_RE = re.compile(r"<<-?\s*([\"']?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
+
+def mask_heredocs(body):
+    """Blank out heredoc BODY lines, keeping line numbering intact."""
+    out, pending = [], None
+    for line in body.splitlines():
+        if pending is None:
+            out.append(line)
+            m = HEREDOC_START_RE.search(line)
+            if m:
+                pending = m.group(2)
+            continue
+        # `<<-` permits a tab-indented terminator; plain `<<` does not, but
+        # accepting leading whitespace either way only ENDS masking sooner,
+        # which is the conservative direction.
+        if line.strip() == pending:
+            out.append(line)
+            pending = None
+        else:
+            out.append("")
+    return "\n".join(out)
+
+
 def names(body):
+    code = mask_heredocs(body)
     assigned = (
-        set(ASSIGN_RE.findall(body))
-        | set(FOR_RE.findall(body))
-        | read_names(body)
+        set(ASSIGN_RE.findall(code))
+        | set(FOR_RE.findall(code))
+        | read_names(code)
     )
-    # `assigned` and `sources` read the RAW body; only `used` is comment-
-    # stripped. The asymmetry is deliberate and documented at COMMENT_LINE_RE:
-    # a missed use costs a false negative on one candidate, while a phantom
-    # ASSIGNMENT suppresses every candidate of that name in the block.
+    # THREE DIFFERENT VIEWS OF THE BLOCK, and every asymmetry points the same
+    # way: shrink `assigned`, never shrink `used`.
+    #   assigned -> heredoc-masked, comments NOT stripped (see COMMENT_LINE_RE:
+    #               ASSIGN_RE's anchor already excludes `#NAME=`).
+    #   used     -> raw body minus FULL-LINE comments. NOT heredoc-masked: a
+    #               `$NAME` inside a heredoc really is expanded by the shell
+    #               unless the delimiter is quoted, and masking it would HIDE a
+    #               real use — the wrong-all-clear direction.
+    #   sources  -> raw body, so a `.` line is never missed.
     used = {
         n for n in USE_RE.findall(COMMENT_LINE_RE.sub("", body))
         if not n.isdigit()

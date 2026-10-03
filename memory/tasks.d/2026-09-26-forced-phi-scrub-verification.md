@@ -341,9 +341,9 @@
 
    **What the gate is (2026-10-03).** `scripts/check-fenced-block-state.sh`
    runs the extractor's `--report` across every command file, applies a
-   per-name allowlist, and FAILS on what is left. Six legs; the two that
-   matter most were each found by MUTATION-TESTING THE CONTROLS, not by
-   reading code:
+   per-name allowlist, and FAILS on what is left. Legs 0, 1, 2, 2b, 2s, 2f, 3
+   and 4; the ones that matter most were each found by MUTATION-TESTING THE
+   CONTROLS or by ADVERSARIAL ATTACK, never by reading code:
 
    - **Leg 2s is the load-bearing one, and its absence was a silent pass.**
      Leg 1 rests on the extractor's cross-block signal, which only fires when
@@ -387,14 +387,26 @@
      a false positive: a phantom assignment SUPPRESSES every real candidate of
      that name. Same shape as the `re.M` defect this item already records.
 
-   **And two defects in the CONTROLS, both of which made a case pass for the
-   wrong reason** — the `sv_oneline` failure from 2i, reproduced in the suite
-   written to honour it:
+   **THREE defects in the CONTROLS, every one of which made a case pass for
+   the wrong reason** — the `sv_oneline` failure from 2i, reproduced three
+   times in the suite written to honour it. This is the single most
+   generalizable thing the PR produced:
 
    - `mut_instance5` had an empty allowlist, so it produced TWO MISSes (leg 2
      *and* leg 1). Disabling leg 1 left rc=1 and the case still passed:
-     **removing 2g's own detection killed ZERO of 13 cases.** Fixed by
-     allowlisting the name so only leg 1 can fail it.
+     **removing 2g's own detection killed ZERO of 13 cases.**
+   - **The fix for that was ALSO wrong, and the shard asserted it for one
+     revision.** Allowlisting the name and declaring "leg 1 is the ONLY leg
+     that can redden this case" was true when written and false when it
+     shipped: leg 2s was added later, block 1 sourced nothing, and leg 2s
+     became a second trigger. PR #82's adversarial review measured it —
+     removing leg 1 killed only `mut_instance3`, and `mut_instance5` was a
+     duplicate of `mut_sourced_gap`. **A later leg silently took over an
+     earlier leg's only headline control.** Leg 1 now has `mut_leg1_literal`,
+     a `literal`-class fixture leg 2s structurally cannot touch. Note what
+     does NOT work: making block 1 source an unrelated script. Leg 1 cannot
+     fire for a `sourced` name at all (never recorded as `assigned` — the
+     reason leg 2s exists), so that variant reports 0 MISS.
    - `mut_frag_abuse`'s block 0 did not source, so it carried its own leg-2s
      finding and stayed red with the cap removed. Fixing it exposed a real bug:
      `frag_blk` was a scalar holding only the LAST marked block, so the
@@ -402,24 +414,79 @@
      passing while a documented fragment was flagged. Now a set, with
      `mut_frag_order` pinning it.
 
-   **Mutation-swept: 15 mutants, 15 killed, 0 survivors** — 9 checker legs
-   (including the exit code) and 6 extractor invariants, each killing at least
-   one named case. Controls 20/20. Live tree 0 MISS / 0 WARN over 28 ```bash
-   blocks in 11 command files, of which 6 carry candidates.
+   **THE RULE THIS YIELDS, and it outlives this gate:** after adding any leg,
+   re-run the per-leg mutation sweep and confirm every leg still kills at least
+   one case **that no other leg also kills**. A green suite is not evidence
+   that each leg is covered, and rc alone cannot pin a leg's *scope* — the
+   leg-2b whole-file mutant stayed red by over-reporting (2 MISSes instead of
+   1), so `mut_env_scope_exact` asserts the exact finding set rather than rc.
+
+   **Five more defects found by RUNNING the gate against hostile input** (PR
+   #82's review), each a way to commit 2g and pass:
+
+   - **A `` ```sh ``, unlabeled, or `` ```Bash `` fence was invisible.** The
+     extractor matches `` ```bash `` exactly, so instance 5 placed in any of
+     them gave rc=0 — `` ```sh `` with a label-only WARN, the other two in
+     total silence. Leg 0 now detects by CONTENT. The live corpus has 62
+     unlabeled fences and `handoff.md` block 9 holds six shell-looking lines,
+     so this was a real blind spot. WARN not MISS: that block is a paste
+     template with no second block to inherit from, so failing on it would
+     make the fix "mangle a correct document".
+   - **A heredoc body line shaped like an assignment phantom-assigned.** A
+     block writing an operator runbook that documents `P=/tmp/payload.json`
+     reported `assigned: P`, which SUPPRESSED the real candidate — the
+     wrong-all-clear direction, and on `compound.md`'s writeback path it is the
+     v1.26.8 shape: writeback falls back to the unscrubbed original, a PHI
+     leak. `task.md` block 9 already contains a heredoc. Fixed by masking
+     heredoc bodies before the assignment scan only; the uses scan must NOT be
+     masked, because the shell really does expand `$NAME` there.
+   - **One guarded mention laundered every unguarded use.** Leg 2b grepped the
+     whole `.md` file, so unguarded `$X` in block 0 plus `${X:-}` in block 1
+     passed — and the laundering mention did not have to be code: a comment, or
+     markdown prose outside any fence, satisfied a claim about shell state.
+     Now scoped per block, over the emitted body, comments stripped.
+   - **The fragment marker could be granted by accident.** Two unanchored
+     greps meant the strings matched inside a heredoc writing an unrelated
+     note, or split across two `echo` arguments — each silently consuming the
+     file's one fragment slot and disabling leg 2s on a block with a real
+     violation. Reachable here specifically: command files routinely emit PR
+     bodies and handoff prompts containing paste instructions. Now one
+     full-line comment carrying both strings, which is what the prose always
+     described.
+   - **A drifted output label made the gate green while parsing NOTHING.**
+     Renaming `block N:` in the extractor gave `scope: 0 block(s)`, 0 MISS,
+     rc=0 — the `scope:` line printing the evidence of its own failure while
+     nothing acted on it. Leg 4 now cross-checks the parsed count against two
+     independent probes (a direct grep of the reports, and a fence count that
+     does not involve the extractor). All three must agree.
+
+   **Mutation-swept: 20 mutants, 17 killed outright; the 3 survivors are
+   deliberate redundancy, verified individually** — leg 4's two cross-checks
+   each catch the drift alone (removing BOTH kills `mut_parse_drift`), and the
+   leg-2b scope mutant is killed by `mut_env_scope_exact` rather than by rc.
+   Controls 30/30.
 
    Verification commands, per this repo's state-the-probe rule:
 
    ```
-   bash scripts/check-fenced-block-state.sh           # 0 MISS, 0 WARN
-   bash scripts/check-fenced-block-state-controls.sh  # 20/20
+   bash scripts/check-fenced-block-state.sh           # 0 MISS, 1 WARN
+   bash scripts/check-fenced-block-state-controls.sh  # 30/30
    ```
 
-   Stated limits, so none reads as a pass: it only inspects ```bash fences
-   (leg 0 WARNs on other shell-ish labels); it proves a `sourced` name's block
-   sources SOMETHING, not that the sourced file sets that name; and it proves a
-   name is re-resolved, NOT that the re-resolution is correct — instance 5 was
-   a re-assignment in the right block expanding to the wrong path. **Running
-   the block remains the only thing that catches that**, which is what `--emit`
+   The 1 WARN is `handoff.md`'s unlabeled paste-template block, described
+   above — expected, not a deferred failure. Measured over 28 ```bash blocks
+   in 11 command files, of which 6 carry candidates. The extractor changes
+   were corpus-diffed against `HEAD`: output IDENTICAL on all 11 files, so no
+   row was lost to heredoc masking (the repo's "a fixture score is necessary,
+   never sufficient" rule).
+
+   Stated limits, so none reads as a pass: shell in a non-`bash` fence is
+   WARNed, not inspected; it proves a `sourced` name's block sources
+   SOMETHING, not that the sourced file sets that name; the fragment marker is
+   still an unverifiable promise, merely a narrower one; and it proves a name
+   is re-resolved, NOT that the re-resolution is correct — instance 5 was a
+   re-assignment in the right block expanding to the wrong path. **Running the
+   block remains the only thing that catches that**, which is what `--emit`
    is for.
 
    Still open: a `docs/solutions/` entry via `/cepa:compound`. The entry is

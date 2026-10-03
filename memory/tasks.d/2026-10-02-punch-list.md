@@ -44,30 +44,34 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    as an open question, not a settled task.
    Needs a fresh session and a plan. Run via `/cepa:task`.
 
-5. **Work residual 2i, then 2j, then 2g, then 2c.**
+5. **Work residual 2i, then 2j, then 2g, then 2c.** (2i, 2j, 2g closed; 2c open)
    status: in_progress
-   severity: P1
+   severity: P2
    **2i CLOSED** — PR #80 (`afe7ce1`), merged 2026-10-03. The re-Write PHI gate
    is executable: `scrub-seal` before the hand-edit, `scrub-verify` before
    `writeback`. Verified live against the loaded copy.
    **2j CLOSED** — PR #81 (`17271ee`), merged 2026-10-03. The payload path is
    minted per run, so concurrent runs no longer collide. 2j was filed BY #80's
    review and did not exist when this list was written.
-   **Remaining: 2g, then 2c.** 2g now has SIX instances, two of them written by
-   sessions actively enforcing the rule — so review alone is measurably not
-   holding, and the checker leg is the real fix. `extract-fenced-blocks.py`
-   (committed in #80) already does the extraction half.
+   **2g CLOSED** — PR #82 (`feat/fenced-block-state-checker`), 2026-10-03.
+   `scripts/check-fenced-block-state.sh` + its controls, CI-gated in
+   `residual-integrity.yml`. The checker WAS the fix: 2g had six instances, two
+   written by sessions actively enforcing the rule, so review alone was
+   measurably not holding. `extract-fenced-blocks.py` (committed in #80) did
+   the extraction half; #82 added the gate, the allowlist, and four probe
+   fixes the gate's own first cut needed. The shard owns the detail.
+   **Remaining: 2c.**
    Also surfaced by #81's review and still open: **2k/2l** — document the
    seal/verify contract in the `cepa:brain` skill, and state the non-zero-block
    stop rule once in `cepa:autonomy` rather than per command file.
-   2i is the last unenforced P1 in the repo — a PHI-scrub guard that exists
-   only as prose. The shard
-   `memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md` **IS the plan.
-   Do not write another one.**
-   Order: 2i → 2g → 2c. Leave 2e, 2f, 2d filed — they are the honest limits of
+   The shard `memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md`
+   **IS the plan. Do not write another one.**
+   Order: 2c next. Leave 2e, 2f, 2d filed — they are the honest limits of
    a numeric-only scrub, not defects.
-   2i is coupled to 2g: the count must cross a fenced-block boundary, so it
-   goes through the filesystem. 2i is the first real test of 2g's rule.
+   Kept as the record of why the order was 2i → 2j → 2g: 2i was coupled to 2g,
+   because its marker count must cross a fenced-block boundary and therefore
+   goes through the filesystem. 2i was the first real test of 2g's rule — and
+   it failed it, which is instance 5.
 
 6. **Hand the dpc-pro discrepancy to that repo.**
    status: completed

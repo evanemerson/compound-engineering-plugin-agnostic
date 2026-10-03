@@ -155,6 +155,15 @@ miss=0
 warn=0
 hit_names=()
 
+# A trap, not a per-branch rm. The controls file records why in its own header:
+# check-brain-client-args.sh once had a ten-branch cleanup list where exactly
+# ONE branch cleaned up. A list has to stay complete as branches are added; a
+# trap is the mechanism. $fdir is per-file and reassigned each iteration, so the
+# trap covers only the current one — the explicit rm after each file's parse
+# loop handles the rest, and this catches the abort path.
+fdir=""
+trap '[ -n "$fdir" ] && rm -rf "$fdir"' EXIT
+
 say_miss() { echo "MISS: $*"; miss=$((miss + 1)); }
 say_warn() { echo "WARN: $*"; warn=$((warn + 1)); }
 
@@ -183,16 +192,51 @@ allow_field() {
 # Leg 0 — coverage. The report only reads ```bash fences, so a shell block
 # under another label is invisible to legs 1 and 2. Announce it.
 # ---------------------------------------------------------------------------
+# Detect by CONTENT, not by label, and the difference is measurable. A
+# label-only check WARNs on ```sh but is blind to an unlabeled fence and to
+# ```Bash (the extractor matches the label exactly, case-sensitively). Measured
+# 2026-10-03 against the live corpus: a reconstructed instance-5 violation
+# placed in a ```sh block gave `0 MISS, 1 WARN, rc=0`, and in an unlabeled or
+# ```Bash block gave `0 MISS, 0 WARN, rc=0` — the gate passing a real 2g
+# violation silently. The live corpus has 62 unlabeled fences, one of which
+# (handoff.md block 9) contains six shell-looking lines, so this is an actual
+# blind spot rather than a hypothetical one.
+#
+# WARN, not MISS, and the reason is specific: that handoff.md block is a PROMPT
+# TEMPLATE — text a human pastes, one self-contained snippet with no second
+# block to inherit from — so it cannot violate 2g, and failing on it would make
+# the fix "mangle a correct document". Relabeling shell that the agent really
+# does execute to ```bash is what brings it under legs 1-2s. A WARN that names
+# the block is enough to force that judgment once.
+SHELLISH='^[ \t]*(set -[eux]|bash |sh |git |gh |python3 |mktemp|export |[A-Za-z_][A-Za-z0-9_]*=\$)'
 for f in "$CMD_DIR"/*.md; do
+  # Labels first: an explicitly shell-ish label is worth naming even when the
+  # body happens not to trip the content probe.
   while read -r lbl; do
     case "$lbl" in
-      bash|text|markdown|json|yaml|'') ;;
-      sh|shell|console|zsh|bats)
-        say_warn "$f declares a \`\`\`$lbl fence — shell-looking, but only \`\`\`bash is inspected. Relabel it bash or extend this check."
+      sh|shell|console|zsh|bats|Bash|BASH|Shell|SH)
+        say_warn "$f declares a \`\`\`$lbl fence — shell-looking, but the extractor matches \`\`\`bash exactly (case-sensitive), so legs 1-2s never see it. Relabel it \`\`\`bash."
         ;;
       *) ;;
     esac
   done < <(grep -oE '^[ \t]*```[a-zA-Z]*' "$f" 2>/dev/null | sed 's/[ \t]*```//')
+
+  # Then content, which is what catches the unlabeled case.
+  cdir="$(mktemp -d -t cepa-fbs-cov.XXXXXX)" || {
+    say_miss "mktemp failed for the leg-0 content scan of $f — coverage UNVERIFIED, which must not read as a pass"
+    continue
+  }
+  # --lang '' selects unlabeled fences. A failure here is a harness error, not
+  # an absence: report it rather than letting an empty emit read as "clean".
+  if python3 "$EXTRACT" "$f" --lang '' --emit "$cdir" >/dev/null 2>&1; then
+    for bf in "$cdir"/b*.sh; do
+      [ -f "$bf" ] || continue
+      if grep -qE "$SHELLISH" "$bf" 2>/dev/null; then
+        say_warn "$f has an UNLABELED \`\`\` fence containing shell-looking lines ($(basename "$bf" .sh)). The extractor matches \`\`\`bash, so legs 1-2s never inspect it: a 2g violation placed here passes. Label it \`\`\`bash if the agent executes it, or \`\`\`text if it is a template."
+      fi
+    done
+  fi
+  rm -rf "$cdir"
 done
 
 # ---------------------------------------------------------------------------
@@ -254,19 +298,46 @@ for f in "$CMD_DIR"/*.md; do
   frag_count=0
   # The report does not carry block bodies, so re-derive fragment status from
   # the SOURCE: --emit writes each block, then inspect its text.
-  fdir="$(mktemp -d -t cepa-fbs.XXXXXX)"
-  if python3 "$EXTRACT" "$f" --emit "$fdir" >/dev/null 2>&1; then
+  # Both failure arms are explicit, matching the --report call below and the
+  # leg-0 scan above. The --emit call previously discarded stdout AND stderr
+  # with no else-branch, so a crash left frag_count at 0 and read exactly like
+  # "this file has no fragment blocks" — the "a tool error is not a finding"
+  # shape this repo has a recorded incident for. Direction was benign (fewer
+  # exemptions, more scrutiny), but an unverified scan must not read as a pass:
+  # a real fragment would then be reported as "block sources NOTHING", a
+  # misleading message that never mentions the actual cause.
+  fdir="$(mktemp -d -t cepa-fbs.XXXXXX)" || {
+    say_miss "mktemp failed for the fragment scan of $f — fragment detection UNVERIFIED, which must not read as a pass"
+    continue
+  }
+  emit_err="$fdir/.emit.err"
+  if python3 "$EXTRACT" "$f" --emit "$fdir" >/dev/null 2>"$emit_err"; then
     for bf in "$fdir"/b*.sh; do
       [ -f "$bf" ] || continue
       bn="$(basename "$bf" .sh)"; bn="${bn#b}"
-      if grep -q 'PASTE THIS AFTER' "$bf" 2>/dev/null &&
-         grep -q 'ONE block' "$bf" 2>/dev/null; then
+      # ONE FULL-LINE COMMENT carrying BOTH strings, which is what the comment
+      # above actually describes. Two independent unanchored greps over the
+      # whole block was looser than the description in three measured ways:
+      # the strings matched inside a HEREDOC body writing an operator note,
+      # across two unrelated `echo` arguments, and anywhere in any order. Each
+      # silently consumed the file's single fragment slot and disabled leg 2s
+      # for a block carrying a real violation — found by PR #82's adversarial
+      # review. Command files in this corpus routinely emit PR bodies and
+      # handoff prompts containing paste instructions, so this is reachable,
+      # not theoretical. The real instance (compound-refresh.md) has both
+      # strings on one comment line, so tightening costs it nothing.
+      if grep -qE '^[ \t]*#.*PASTE THIS AFTER.*ONE block' "$bf" 2>/dev/null; then
         frag_count=$((frag_count + 1))
         frag_blocks="$frag_blocks$bn "
       fi
     done
+  else
+    say_miss "$EXTRACT --emit failed on $f (harness error, not a 2g finding) — fragment detection UNVERIFIED for this file, so a leg-2s finding below may be caused by the failed scan rather than by the block:"
+    sed 's/^/        /' "$emit_err" 2>/dev/null | head -5
   fi
-  rm -rf "$fdir"
+  # NOTE: $fdir is NOT removed here — leg 2b needs each block's BODY to decide
+  # guardedness per block rather than per file, and the emitted b<N>.sh files
+  # are that body. It is removed after the parse loop below.
   # Over the cap, NO block is exempt. Failing closed is the point: the
   # alternative (honour the first marker, reject the rest) would let a file
   # keep one exemption while being told off for the others, so the loudest
@@ -280,7 +351,15 @@ for f in "$CMD_DIR"/*.md; do
   blk=-1
   while IFS= read -r line; do
     case "$line" in
-      block\ *) blk="${line#block }"; blk="${blk%%:*}"; total_blocks=$((total_blocks + 1)) ;;
+      block\ *)
+        blk="${line#block }"; blk="${blk%%:*}"; total_blocks=$((total_blocks + 1))
+        # The emitted body for THIS block, used by leg 2b for per-block
+        # guardedness. Empty when --emit failed, which leg 2b treats as
+        # "cannot decide" and skips — the failure is already a MISS above, so
+        # it is reported once rather than twice.
+        blk_body="$fdir/b$blk.sh"
+        [ -f "$blk_body" ] || blk_body=""
+        ;;
 
       *'2g DEFECT CANDIDATES: '*)
         # Leg 1. The cross-block signal — unconditional, allowlist does not
@@ -304,10 +383,24 @@ for f in "$CMD_DIR"/*.md; do
             # Leg 2b — an `env` entry's legitimacy rests on every use being
             # default-guarded. An unguarded `$NAME` under `set -u` aborts the
             # block, so the allowlist claim would be false.
-            if [ "$cls" = env ]; then
-              if grep -qE "\\\$\{?$n\}?([^:+}]|$)" "$f" 2>/dev/null &&
-                 ! grep -qE "\\\$\{$n:[-+]" "$f" 2>/dev/null; then
-                say_miss "$f block $blk: \$$n is allowlisted as \`env\` but is used without a \${$n:-} / \${$n:+} default. Under \`set -u\` that aborts the block, so the allowlist's claim does not hold."
+            # Leg 2b, scoped PER BLOCK — and per-block is the whole point.
+            # The first cut grepped the entire .md file for a guarded form, so
+            # ONE guarded mention anywhere laundered every unguarded use
+            # elsewhere. Measured by PR #82's adversarial review: unguarded
+            # `$MY_VAR` in block 0 plus `${MY_VAR:-}` in block 1 gave 0 MISS,
+            # while block 0 aborts under the `set -euo pipefail` every block in
+            # this corpus sets — exactly the failure leg 2b's own comment says
+            # it prevents. Worse, the laundering mention did not even have to be
+            # code: a full-line comment, or markdown prose OUTSIDE any fence,
+            # satisfied a claim about shell state, because the probe read the
+            # .md file rather than the extracted block.
+            if [ "$cls" = env ] && [ -n "${blk_body:-}" ]; then
+              # Strip full-line comments first: a guarded form mentioned only
+              # in a comment is documentation, not a guard.
+              code_only="$(grep -vE '^[ \t]*#' "$blk_body" 2>/dev/null || true)"
+              # An unguarded use is `$N` or `${N}` NOT followed by `:-`/`:+`.
+              if printf '%s\n' "$code_only" | grep -qE "\\\$$n([^A-Za-z0-9_]|$)|\\\$\{$n\}" 2>/dev/null; then
+                say_miss "$f block $blk: \$$n is allowlisted as \`env\` but THIS block uses it without a \${$n:-} / \${$n:+} default. Under \`set -u\` that aborts the block, so the allowlist's claim that an empty value is the designed case does not hold here. A guarded use in another block does not help — each block is its own process."
               fi
             fi
             # Leg 2s — a `sourced` name is only legitimate in a block that
@@ -327,6 +420,8 @@ for f in "$CMD_DIR"/*.md; do
         ;;
     esac
   done < <(printf '%s\n' "$report")
+  # Now that leg 2b has read every block body, the emit dir can go.
+  rm -rf "$fdir"
 done
 
 # ---------------------------------------------------------------------------
@@ -345,9 +440,52 @@ done
 # Report. State the probe beside the count (CLAUDE.md) — a bare number invites
 # re-reasoning about what was measured instead of re-running it.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Leg 4 — the parse actually understood the report.
+#
+# Legs 1-3 all read labels out of the extractor's text output: `block N:`,
+# `  used-not-assigned:`, `>> 2g DEFECT CANDIDATES:`, `sources a script`.
+# Nothing pins that format, and the two files can drift independently.
+#
+# Measured 2026-10-03, renaming ONE label in a copy of the extractor:
+#   * `used-not-assigned:` -> `external:`  => 5 MISS (leg 3 catches it, because
+#     zero parsed candidates makes every allowlist entry stale). Safe BY
+#     ACCIDENT, and only while the allowlist is non-empty.
+#   * `block N:` -> `chunk N:`             => `scope: 0 block(s)`, 0 MISS, rc=0.
+#     A GREEN GATE THAT PARSED NOTHING. The `scope:` line printed the evidence
+#     of its own failure and nothing acted on it.
+#
+# So the count is cross-checked against a SECOND, independent probe — a direct
+# grep over the raw report, not the state machine above. A checker whose only
+# evidence of having worked is produced by the thing that failed is the
+# silent-pass shape this whole script exists to gate.
+raw_blocks=0
+for f in "$CMD_DIR"/*.md; do
+  r="$(python3 "$EXTRACT" "$f" --report 2>/dev/null)" || continue
+  n="$(printf '%s\n' "$r" | grep -cE '^block [0-9]+:' || true)"
+  raw_blocks=$((raw_blocks + n))
+done
+# And a third probe that does not involve the extractor at all.
+fence_blocks="$(grep -chE '^[ \t]*```bash[ \t]*$' "$CMD_DIR"/*.md 2>/dev/null | paste -sd+ | bc)"
+
+if [ "$total_blocks" -ne "$raw_blocks" ]; then
+  say_miss "parse disagreement: the report loop counted $total_blocks block(s) but a direct grep of the same reports found $raw_blocks. The extractor's output format has drifted from what this script parses, so legs 1-3 are reading NOTHING and their silence is meaningless."
+fi
+if [ "$total_blocks" -ne "$fence_blocks" ]; then
+  say_miss "parse disagreement: the report loop counted $total_blocks block(s) but $CMD_DIR/*.md contains $fence_blocks \`\`\`bash fence(s). Either the extractor is skipping blocks or this script is failing to parse them; either way legs 1-3 did not inspect every block."
+fi
+if [ "$total_blocks" -eq 0 ] && [ "$fence_blocks" -gt 0 ]; then
+  say_miss "parsed ZERO blocks while $fence_blocks \`\`\`bash fence(s) exist. This is a total parse failure reporting as a clean run."
+fi
+
+# ---------------------------------------------------------------------------
+# Report. State the probe beside the count (CLAUDE.md) — a bare number invites
+# re-reasoning about what was measured instead of re-running it.
+# ---------------------------------------------------------------------------
 echo
 echo "probe: python3 $EXTRACT <file> --report, over $CMD_DIR/*.md"
 echo "scope: $total_blocks \`\`\`bash block(s); $cand_blocks carried used-not-assigned names"
+echo "cross-check: $raw_blocks via direct grep of the reports, $fence_blocks via fence count (all three must agree)"
 echo "allowlist: ${#ALLOW[@]} entr(ies)"
 echo "result: $miss MISS, $warn WARN"
 

@@ -190,18 +190,30 @@ CI runner has and no commit can fix. It holds by habit and by `/cepa:setup`.
 
 ### A fenced block never inherits a shell variable — run the checker
 
-Every fenced ```bash block in a command file is its OWN process. State crosses
-blocks only through the FILESYSTEM. The rule, its six shipped instances, and
-the reviewable form are owned by residual 2g in
-`memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md` — cite it, do not
-restate it. Unlike the three rules above, this one IS enforced:
+The rule, its shipped instances, and the reviewable form are owned by
+residual 2g in `memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md` —
+read it there. Unlike the three rules above, this one IS enforced:
 
 ```
 bash scripts/check-fenced-block-state.sh           # expect 0 MISS
-bash scripts/check-fenced-block-state-controls.sh  # expect 20/20
+bash scripts/check-fenced-block-state-controls.sh  # expect 0 failed
 ```
 
-Both run in `residual-integrity.yml`, so CI gates them.
+Both run in `residual-integrity.yml`, so CI gates them. The gate carries one
+expected WARN (`handoff.md`'s unlabeled paste-template block) — WARN never
+fails, and the shard says why. **Expect 0 MISS and 0 failed, never a specific
+total**: a case count restated here is the count-drift rule's own trap, and the
+suite grows every time a leg is added.
+
+**Adding a leg to ANY checker can silently uncover an existing leg.** After
+adding one, re-run the per-leg mutation sweep and confirm every leg still kills
+at least one case **that no other leg also kills**. Measured on this gate: a
+later leg became a second trigger for leg 1's only headline control, so
+removing 2g's own detection killed nothing while the suite stayed green — and
+the control's comment asserted the opposite, having been true when written.
+A green suite is not evidence that each leg is covered. Nor is rc enough to pin
+a leg's *scope*: a mutant that widens a check stays red by over-reporting, so
+assert the exact finding set where scope is the invariant.
 
 **Two things the gate cannot do, and the second is why `--emit` still matters.**
 It admits names by allowlist, so adding an entry is a claim about the harness or
@@ -211,9 +223,10 @@ re-resolved in its own block, NOT that the re-resolution is *correct*: 2g's
 instance 5 was a re-assignment in the right block that expanded to the wrong
 path and exited 127. **Run the extracted block** —
 `python3 scripts/extract-fenced-blocks.py <file.md> --emit <dir>`, then each
-block under `bash -e` in a SEPARATE process. Every one of 2g's six instances,
-and all four probe defects in the gate's own first cut, were found that way and
-none by reading a diff.
+block under `bash -e` in a SEPARATE process. Every one of 2g's instances, and
+every probe defect in the gate's own first cut, were found that way and none by
+reading a diff. (The shard owns the counts — restating them here is how the
+extractor's docstring came to claim "five" after the sixth was recorded.)
 
 ## Conventions
 

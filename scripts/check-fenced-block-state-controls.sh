@@ -139,18 +139,38 @@ CLIENT="$CEPA_ROOT/scripts/brain-client.sh"
 bash "$CLIENT" writeback
 ```
 MD
-# CEPA_ROOT IS ALLOWLISTED HERE, DELIBERATELY, and this is the most important
-# line in this file. Mutation-tested 2026-10-03: with an EMPTY allowlist this
-# case produced TWO MISSes — one from leg 2 (name not allowlisted) and one from
-# leg 1 — so disabling leg 1 entirely left rc=1 and the case still passed. It
-# passed for the wrong reason, never exercising 2g's own detection: removing
-# leg 1 killed ZERO of 13 cases. That is residual 2i's `sv_oneline` defect
-# reproduced exactly, in the control written to honour it.
+# THIS CASE HAS BEEN WRONG TWICE, AND BOTH ERRORS WERE FOUND BY MUTATION-
+# TESTING THE CONTROLS RATHER THAN BY READING THEM. Recorded in full because
+# the file's whole premise is that a control passing for the wrong reason is
+# worse than no control.
 #
-# Allowlisting the name satisfies leg 2, so leg 1 is the ONLY leg that can
-# redden this case — and that is also the true production shape, since
-# CEPA_ROOT is allowlisted in the real checker (it is set by a sourced script)
-# and leg 1 is precisely what catches it when a block stops re-resolving it.
+# Cut 1: an EMPTY allowlist. The case then produced TWO MISSes — leg 2 (name
+# not allowlisted) AND leg 1 — so disabling leg 1 left rc=1 and the case still
+# passed. Removing 2g's own detection killed ZERO of 13 cases.
+#
+# Cut 2: allowlisted the name and declared "leg 1 is the ONLY leg that can
+# redden this case". That was true when written and FALSE by the time it
+# shipped: leg 2s was added later, and because block 1 sourced nothing, leg 2s
+# became a second trigger. Measured — removing leg 1 killed only
+# `mut_instance3`; this case survived and was a duplicate of `mut_sourced_gap`.
+# A later leg silently de-isolated an earlier leg's only headline control.
+#
+# Cut 3: this case is now documented as a DOUBLE-covered case (leg 1 and leg
+# 2s both fire on it) rather than falsely claimed to isolate leg 1, and the
+# leg-1 isolation it was supposed to provide moved to `mut_leg1_literal`
+# below. Trying to isolate it in place does not work and the attempt is worth
+# recording: making block 1 source an unrelated script satisfies leg 2s, but
+# leg 1 STRUCTURALLY cannot fire for a `sourced` name either — the extractor
+# never records such a name as `assigned`, which is the header's own stated
+# reason leg 2s had to exist. Measured: that variant reported 0 MISS. So for a
+# sourced name there is no leg-1 coverage to isolate; the right fixture uses a
+# directly-assigned name.
+#
+# THE LESSON FOR WHOEVER ADDS THE NEXT LEG: adding a leg can silently take
+# over an existing case's kill, leaving the older leg uncovered while the suite
+# still reports green. Re-run the per-leg mutation sweep after ANY new leg and
+# check that every leg still kills at least one case *that no other leg also
+# kills* — a green suite is not evidence that each leg is covered.
 python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
 import re, sys, pathlib
 p = pathlib.Path(sys.argv[1]); s = p.read_text()
@@ -305,6 +325,94 @@ p.write_text(s)
 PY
 reg mut_unguarded 1 "leg 2b: an \`env\` allowlist entry whose uses are bare \$NAME. Removing leg 2b makes the allowlist a rubber stamp — the entry CLAIMS the empty case is designed while \`set -u\` aborts the block." "$d"
 
+# mut_leg1_literal — the ONLY case that isolates leg 1, and it exists because
+# the adversarial review of PR #82 measured that `mut_instance5` does not.
+# A `literal`-class name sidesteps leg 2s entirely (that leg only guards
+# `sourced`) and the allowlist entry satisfies leg 2, so leg 1 — the
+# cross-block signal, 2g's own detection — is the single remaining trigger.
+# This is also the realistic shape for a documented literal that an author
+# substituted in ONE block and then relied on in a later one, which is 2g
+# instances 3 and 4 exactly.
+d="$(new_fixture leg1literal)"
+cat > "$d/plugins/cepa/commands/a.md" <<'MD'
+# A command
+
+```bash
+set -euo pipefail
+P=/tmp/payload.json
+echo "{}" > "$P"
+```
+
+A DIFFERENT shell, relying on the earlier substitution:
+
+```bash
+set -euo pipefail
+bash client writeback "$P"
+```
+MD
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+new = re.sub(r"^ALLOW=\(.*?^\)$",
+             'ALLOW=(\n  "P|literal|fixture: payload path the prose tells the agent to substitute"\n)',
+             s, flags=re.S | re.M)
+assert new != s, "ALLOW substitution matched nothing"
+p.write_text(new)
+PY
+reg mut_leg1_literal 1 "leg 1 — the cross-block signal, 2g's OWN detection. This is leg 1's only isolating case: a literal-class name cannot trigger leg 2s, and the allowlist entry satisfies leg 2. The adversarial review measured that mut_instance5 does NOT isolate leg 1 (it dies to leg 2s), so without this case removing 2g's core detection kills only mut_instance3." "$d"
+
+# mut_env_launder — leg 2b must decide guardedness PER BLOCK. The first cut
+# grepped the whole .md file, so one guarded mention anywhere laundered every
+# unguarded use elsewhere: measured by PR #82's adversarial review, unguarded
+# `$MY_VAR` in block 0 plus `${MY_VAR:-}` in block 1 gave 0 MISS, while block 0
+# aborts under the `set -euo pipefail` every block in this corpus sets.
+# mut_unguarded alone cannot catch this — it is single-block, where per-file
+# and per-block scope coincide, so the gap was invisible to the suite.
+d="$(new_fixture envlaunder)"
+cat > "$d/plugins/cepa/commands/a.md" <<'MD'
+# A command
+
+```bash
+set -euo pipefail
+echo "$MY_OPERATOR_VAR"
+```
+
+```bash
+set -euo pipefail
+echo "${MY_OPERATOR_VAR:-fallback}"
+```
+MD
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+new = re.sub(r"^ALLOW=\(.*?^\)$",
+             'ALLOW=(\n  "MY_OPERATOR_VAR|env|fixture operator override, guarded"\n)',
+             s, flags=re.S | re.M)
+assert new != s, "ALLOW substitution matched nothing"
+p.write_text(new)
+PY
+reg mut_env_launder 1 "leg 2b scoped per FILE instead of per BLOCK. One guarded mention then launders every unguarded use in every other block — and the laundering mention need not even be code: a comment, or markdown prose outside any fence, satisfied a claim about shell state." "$d"
+
+# mut_env_scope_exact — rc alone cannot pin leg 2b's SCOPE. Mutation-tested
+# 2026-10-03: replacing the per-block body with the whole file still reddens
+# mut_env_launder, because the whole-file scan over-reports and flags BOTH
+# blocks — 2 MISSes instead of 1. The case survives for the wrong reason, so
+# it cannot tell per-block from per-file. This asserts the EXACT finding set:
+# block 0 is unguarded and must be flagged; block 1 is guarded and must NOT be.
+# Counting findings, not just rc, is the lesson a-control-suite-proves-only-
+# the-branch-it-exercises records as "assert the exit code, not just message
+# text" — one level further in.
+out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"
+n_miss="$(printf '%s\n' "$out" | grep -cE '^MISS' || true)"
+if [ "$n_miss" -eq 1 ] && printf '%s\n' "$out" | grep -q 'block 0: \$MY_OPERATOR_VAR'; then
+  pass=$((pass + 1)); printf 'ok   %-18s exactly block 0 flagged\n' mut_env_scope_exact
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-18s expected exactly 1 MISS naming block 0, got %s\n' mut_env_scope_exact "$n_miss"
+  printf '     kills: leg 2b reading the whole FILE rather than this block. That over-reports (flags the guarded block too), which still reddens an rc-only case — so without this assertion the scope is untested in both directions.\n'
+  printf '%s\n' "$out" | sed 's/^/       | /'
+fi
+
 echo
 echo "=== leg 2s: a sourced name needs sourcing IN ITS OWN block ==="
 
@@ -442,6 +550,73 @@ p.write_text(s)
 PY
 reg mut_frag_order 0 "a scalar frag_blk holding only the LAST marked block. The marker here is on block 0, so a scalar implementation exempts block 1 instead and flags block 0 — the exemption silently following block order rather than the marker." "$d"
 
+# mut_frag_heredoc — the marker must be ONE FULL-LINE COMMENT carrying both
+# strings. Two independent unanchored greps over the whole block was looser
+# than the comment describing it, and PR #82's adversarial review measured the
+# consequence: a block writing an operator note whose heredoc body happens to
+# say "PASTE THIS AFTER the summary table, as ONE block of prose" was EXEMPTED
+# (0 MISS) while carrying a real leg-2s violation. Reachable in this corpus
+# specifically — command files routinely emit PR bodies and handoff prompts
+# containing paste instructions.
+d="$(new_fixture fragheredoc)"
+cat > "$d/plugins/cepa/commands/a.md" <<'MD'
+# A command
+
+```bash
+set -euo pipefail
+. /opt/cepa/resolve-plugin-root.sh
+echo "${CEPA_ROOT:-}"
+```
+
+```bash
+set -euo pipefail
+cat > /tmp/note.md <<'EOF'
+PASTE THIS AFTER the summary table, as ONE block of prose.
+EOF
+bash "$CEPA_ROOT/scripts/brain-client.sh" writeback
+```
+MD
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+new = re.sub(r"^ALLOW=\(.*?^\)$",
+             'ALLOW=(\n  "CEPA_ROOT|sourced|fixture: set by a sourced resolve script"\n)',
+             s, flags=re.S | re.M)
+assert new != s, "ALLOW substitution matched nothing"
+p.write_text(new)
+PY
+reg mut_frag_heredoc 1 "a fragment marker matched by two unanchored greps anywhere in the block. The strings then match inside a heredoc body writing an unrelated operator note, silently consuming the file's one fragment slot and disabling leg 2s on a block with a real violation." "$d"
+
+# mut_frag_split — same class, different shape: the two strings on separate
+# lines, in unrelated `echo` arguments. Also measured exempt before the fix.
+d="$(new_fixture fragsplit)"
+cat > "$d/plugins/cepa/commands/a.md" <<'MD'
+# A command
+
+```bash
+set -euo pipefail
+. /opt/cepa/resolve-plugin-root.sh
+echo "${CEPA_ROOT:-}"
+```
+
+```bash
+set -euo pipefail
+echo "PASTE THIS AFTER the table"
+echo "Summarise in ONE block quote"
+bash "$CEPA_ROOT/scripts/brain-client.sh" writeback
+```
+MD
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+new = re.sub(r"^ALLOW=\(.*?^\)$",
+             'ALLOW=(\n  "CEPA_ROOT|sourced|fixture: set by a sourced resolve script"\n)',
+             s, flags=re.S | re.M)
+assert new != s, "ALLOW substitution matched nothing"
+p.write_text(new)
+PY
+reg mut_frag_split 1 "the two marker strings on SEPARATE lines in unrelated echo arguments. A per-string grep pair cannot tell this from a real one-line assembly comment, so it grants the exemption to a block that never claimed it." "$d"
+
 echo
 echo "=== leg 3: allowlist honesty ==="
 
@@ -487,6 +662,57 @@ else
   fail=$((fail + 1))
   printf 'FAIL %-18s rc=%d (want rc=0 WITH a ```sh WARN)\n' mut_sh_label "$rc"
   printf '     kills: a ```sh block silently escaping inspection — coverage shrinking with no signal, which reads as "nothing to find".\n'
+  printf '%s\n' "$out" | sed 's/^/       | /'
+fi
+
+# mut_unlabeled_shell — leg 0's CONTENT probe. The label-only form of leg 0 was
+# blind to an unlabeled fence: measured 2026-10-03, a reconstructed instance-5
+# violation in an unlabeled block gave `0 MISS, 0 WARN, rc=0` — the gate
+# passing a real 2g violation in total silence. The live corpus has 62
+# unlabeled fences and one of them (handoff.md block 9) holds six shell-looking
+# lines, so the blind spot was real, not hypothetical.
+d="$(new_fixture unlabeled)"
+printf '```bash\nset -e\n. /opt/r.sh\necho "${CEPA_ROOT:-}"\n```\n\n```\nset -euo pipefail\nbash "$CEPA_ROOT/x" writeback\n```\n' \
+  > "$d/plugins/cepa/commands/a.md"
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+s = re.sub(r"^ALLOW=\(.*?^\)$",
+           'ALLOW=(\n  "CEPA_ROOT|sourced|fixture: set by a sourced resolve script"\n)',
+           s, flags=re.S | re.M)
+p.write_text(s)
+PY
+out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'UNLABELED'; then
+  pass=$((pass + 1)); printf 'ok   %-18s rc=0 + UNLABELED WARN\n' mut_unlabeled_shell
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-18s rc=%d (want rc=0 WITH an UNLABELED warn)\n' mut_unlabeled_shell "$rc"
+  printf '     kills: a leg 0 that checks only the fence LABEL. An unlabeled fence then escapes inspection entirely and a 2g violation placed there passes at 0 MISS / 0 WARN.\n'
+  printf '%s\n' "$out" | sed 's/^/       | /'
+fi
+
+# mut_capital_bash — ```Bash. The extractor matches the label exactly and
+# case-sensitively, so a capitalised label is NOT inspected by legs 1-2s. The
+# original leg-0 label list omitted it and the gate went fully silent.
+d="$(new_fixture capbash)"
+printf '```bash\nset -e\n. /opt/r.sh\necho "${CEPA_ROOT:-}"\n```\n\n```Bash\nset -euo pipefail\nbash "$CEPA_ROOT/x" writeback\n```\n' \
+  > "$d/plugins/cepa/commands/a.md"
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+s = re.sub(r"^ALLOW=\(.*?^\)$",
+           'ALLOW=(\n  "CEPA_ROOT|sourced|fixture: set by a sourced resolve script"\n)',
+           s, flags=re.S | re.M)
+p.write_text(s)
+PY
+out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qE 'case-sensitive|UNLABELED'; then
+  pass=$((pass + 1)); printf 'ok   %-18s rc=0 + WARN\n' mut_capital_bash
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-18s rc=%d (want rc=0 WITH a warn)\n' mut_capital_bash "$rc"
+  printf '     kills: a leg-0 label list omitting capitalised spellings. ```Bash looks inspected to a reader and is invisible to the extractor.\n'
   printf '%s\n' "$out" | sed 's/^/       | /'
 fi
 
@@ -652,6 +878,93 @@ if printf '%s\n' "$out" | grep -qE '^  assigned: .*\bWIDGET\b'; then
 else
   pass=$((pass + 1)); printf 'ok   %-18s commented assignment is not an assignment\n' mut_comment_assign
 fi
+
+# mut_heredoc_assign — a heredoc BODY line shaped like an assignment must not
+# count as one. Found by PR #82's adversarial review, reproduced here: a block
+# writing an operator runbook that documents `P=/tmp/payload.json` reported
+# `assigned: P`, which SUPPRESSED the real candidate, so leg 1 saw nothing and
+# the gate passed a block where `$P` is genuinely unset. On compound.md's
+# writeback path that is the v1.26.8 shape — writeback falls back to the
+# unscrubbed original, a PHI leak. `task.md` block 9 already has a heredoc.
+probe="$WORK/heredoc.md"
+cat > "$probe" <<'MD'
+```bash
+set -euo pipefail
+P="$(mktemp)"
+echo '{}' > "$P"
+```
+
+```bash
+set -euo pipefail
+cat > /tmp/runbook.md <<'EOF'
+To reproduce by hand:
+P=/tmp/payload.json
+then run writeback.
+EOF
+bash client writeback "$P"
+```
+MD
+out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
+# Anchored, per mut_comment_assign's precedent: an unanchored `assigned: P`
+# also matches inside `used-not-assigned: P` and would invert this case.
+if printf '%s\n' "$out" | grep -qE '^  assigned: .*\bP\b.*$' &&
+   printf '%s\n' "$out" | sed -n '/^block 1:/,$p' | grep -qE '^  assigned: .*\bP\b'; then
+  fail=$((fail + 1))
+  printf 'FAIL %-18s heredoc text counted as an assignment\n' mut_heredoc_assign
+  printf '     kills: an ASSIGN_RE scan over the raw body with no heredoc masking. A phantom assignment suppresses every real candidate of that name — the wrong-all-clear direction, and a PHI-leak path on compound.md.\n'
+  printf '%s\n' "$out" | sed 's/^/       | /'
+else
+  pass=$((pass + 1)); printf 'ok   %-18s heredoc text is not an assignment\n' mut_heredoc_assign
+fi
+
+# mut_heredoc_use — the OTHER direction, and it must NOT be masked. A `$NAME`
+# inside an unquoted-delimiter heredoc really is expanded by the shell, so
+# masking the uses scan would HIDE a real use. Masking is for `assigned` only.
+probe="$WORK/heredocuse.md"
+cat > "$probe" <<'MD'
+```bash
+set -euo pipefail
+cat > /tmp/out.txt <<EOF
+value is $WIDGET
+EOF
+```
+MD
+out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
+if printf '%s\n' "$out" | grep -q 'used-not-assigned: .*WIDGET'; then
+  pass=$((pass + 1)); printf 'ok   %-18s heredoc use still counted\n' mut_heredoc_use
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-18s a real use inside a heredoc was masked away\n' mut_heredoc_use
+  printf '     kills: applying heredoc masking to the USES scan. The shell expands $NAME in an unquoted-delimiter heredoc, so hiding it is a false negative on a real carry.\n'
+  printf '%s\n' "$out" | sed 's/^/       | /'
+fi
+
+echo
+echo "=== leg 4: the parse understood the report ==="
+
+# mut_parse_drift — the gate reads the extractor's output by matching literal
+# labels, and nothing pins that format. Measured 2026-10-03: renaming
+# `block N:` to `chunk N:` in a copy of the extractor gave `scope: 0 block(s)`,
+# `0 MISS`, rc=0 — a GREEN GATE THAT PARSED NOTHING, printing the evidence of
+# its own failure in the scope line while nothing acted on it. That is the
+# silent-pass shape this entire script exists to gate, inside the gate.
+d="$(new_fixture parsedrift)"; clean_cmd "$d/plugins/cepa/commands/a.md"
+python3 - "$d/scripts/check-fenced-block-state.sh" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+new = re.sub(r"^ALLOW=\(.*?^\)$", "ALLOW=()", s, flags=re.S | re.M)
+assert new != s, "ALLOW substitution matched nothing"
+p.write_text(new)
+PY
+# Drift the extractor's block header in the FIXTURE copy only.
+python3 - "$d/scripts/extract-fenced-blocks.py" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+old = 'print(f"block {i}: {len(b[\'lines\'])} lines")'
+assert old in s, "block-header print not found — update this mutant"
+p.write_text(s.replace(old, 'print(f"chunk {i}: {len(b[\'lines\'])} lines")', 1))
+PY
+reg mut_parse_drift 1 "leg 4: the gate's label-matching parse silently reading NOTHING. Without the cross-check, a renamed block-header label gives scope:0 / 0 MISS / rc=0 — every leg's silence meaningless, reported as a clean run and cited as evidence." "$d"
 
 echo
 echo "=== real tree ==="
