@@ -136,6 +136,78 @@ printf '# A solution doc\n\nProse a human wrote.\n' > "$FIX/doc.md"
 # `jq -n ... > f` leaves an EMPTY file when jq is absent (it is absent on the
 # primary dev machine, per CLAUDE.md), and `[ -f ]` happily accepts it.
 : > "$FIX/empty.json"
+# --- re-Write gate fixtures (residual 2i) -----------------------------------
+# A payload with a KNOWN marker count, for the scrub-seal success case.
+printf '{"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"ws","memory_payload":{"lessons":["[REDACTED-PHI-SSN] and [REDACTED-PHI-ID]"]}}' > "$FIX/sealcount.json"
+# A non-numeric seal. The payload must EXIST and be readable, or the case would
+# pass on the file-missing guard instead of the seal-validation guard it names.
+printf '{"a":"[REDACTED-PHI-SSN]"}' > "$FIX/sealed.json"
+printf 'garbage\n' > "$FIX/sealed.json.phiseal"
+# An EMPTY seal — distinct from a missing one, since `[ -f ]` accepts it.
+printf '{"a":"[REDACTED-PHI-SSN]"}' > "$FIX/emptyseal.json"
+: > "$FIX/emptyseal.json.phiseal"
+# The honest path: payload and seal agree. Count the markers rather than
+# hardcoding, so editing the payload above cannot make this green for the wrong
+# reason.
+printf '{"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}' > "$FIX/intact.json"
+bash "$CLIENT" scrub-seal "$FIX/intact.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal intact.json\n' >&2; exit 2; }
+# THE SINGLE-LINE DEFECT: two markers on ONE line, one then dropped.
+# compound.md emits single-line JSON, so this is the real shape.
+#
+# The seal is written by `scrub-seal` ITSELF, not hardcoded. That distinction
+# is load-bearing and was found by mutation-testing this very case: with a
+# hardcoded `2`, a line-counting mutant reads 1 at verify time, `1 -lt 2` still
+# fails, and the case passes FOR THE WRONG REASON — it never exercises the
+# counting at all. Sealing with the code under test makes both sides use the
+# same counter, so a line-counting mutant seals 1, reads 1, and reports
+# "intact" — which is exactly the blindness being pinned, and this case then
+# fails as it should. A fixture that hardcodes the expected side of a
+# comparison cannot test the thing computing it.
+printf '{"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}' > "$FIX/oneline.json"
+bash "$CLIENT" scrub-seal "$FIX/oneline.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal oneline.json\n' >&2; exit 2; }
+printf '{"a":"123-45-6789","b":"[REDACTED-PHI-ID]"}' > "$FIX/oneline.json"
+
+# THE ADDITION DEFECT: markers all survive, raw PHI is APPENDED. The marker
+# count is identical before and after, so only the content fingerprint can see
+# it. Sealed by the code under test, for the reason given above.
+printf '{"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"ws","memory_payload":{"lessons":["[REDACTED-PHI-SSN]","[REDACTED-PHI-ID]"]}}' > "$FIX/added.json"
+bash "$CLIENT" scrub-seal "$FIX/added.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal added.json\n' >&2; exit 2; }
+printf '{"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"ws","memory_payload":{"lessons":["[REDACTED-PHI-SSN]","[REDACTED-PHI-ID]","SSN 987-65-4321 MRN 4567890"]},"idempotency_key":"k:1"}' > "$FIX/added.json"
+
+# The HONEST re-Write: only the two authorized fields are added, and the keys
+# are reordered with different whitespace — which an agent rewriting the whole
+# file legitimately does. Must PASS, or the gate suppresses every real run.
+printf '{"schema_version":"openbrain.agent_memory.writeback.v1","workspace_id":"ws","memory_payload":{"lessons":["[REDACTED-PHI-SSN]","[REDACTED-PHI-ID]"]}}' > "$FIX/honest.json"
+bash "$CLIENT" scrub-seal "$FIX/honest.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal honest.json\n' >&2; exit 2; }
+printf '{\n  "memory_payload": {"lessons": ["[REDACTED-PHI-SSN]", "[REDACTED-PHI-ID]"]},\n  "workspace_id": "ws",\n  "schema_version": "openbrain.agent_memory.writeback.v1",\n  "idempotency_key": "k:1",\n  "source_refs": [{"kind": "solution-doc", "uri": "r:d.md@abc123", "title": "A title"}]\n}\n' > "$FIX/honest.json"
+
+# A count-only seal, as an older brain-client wrote them: one line, no
+# fingerprint. Must be UNEVALUABLE, never a silent count-only fallback.
+printf '{"a":"[REDACTED-PHI-SSN]"}' > "$FIX/legacyseal.json"
+printf '1\n' > "$FIX/legacyseal.json.phiseal"
+
+# RE-SEAL LAUNDERING: sealed clean, then contaminated. `scrub-seal` must refuse
+# rather than re-deriving a seal that agrees with the new bytes.
+printf '{"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}' > "$FIX/reseal.json"
+bash "$CLIENT" scrub-seal "$FIX/reseal.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal reseal.json\n' >&2; exit 2; }
+printf '{"a":"123-45-6789","b":"4567890"}' > "$FIX/reseal.json"
+
+# The benign sibling: sealed, NOT modified. A no-op re-seal must succeed.
+printf '{"a":"[REDACTED-PHI-SSN]"}' > "$FIX/resealok.json"
+bash "$CLIENT" scrub-seal "$FIX/resealok.json" >/dev/null 2>&1 \
+  || { printf 'FATAL: fixture setup failed — scrub-seal could not seal resealok.json\n' >&2; exit 2; }
+
+# A seal count at exactly 2^63 — all digits, but beyond what `test` can parse.
+# The fingerprint line is present and WRONG-but-syntactically-valid so the case
+# fails on the magnitude guard, not on a missing fingerprint.
+printf '{"a":"x"}' > "$FIX/hugeseal.json"
+printf '9223372036854775808\njson:0000000000000000000000000000000000000000000000000000000000000000\n' > "$FIX/hugeseal.json.phiseal"
+
 # Present-but-empty workspace_id: the git-worktree failure mode. `.env.local`
 # is gitignored, so it exists only in the main checkout; a heredoc in a linked
 # worktree interpolates "". A presence check passes and only the API rejects it.
@@ -250,6 +322,106 @@ reg sr_undecidable 'scrub-required exits 2 (not 1) on an unresolvable config' 2 
 reg sr_nongit 'scrub-required exits 2 with a message outside a git work tree' 2 'not in a git work tree' \
   'kills: letting git rev-parse status carry into the assignment (silent 128)' \
   scrub-required
+
+# --- the re-Write gate (residual 2i) ----------------------------------------
+# These pin the half of the gate that is mechanically checkable here: the
+# argument and seal-validation guards. The BEHAVIOR — that a contaminating
+# re-Write is actually caught between two fenced blocks — is not expressible in
+# this suite, which is single-call and offline; it is measured by extracting
+# compound.md's blocks and running them (see the PR body). Both halves are
+# needed: this file would pass with a verb that validated perfectly and counted
+# nothing.
+reg arity_ss 'scrub-seal rejects a stray 2nd argument' 2 'scrub-seal takes exactly 1 argument' \
+  'kills: removal of scrub-seal arity' \
+  scrub-seal "$FIX/payload.json" EXTRA
+reg arity_sv 'scrub-verify rejects a stray 2nd argument' 2 'scrub-verify takes exactly 1 argument' \
+  'kills: removal of scrub-verify arity' \
+  scrub-verify "$FIX/payload.json" EXTRA
+# A MISSING seal must be exit 2 ("unevaluable"), never 0. This is the same
+# shape as sr_undecidable and the same hazard: a gate that cannot be evaluated
+# must not report success, or the re-Write check silently stops existing while
+# every call site still looks gated.
+reg sv_noseal 'scrub-verify exits 2 (not 0) when the seal is absent' 2 'UNEVALUABLE' \
+  'kills: a mutant that treats a missing .phiseal as "nothing to check" and passes — the gate would stop existing while every call site still appears gated' \
+  scrub-verify "$FIX/payload.json"
+# A seal whose content is not a number must be 2, not an abort. `[ x -lt y ]`
+# on non-numeric input dies under set -e with no diagnostic — unevaluable, but
+# silently, which is the failure mode this whole suite exists to catch.
+reg sv_badseal 'scrub-verify exits 2 on a non-numeric seal' 2 'non-numeric seal count' \
+  'kills: removal of the seal content validation — a garbage seal aborts the comparison with no message instead of refusing to send' \
+  scrub-verify "$FIX/sealed.json"
+# An EMPTY seal is distinct from a missing one (`[ -f ]` accepts it) and has
+# its own guard, so it gets its own case.
+reg sv_emptyseal 'scrub-verify exits 2 on an empty seal' 2 'EMPTY seal' \
+  'kills: removal of the `[ -s ]` seal check — an empty seal reads as count "" and the comparison aborts silently' \
+  scrub-verify "$FIX/emptyseal.json"
+reg ss_nofile 'scrub-seal rejects a nonexistent payload' 2 'scrub-seal needs' \
+  'kills: removal of the scrub-seal existence check — sealing a missing file would record 0, a count that can never fall' \
+  scrub-seal "$FIX/does-not-exist.json"
+# The false-positive floor for this verb pair: a SUCCESS case. A guard that
+# rejects everything passes every rejection case above while breaking the real
+# call site in compound.md. `scrub-seal` on a valid payload must exit 0 and
+# report a count.
+reg ss_ok 'scrub-seal succeeds on a readable payload' 0 'sealed: [0-9]+ redaction markers' \
+  'kills: over-strict scrub-seal validation that rejects a legitimate payload — compound.md would suppress every writeback while each rejection case still passes' \
+  scrub-seal "$FIX/sealcount.json"
+# And verify must PASS on an untouched sealed payload — the honest-re-Write
+# path. Pinned with a pre-built seal matching the fixture's real marker count.
+reg sv_ok 'scrub-verify passes when the redactions are intact' 0 'redaction markers intact' \
+  'kills: an off-by-one or inverted comparison that suppresses every honest writeback' \
+  scrub-verify "$FIX/intact.json"
+# THE COUNTING DEFECT, pinned. Two markers on ONE line with one dropped: the
+# shipped-and-measured form, since compound.md emits single-line JSON. With
+# `grep -c` (lines) both counts are 1 and this passes as intact; only
+# occurrence counting sees 2 -> 1.
+reg sv_oneline 'scrub-verify catches a dropped marker on a shared line' 1 'has 1 redaction markers but 2 were sealed' \
+  'kills: counting matching LINES instead of occurrences — compound.md emits single-line JSON, so every marker shares one line and partial reintroduction is invisible' \
+  scrub-verify "$FIX/oneline.json"
+# THE ADDITION DEFECT — the one a marker count structurally cannot see, and the
+# actual threat model: the agent re-emits pre-scrub strings it still holds in
+# context by ADDING them, leaving every sealed marker in place. The count holds,
+# so a floor check reports "intact" while raw PHI egresses. Measured 2026-10-02
+# as rc=0 before the content fingerprint was added. This case is the reason
+# scrub-verify compares a fingerprint and not just a count.
+reg sv_added 'scrub-verify catches PHI added with the marker count intact' 1 'changed outside the authorized fields' \
+  'kills: removal of the content-fingerprint comparison, reverting to a count-only floor check — every deletion case still passes while the actual egress path (addition) reopens' \
+  scrub-verify "$FIX/added.json"
+# The false-positive floor for the fingerprint. An honest re-Write edits ONLY
+# `idempotency_key` and `source_refs`, and legitimately reorders keys and
+# changes whitespace because the agent rewrites the whole file. A fingerprint
+# over raw bytes would suppress every honest run — a gate that always fails
+# gets disabled by the next author, so this case is load-bearing, not filler.
+reg sv_honest 'scrub-verify passes an honest two-field re-Write with reordered keys' 0 'content unchanged outside' \
+  'kills: fingerprinting raw bytes instead of canonical JSON, or forgetting to neutralize the two authorized fields — suppresses every legitimate writeback' \
+  scrub-verify "$FIX/honest.json"
+# A seal written by an older brain-client has no fingerprint line. That must be
+# UNEVALUABLE, not a silent fall back to the count-only check — otherwise the
+# defect above reopens on exactly the runs that straddle an upgrade.
+reg sv_legacyseal 'scrub-verify exits 2 on a count-only legacy seal' 2 'no content fingerprint' \
+  'kills: falling back to the count-only comparison when the seal lacks a fingerprint — reinstates the addition blindness across an upgrade boundary' \
+  scrub-verify "$FIX/legacyseal.json"
+# RE-SEAL LAUNDERING. Re-running the setup block after the payload changed must
+# REFUSE, not silently re-derive a seal that agrees with the contaminated bytes.
+# Measured 2026-10-02 on the version without this guard: seal=2, contaminate,
+# re-seal -> seal=0, verify -> 0 >= 0 and fingerprints match -> exit 0, PHI sent.
+# Re-running a setup block is an ordinary recovery move, so this is a live path,
+# not a contrived one.
+reg ss_reseal 'scrub-seal refuses to re-seal changed content' 2 'a seal already exists describing DIFFERENT content' \
+  'kills: removal of the pre-existing-seal fingerprint comparison in scrub-seal — a retry after contamination launders it into a passing gate' \
+  scrub-seal "$FIX/reseal.json"
+# The benign sibling: re-sealing the SAME bytes (block re-run before any edit)
+# is a no-op and must be allowed, or an ordinary retry becomes a hard failure.
+reg ss_reseal_ok 'scrub-seal allows a no-op re-seal of identical content' 0 'sealed:' \
+  'kills: refusing every re-seal unconditionally — turns a harmless setup-block retry into a dead run' \
+  scrub-seal "$FIX/resealok.json"
+# THE 2^63 FALL-THROUGH. All-digits passes the non-numeric check, but bash
+# `test` cannot parse >= 2^63 and the failing `[` was an `if` CONDITION — so
+# `set -e` did not fire and execution fell through to the success printf.
+# Measured 2026-10-02: exit 0 on a fully contaminated payload. 2^63-1 compares
+# fine, so the boundary is exact and a magnitude guard is the fix.
+reg sv_hugeseal 'scrub-verify exits 2 on a seal beyond test(1) range' 2 'implausible seal count' \
+  'kills: removal of the seal magnitude guard, or reverting the explicit-pass comparison to a bare `if [ -lt ]` — an unparseable comparison falls through to "verified"' \
+  scrub-verify "$FIX/hugeseal.json"
 
 # --- guards must run BEFORE credentials -------------------------------------
 # THE ORDERING INVARIANT, and it is the subtle one. Every guard above sits

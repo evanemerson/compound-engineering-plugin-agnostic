@@ -3,3 +3,7 @@ docs
 .env.local
 .brain-backfill-state.log
 cepa.local.md
+
+# python bytecode from running scripts/*.py
+__pycache__/
+*.pyc

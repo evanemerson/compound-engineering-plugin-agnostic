@@ -166,28 +166,106 @@
    explicit gates are needed. Not done here to keep the PHI-leak fix
    reviewable; this is the immediate next PR.
 
-2i. **The re-Write step's protection is prose, not enforcement.** P1, filed.
-   After `idkey`, `compound.md` tells the agent to write the SHA and key into
-   the payload and re-Write it. An agent doing that from the payload it still
-   holds in context re-emits the PRE-scrub strings, undoing the redaction.
-   v1.26.9 added an instruction to read the file back and check
-   `grep -c REDACTED-PHI` does not fall — but nothing executes that check.
+2i. **The re-Write step's protection is prose, not enforcement.** P1.
+   **FIXED in v1.28.0** — `brain-client.sh scrub-seal` / `scrub-verify`, wired
+   into `compound.md` either side of the agent's re-Write.
 
-   This was briefly marked `applied`. It is not: "a guard expressed as prose
-   in a command contract is not enforcement" is this repo's own rule, and
-   this is the one step where the agent's own context is the contamination
-   source. Reclassified `deferred` on re-review.
+   The count crosses the fenced-block boundary in a FILE (`<payload>.phiseal`),
+   per 2g. It had to: measured under the real block split, `$CEPA_ROOT` is
+   unbound in the step-4 shell, and the naive `CLIENT="$CEPA_ROOT/scripts/…"`
+   expands to `/scripts/brain-client.sh` and exits **127** — the signature that
+   reads as a missing binary and put a false "brain unreachable" claim into 42
+   artist360 review files. The first cut of this fix shipped that line. It was
+   caught by running the extracted block, not by reading it, which is the
+   fifth instance of 2g's class on this surface and the reason 2g is now
+   enforced at the top of the step-4 block rather than assumed.
 
-   The executable form: capture the count before the re-Write, assert it
-   after, immediately before `writeback`, and suppress if it fell. Note the
-   flag and the count must cross a fenced-block boundary — so they go through
-   the filesystem, not variables, per 2g below. That coupling is why this is
-   filed rather than patched in: it is the first real test of 2g's rule.
+   Exit semantics mirror `scrub-required`: 0 intact / 1 FELL / 2 unevaluable.
+   A missing, empty, or non-numeric seal is 2 and suppresses — an unevaluable
+   gate must never read as a pass, or the check silently stops existing while
+   every call site still looks gated.
+
+   **Three defects in the fix itself, all found by running it:**
+
+   - **`grep -c` counts LINES, not occurrences.** `compound.md` emits
+     single-line JSON, so every marker shares one line and the count can only
+     be 0 or 1 — dropping one of two markers left it unchanged and the gate
+     passed. Measured: a two-marker line gives `grep -c` 1 and
+     `grep -o | grep -c ''` 2. Both verbs now count through one shared
+     `_phi_count`, so they cannot drift apart and make the comparison
+     meaningless.
+   - **`[ $? -gt 1 ]` in an `elif` reads a status the `if` test already
+     clobbered.** Measured: `$?` is 0 inside the elif regardless of grep's
+     real status. An unreadable payload could therefore seal as "0
+     redactions" — a count that can never fall, i.e. a gate that always
+     passes. The status is now captured immediately.
+   - **A failed seal left the PREVIOUS atom's seal in place** on a reused
+     payload path (2a's shape), so `scrub-verify` would compare against a
+     count describing different content. The stale seal is now removed before
+     anything that can fail.
+
+   **And one defect in the CONTROL for the first of those** — worth more than
+   the fix. `sv_oneline` originally hardcoded its seal as `2`. Under a
+   line-counting mutant, verify reads 1, `1 -lt 2` still fails, and the case
+   passed **for the wrong reason**: it never exercised the counting at all.
+   The seal is now written by `scrub-seal` itself, so both sides use the
+   counter under test; the mutant then seals 1, reads 1, reports "intact", and
+   the case fails as it should. **A fixture that hardcodes the expected side of
+   a comparison cannot test the thing computing it** — the sibling of this
+   file's own rule that a fixture score is necessary but never sufficient.
+
+   **FOUR MORE P1s, found by the PR #80 review running the code — and the
+   first cut of this fix was green on all 30 controls while every one of them
+   was live.** That is this file's own "a fixture score is necessary, never
+   sufficient" rule landing on the fix written to honor it.
+
+   - **A marker count detects DELETION only.** The actual threat is an agent
+     re-emitting pre-scrub strings it still holds, which it can do by
+     ADDING them while every sealed marker stays put. Measured: seal 2,
+     append `SSN 987-65-4321`, count still 2, verdict `verified: intact`,
+     raw PHI sent. Found independently by two review agents. Fixed with
+     `_phi_fingerprint` — a canonical-JSON SHA-256 over the payload minus the
+     two authorized fields (`idempotency_key`, `source_refs`), so any byte
+     changed outside them moves the hash. Canonical, not raw bytes: an agent
+     rewrites the whole file, so key order and whitespace legitimately change
+     and a byte hash would suppress every honest run.
+   - **Re-running the setup block LAUNDERED contamination.** `scrub-seal`
+     re-derived the seal from whatever the payload then held, so seal 2 →
+     contaminate → re-seal 0 → `0 >= 0` → pass. Re-running a setup block is
+     an ordinary recovery move. Fixed: `scrub-seal` refuses when a seal
+     already describes different content; an identical-bytes re-seal is still
+     a permitted no-op.
+   - **A seal of 2^63 fell THROUGH to success.** All digits passes the
+     non-numeric check, but bash `test` cannot parse ≥ 2^63, and the failing
+     `[` was an `if` CONDITION — so `set -e` does not fire and execution
+     reached the success `printf`. Measured: exit 0 on a fully contaminated
+     payload; 2^63−1 compares correctly, so the boundary is exact. Fixed with
+     a magnitude guard AND by inverting both comparisons so the pass is
+     explicit (`[ ok ] || _die`), never "no failure branch fired".
+   - **`$P` is agent-chosen, so concurrent runs can collide** on both the
+     payload and the seal — failing in both directions (a clean memory
+     suppressed and deleted; or PHI passing against a sibling's lower seal).
+     NOT fixed here: it is a `compound.md` contract change (derive `$P` from
+     `mktemp` and carry the path through the filesystem, per 2g). Filed as
+     **2j** below.
+
+   Controls: 36/36 (was 21/21). Fifteen new cases. Each of the four
+   P1-guarding cases was mutation-tested: removing the fingerprint comparison
+   reddens only `sv_added`, the re-seal guard only `ss_reseal`, the magnitude
+   guard only `sv_hugeseal`, the legacy-seal refusal only `sv_legacyseal`.
+
+   Behavior end-to-end was measured by extracting both fenced blocks with
+   `scripts/extract-fenced-blocks.py` and running them under `bash -e` in
+   separate processes with a stubbed curl: honest re-Write (reordered keys,
+   reindented) → `verified: 3 intact` then the expected network degrade; PHI
+   added with the count intact → suppressed, payload removed; markers removed
+   → suppressed; re-seal after contamination → block 3 refuses, block 4
+   suppresses; deleted seal → unevaluable, suppressed.
 
 2g. **A fenced-block instruction file must never carry state across a block
-   boundary in a shell variable.** P2, filed — and this is the most
-   generalizable finding of the whole investigation. This is now the THIRD
-   instance on the brain-writeback surface alone:
+   boundary in a shell variable.** P2, still filed as a CHECKER — and this is
+   the most generalizable finding of the whole investigation. This is now the
+   FIFTH instance on the brain-writeback surface alone:
 
    1. `${CLAUDE_PLUGIN_ROOT}` is not exported into the Bash tool's shell
       (PR #69).
@@ -195,14 +273,79 @@
       (documented in `compound-refresh.md`).
    3. `P="$P.scrubbed"` did not reach the writeback block (v1.26.8, fixed
       v1.26.9).
+   4. `compound.md`'s step-4 block used a bare `$CLIENT` assigned in step 3 —
+      latent, since nothing in that block ran before the writeback.
+   5. The first cut of 2i's own fix wrote `CLIENT="$CEPA_ROOT/scripts/…"` in
+      the step-4 block. Measured 2026-10-02: `set -u` → "CEPA_ROOT: unbound
+      variable"; without it → `/scripts/brain-client.sh`, rc=127.
 
    The rule: state crosses blocks only through the FILESYSTEM — the same
    path, or an explicit re-read — never through a variable. The reviewable
    form: every variable used in block N was either assigned in block N or is
-   a documented literal. Worth a `docs/solutions/` entry via
-   `/cepa:compound`, and worth a checker leg — this is mechanically
-   detectable by extracting fenced blocks and diffing assigned-vs-used
-   variable names per block.
+   a documented literal.
+
+   **v1.28.0 is 2g's first enforcement**, and the lesson is that the rule does
+   not survive being known. Instance 5 was written BY the session implementing
+   2i, in the block it was adding, with 2g's text in front of it — and it
+   reproduced the exact 127 signature the rule exists to prevent. Reading the
+   diff did not catch it; running the extracted block did, in one command.
+   **So the checker is the deliverable, not the rule.**
+
+   **`scripts/extract-fenced-blocks.py` (v1.28.0) is the extraction half**, and
+   it is committed rather than described — the PR #80 review caught this entry
+   claiming "see the PR" for a script that existed only in scrollback, which is
+   this shard's third false-durable-claim after 2b's and 2i's. `--emit` writes
+   each block to a file to be run under `bash -e` in separate processes;
+   `--report` lists, per block, names used but assigned in an EARLIER block.
+   Verified against the reconstructed instance-5 shape: the defect reports
+   `>> 2g DEFECT CANDIDATES: CEPA_ROOT` and the fix reports clean.
+
+   Two things it deliberately does NOT do, so the next session does not
+   over-trust it. It emits **candidates, not verdicts** — it cannot know which
+   names the harness exports (`CLAUDE_PLUGIN_ROOT` is NOT exported into the Bash
+   tool's shell; that is instance 1) nor which are literals the prose tells the
+   agent to substitute (`$P`). That judgment is the small allowlist this item
+   describes, and it is still owed. And it cannot see names set by a sourced
+   script, so it reports sourcing separately instead of claiming the name is
+   assigned — `resolve-plugin-root.sh` sets `$CEPA_ROOT` that way.
+
+   Its own first cut was wrong in the same shape as everything else here: the
+   assignment regex lacked `re.M`, so `^` anchored to the start of the whole
+   block and every assignment except a column-0 one on line 1 was invisible.
+   The deliberately-broken and the fixed shapes of `compound.md` produced
+   IDENTICAL reports. **A checker for 2g that cannot see a re-assignment
+   reports the fix and the defect the same way** — worse than no checker.
+   Caught by running it on both shapes, not by reading the regex.
+
+   Still open: wiring it into CI with the allowlist, and a `docs/solutions/`
+   entry via `/cepa:compound`. The entry is not the fix.
+
+2j. **`$P` is agent-chosen, so two concurrent `/cepa:compound` runs can
+   collide on the payload AND the seal.** P2, filed — found by PR #80's
+   adversarial review, which measured both directions.
+
+   `compound.md` says `P="<payload-file you just wrote>"` and, in the later
+   block, `P="<the same payload file>"`. No `mktemp`, no run id. Two agents
+   reading the same instructions plausibly choose the same conventional name.
+
+   - **False positive, with data loss.** Run A seals 1; run B overwrites the
+     seal with 3; A verifies its own 1-marker payload against 3 → suppressed,
+     and the suppression path `rm -f`s the payload. A correctly-scrubbed
+     memory is discarded and the run reports "re-Write reintroduced pre-scrub
+     content", which is false.
+   - **False negative.** Reverse interleaving: B verifies against A's lower
+     seal while holding raw PHI → passes.
+
+   The `rm -f` in each suppression path also deletes the other run's payload
+   mid-flight.
+
+   Fix: have the setup block derive the path (`P="$(mktemp -t
+   cepa-brain-payload.XXXXXX)"`) and have the later block re-read it from one
+   recorded location rather than from the agent's memory of it. Note the path
+   itself then has to cross the block boundary — so it goes through the
+   filesystem, per 2g. Not done in #80: it is a contract change to
+   `compound.md`'s payload convention, affecting every step that names `$P`,
+   and worth its own reviewable diff.
 
 2h. **The two sibling commands now scrub under different conditions.** P2.
    **RESOLVED in v1.27.0** — operator decision taken 2026-09-28: unify on
@@ -315,3 +458,44 @@
    "agent-driven" framing, so it is not a defect, but it is a second place
    where the guarantee depends on an agent following prose. Worth folding
    into whatever fix item 1 gets.
+
+2k. **The `cepa:brain` skill's `## Compliance` section does not document the
+   seal/verify contract.** P2, filed — from PR #80's review
+   (`todos/review-2026-10-02-143000.md`, finding 7).
+
+   That skill is the documented home of PHI-scrub policy ("One executable
+   home: `brain-client.sh scrub-required`"). v1.28.0 adds a SECOND executable
+   gate whose contract lives only in `brain-client.sh`'s header and
+   `compound.md`'s prose — which makes `compound.md` a second normative home
+   for a policy the skill owns. This is 2h's shape one level up: only one
+   caller exists today, so nothing has diverged yet, but the skill is where a
+   second author looks, and `compound-refresh.md` growing a hand-edit step is
+   a plausible refactor.
+
+   Fix: a `## Re-Write gate` subsection stating that a command which asks the
+   agent to hand-edit a scrubbed payload MUST seal before the edit and verify
+   after, exit codes 0/1/2 mirroring `scrub-required`. Then `compound.md`'s
+   comments cite it instead of re-deriving the rationale. Also worth one
+   sentence in `compound-refresh.md` saying why it is exempt (its envelope is
+   posted in the same block it is built in, so there is no window) — otherwise
+   the next author has no signpost.
+
+2l. **Nothing binds an agent to STOP when a fenced block exits nonzero.** P2,
+   filed — from PR #80's review (finding 8).
+
+   Every gate in `compound.md` is enforced by `exit 1`/`exit 2` from a Bash
+   tool call. That is correct inside a block, but the file is prose consumed by
+   an agent: nothing in it, in `cepa:autonomy`, or in `cepa:brain` says "a
+   fenced block that exits nonzero is a hard stop for this step — do not
+   proceed to the next block, do not retry silently, do not report success."
+   The whole gate rests on the agent voluntarily halting on a nonzero tool
+   result.
+
+   Pre-existing — the `scrub` step already depended on it before v1.28.0 — but
+   that release doubles the number of gates resting on it, which is why it is
+   filed now rather than left implicit.
+
+   Fix: one explicit sentence, in **`cepa:autonomy`'s execution contract**, not
+   in `compound.md`. It governs every gate in every command file, and this
+   repo has already paid three times for restating a cross-cutting rule at
+   each site (see CLAUDE.md § "Every dispatch declares its model").

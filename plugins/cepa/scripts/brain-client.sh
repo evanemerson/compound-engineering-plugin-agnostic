@@ -26,12 +26,107 @@
 #       `## Compliance` section). Callers gate on it instead of re-deriving it
 #       with their own regexes — which is how the two writeback commands came
 #       to disagree (residual 2h). Exit 2 means REFUSE TO SEND, never "no".
+#   brain-client.sh scrub-seal   <payloadfile>      # record redaction count -> <payloadfile>.phiseal
+#   brain-client.sh scrub-verify <payloadfile>      # 0=redactions intact 1=FELL 2=unevaluable
+#       The re-Write gate (residual 2i). Between the scrub and the writeback an
+#       agent edits the payload by hand, and it still holds the PRE-scrub
+#       strings in context — so re-emitting them silently undoes the redaction.
+#       Seal before that edit, verify after it, and SUPPRESS on exit 1. The
+#       count travels in a FILE because the two calls run in different shells
+#       (residual 2g); a variable is unset by then and compares equal to
+#       nothing.
 #   brain-client.sh idkey    <repo> <docpath> <payloadfile>  # stable idempotency_key (hashes the payload)
 # Bodies are passed as FILES, never as argv, so untrusted content is never
 # spliced into a shell line (cepa:autonomy §7).
 set -euo pipefail
 
 _die() { printf 'brain-client: %s\n' "$1" >&2; exit 2; }
+
+# Count REDACTION MARKER OCCURRENCES in a file. Used by scrub-seal and
+# scrub-verify, which must count identically or the comparison is meaningless.
+#
+# `grep -o | wc -l`, NOT `grep -c`. `grep -c` counts matching LINES: a payload
+# holding `[REDACTED-PHI-SSN] [REDACTED-PHI-ID]` on one line counts 1, so an
+# agent that drops one of the two markers leaves the count unchanged and the
+# gate passes. compound.md emits its payload as single-line JSON, which is the
+# worst case for that — one line holding EVERY marker, where the count can only
+# ever be 0 or 1 and almost any partial reintroduction is invisible. Measured
+# 2026-10-02: the two-marker line gives `grep -c` 1 and `grep -o|wc -l` 2.
+#
+# Status handling: `grep` exits 1 on no-match (legitimate: a payload with no
+# PHI) and >1 on a real error (unreadable file). Those must NOT collapse —
+# treating an unreadable payload as "0 redactions" seals a count that can never
+# fall, which is a gate that passes unconditionally. Capture the status into a
+# variable IMMEDIATELY; do not read `$?` in an `elif`, where the `if` test has
+# already clobbered it (measured: `$?` reads 0 inside the elif regardless of
+# grep's real status, so the error branch fires on a false condition).
+_phi_count() {
+  local f="$1" out rc
+  set +e
+  out="$(grep -o 'REDACTED-PHI' "$f" 2>/dev/null)"
+  rc=$?
+  set -e
+  [ "$rc" -le 1 ] || return 1
+  # A no-match grep prints nothing; `printf '' | wc -l` is 0, but a non-empty
+  # match list needs its trailing newline counted, so wc -l is correct for
+  # both. Guard the empty case explicitly rather than relying on that.
+  if [ -z "$out" ]; then printf '0\n'; else printf '%s\n' "$out" | grep -c ''; fi
+}
+
+# The two fields `compound.md` AUTHORIZES the agent to edit after the scrub.
+# Everything else in the payload must be byte-identical to the scrubbed bytes.
+# Keep this list in sync with compound.md's re-Write instruction; a field added
+# there and not here makes the honest path fail, and the reverse makes the gate
+# blind to that field.
+_PHI_MUTABLE_FIELDS='idempotency_key source_refs'
+
+# Canonical content fingerprint of a payload with the authorized-mutable fields
+# NEUTRALIZED. This is what makes the gate detect ADDITION, not just removal.
+#
+# WHY A COUNT IS NOT ENOUGH, measured 2026-10-02. `scrub-verify` originally
+# compared only the redaction-marker count and failed when it FELL. But the
+# threat is an agent re-emitting pre-scrub strings it still holds in context,
+# and nothing stops it ADDING them alongside the markers it leaves intact:
+#
+#   sealed:   {"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}            -> 2
+#   re-Write: {...same two...,"c":"SSN 987-65-4321 MRN 4567890"}            -> 2
+#
+# Count holds at 2, gate reports "intact", raw PHI egresses. A floor check can
+# only see deletion. So the seal fingerprints the CONTENT: parse the JSON, drop
+# the authorized fields, re-serialize with sorted keys, hash that. Any byte the
+# agent changes outside those two fields moves the hash.
+#
+# JSON-canonical rather than raw bytes, deliberately: the agent re-Writes the
+# whole file, so insignificant whitespace and key order legitimately change
+# even on an honest edit. Hashing raw bytes would suppress every honest run,
+# and a gate that always fails gets disabled by the next author.
+#
+# python3, not jq — jq is absent on the primary dev machine (CLAUDE.md), and
+# the writeback path already depends on python3 to parse its response.
+_phi_fingerprint() {
+  local f="$1"
+  python3 - "$f" "$_PHI_MUTABLE_FIELDS" <<'PY' 2>/dev/null || return 1
+import hashlib, json, sys
+path, mutable = sys.argv[1], sys.argv[2].split()
+with open(path, "rb") as fh:
+    raw = fh.read()
+try:
+    doc = json.loads(raw)
+except Exception:
+    # NOT parseable as JSON. Fall back to hashing the raw bytes rather than
+    # failing open: a non-JSON payload is already a defect writeback will
+    # reject, but until then the strictest available check is exact bytes.
+    print("raw:" + hashlib.sha256(raw).hexdigest())
+    sys.exit(0)
+if isinstance(doc, dict):
+    for k in mutable:
+        doc.pop(k, None)
+# sort_keys so an honest re-Write's key reordering is not contamination;
+# separators fixed so whitespace changes are not either.
+canon = json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+print("json:" + hashlib.sha256(canon.encode("utf-8")).hexdigest())
+PY
+}
 
 # Fail LOCALLY on a payload missing the mandatory envelope, instead of letting
 # the API answer 400. Under the cepa:brain mid-run degrade rule a single non-2xx
@@ -341,6 +436,162 @@ case "$cmd" in
     # "drop-all" registry above), NOT grep's exit 1 which the caller can't read.
     tr -d '\r' < "$_pf" | grep -E $'^[A-Za-z0-9._-]+\t(active|retracted)$' || true
     ;;
+  scrub-seal)
+    # Record the payload's redaction count to a SIDECAR so a later shell can
+    # check it. This is half one of the re-Write gate (residual 2i); the other
+    # half is `scrub-verify`.
+    #
+    # WHY A FILE AND NOT A VARIABLE. The thing being guarded is an agent's
+    # Write between two fenced blocks: the scrub runs in block N, the re-Write
+    # happens in no shell at all, and `writeback` runs in block N+1 — a fresh
+    # process where every variable from block N is unset. A count held in
+    # `$PHI_BEFORE` is therefore empty at the only moment it matters, and an
+    # empty count compares equal to nothing, so the gate passes vacuously. That
+    # is residual 2g's rule and this is its first enforcement: state crosses a
+    # block boundary through the filesystem or not at all. It shipped FOUR
+    # times on this exact surface as a variable that did not survive
+    # (${CLAUDE_PLUGIN_ROOT}, $CEPA_ROOT, P="$P.scrubbed", and this).
+    [ -f "${1:-}" ] || _die "scrub-seal needs <payloadfile>"
+    [ $# -eq 1 ] || _die "scrub-seal takes exactly 1 argument, got $#"
+    # The seal is derived, so a stale one from a previous atom reusing this
+    # path must not be trusted. Writing unconditionally overwrites it; the
+    # `[ ! -L ]` refusal matches `scrub`'s — the path is predictable.
+    [ ! -L "$1.phiseal" ] || _die "scrub-seal refuses to write through the symlink '$1.phiseal'"
+    # REFUSE TO RE-SEAL CONTAMINATED BYTES. This guard runs BEFORE the stale
+    # seal is dropped, and it is the one thing standing between a retry and a
+    # laundered gate.
+    #
+    # Measured 2026-10-02, on the version that simply re-sealed:
+    #   block 3        -> payload has 2 markers, seal = 2
+    #   agent re-Write -> raw PHI restored, 0 markers
+    #   block 3 AGAIN  -> re-counts the CONTAMINATED payload, seal = 0
+    #   block 4        -> 0 >= 0 and the fingerprint matches -> exit 0, PHI sent
+    # Re-running the setup block is an ordinary recovery move — after an error,
+    # or to recompute an idkey — and nothing in compound.md says it is
+    # once-only. So re-sealing has to notice that a seal already exists for
+    # DIFFERENT bytes and refuse, rather than silently agreeing with itself.
+    #
+    # Fingerprint equality is the test, not count equality: the count is what
+    # the laundering moved. A seal whose fingerprint matches the current bytes
+    # is a harmless no-op re-seal (same payload, block re-run before any edit)
+    # and is allowed through.
+    if [ -f "$1.phiseal" ] && [ -s "$1.phiseal" ]; then
+      _prior_fp="$(sed -n 2p "$1.phiseal" | tr -d '[:space:]')"
+      if [ -n "$_prior_fp" ]; then
+        _now_fp="$(_phi_fingerprint "$1")" \
+          || _die "scrub-seal cannot fingerprint '$1' to compare against the existing seal — refusing to re-seal blind"
+        [ "$_now_fp" = "$_prior_fp" ] \
+          || _die "scrub-seal refuses to re-seal '$1': a seal already exists describing DIFFERENT content. Re-sealing after the payload changed would launder a contaminated re-Write into a passing gate (the new seal would simply agree with the new bytes). Regenerate the payload from \$DOC and re-scrub; do not re-seal. To seal a deliberately new payload at this path, remove '$1.phiseal' first."
+      fi
+    fi
+    # Drop any stale seal, before anything below can fail. A payload path
+    # reused across atoms (residual 2a's shape) otherwise leaves the PREVIOUS
+    # atom's count sitting there, and every failure path below — unreadable
+    # payload, uncreatable seal — then exits nonzero while `scrub-verify` finds
+    # a seal describing different content. Measured 2026-10-02: an unreadable
+    # payload died at rc=2 with a prior atom's seal still in place. Removing it
+    # up front makes the unevaluable case look unevaluable, which is the only
+    # state `scrub-verify` is allowed to fail closed on. The guard above is what
+    # keeps this removal from also erasing a contamination signal.
+    rm -f "$1.phiseal"
+    # TWO values are sealed, and the fingerprint is the load-bearing one.
+    #
+    # The count alone only detects DELETION. Measured 2026-10-02: an agent that
+    # leaves the markers intact and APPENDS raw PHI keeps the count at 2, and a
+    # floor check reports "intact" while unredacted content egresses. The
+    # fingerprint covers the whole payload minus the two authorized fields, so
+    # addition moves it. The count is kept as a second, human-legible signal —
+    # it names WHICH failure happened in the diagnostic, which a bare hash
+    # mismatch cannot.
+    #
+    # Both are computed before the seal is written, and either failing is fatal:
+    # an unreadable payload must never seal as "0 redactions, empty hash", a
+    # state that can never fall and so passes unconditionally.
+    _n="$(_phi_count "$1")" || _die "scrub-seal cannot read '$1'"
+    _fp="$(_phi_fingerprint "$1")" || _die "scrub-seal cannot fingerprint '$1' (python3 missing or unreadable payload) — refusing to seal a gate that could not be computed"
+    [ -n "$_fp" ] || _die "scrub-seal produced an EMPTY fingerprint for '$1' — refusing to seal an unevaluable gate"
+    : > "$1.phiseal" || _die "scrub-seal cannot create '$1.phiseal'"
+    chmod 600 "$1.phiseal"
+    printf '%s\n%s\n' "$_n" "$_fp" > "$1.phiseal"
+    printf 'sealed: %s redaction markers + content fingerprint in %s\n' "$_n" "$1"
+    ;;
+  scrub-verify)
+    # Half two of the re-Write gate. Recompute the payload's marker count AND
+    # its content fingerprint, and compare both against the seal.
+    #   exit 0 = the scrubbed content survived the agent's re-Write
+    #   exit 1 = it did NOT — suppress the writeback
+    #   exit 2 = the gate could not be evaluated — also suppress
+    #
+    # The fingerprint is what makes this a real check. A marker count can only
+    # fall when content is DELETED; the actual threat is an agent re-emitting
+    # pre-scrub strings it still holds in context, which it can do by ADDING
+    # them while every sealed marker stays put. Measured 2026-10-02:
+    #   sealed   {"a":"[REDACTED-PHI-SSN]","b":"[REDACTED-PHI-ID]"}        -> 2
+    #   re-Write {...same two...,"c":"SSN 987-65-4321 MRN 4567890"}        -> 2
+    # Count-only verdict: "intact". Raw PHI egressed. The fingerprint catches it.
+    [ -f "${1:-}" ] || _die "scrub-verify needs <payloadfile>"
+    [ $# -eq 1 ] || _die "scrub-verify takes exactly 1 argument, got $#"
+    # A MISSING seal is not "nothing to check" — it is an unevaluable gate, and
+    # the whole point of this verb is that the unevaluable case must not look
+    # like a pass. Same fail-closed shape as `scrub-required`'s exit 2: the
+    # caller refuses to send rather than assuming the redactions are intact.
+    [ -f "$1.phiseal" ] || _die "scrub-verify cannot find the seal '$1.phiseal' — the pre-re-Write baseline was never recorded, so redaction survival is UNEVALUABLE. Refuse to send rather than treating it as intact."
+    [ -s "$1.phiseal" ] || _die "scrub-verify found an EMPTY seal '$1.phiseal' — baseline unevaluable; refuse to send"
+    # Line 1 = marker count, line 2 = content fingerprint. Read both explicitly;
+    # a seal missing either line is unevaluable, NOT a pass.
+    _want="$(sed -n 1p "$1.phiseal" | tr -d '[:space:]')"
+    _want_fp="$(sed -n 2p "$1.phiseal" | tr -d '[:space:]')"
+    # Validate the seal's CONTENT. An unvalidated read lets any garbage become
+    # the expected value, and a non-numeric `$_want` makes the `-lt` comparison
+    # below abort under `set -e` with no diagnostic — unevaluable again, but
+    # silently.
+    case "$_want" in
+      ''|*[!0-9]*) _die "scrub-verify found a non-numeric seal count ('$_want') in '$1.phiseal' — baseline unevaluable; refuse to send" ;;
+    esac
+    # BOUND THE MAGNITUDE. All-digits is not enough: bash `test` cannot parse an
+    # integer >= 2^63, and because the failing `[` is an `if` CONDITION, `set -e`
+    # does not fire — execution falls straight through to the success branch.
+    # Measured 2026-10-02 with a seal of 9223372036854775808: bash printed
+    # "[: integer expression expected" and the verb exited 0 on a fully
+    # contaminated payload. 2^63-1 compares correctly, so the boundary is exact.
+    # This is the "an unevaluable gate must never read as a pass" rule surviving
+    # in a new spelling, one guard below the non-numeric case that handles it
+    # correctly. 9 digits is far above any real marker count and well inside
+    # what `test` parses.
+    [ "${#_want}" -le 9 ] || _die "scrub-verify found an implausible seal count ('$_want', ${#_want} digits) in '$1.phiseal' — beyond what the comparison can parse, so the gate is unevaluable; refuse to send"
+    # A seal written by an older version carries no fingerprint line. Treat that
+    # as UNEVALUABLE rather than falling back to the count-only check: the
+    # count-only check is the defect being fixed, so silently accepting a
+    # legacy seal would reinstate it on exactly the runs that straddle an
+    # upgrade.
+    [ -n "$_want_fp" ] || _die "scrub-verify found a seal with no content fingerprint in '$1.phiseal' (written by an older brain-client?) — the count-only check it implies cannot detect ADDED content; re-seal before verifying"
+    _have="$(_phi_count "$1")" || _die "scrub-verify cannot read '$1'"
+    _have_fp="$(_phi_fingerprint "$1")" || _die "scrub-verify cannot fingerprint '$1' (python3 missing or unreadable payload) — gate unevaluable; refuse to send"
+    # STATE THE PASS EXPLICITLY — do not let "no failure branch fired" mean
+    # success. Both checks are written as a positive condition that must hold,
+    # with `|| _die`, so a comparison that cannot be evaluated at all lands in
+    # the refuse path instead of falling through. The `-lt` form shipped first
+    # and had exactly that hole (see the magnitude guard above): bash `test`
+    # returned 2 on an unparseable operand, the `if` read false, and the verb
+    # printed "verified" on a contaminated payload.
+    #
+    # Count first: it NAMES the failure ("redactions were removed") where a
+    # fingerprint mismatch alone says only "content changed".
+    [ "$_have" -ge "$_want" ] 2>/dev/null || {
+      # Distinguish "genuinely fell" from "could not compare". Both suppress,
+      # but they are different operator problems and must not share a message.
+      if [ "$_have" -lt "$_want" ] 2>/dev/null; then
+        printf 'brain-client: scrub-verify FAILED — %s has %s redaction markers but %s were sealed before the re-Write. Pre-scrub strings were REMOVED; SUPPRESS the writeback.\n' "$1" "$_have" "$_want" >&2
+        exit 1
+      fi
+      _die "scrub-verify could not compare the marker counts (have='$_have', sealed='$_want') — gate unevaluable; refuse to send"
+    }
+    [ "$_have_fp" = "$_want_fp" ] || {
+      printf 'brain-client: scrub-verify FAILED — %s changed outside the authorized fields (%s) since the scrub. Content was ADDED or ALTERED, which reintroduces pre-scrub strings while leaving the marker count intact; SUPPRESS the writeback.\n' "$1" "$_PHI_MUTABLE_FIELDS" >&2
+      exit 1
+    }
+    printf 'verified: %s redaction markers intact and content unchanged outside %s in %s\n' "$_have" "$_PHI_MUTABLE_FIELDS" "$1"
+    ;;
   idkey)
     # CONTENT-derived idempotency_key so re-runs of an UNCHANGED doc dedup
     # (agent_memories has no upsert — a repeated key is skipped) while an
@@ -363,6 +614,6 @@ case "$cmd" in
     printf '%s:%s:%s\n' "$1" "$2" "$_sha"
     ;;
   *)
-    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|scrub-required|idkey)"
+    _die "unknown command: '${cmd}' (health|recall|writeback|review|participants|scrub|scrub-required|scrub-seal|scrub-verify|idkey)"
     ;;
 esac
