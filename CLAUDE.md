@@ -188,6 +188,33 @@ model" above, and
 Nothing enforces this: it measures one machine's local install state, which no
 CI runner has and no commit can fix. It holds by habit and by `/cepa:setup`.
 
+### A fenced block never inherits a shell variable — run the checker
+
+Every fenced ```bash block in a command file is its OWN process. State crosses
+blocks only through the FILESYSTEM. The rule, its six shipped instances, and
+the reviewable form are owned by residual 2g in
+`memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md` — cite it, do not
+restate it. Unlike the three rules above, this one IS enforced:
+
+```
+bash scripts/check-fenced-block-state.sh           # expect 0 MISS
+bash scripts/check-fenced-block-state-controls.sh  # expect 20/20
+```
+
+Both run in `residual-integrity.yml`, so CI gates them.
+
+**Two things the gate cannot do, and the second is why `--emit` still matters.**
+It admits names by allowlist, so adding an entry is a claim about the harness or
+the contract — state the evidence in the entry's `reason` field; an entry that
+matches nothing is a MISS, not a harmless leftover. And it proves a name is
+re-resolved in its own block, NOT that the re-resolution is *correct*: 2g's
+instance 5 was a re-assignment in the right block that expanded to the wrong
+path and exited 127. **Run the extracted block** —
+`python3 scripts/extract-fenced-blocks.py <file.md> --emit <dir>`, then each
+block under `bash -e` in a SEPARATE process. Every one of 2g's six instances,
+and all four probe defects in the gate's own first cut, were found that way and
+none by reading a diff.
+
 ## Conventions
 
 - `docs/` is deliberately gitignored — plans stay local; the durable records

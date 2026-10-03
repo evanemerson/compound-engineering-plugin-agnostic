@@ -273,11 +273,15 @@
    suppresses; deleted seal → unevaluable, suppressed.
 
 2g. **A fenced-block instruction file must never carry state across a block
-   boundary in a shell variable.** P2, still filed as a CHECKER — and this is
-   the most generalizable finding of the whole investigation. This is now the
-   SIXTH instance on the brain-writeback surface alone — and instances 5 and 6
-   were each written BY the session enforcing the rule, in the block it was
-   adding, with 2g's text on screen:
+   boundary in a shell variable.** P2. **CLOSED 2026-10-03** —
+   `scripts/check-fenced-block-state.sh` + its controls, CI-gated in
+   `.github/workflows/residual-integrity.yml`. The gate, not the rule, was the
+   deliverable; see "What the gate is" at the end of this item.
+
+   This is the most generalizable finding of the whole investigation. It was
+   the SIXTH instance on the brain-writeback surface alone — and instances 5
+   and 6 were each written BY the session enforcing the rule, in the block it
+   was adding, with 2g's text on screen:
 
    1. `${CLAUDE_PLUGIN_ROOT}` is not exported into the Bash tool's shell
       (PR #69).
@@ -335,8 +339,91 @@
    reports the fix and the defect the same way** — worse than no checker.
    Caught by running it on both shapes, not by reading the regex.
 
-   Still open: wiring it into CI with the allowlist, and a `docs/solutions/`
-   entry via `/cepa:compound`. The entry is not the fix.
+   **What the gate is (2026-10-03).** `scripts/check-fenced-block-state.sh`
+   runs the extractor's `--report` across every command file, applies a
+   per-name allowlist, and FAILS on what is left. Six legs; the two that
+   matter most were each found by MUTATION-TESTING THE CONTROLS, not by
+   reading code:
+
+   - **Leg 2s is the load-bearing one, and its absence was a silent pass.**
+     Leg 1 rests on the extractor's cross-block signal, which only fires when
+     a name was *assigned* in an earlier block. `$CEPA_ROOT` is set by a
+     **sourced** script, so it is never recorded as assigned and leg 1
+     structurally CANNOT fire for it — the name behind instances 2, 4 and 5.
+     With only legs 1–3, the reconstructed instance-5 shape reported **0
+     MISS**: the gate green-lighting the exact defect it was built for. Leg 2s
+     requires a `sourced` name's own block to source something.
+   - **The fragment marker needed a one-per-file cap.** `compound-refresh.md`'s
+     writeback block is a genuine fragment ("PASTE THIS AFTER … in ONE block"),
+     so an exemption path was unavoidable — and an exemption with no cap is an
+     off switch. Capped at one; over the cap NO block is exempt, so a
+     capped-out file sees every finding its markers were hiding.
+
+   **The allowlist is 5 entries, and three names were REJECTED from it** —
+   that triage is the substance, exactly as this item predicted. `$RUN`,
+   `$REPO` and `$DOC` all read as archetypal documented literals, and leg 3
+   rejected all three as stale: each is re-assigned in every block that uses
+   it (which is 2j's fix working), so none ever reaches the candidate list. The
+   test is not "is it obviously a literal" but "does any block use it
+   unassigned". Entries carry a mandatory reason and an unused entry is a MISS.
+
+   **Four defects in the probe, all found by running it, none by reading it** —
+   this item's own lesson, applied to its own fix:
+
+   - `SOURCE_RE` was line-anchored (`^[ \t]*\.`), but this repo's resolve
+     idiom is `[ -f "$R" ] && . "$R" && break`. It reported "sources nothing"
+     for every one of those blocks: **6 of the first 7 findings were false
+     positives.** An absence claim is a fact about the probe.
+   - The uses scan counted names inside full-line comments, so `setup.md`
+     block 1 was flagged over a comment reading "do NOT resolve it through
+     `$CEPA_ROOT`" — a finding whose own evidence says the opposite.
+   - `while read -r id` was invisible, surfacing `id` as a candidate. Fixed in
+     the extractor (`READ_RE`) rather than allowlisted: papering a parser gap
+     into a suppression makes the next loop variable an unexamined pass.
+   - `READ_RE`'s first cut used a bare `\bread\b`, which matched the PROSE
+     "Re-read the payload path from the pointer rather than retyping it" and
+     harvested `from`, `it`, `rather`, `than`, `the`, `there`, `retyping`,
+     `path`, `payload`, `pointer` as *assigned*. That direction is worse than
+     a false positive: a phantom assignment SUPPRESSES every real candidate of
+     that name. Same shape as the `re.M` defect this item already records.
+
+   **And two defects in the CONTROLS, both of which made a case pass for the
+   wrong reason** — the `sv_oneline` failure from 2i, reproduced in the suite
+   written to honour it:
+
+   - `mut_instance5` had an empty allowlist, so it produced TWO MISSes (leg 2
+     *and* leg 1). Disabling leg 1 left rc=1 and the case still passed:
+     **removing 2g's own detection killed ZERO of 13 cases.** Fixed by
+     allowlisting the name so only leg 1 can fail it.
+   - `mut_frag_abuse`'s block 0 did not source, so it carried its own leg-2s
+     finding and stayed red with the cap removed. Fixing it exposed a real bug:
+     `frag_blk` was a scalar holding only the LAST marked block, so the
+     exemption followed block ORDER rather than the marker — a real violation
+     passing while a documented fragment was flagged. Now a set, with
+     `mut_frag_order` pinning it.
+
+   **Mutation-swept: 15 mutants, 15 killed, 0 survivors** — 9 checker legs
+   (including the exit code) and 6 extractor invariants, each killing at least
+   one named case. Controls 20/20. Live tree 0 MISS / 0 WARN over 28 ```bash
+   blocks in 11 command files, of which 6 carry candidates.
+
+   Verification commands, per this repo's state-the-probe rule:
+
+   ```
+   bash scripts/check-fenced-block-state.sh           # 0 MISS, 0 WARN
+   bash scripts/check-fenced-block-state-controls.sh  # 20/20
+   ```
+
+   Stated limits, so none reads as a pass: it only inspects ```bash fences
+   (leg 0 WARNs on other shell-ish labels); it proves a `sourced` name's block
+   sources SOMETHING, not that the sourced file sets that name; and it proves a
+   name is re-resolved, NOT that the re-resolution is correct — instance 5 was
+   a re-assignment in the right block expanding to the wrong path. **Running
+   the block remains the only thing that catches that**, which is what `--emit`
+   is for.
+
+   Still open: a `docs/solutions/` entry via `/cepa:compound`. The entry is
+   not the fix.
 
 2j. **`$P` is agent-chosen, so two concurrent `/cepa:compound` runs can
    collide on the payload AND the seal.** P2. **FIXED in v1.28.1** — a
