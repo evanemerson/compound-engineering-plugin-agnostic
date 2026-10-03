@@ -204,8 +204,19 @@ _curl() {
   local method="$1" path="$2" body="${3:-}"
   local cfg; cfg="$(mktemp)"
   chmod 600 "$cfg"
+  # RETURN is not enough on its own: it fires when the function returns
+  # NORMALLY, but this script runs under `set -e`, so a nonzero curl kills the
+  # shell before the function ever returns and the trap never runs. The config
+  # file holds `x-brain-key: <MCP_ACCESS_KEY>` in PLAINTEXT, so every network
+  # failure left the credential at rest in /tmp — one file per failure,
+  # accumulating, never cleaned. Measured 2026-10-03 with a curl stub exiting
+  # 7: rc=7 and `grep` found the key in the leftover file (mode 600, so
+  # same-user only, but it is still a credential on disk nobody removes).
+  # EXIT covers the die-under-set-e path; RETURN still covers the ordinary
+  # one, so a long-lived caller making several calls does not accumulate
+  # configs until the process ends.
   # shellcheck disable=SC2064
-  trap "rm -f '$cfg'" RETURN
+  trap "rm -f '$cfg'" RETURN EXIT
   {
     printf 'header = "x-brain-key: %s"\n' "$MCP_ACCESS_KEY"
     printf 'header = "content-type: application/json"\n'

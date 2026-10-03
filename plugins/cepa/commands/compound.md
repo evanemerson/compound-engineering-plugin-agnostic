@@ -205,9 +205,144 @@ and authoritative either way.
    exists — `idkey`'s third argument is the PAYLOAD FILE, so the key hashes
    the strings actually being written, not the source doc.
 
+   **MINT THE PAYLOAD PATH FIRST — run this block BEFORE the Write tool, and
+   do not choose the filename yourself.** `mktemp` is what makes the path
+   unique per run; a name an agent picks from these instructions is the same
+   name a concurrent run picks from the same instructions.
+
    ```bash
    set -euo pipefail
-   REPO="<repo>"; DOC="<doc-path>"; P="<payload-file you just wrote>"
+   # One unique payload path per run. Two concurrent /cepa:compound runs that
+   # both chose a conventional name (`payload.json`, `/tmp/payload.json`)
+   # collide on the payload AND on every path derived from it — .scrubbed,
+   # .phiseal, .resp, .ids — and the gate then fails in BOTH directions
+   # (measured, residual 2j):
+   #   run A seals 1; run B overwrites the seal with 3; A verifies its own
+   #   1-marker payload against 3 -> SUPPRESSED, and the suppression path
+   #   rm -f's it. A correctly-scrubbed memory is destroyed and the run
+   #   reports "re-Write reintroduced pre-scrub content" — which is false.
+   #   Reverse the interleaving and B verifies against A's LOWER seal while
+   #   holding raw PHI -> passes. Each suppression path also deletes the
+   #   other run's payload mid-flight.
+   # mktemp with a template, not a bare name, so the uniqueness is the
+   # kernel's rather than the agent's.
+   # RUN="<a short id unique to this run>" — substitute it ONCE here, then
+   # paste the SAME literal into every later block. It is the run's only
+   # cross-block identifier and it is a documented literal, exactly like $REPO
+   # and $DOC. Any short unique string works (the branch name, an issue
+   # number, a timestamp you read from `date` yourself).
+   #
+   # DO NOT reach for `$$` here. Each fenced block is a different shell, so
+   # `$$` is a different PID in each one and a pointer named with it is
+   # unfindable from the next block. Measured 2026-10-03 while writing this
+   # block: three bash invocations gave 4064353 / 4064354 / 4064355. That is
+   # residual 2g's class — instance 6, inside the fix for 2j — and it is why
+   # the identifier is a literal you paste rather than anything the shell
+   # derives.
+   RUN="<short-run-id>"
+   # Validate before composing any path from it. $RUN lands in a filename, so
+   # an unsubstituted placeholder or a value carrying `/` or `..` would write
+   # the pointer somewhere no later block looks — or outside $TMPDIR entirely.
+   # This is autonomy §5's slug discipline applied at the one place this
+   # command composes a path from a substituted value.
+   case "$RUN" in ''|'<short-run-id>'|*[!A-Za-z0-9._-]*)
+     echo "brain writeback ABORTED: substitute RUN with a short id ([A-Za-z0-9._-])." >&2
+     exit 1 ;;
+   esac
+   # allowed-tools note: every verb below (`mktemp`, `printf`, `chmod`, `cat`,
+   # `rm`) runs INSIDE this fenced block, so `Bash(bash:*)` is the grant that
+   # covers them — the same way the pre-existing `cat`/`rm`/`echo`/`chmod`/`mv`
+   # in the later blocks are covered. No per-verb grant is added, and none is
+   # needed; recorded here because CLAUDE.md requires re-verifying
+   # `allowed-tools` whenever a command body gains a verb, and "checked, the
+   # existing grant covers it" is the answer rather than an omission.
+   P="$(mktemp "${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-XXXXXX.json")"
+   chmod 600 "$P"                 # it will hold doc content; create it private
+   # RECORD THE PATH where a LATER BLOCK can read it. The payload is written by
+   # the Write tool (no shell at all) and posted from a different fenced block —
+   # a different process — so `$P` does not survive to the writeback. Per
+   # residual 2g, state crosses a block boundary through the FILESYSTEM or not
+   # at all; five instances of that class have shipped on this exact surface
+   # before this one.
+   # The pointer's name is derivable from $RUN alone, so the next block can
+   # FIND it without inheriting anything. That findability is exactly why it
+   # cannot also be unique by construction the way `mktemp` is — so the
+   # uniqueness has to be CHECKED rather than assumed.
+   PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
+   # REFUSE to clobber another run's pointer. $RUN is agent-chosen, and nothing
+   # stops two concurrent runs picking the same short id — "A", a shared issue
+   # number, the same date. Measured 2026-10-03: minting twice with RUN=A gave
+   # two distinct mktemp payloads but ONE pointer, which the second mint
+   # overwrote. Run 1's payload was orphaned and BOTH runs' later blocks then
+   # read run 2's path — the payloads no longer collide, but the pointer does,
+   # which moves residual 2j up one level instead of closing it.
+   # Same shape as `scrub-seal`'s refusal to re-seal different content: an
+   # existing pointer means another run owns this id, so stop and say so.
+   #
+   # `set -C` (noclobber) in a SUBSHELL, not `[ -e "$PTR" ]` then write. The
+   # test-then-write form is a TOCTOU race: two runs starting together both see
+   # no pointer, both write, and the loser is silently orphaned again — the
+   # same defect in a smaller window. noclobber makes the create-or-refuse one
+   # atomic operation in the kernel. Measured 2026-10-03: 20 concurrent
+   # noclobber writers to one path, exactly 1 winner, 19 refused at rc=1.
+   # The subshell scopes `-C` so the rest of this block keeps ordinary
+   # redirection.
+   if ! ( set -C; printf '%s\n' "$P" > "$PTR" ) 2>/dev/null; then
+     echo "brain writeback ABORTED: pointer '$PTR' already exists — another" >&2
+     echo "  /cepa:compound run is using RUN='$RUN'. Pick a different RUN id." >&2
+     echo "  (If it is a leftover from a dead run, remove that file and retry.)" >&2
+     rm -f "$P"                     # do not leave this run's payload orphaned
+     exit 1
+   fi
+   chmod 600 "$PTR"
+   printf 'payload path: %s\npointer: %s\n' "$P" "$PTR"
+   ```
+
+   **If that block exited non-zero, STOP.** Do not Write a payload, do not run
+   the next block, and do not report a writeback. Every gate in this phase is
+   enforced by a non-zero `exit` from a Bash call, and a non-zero block is a
+   hard stop for the step — never a line of output to read past. (This is the
+   general rule for every fenced block below too; residual 2l tracks stating it
+   once in `cepa:autonomy`'s execution contract rather than per command file.)
+
+   Now **Write the payload JSON to the path that block printed** — the
+   `mktemp` path, not a name of your own. Then run the block below.
+
+   ```bash
+   set -euo pipefail
+   REPO="<repo>"; DOC="<doc-path>"
+   # The SAME literal you substituted above. This is the one value that has to
+   # be identical across blocks; everything else is re-derived from it.
+   RUN="<short-run-id>"
+   # Re-read the payload path from the pointer rather than retyping it: a
+   # retyped path is an agent-chosen path again, and a typo here operates on a
+   # file that does not exist while every later step still reads rc=0 on its
+   # own terms.
+   case "$RUN" in ''|'<short-run-id>'|*[!A-Za-z0-9._-]*)
+     echo "brain writeback ABORTED: substitute RUN with the same short id used" >&2
+     echo "  in the path-minting block ([A-Za-z0-9._-])." >&2
+     exit 1 ;;
+   esac
+   PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
+   [ -s "$PTR" ] || { echo "brain writeback ABORTED: no payload pointer at $PTR — run the path-minting block first, with the same RUN id." >&2; exit 1; }
+   P="$(cat "$PTR")"
+   # CONTAIN the path the pointer names. Its contents are used as a file path,
+   # and the pointer sits at a predictable name in a world-writable /tmp — so
+   # whatever it holds must be proven to be THIS run's minted payload, not
+   # merely readable. Without this, a pointer aimed at an unrelated file makes
+   # the scrub rewrite that file in place and a later suppression `rm -f` it:
+   # measured 2026-10-03, the seal reported success on a file outside the
+   # minted prefix. Same discipline `brain-client.sh` already applies to
+   # `.phiseal` ("the path is predictable"), applied to the pointer.
+   case "$P" in
+     "${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-"*.json) : ;;
+     *) echo "brain writeback ABORTED: pointer names '$P', which is not this" >&2
+        echo "  run's minted payload (expected ${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-*.json)." >&2
+        echo "  Refusing to operate on it." >&2
+        exit 1 ;;
+   esac
+   [ -f "$P" ] && [ ! -L "$P" ] || { echo "brain writeback ABORTED: payload '$P' is not a regular file." >&2; exit 1; }
+   [ -s "$P" ] || { echo "brain writeback ABORTED: payload '$P' is missing or empty — the Write step did not land on the minted path." >&2; exit 1; }
    # BRAIN_WORKSPACE_ID comes from the gitignored repo-root .env.local. In a
    # linked git worktree that file does NOT exist — it lives only in the main
    # checkout — so resolve it via git-common-dir rather than assuming `./`.
@@ -271,7 +406,7 @@ and authoritative either way.
      1) FORCE_SCRUB=0 ;;
      *) echo "brain writeback ABORTED: scrub-required could not evaluate the" >&2
         echo "  forced-scrub condition (rc=$_sr_rc). Refusing to send." >&2
-        rm -f "$P"                            # do not leave the payload at rest
+        rm -f "$P" "$PTR"                     # payload and its pointer
         exit 1 ;;
    esac
    if [ "$FORCE_SCRUB" = 1 ]; then
@@ -282,7 +417,7 @@ and authoritative either way.
      bash "$CLIENT" scrub "$P" "$P.scrubbed" || {
        echo "brain writeback SUPPRESSED: PHI scrub failed; not sending" >&2
        echo "  unscrubbed. Record it in suppressed_writebacks:." >&2
-       rm -f "$P"                              # unscrubbed bytes must not linger
+       rm -f "$P" "$PTR"                       # unscrubbed bytes must not linger
        exit 1
      }
      chmod 600 "$P.scrubbed"
@@ -294,7 +429,7 @@ and authoritative either way.
      [ -s "$P.scrubbed" ] || {
        echo "brain writeback SUPPRESSED: the scrub produced an EMPTY payload." >&2
        echo "  The payload was removed; regenerate from $DOC to retry." >&2
-       rm -f "$P" "$P.scrubbed"; exit 1
+       rm -f "$P" "$P.scrubbed" "$PTR"; exit 1
      }
      # Install with mv, and KEEP THE SAME PATH. Two reasons for each half:
      # mv is atomic within a directory, so it can never leave a truncated
@@ -305,7 +440,7 @@ and authoritative either way.
      mv -f "$P.scrubbed" "$P" || {
        echo "brain writeback SUPPRESSED: could not install scrubbed payload." >&2
        echo "  The payload was removed; regenerate from $DOC to retry." >&2
-       rm -f "$P" "$P.scrubbed"; exit 1
+       rm -f "$P" "$P.scrubbed" "$PTR"; exit 1
      }
      chmod 600 "$P"                            # mv carries the mode; be explicit
    fi
@@ -334,7 +469,7 @@ and authoritative either way.
      echo "brain writeback SUPPRESSED: cannot seal the redaction count, so" >&2
      echo "  re-Write contamination would be unverifiable. Record it in" >&2
      echo "  suppressed_writebacks:." >&2
-     rm -f "$P" "$P.phiseal"; exit 1
+     rm -f "$P" "$P.phiseal" "$PTR"; exit 1
    }
    ```
 
@@ -396,7 +531,45 @@ and authoritative either way.
    # `set -u` it dies "CEPA_ROOT: unbound variable"; without it, rc=127. This
    # block previously used a bare `$CLIENT` for exactly this reason-shaped
    # defect, so the resolver is repeated rather than assumed.
-   P="<the same payload file>"
+   # Same RUN literal as the earlier blocks, and the payload path is re-read
+   # from the pointer — never retyped. Retyping it reintroduces the
+   # agent-chosen path residual 2j is about, and a path that does not exist
+   # makes `scrub-verify` report rc=2 "unevaluable" for a run whose payload was
+   # in fact perfectly clean.
+   RUN="<short-run-id>"
+   # Validate HERE too, not only in the minting block. Each block composes
+   # $PTR from $RUN independently, so a guard that lives in one block leaves
+   # the other two deriving the same path unchecked — the asymmetry residual 2g
+   # is about. Latent today (an invalid $RUN makes the pointer lookup miss and
+   # abort), but any future change to how $PTR is built would turn that safe
+   # abort into an unguarded path composition.
+   case "$RUN" in ''|'<short-run-id>'|*[!A-Za-z0-9._-]*)
+     echo "brain writeback ABORTED: substitute RUN with the same short id used" >&2
+     echo "  in the path-minting block ([A-Za-z0-9._-])." >&2
+     exit 1 ;;
+   esac
+   PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
+   [ -s "$PTR" ] || { echo "brain writeback ABORTED: no payload pointer at $PTR (same RUN id as the earlier blocks?)." >&2; exit 1; }
+   P="$(cat "$PTR")"
+   # Contain it, exactly as the step-3 block does — see the rationale there.
+   case "$P" in
+     "${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-"*.json) : ;;
+     *) echo "brain writeback ABORTED: pointer names '$P', which is not this" >&2
+        echo "  run's minted payload. Refusing to operate on it." >&2
+        exit 1 ;;
+   esac
+   [ -f "$P" ] && [ ! -L "$P" ] || { echo "brain writeback ABORTED: payload '$P' is not a regular file." >&2; exit 1; }
+   [ -s "$P" ] || { echo "brain writeback ABORTED: payload '$P' is missing or empty." >&2; exit 1; }
+   # CLEAN UP ON EVERY EXIT, via a trap rather than per-branch `rm -f`. This
+   # block has ten `exit 1` paths (resolver unresolved, gate suppressed,
+   # writeback non-2xx, unparseable response, …) and before the trap only ONE
+   # of them removed anything — measured 2026-10-03. Every other failure left
+   # $P, holding scrubbed solution-doc content, plus the pointer, sitting in
+   # /tmp at mode 600 after the run. A per-branch rm is a list that has to stay
+   # complete as branches are added; a trap is the mechanism.
+   # Set AFTER the containment checks above, so a refused pointer can never
+   # make the trap delete a file this run does not own.
+   trap 'rm -f "$P" "$P.phiseal" "$P.resp" "$P.ids" "$PTR"' EXIT
    for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
@@ -417,7 +590,7 @@ and authoritative either way.
      echo "  content, or redaction survival could not be evaluated. NOT" >&2
      echo "  sending. Record it in suppressed_writebacks: and regenerate the" >&2
      echo "  payload from the scrubbed file rather than from context." >&2
-     rm -f "$P" "$P.phiseal"          # contaminated bytes must not linger
+     rm -f "$P" "$P.phiseal" "$PTR"   # contaminated bytes must not linger
      exit 1
    }
    rm -f "$P.phiseal"                 # consumed; a stale seal must not outlive it
@@ -457,6 +630,11 @@ and authoritative either way.
    done < "$P.ids"
    [ "$promoted" -eq "$total" ] \
      || echo "brain writeback: $((total-promoted)) of $total ids stranded in pending" >&2
+
+   # No explicit cleanup here: the EXIT trap set at the top of this block
+   # already removes $P, .phiseal, .resp, .ids and the pointer, and it fires on
+   # the success path as well as on all ten failure paths. A second copy would
+   # be a list to keep in sync with the trap for no benefit.
    ```
 
    The counters are the mechanism, not a reminder: report `written: $promoted`
