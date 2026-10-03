@@ -170,6 +170,16 @@
    **FIXED in v1.28.0** — `brain-client.sh scrub-seal` / `scrub-verify`, wired
    into `compound.md` either side of the agent's re-Write.
 
+   **LIVE as of 2026-10-03.** Merged as `afe7ce1` (PR #80), both install hops
+   refreshed, `check-plugin-freshness.sh` rc=0, and the gate re-verified
+   against the LOADED copy at
+   `~/.claude/plugins/cache/cepa/cepa/1.28.0/scripts/brain-client.sh` — not
+   against this checkout. Four behaviors confirmed there: PHI added with the
+   marker count intact → rc=1; honest two-field re-Write with reindented JSON
+   → rc=0; re-seal after contamination → rc=2 refused; a 2^63 seal → rc=2, no
+   fall-through. Stated this way because CLAUDE.md's rule is that a merged fix
+   is not a live fix, and this surface is the one that wrote that rule.
+
    The count crosses the fenced-block boundary in a FILE (`<payload>.phiseal`),
    per 2g. It had to: measured under the real block split, `$CEPA_ROOT` is
    unbound in the step-4 shell, and the naive `CLIENT="$CEPA_ROOT/scripts/…"`
