@@ -66,6 +66,20 @@ jobs:
       - name: Check sweep branch classification
         if: always()
         run: bash scripts/check-sweep-branch-classes.sh
+      # Residual 2g: a fenced-block instruction file must never carry state
+      # across a block boundary in a shell variable. SIX instances shipped on
+      # the brain-writeback surface alone, and instances 5 and 6 were each
+      # written BY the session enforcing the rule, in the block it was adding,
+      # with 2g's text on screen — so review is measurably not holding this and
+      # a runner is the only thing that will. Unlike check-plugin-freshness.sh
+      # this CAN be gated: it reads tracked files only and needs no local
+      # install state. Static command, no workflow-context interpolation.
+      - name: Check fenced-block state crossing
+        if: always()
+        run: bash scripts/check-fenced-block-state.sh
+      - name: Check fenced-block-state checker controls
+        if: always()
+        run: bash scripts/check-fenced-block-state-controls.sh
       # brain-client.sh's argument guards. Same rationale as the step above —
       # a field run cannot cover these, because the failure they prevent is
       # SILENT: the three recorded incidents (2026-08-06, 08-22, 08-23) each

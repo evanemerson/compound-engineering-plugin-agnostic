@@ -273,11 +273,15 @@
    suppresses; deleted seal → unevaluable, suppressed.
 
 2g. **A fenced-block instruction file must never carry state across a block
-   boundary in a shell variable.** P2, still filed as a CHECKER — and this is
-   the most generalizable finding of the whole investigation. This is now the
-   SIXTH instance on the brain-writeback surface alone — and instances 5 and 6
-   were each written BY the session enforcing the rule, in the block it was
-   adding, with 2g's text on screen:
+   boundary in a shell variable.** P2. **CLOSED 2026-10-03** —
+   `scripts/check-fenced-block-state.sh` + its controls, CI-gated in
+   `.github/workflows/residual-integrity.yml`. The gate, not the rule, was the
+   deliverable; see "What the gate is" at the end of this item.
+
+   This is the most generalizable finding of the whole investigation. It was
+   the SIXTH instance on the brain-writeback surface alone — and instances 5
+   and 6 were each written BY the session enforcing the rule, in the block it
+   was adding, with 2g's text on screen:
 
    1. `${CLAUDE_PLUGIN_ROOT}` is not exported into the Bash tool's shell
       (PR #69).
@@ -335,8 +339,193 @@
    reports the fix and the defect the same way** — worse than no checker.
    Caught by running it on both shapes, not by reading the regex.
 
-   Still open: wiring it into CI with the allowlist, and a `docs/solutions/`
-   entry via `/cepa:compound`. The entry is not the fix.
+   **What the gate is (2026-10-03).** `scripts/check-fenced-block-state.sh`
+   runs the extractor's `--report` across every command file, applies a
+   per-name allowlist, and FAILS on what is left. Legs 0, 1, 2, 2b, 2s, 2f, 3
+   and 4; the ones that matter most were each found by MUTATION-TESTING THE
+   CONTROLS or by ADVERSARIAL ATTACK, never by reading code:
+
+   - **Leg 2s is the load-bearing one, and its absence was a silent pass.**
+     Leg 1 rests on the extractor's cross-block signal, which only fires when
+     a name was *assigned* in an earlier block. `$CEPA_ROOT` is set by a
+     **sourced** script, so it is never recorded as assigned and leg 1
+     structurally CANNOT fire for it — the name behind instances 2, 4 and 5.
+     With only legs 1–3, the reconstructed instance-5 shape reported **0
+     MISS**: the gate green-lighting the exact defect it was built for. Leg 2s
+     requires a `sourced` name's own block to source something.
+   - **The fragment marker needed a one-per-file cap.** `compound-refresh.md`'s
+     writeback block is a genuine fragment ("PASTE THIS AFTER … in ONE block"),
+     so an exemption path was unavoidable — and an exemption with no cap is an
+     off switch. Capped at one; over the cap NO block is exempt, so a
+     capped-out file sees every finding its markers were hiding.
+
+   **The allowlist is 5 entries, and three names were REJECTED from it** —
+   that triage is the substance, exactly as this item predicted. `$RUN`,
+   `$REPO` and `$DOC` all read as archetypal documented literals, and leg 3
+   rejected all three as stale: each is re-assigned in every block that uses
+   it (which is 2j's fix working), so none ever reaches the candidate list. The
+   test is not "is it obviously a literal" but "does any block use it
+   unassigned". Entries carry a mandatory reason and an unused entry is a MISS.
+
+   **Four defects in the probe, all found by running it, none by reading it** —
+   this item's own lesson, applied to its own fix:
+
+   - `SOURCE_RE` was line-anchored (`^[ \t]*\.`), but this repo's resolve
+     idiom is `[ -f "$R" ] && . "$R" && break`. It reported "sources nothing"
+     for every one of those blocks: **6 of the first 7 findings were false
+     positives.** An absence claim is a fact about the probe.
+   - The uses scan counted names inside full-line comments, so `setup.md`
+     block 1 was flagged over a comment reading "do NOT resolve it through
+     `$CEPA_ROOT`" — a finding whose own evidence says the opposite.
+   - `while read -r id` was invisible, surfacing `id` as a candidate. Fixed in
+     the extractor (`READ_RE`) rather than allowlisted: papering a parser gap
+     into a suppression makes the next loop variable an unexamined pass.
+   - `READ_RE`'s first cut used a bare `\bread\b`, which matched the PROSE
+     "Re-read the payload path from the pointer rather than retyping it" and
+     harvested `from`, `it`, `rather`, `than`, `the`, `there`, `retyping`,
+     `path`, `payload`, `pointer` as *assigned*. That direction is worse than
+     a false positive: a phantom assignment SUPPRESSES every real candidate of
+     that name. Same shape as the `re.M` defect this item already records.
+
+   **THREE defects in the CONTROLS, every one of which made a case pass for
+   the wrong reason** — the `sv_oneline` failure from 2i, reproduced three
+   times in the suite written to honour it. This is the single most
+   generalizable thing the PR produced:
+
+   - `mut_instance5` had an empty allowlist, so it produced TWO MISSes (leg 2
+     *and* leg 1). Disabling leg 1 left rc=1 and the case still passed:
+     **removing 2g's own detection killed ZERO of 13 cases.**
+   - **The fix for that was ALSO wrong, and the shard asserted it for one
+     revision.** Allowlisting the name and declaring "leg 1 is the ONLY leg
+     that can redden this case" was true when written and false when it
+     shipped: leg 2s was added later, block 1 sourced nothing, and leg 2s
+     became a second trigger. PR #82's adversarial review measured it —
+     removing leg 1 killed only `mut_instance3`, and `mut_instance5` was a
+     duplicate of `mut_sourced_gap`. **A later leg silently took over an
+     earlier leg's only headline control.** Leg 1 now has `mut_leg1_literal`,
+     a `literal`-class fixture leg 2s structurally cannot touch. Note what
+     does NOT work: making block 1 source an unrelated script. Leg 1 cannot
+     fire for a `sourced` name at all (never recorded as `assigned` — the
+     reason leg 2s exists), so that variant reports 0 MISS.
+   - `mut_frag_abuse`'s block 0 did not source, so it carried its own leg-2s
+     finding and stayed red with the cap removed. Fixing it exposed a real bug:
+     `frag_blk` was a scalar holding only the LAST marked block, so the
+     exemption followed block ORDER rather than the marker — a real violation
+     passing while a documented fragment was flagged. Now a set, with
+     `mut_frag_order` pinning it.
+
+   **THE RULE THIS YIELDS, and it outlives this gate:** after adding any leg,
+   re-run the per-leg mutation sweep and confirm every leg still kills at least
+   one case **that no other leg also kills**. A green suite is not evidence
+   that each leg is covered, and rc alone cannot pin a leg's *scope* — the
+   leg-2b whole-file mutant stayed red by over-reporting (2 MISSes instead of
+   1), so `mut_env_scope_exact` asserts the exact finding set rather than rc.
+
+   **Five more defects found by RUNNING the gate against hostile input** (PR
+   #82's review), each a way to commit 2g and pass:
+
+   - **A `` ```sh ``, unlabeled, or `` ```Bash `` fence was invisible.** The
+     extractor matches `` ```bash `` exactly, so instance 5 placed in any of
+     them gave rc=0 — `` ```sh `` with a label-only WARN, the other two in
+     total silence. Leg 0 now detects by CONTENT. The live corpus has 62
+     unlabeled fences and `handoff.md` block 9 holds six shell-looking lines,
+     so this was a real blind spot. WARN not MISS: that block is a paste
+     template with no second block to inherit from, so failing on it would
+     make the fix "mangle a correct document".
+   - **A heredoc body line shaped like an assignment phantom-assigned.** A
+     block writing an operator runbook that documents `P=/tmp/payload.json`
+     reported `assigned: P`, which SUPPRESSED the real candidate — the
+     wrong-all-clear direction, and on `compound.md`'s writeback path it is the
+     v1.26.8 shape: writeback falls back to the unscrubbed original, a PHI
+     leak. `task.md` block 9 already contains a heredoc. Fixed by masking
+     heredoc bodies before the assignment scan only; the uses scan must NOT be
+     masked, because the shell really does expand `$NAME` there.
+   - **One guarded mention laundered every unguarded use.** Leg 2b grepped the
+     whole `.md` file, so unguarded `$X` in block 0 plus `${X:-}` in block 1
+     passed — and the laundering mention did not have to be code: a comment, or
+     markdown prose outside any fence, satisfied a claim about shell state.
+     Now scoped per block, over the emitted body, comments stripped.
+   - **The fragment marker could be granted by accident.** Two unanchored
+     greps meant the strings matched inside a heredoc writing an unrelated
+     note, or split across two `echo` arguments — each silently consuming the
+     file's one fragment slot and disabling leg 2s on a block with a real
+     violation. Reachable here specifically: command files routinely emit PR
+     bodies and handoff prompts containing paste instructions. Now one
+     full-line comment carrying both strings, which is what the prose always
+     described.
+   - **A drifted output label made the gate green while parsing NOTHING.**
+     Renaming `block N:` in the extractor gave `scope: 0 block(s)`, 0 MISS,
+     rc=0 — the `scope:` line printing the evidence of its own failure while
+     nothing acted on it. Leg 4 now cross-checks the parsed count against two
+     independent probes (a direct grep of the reports, and a fence count that
+     does not involve the extractor). All three must agree.
+   - **And leg 4 itself then shipped the same defect, one layer down.** Its
+     extractor-independent probe summed via `paste -sd+ | bc`, and `bc` is a
+     dependency this repo explicitly must not assume — CLAUDE.md records the
+     identical gap for `jq`. Measured with a PATH identical except for `bc`:
+     `bc: command not found`, then `[: : integer expression expected`, then
+     **`0 MISS`, rc=0** with the `cross-check:` line printing a blank where its
+     count belongs. The failed substitution leaves the value EMPTY rather than
+     unset, so `set -u` cannot see it, and the `[` error is swallowed because
+     it is an `if` CONDITION — residual 2i's 2^63 blind spot exactly. Now pure
+     bash arithmetic that skips non-numeric input, so a grep failure degrades
+     to 0 and the comparison REPORTS it instead of crashing on it. Pinned by
+     `mut_no_bc`, which builds a PATH missing only `bc` and treats its own
+     inability to do so as a failure rather than a pass. This is the
+     `a-detector-is-not-exempt-from-the-class-it-detects` doc landing on the
+     leg added to prevent that class.
+
+   **Mutation-swept: 21 mutants, 18 killed outright; the 3 survivors are
+   deliberate redundancy, verified individually** — leg 4's two cross-checks
+   each catch the drift alone (removing BOTH kills `mut_parse_drift`), and the
+   leg-2b scope mutant is killed by `mut_env_scope_exact` rather than by rc.
+   Controls 31/31.
+
+   Verification commands, per this repo's state-the-probe rule:
+
+   ```
+   bash scripts/check-fenced-block-state.sh           # 0 MISS, 1 WARN
+   bash scripts/check-fenced-block-state-controls.sh  # 0 failed
+   ```
+
+   The 1 WARN is `handoff.md`'s unlabeled paste-template block, described
+   above — expected, not a deferred failure. Measured over 28 ```bash blocks
+   in 11 command files, of which 6 carry candidates. The extractor changes
+   were corpus-diffed against `HEAD`: output IDENTICAL on all 11 files, so no
+   row was lost to heredoc masking (the repo's "a fixture score is necessary,
+   never sufficient" rule).
+
+   Stated limits, so none reads as a pass: shell in a non-`bash` fence is
+   WARNed, not inspected; it proves a `sourced` name's block sources
+   SOMETHING, not that the sourced file sets that name; the fragment marker is
+   still an unverifiable promise, merely a narrower one; and it proves a name
+   is re-resolved, NOT that the re-resolution is correct — instance 5 was a
+   re-assignment in the right block expanding to the wrong path. **Running the
+   block remains the only thing that catches that**, which is what `--emit`
+   is for.
+
+   **The `docs/solutions/` entry is DONE, as an extension rather than a new
+   doc.** `an-assertion-must-name-the-edit-that-reddens-it.md` already owned
+   "a control detaches from the construct it names" with four mechanisms, each
+   detaching **when the control is written**. What PR #82 found is a fifth that
+   none of them cover — **succession**: the control was measured correct, and a
+   later leg took its kill away. A new doc would have been the restatement this
+   repo has paid for three times, so the doc now reads "five ways", with the
+   mechanism, three reasons a reviewer cannot catch it (the control is not
+   wrong; the invalidating edit is in another file's diff; adding coverage
+   REMOVED coverage), the repair that works, and the repair that does not.
+   Three Detection signals added — S0 (an unqualified "ONLY leg N" claim in a
+   checker that has since gained a leg), S0b (a per-leg sweep with no
+   uniqueness assertion), S0c (a control that can decline and still pass).
+
+   **S0 immediately found two live instances in this PR's own controls** —
+   `mut_instance5` and `mut_instance3` both still claimed "ONLY leg 1". One was
+   false (fixed), one was true but unverified (re-measured, and the sentence
+   now says how to re-verify rather than asserting it). A signal that catches
+   something in the diff that created it is the right shape.
+
+   Note `docs/` is gitignored here, so that write-up is local. The durable
+   tracked record is CLAUDE.md's rule plus this item.
 
 2j. **`$P` is agent-chosen, so two concurrent `/cepa:compound` runs can
    collide on the payload AND the seal.** P2. **FIXED in v1.28.1** — a
