@@ -275,7 +275,9 @@
 2g. **A fenced-block instruction file must never carry state across a block
    boundary in a shell variable.** P2, still filed as a CHECKER — and this is
    the most generalizable finding of the whole investigation. This is now the
-   FIFTH instance on the brain-writeback surface alone:
+   SIXTH instance on the brain-writeback surface alone — and instances 5 and 6
+   were each written BY the session enforcing the rule, in the block it was
+   adding, with 2g's text on screen:
 
    1. `${CLAUDE_PLUGIN_ROOT}` is not exported into the Bash tool's shell
       (PR #69).
@@ -288,6 +290,12 @@
    5. The first cut of 2i's own fix wrote `CLIENT="$CEPA_ROOT/scripts/…"` in
       the step-4 block. Measured 2026-10-02: `set -u` → "CEPA_ROOT: unbound
       variable"; without it → `/scripts/brain-client.sh`, rc=127.
+   6. The first cut of **2j's** fix named the cross-block pointer file with
+      `$$`, for per-run uniqueness. Each block is a different shell, so `$$` is
+      a different PID in each: measured 2026-10-03, three bash invocations gave
+      4064353 / 4064354 / 4064355, and the pointer would have been unfindable
+      from the next block. A fix for a path-collision bug, broken by the
+      state-crossing bug, in the same diff.
 
    The rule: state crosses blocks only through the FILESYSTEM — the same
    path, or an explicit re-read — never through a variable. The reviewable
@@ -331,7 +339,45 @@
    entry via `/cepa:compound`. The entry is not the fix.
 
 2j. **`$P` is agent-chosen, so two concurrent `/cepa:compound` runs can
-   collide on the payload AND the seal.** P2, filed — found by PR #80's
+   collide on the payload AND the seal.** P2. **FIXED in v1.28.1** — a
+   path-minting block now runs BEFORE the Write tool: `mktemp` creates the
+   payload path, and a pointer file named from a substituted `$RUN` literal
+   carries that path to the later blocks.
+
+   Three things had to be true at once, which is why this was its own diff.
+   The payload is written by the **Write tool** (no shell), so `mktemp` cannot
+   live in the block that uses it; the path must therefore cross a block
+   boundary, so per 2g it goes through the filesystem; and the pointer itself
+   must be findable without inheriting anything, so its NAME is derived from a
+   literal rather than from shell state.
+
+   **2g bit this fix too — instance 6, inside 2j's own fix.** The first cut
+   named the pointer with `$$` for per-run uniqueness. Each fenced block is a
+   different shell, so `$$` is a different PID in each: measured 2026-10-03,
+   three bash invocations gave 4064353 / 4064354 / 4064355, and the pointer
+   would have been unfindable from the next block. `$RUN` is a documented
+   literal the agent substitutes once — the same shape `$REPO` and `$DOC`
+   already use — and it is validated against `[A-Za-z0-9._-]` before any path
+   is composed from it, since it lands in a filename. Measured: the
+   placeholder, empty, `../../etc/evil`, `a/b` and `x;rm -rf /` all abort at
+   rc=1 writing nothing; only a valid id creates files.
+
+   Every suppression path now removes the pointer alongside the payload, and
+   the successful path removes `$P`, `.phiseal`, `.resp`, `.ids` and the
+   pointer after the promote loop has read `.ids`. A pointer outliving its
+   payload resolves to a path that no longer exists, which the next block
+   would report as "the Write step did not land" for a run that completed.
+
+   Verified by extracting all three blocks and running two interleaved runs:
+   A seals 1 and B seals 3 against distinct `mktemp` paths, neither seal moves
+   when the other runs, and a contaminated run suppresses while its concurrent
+   honest sibling still passes. The `allowed-tools` re-check CLAUDE.md requires
+   was done: `mktemp`/`printf` run inside the fenced block, so `Bash(bash:*)`
+   covers them exactly as it already covers the pre-existing
+   `cat`/`rm`/`echo`/`chmod`/`mv` — recorded at the call site rather than left
+   as an apparent omission.
+
+   Retained below as the record of what was wrong — found by PR #80's
    adversarial review, which measured both directions.
 
    `compound.md` says `P="<payload-file you just wrote>"` and, in the later
