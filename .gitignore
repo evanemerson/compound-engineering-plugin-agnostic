@@ -7,3 +7,6 @@ cepa.local.md
 # python bytecode from running scripts/*.py
 __pycache__/
 *.pyc
+
+# agent worktrees created by isolated subagent dispatches
+.claude/worktrees/

@@ -265,11 +265,36 @@ and authoritative either way.
    # at all; five instances of that class have shipped on this exact surface
    # before this one.
    # The pointer's name is derivable from $RUN alone, so the next block can
-   # FIND it without inheriting anything — and $RUN makes it per-run, so
-   # concurrent runs do not collide on the pointer either (which would
-   # reintroduce this very bug one level up).
+   # FIND it without inheriting anything. That findability is exactly why it
+   # cannot also be unique by construction the way `mktemp` is — so the
+   # uniqueness has to be CHECKED rather than assumed.
    PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
-   printf '%s\n' "$P" > "$PTR"
+   # REFUSE to clobber another run's pointer. $RUN is agent-chosen, and nothing
+   # stops two concurrent runs picking the same short id — "A", a shared issue
+   # number, the same date. Measured 2026-10-03: minting twice with RUN=A gave
+   # two distinct mktemp payloads but ONE pointer, which the second mint
+   # overwrote. Run 1's payload was orphaned and BOTH runs' later blocks then
+   # read run 2's path — the payloads no longer collide, but the pointer does,
+   # which moves residual 2j up one level instead of closing it.
+   # Same shape as `scrub-seal`'s refusal to re-seal different content: an
+   # existing pointer means another run owns this id, so stop and say so.
+   #
+   # `set -C` (noclobber) in a SUBSHELL, not `[ -e "$PTR" ]` then write. The
+   # test-then-write form is a TOCTOU race: two runs starting together both see
+   # no pointer, both write, and the loser is silently orphaned again — the
+   # same defect in a smaller window. noclobber makes the create-or-refuse one
+   # atomic operation in the kernel. Measured 2026-10-03: 20 concurrent
+   # noclobber writers to one path, exactly 1 winner, 19 refused at rc=1.
+   # The subshell scopes `-C` so the rest of this block keeps ordinary
+   # redirection.
+   if ! ( set -C; printf '%s\n' "$P" > "$PTR" ) 2>/dev/null; then
+     echo "brain writeback ABORTED: pointer '$PTR' already exists — another" >&2
+     echo "  /cepa:compound run is using RUN='$RUN'. Pick a different RUN id." >&2
+     echo "  (If it is a leftover from a dead run, remove that file and retry.)" >&2
+     rm -f "$P"                     # do not leave this run's payload orphaned
+     exit 1
+   fi
+   chmod 600 "$PTR"
    printf 'payload path: %s\npointer: %s\n' "$P" "$PTR"
    ```
 
@@ -286,9 +311,30 @@ and authoritative either way.
    # retyped path is an agent-chosen path again, and a typo here operates on a
    # file that does not exist while every later step still reads rc=0 on its
    # own terms.
+   case "$RUN" in ''|'<short-run-id>'|*[!A-Za-z0-9._-]*)
+     echo "brain writeback ABORTED: substitute RUN with the same short id used" >&2
+     echo "  in the path-minting block ([A-Za-z0-9._-])." >&2
+     exit 1 ;;
+   esac
    PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
    [ -s "$PTR" ] || { echo "brain writeback ABORTED: no payload pointer at $PTR — run the path-minting block first, with the same RUN id." >&2; exit 1; }
    P="$(cat "$PTR")"
+   # CONTAIN the path the pointer names. Its contents are used as a file path,
+   # and the pointer sits at a predictable name in a world-writable /tmp — so
+   # whatever it holds must be proven to be THIS run's minted payload, not
+   # merely readable. Without this, a pointer aimed at an unrelated file makes
+   # the scrub rewrite that file in place and a later suppression `rm -f` it:
+   # measured 2026-10-03, the seal reported success on a file outside the
+   # minted prefix. Same discipline `brain-client.sh` already applies to
+   # `.phiseal` ("the path is predictable"), applied to the pointer.
+   case "$P" in
+     "${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-"*.json) : ;;
+     *) echo "brain writeback ABORTED: pointer names '$P', which is not this" >&2
+        echo "  run's minted payload (expected ${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-*.json)." >&2
+        echo "  Refusing to operate on it." >&2
+        exit 1 ;;
+   esac
+   [ -f "$P" ] && [ ! -L "$P" ] || { echo "brain writeback ABORTED: payload '$P' is not a regular file." >&2; exit 1; }
    [ -s "$P" ] || { echo "brain writeback ABORTED: payload '$P' is missing or empty — the Write step did not land on the minted path." >&2; exit 1; }
    # BRAIN_WORKSPACE_ID comes from the gitignored repo-root .env.local. In a
    # linked git worktree that file does NOT exist — it lives only in the main
@@ -484,10 +530,39 @@ and authoritative either way.
    # makes `scrub-verify` report rc=2 "unevaluable" for a run whose payload was
    # in fact perfectly clean.
    RUN="<short-run-id>"
+   # Validate HERE too, not only in the minting block. Each block composes
+   # $PTR from $RUN independently, so a guard that lives in one block leaves
+   # the other two deriving the same path unchecked — the asymmetry residual 2g
+   # is about. Latent today (an invalid $RUN makes the pointer lookup miss and
+   # abort), but any future change to how $PTR is built would turn that safe
+   # abort into an unguarded path composition.
+   case "$RUN" in ''|'<short-run-id>'|*[!A-Za-z0-9._-]*)
+     echo "brain writeback ABORTED: substitute RUN with the same short id used" >&2
+     echo "  in the path-minting block ([A-Za-z0-9._-])." >&2
+     exit 1 ;;
+   esac
    PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
    [ -s "$PTR" ] || { echo "brain writeback ABORTED: no payload pointer at $PTR (same RUN id as the earlier blocks?)." >&2; exit 1; }
    P="$(cat "$PTR")"
+   # Contain it, exactly as the step-3 block does — see the rationale there.
+   case "$P" in
+     "${TMPDIR:-/tmp}/cepa-compound-payload-$RUN-"*.json) : ;;
+     *) echo "brain writeback ABORTED: pointer names '$P', which is not this" >&2
+        echo "  run's minted payload. Refusing to operate on it." >&2
+        exit 1 ;;
+   esac
+   [ -f "$P" ] && [ ! -L "$P" ] || { echo "brain writeback ABORTED: payload '$P' is not a regular file." >&2; exit 1; }
    [ -s "$P" ] || { echo "brain writeback ABORTED: payload '$P' is missing or empty." >&2; exit 1; }
+   # CLEAN UP ON EVERY EXIT, via a trap rather than per-branch `rm -f`. This
+   # block has ten `exit 1` paths (resolver unresolved, gate suppressed,
+   # writeback non-2xx, unparseable response, …) and before the trap only ONE
+   # of them removed anything — measured 2026-10-03. Every other failure left
+   # $P, holding scrubbed solution-doc content, plus the pointer, sitting in
+   # /tmp at mode 600 after the run. A per-branch rm is a list that has to stay
+   # complete as branches are added; a trap is the mechanism.
+   # Set AFTER the containment checks above, so a refused pointer can never
+   # make the trap delete a file this run does not own.
+   trap 'rm -f "$P" "$P.phiseal" "$P.resp" "$P.ids" "$PTR"' EXIT
    for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
             "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
@@ -549,13 +624,10 @@ and authoritative either way.
    [ "$promoted" -eq "$total" ] \
      || echo "brain writeback: $((total-promoted)) of $total ids stranded in pending" >&2
 
-   # Clean up the run's temp files LAST, after the promote loop has read
-   # "$P.ids". $P holds solution-doc content and, on a compliance repo, the
-   # pre-scrub original's replacement — none of it should sit in /tmp after the
-   # run. The pointer goes too: a pointer outliving its payload resolves to a
-   # path that no longer exists, and the next block's `[ -s "$P" ]` would then
-   # report "the Write step did not land" for a run that in fact completed.
-   rm -f "$P" "$P.phiseal" "$P.resp" "$P.ids" "$PTR"
+   # No explicit cleanup here: the EXIT trap set at the top of this block
+   # already removes $P, .phiseal, .resp, .ids and the pointer, and it fires on
+   # the success path as well as on all ten failure paths. A second copy would
+   # be a list to keep in sync with the trap for no benefit.
    ```
 
    The counters are the mechanism, not a reminder: report `written: $promoted`

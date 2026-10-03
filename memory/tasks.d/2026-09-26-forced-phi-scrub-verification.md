@@ -368,6 +368,49 @@
    payload resolves to a path that no longer exists, which the next block
    would report as "the Write step did not land" for a run that completed.
 
+   **PR #81's review found three more defects in this fix, two of them P1 —
+   again by running it.** The pattern now has a name on this surface: the first
+   cut of every fix here has been green on its own tests while live.
+
+   - **A reused `$RUN` sent the WRONG DOCUMENT at rc=0.** `mktemp` made the
+     payloads distinct, so the collision moved to the single shared pointer:
+     run B's later block read run A's path, sealed and verified A's payload,
+     and posted A's document under B's idempotency_key while B's contaminated
+     payload stayed at rest in /tmp. Measured: 12 concurrent runs on one
+     `$RUN` gave 12 payloads, 1 pointer, 11 orphans. The old bug collided on
+     payload AND seal, so a mismatch was loud; this was a green, consistently
+     wrong gate — a false negative replacing a false positive. Fixed with an
+     ATOMIC create: `( set -C; printf ... > "$PTR" )` in a subshell. A
+     `[ -e "$PTR" ]` test-then-write is itself a TOCTOU race; measured, 20
+     concurrent noclobber writers to one path give exactly 1 winner and 19
+     refusals.
+   - **The pointer's contents were used as a path with no containment.** A
+     pointer aimed outside the minted prefix made the scrub rewrite an
+     unrelated file in place, which a later suppression then `rm -f`'d:
+     measured, `sealed: 1 redaction markers ... in <outside-TMPDIR>/precious.json`
+     at rc=0. Both later blocks now require `$P` to match
+     `$TMPDIR/cepa-compound-payload-$RUN-*.json` and to be a non-symlink
+     regular file. The symlink half of this (a pre-squatted pointer path whose
+     write followed the link and destroyed the target) was closed incidentally
+     by the same `set -C`, since noclobber refuses to follow an existing
+     symlink — verified.
+   - **`$RUN` was validated in the minting block only.** The two later blocks
+     composed `$PTR` from an unvalidated literal. Latent rather than active (a
+     bad `$RUN` made the lookup miss and abort) but it is 2g's asymmetry
+     exactly: the guard in one block, the same path re-derived without it in
+     two others. Copied into all three.
+
+   Also fixed while here, found by the same review's leftover-file note and
+   then measured directly: **`_curl`'s trap was `RETURN` only**, which never
+   fires when `set -e` kills the shell on a nonzero curl — so every network
+   failure left the curl config, holding `x-brain-key: $MCP_ACCESS_KEY` in
+   PLAINTEXT, in `/tmp` forever, one file per failure. Measured with a stub
+   exiting 7: rc=7 and `grep` found the key in the leftover. Now
+   `RETURN EXIT`; re-measured at 0 files after 1 and after 3 failed calls.
+   Separately, block 2 had ten `exit 1` paths of which exactly ONE cleaned up,
+   so an EXIT trap replaced the per-branch list — a list has to stay complete
+   as branches are added; a trap is the mechanism.
+
    Verified by extracting all three blocks and running two interleaved runs:
    A seals 1 and B seals 3 against distinct `mktemp` paths, neither seal moves
    when the other runs, and a contaminated run suppresses while its concurrent
