@@ -504,8 +504,28 @@
    block remains the only thing that catches that**, which is what `--emit`
    is for.
 
-   Still open: a `docs/solutions/` entry via `/cepa:compound`. The entry is
-   not the fix.
+   **The `docs/solutions/` entry is DONE, as an extension rather than a new
+   doc.** `an-assertion-must-name-the-edit-that-reddens-it.md` already owned
+   "a control detaches from the construct it names" with four mechanisms, each
+   detaching **when the control is written**. What PR #82 found is a fifth that
+   none of them cover — **succession**: the control was measured correct, and a
+   later leg took its kill away. A new doc would have been the restatement this
+   repo has paid for three times, so the doc now reads "five ways", with the
+   mechanism, three reasons a reviewer cannot catch it (the control is not
+   wrong; the invalidating edit is in another file's diff; adding coverage
+   REMOVED coverage), the repair that works, and the repair that does not.
+   Three Detection signals added — S0 (an unqualified "ONLY leg N" claim in a
+   checker that has since gained a leg), S0b (a per-leg sweep with no
+   uniqueness assertion), S0c (a control that can decline and still pass).
+
+   **S0 immediately found two live instances in this PR's own controls** —
+   `mut_instance5` and `mut_instance3` both still claimed "ONLY leg 1". One was
+   false (fixed), one was true but unverified (re-measured, and the sentence
+   now says how to re-verify rather than asserting it). A signal that catches
+   something in the diff that created it is the right shape.
+
+   Note `docs/` is gitignored here, so that write-up is local. The durable
+   tracked record is CLAUDE.md's rule plus this item.
 
 2j. **`$P` is agent-chosen, so two concurrent `/cepa:compound` runs can
    collide on the payload AND the seal.** P2. **FIXED in v1.28.1** — a

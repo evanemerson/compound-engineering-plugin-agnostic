@@ -179,7 +179,7 @@ s = re.sub(r"^ALLOW=\(.*?^\)$",
            s, flags=re.S | re.M)
 p.write_text(s)
 PY
-reg mut_instance5 1 "the CLIENT=\"\$CEPA_ROOT/scripts/…\" shape from PR #80's first cut: CEPA_ROOT assigned in block 0, used in block 1, re-assigned nowhere there. Expands to /scripts/brain-client.sh and exits 127. The name is allowlisted so ONLY leg 1 can fail this — with an empty allowlist, leg 2 masked leg 1 and removing leg 1 killed nothing." "$d"
+reg mut_instance5 1 "the CLIENT=\"\$CEPA_ROOT/scripts/…\" shape from PR #80's first cut: CEPA_ROOT assigned in block 0, used in block 1, re-assigned nowhere there. Expands to /scripts/brain-client.sh and exits 127. DOUBLE-COVERED by design — measured, it dies to leg 1 AND to leg 2s. Leg 1's isolating case is mut_leg1_literal; do not re-add an ONLY-leg claim here." "$d"
 
 # The FIX for that mutant must go green — a gate that reddens on both shapes
 # is the re.M defect the extractor already shipped once (broken and fixed
@@ -258,7 +258,7 @@ s = re.sub(r"^ALLOW=\(.*?^\)$",
            s, flags=re.S | re.M)
 p.write_text(s)
 PY
-reg mut_instance3 1 "2g instance 3 (v1.26.8, fixed v1.26.9): \$P set in one block, writeback in a later one where it is unset, so the post fell back to the UNSCRUBBED original. A PHI leak one block later. Allowlisted so only leg 1 can fail it." "$d"
+reg mut_instance3 1 "2g instance 3 (v1.26.8, fixed v1.26.9): \$P set in one block, writeback in a later one where it is unset, so the post fell back to the UNSCRUBBED original. A PHI leak one block later. Isolates leg 1 — RE-MEASURED 2026-10-03: dies to leg-1 removal, survives leg-2 and leg-2s removal. A \`literal\`-class name cannot reach leg 2s, which is what keeps this true as legs are added; re-verify by mutation after any new leg rather than trusting this sentence." "$d"
 
 echo
 echo "=== leg 2: unallowlisted external names ==="
