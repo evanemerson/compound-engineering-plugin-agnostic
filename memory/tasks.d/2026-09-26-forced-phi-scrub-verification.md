@@ -789,8 +789,10 @@
    `check-plugin-freshness.sh`'s header owns its rule). `cepa:autonomy` §9f
    gets one pointer row, nothing more.
 
-   Resolution rule: the qualifier must name a skill discovered under
-   `plugins/<plugin>/skills/<skill>/SKILL.md` (else MISS). The title must
+   Resolution rule: only a qualifier whose plugin is a directory under
+   `plugins/` is matched at all (an external `superpowers:` qualifier is
+   never a citation); within a local plugin, the qualifier must name a skill
+   discovered under `plugins/<plugin>/skills/<skill>/SKILL.md` (else MISS). The title must
    match a heading **of the same level**, outside code fences, whose text
    equals it, or starts with it followed by ` — ` or ` (` — so a heading can
    carry a subtitle that citations do not repeat. A bare prefix
@@ -817,35 +819,94 @@
    `<skill> skill's <words> section` (qualifier adjacent, no heading
    literal). Measured: 6 hits on today's tree, all shape A, zero B.
 
-   **U1. Convert every A site to the required form.** Files:
-   `commands/compound-refresh.md`, `commands/compound.md`,
-   `commands/review.md`, `skills/brain/SKILL.md`, `skills/file-todos/SKILL.md`,
-   `scripts/check-residual-integrity.sh` (comment only — re-point it at
-   `## Frontmatter Summary`). `brain-client.sh` and `compound.md:388` are
-   already in the form. Verification: `probe3.py` reports 0 prose hits.
+   **U1. Convert every A site to the required form.** Qualifiers are always
+   `<plugin>:<skill>`: the bare `file-todos` citers in `review.md:423/452`
+   become `cepa:file-todos`. Sites: `compound-refresh.md:265`,
+   `compound.md:174-175` (prose form), `compound.md:59` (cite
+   `### The Detection Section`), `review.md:423/452` (cite `## Run Metadata`),
+   `check-residual-integrity.sh:198-199` (comment only — re-point it at
+   `## Frontmatter Summary` and name the paragraph in words). The two in-skill
+   self-references (`brain/SKILL.md:35`, `file-todos/SKILL.md:94`) adopt the
+   qualified form as well, so a rename inside a skill is caught like any other.
+   `brain-client.sh:25-26/333-334` and `compound.md:388` are already in the
+   form. Verification: leg 5's near-miss arm, which is the committed probe,
+   reports 0 MISS on the converted tree.
 
-   **U2. Leg 5 in `scripts/check-model-pins.sh`.** Header owns the form,
-   scope and stated limits. Fence-aware heading index; line joining that
-   also strips a continuation line's `# ` comment marker; `checked == 0` is a
-   MISS. Verification: `0 MISS, 0 WARN` on the converted tree.
+   **U2. Leg 5 in `scripts/check-model-pins.sh`.** Leg 4's root loop appends
+   every root it accepts to a new `CITE_FILES` array; leg 5 reads only that
+   array and never calls `traverse`. The leg-5 header owns the form, the
+   scope and the stated limits — a deliberate departure from leg 4, whose
+   limits live in §9f, recorded in the header — and the top-of-file
+   "All four legs" sentence is updated. Specified behavior:
 
-   **U3. Controls N1-N15 in `scripts/check-model-pins-controls.sh`.** N1 is
-   the brain heading rename. Every case names its mutant. Exact counts on
-   README plants; `+` only where the count is how many citers the repo has.
+   - *Adjacency.* Qualifier, then optionally `skill's`, then the backticked
+     heading literal, separated only by whitespace. Any other token between
+     them is not a citation.
+   - *Joining.* A line break inside a paragraph counts as whitespace. A blank
+     line (in `.sh`/`.yml`/`.yaml`, also a marker-only `#` line) ends the
+     paragraph, so nothing joins across it. Leading indentation is stripped,
+     and in those three extensions only, the continuation line's `#` comment
+     marker too. BOM and CR are normalized as leg 4 does.
+   - *Index.* Headings of level 2-4 outside code fences. A fence opens on
+     three or more backticks or tildes and closes only on a run of the same
+     character at least as long. An unterminated fence at end of file is a
+     MISS. A citation matching more than one heading in its skill is a MISS
+     (ambiguous target). A title containing a backtick cannot be cited — a
+     stated limit.
+   - *Self-trigger.* `scripts/` is a scanned root. The header's only literal
+     example is a citation that resolves on the real tree; every broken or
+     prose-form string in the controls and the mutant registry is assembled
+     at runtime from fragments, the way `SS` is.
+   - `checked == 0` is a MISS. Verification: `0 MISS, 0 WARN` on the
+     converted tree.
+
+   **U3. Controls in `scripts/check-model-pins-controls.sh`.** One case per
+   construct, each naming its mutant: the brain `## Compliance` rename (the
+   real-tree proof); an unresolved title; a correct citation; subtitle
+   truncation on ` — ` and on ` (`; a bare title prefix; a level mismatch; a
+   heading inside a backtick fence, a tilde fence, and a four-backtick fence
+   wrapping a three-backtick one; an unterminated fence; an ambiguous title;
+   a citation wrapped in markdown; one wrapped in a shell comment; no join
+   across a blank line; an unknown qualifier under a local plugin; the
+   `skill's` variant; the near-miss prose shape; repo-sense prose directly
+   after a qualifier on the previous line staying clean; zero citations.
+   Exact counts on README plants; `+` only where the count is how many
+   citers the repo has. Every leg-5 case asserts the leg-5 message text, so
+   no leg-4 finding can satisfy it. After U3, the clean tree stays at 0 MISS.
 
    **U4. Mutants in `scripts/mutants/registry.sh`**, silent on the clean
-   tree, one per leg-5 construct. Then the full sweep, and a per-leg check
-   that every leg still owns a killing case no other leg's mutant also
-   reaches.
+   tree, one per leg-5 construct, each killed by a case whose expected
+   message is leg 5's own. Then the full sweep, and a per-leg check that
+   every leg still owns a killing case no other leg's mutant also reaches.
 
    **U5. Pointer row in `cepa:autonomy` §9f; manifests 1.28.2 → 1.28.3**,
    same commit (plugin content changes in U1 and U5).
 
-   Verification contract: the five gates in the task prompt, the leg-5 mutant
-   proof (rename `## Compliance` in the real tree → red; restore → green),
-   and the sweep result. Plan written as `U<N>` bold labels inside this item
+   Verification contract — each run from the repo root:
+   `bash scripts/check-model-pins.sh` (0 MISS, 0 WARN);
+   `bash scripts/check-model-pins-controls.sh` (all pass);
+   `bash scripts/check-fenced-block-state.sh` (0 MISS, the one known WARN);
+   `bash scripts/check-fenced-block-state-controls.sh` (0 failed);
+   `bash scripts/check-residual-integrity.sh` (0 MISS, the two known WARNs);
+   `bash scripts/run-mutation-sweep.sh` (exit 0). Plus the real-tree proof:
+   rename `## Compliance` in `brain/SKILL.md` → red; restore → green. Plan
+   written as `U<N>` bold labels inside this item
    rather than `### U<N>.` headings: a heading inside a numbered residual
    breaks the item the integrity checker reads.
+
+   **Deferred / Open Questions — from the 2026-10-04 plan review**
+   (`todos/review-2026-10-04-*.md`). Judgment findings; each records the
+   decision taken at build so it can be reversed by a person:
+
+   - Near-miss arm sees only the `skill's … section` spelling (adversarial,
+     P2). Decision: record it as a stated limit; do not widen now — a wider
+     trigger reaches prose that names no section.
+   - Near-miss arm is a heuristic beside a design that rejects heuristics
+     (scope-guardian, P3). Decision: keep it. It is not an A/B separator; it
+     keys on `skill's`, which the repo sense never uses (6 of 6 hits are A).
+   - Should the form also live in a skill doc that command authors read
+     (feasibility)? Decision: no for now — the MISS message names the form,
+     and a second home is the restatement this item exists to avoid.
 
 2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
    Because it runs over the whole payload file, ordinary engineering prose is
