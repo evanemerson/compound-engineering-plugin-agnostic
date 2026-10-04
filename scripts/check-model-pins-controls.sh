@@ -289,8 +289,8 @@ reg 28 'broken citation in a .yml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping --include=*.yml, which would make the workflow files unscanned'
 reg 37 'broken citation in a .yaml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping `yaml` from CITE_EXTS. Case 28 plants a .yml and nothing planted a .yaml, so half of leg 4 own extension set had no case behind it'
-reg 29 'no citations anywhere' '+' 0 'checked no .* citation' '' \
-  'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass'
+reg 29 'no citations anywhere' '+' 0 'leg 4 checked no section citation' '' \
+  'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass. The pattern names leg 4: leg 5 has a guard of the same wording, and a pattern both could satisfy would let leg 5 stand in for a deleted leg-4 guard'
 reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" '' \
   'kills: grep -R reverted to -r — grep follows symlinks named on the command line but NOT during recursion'
 reg 31 'a filesystem cycle under `plugins` is reported' 1 0 \
