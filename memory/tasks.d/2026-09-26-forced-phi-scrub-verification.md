@@ -711,6 +711,36 @@
    It is not an argument for restating. Fix: a second anchor-resolution leg
    covering skill-section citations.
 
+   **Measured 2026-10-04 on `main` @ `d926225`, before any work started.** The
+   numbers below are each the output of ONE command; re-run them rather than
+   reasoning from them.
+
+   A naive probe for a `cepa:brain` + Compliance-section citation finds **one**
+   line (`compound-refresh.md:265`). That is the wrong shape — this item's own
+   history records #74 adding a FOURTH citer. Widening to plain `Compliance`
+   across `plugins/cepa` finds ~20 lines.
+
+   **The difficulty is that `## Compliance` serves two unrelated roles, and only
+   one of them can rot:**
+
+   - **A — a citation of the cepa:brain SKILL's heading.** `compound.md:175`
+     and `compound-refresh.md:265` are this shape. These are what a
+     resolves-check must cover.
+   - **B — a reference to a participant REPO's own `## Compliance` declaration
+     in `cepa.local.md`.** `setup.md:171/189/241`, `review.md:435/528`,
+     `compound.md:681-682`, `grounding/SKILL.md:215/219` are this shape. There
+     is no heading to resolve; B is a condition about a repo.
+
+   A checker that cannot separate A from B flags B everywhere and gets turned
+   off. Separating them is the real design call — and if the answer is that
+   A-shape citers must adopt a distinguishable syntax, that is a contract change
+   touching every A site and belongs in the plan, not in the implementation.
+
+   **A probe warning, paid for during this measurement:** `grep` is ugrep in an
+   interactive shell and GNU grep 3.11 in scripts. A `[^.]{0,40}` pattern
+   exceeded ugrep's complexity limit and errored rather than returning a wrong
+   count — a visible failure that time. Run every probe from a script file.
+
 2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
    Because it runs over the whole payload file, ordinary engineering prose is
    collateral: `Celery task 4567890 ... PR #1234567` becomes two

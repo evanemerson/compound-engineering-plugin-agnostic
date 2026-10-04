@@ -53,7 +53,7 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    **2j CLOSED** — PR #81 (`17271ee`), merged 2026-10-03. The payload path is
    minted per run, so concurrent runs no longer collide. 2j was filed BY #80's
    review and did not exist when this list was written.
-   **2g CLOSED** — PR #82 (`feat/fenced-block-state-checker`), 2026-10-03.
+   **2g CLOSED** — PR #82 (`d926225`), merged 2026-10-04.
    `scripts/check-fenced-block-state.sh` + its controls, CI-gated in
    `residual-integrity.yml`. The checker WAS the fix: 2g had six instances, two
    written by sessions actively enforcing the rule, so review alone was
