@@ -741,6 +741,112 @@
    exceeded ugrep's complexity limit and errored rather than returning a wrong
    count — a visible failure that time. Run every probe from a script file.
 
+   **Re-measured 2026-10-04 on `main` @ `5da0d52` (branch
+   `fix/section-name-citations`).** Probes are Python script files, multi-line
+   aware, over leg 4's own root set (`plugins CLAUDE.md README.md .github
+   scripts`, extensions `md markdown sh yml yaml`):
+
+   - Python `re.finditer` over each whole file (so a match may cross a line
+     break), pattern
+     ``r'`?cepa:(SKILLS)`?(?:[^.\n§]|\n){0,80}?(section|`#{2,4} [^`]+`)'``
+     with SKILLS the alternation of `ls plugins/cepa/skills`: **11** hits.
+   - Same harness, ``r"skill's\s+(?:#\s+)?[\"`]?[A-Z][^.\n]{0,50}?[\"`]?\s+(?:#\s+)?section"``:
+     **6** hits, all shape A. ``r"\(see [A-Z][A-Za-z +-]{2,40}\)"``: 2
+     in-skill self-references (and one unrelated `(see README …)`).
+
+   **The brain Compliance heading has FIVE citers, not four:**
+   `compound-refresh.md:265`, `compound.md:174-175`, `compound.md:388`,
+   `brain-client.sh:25-26`, `brain-client.sh:333-334` — plus the in-skill
+   `(see Compliance)` at `brain/SKILL.md:35`. Two of the five wrap across a
+   line break, and both of those wrap inside a shell comment, so a
+   line-based probe finds neither.
+
+   **The same rot exists outside cepa:brain, and one instance is LIVE.**
+   `review.md:423/452` cite "the `file-todos` skill's Run Metadata section"
+   (the heading is `## Run Metadata (optional frontmatter fields)`).
+   `compound.md:59` cites compound-docs' "Detection section" (the heading is
+   `### The Detection Section (mandatory)`). And
+   `scripts/check-residual-integrity.sh:198-199` cites the `cepa:file-todos`
+   skill's `"Verify against the body" section` — **no such heading exists.**
+   It is a bold paragraph lead at `file-todos/SKILL.md:224`, under
+   `## Frontmatter Summary`. That citer is already rotted.
+
+   **A second trap the probes found:** `compound-docs/SKILL.md` carries
+   `## Detection` at lines 67 and 84, both INSIDE a fenced example. A heading
+   index that does not skip code fences would let a citation resolve against
+   example text.
+
+   **PLAN (this entry is the plan; no separate plan file).**
+
+   *Design call 3 — the syntax. A required form, because no heuristic can
+   separate A from B.* A section-name citation is a skill's qualified name,
+   optionally followed by the word `skill's`, then the heading's own `#`
+   level and title in backticks — e.g. `` `cepa:brain` skill's `## Compliance` ``.
+   B never carries a qualifier next to the heading literal, so B stays
+   unflagged by construction rather than by a list of exceptions. The form is
+   specified ONCE, in the leg-5 header of `scripts/check-model-pins.sh`
+   (the checker's header already owns its legs, as
+   `check-plugin-freshness.sh`'s header owns its rule). `cepa:autonomy` §9f
+   gets one pointer row, nothing more.
+
+   Resolution rule: the qualifier must name a skill discovered under
+   `plugins/<plugin>/skills/<skill>/SKILL.md` (else MISS). The title must
+   match a heading **of the same level**, outside code fences, whose text
+   equals it, or starts with it followed by ` — ` or ` (` — so a heading can
+   carry a subtitle that citations do not repeat. A bare prefix
+   (`## Comp`) does not resolve.
+
+   *Design call 2 — scope: the whole skill family, discovered.* Every skill
+   under `plugins/*/skills/`, keyed `<plugin>:<skill>`, from the same
+   `SKILL.md` list leg 4 indexes. Hardcoding `cepa:brain` would make the leg a
+   property of one path, the defect leg 4's header already records. External
+   skills (`superpowers:` and other plugins outside this repo) are out of
+   scope — no SKILL.md to resolve against.
+
+   *Design call 1 — a new leg in `check-model-pins.sh`, not a new script.*
+   Leg 5 consumes leg 4's per-root file lists directly, so the two legs scan
+   one root set **by construction**. Legs 2-3 versus leg 4 is the recorded
+   divergence (a `.markdown` file read by one and invisible to the other);
+   a separate script would be a second copy of `CITE_ROOTS`, `traverse`, and
+   the per-root accounting. The symlink/`-R` hazard is inherited as solved:
+   leg 5 never walks a tree itself. A root that leg 4 refused is already a
+   MISS; leg 5 skips it rather than reporting it twice.
+
+   *The near-miss half.* The required form only helps if the old prose form
+   cannot quietly come back. Leg 5 also MISSes the prose shape
+   `<skill> skill's <words> section` (qualifier adjacent, no heading
+   literal). Measured: 6 hits on today's tree, all shape A, zero B.
+
+   **U1. Convert every A site to the required form.** Files:
+   `commands/compound-refresh.md`, `commands/compound.md`,
+   `commands/review.md`, `skills/brain/SKILL.md`, `skills/file-todos/SKILL.md`,
+   `scripts/check-residual-integrity.sh` (comment only — re-point it at
+   `## Frontmatter Summary`). `brain-client.sh` and `compound.md:388` are
+   already in the form. Verification: `probe3.py` reports 0 prose hits.
+
+   **U2. Leg 5 in `scripts/check-model-pins.sh`.** Header owns the form,
+   scope and stated limits. Fence-aware heading index; line joining that
+   also strips a continuation line's `# ` comment marker; `checked == 0` is a
+   MISS. Verification: `0 MISS, 0 WARN` on the converted tree.
+
+   **U3. Controls N1-N15 in `scripts/check-model-pins-controls.sh`.** N1 is
+   the brain heading rename. Every case names its mutant. Exact counts on
+   README plants; `+` only where the count is how many citers the repo has.
+
+   **U4. Mutants in `scripts/mutants/registry.sh`**, silent on the clean
+   tree, one per leg-5 construct. Then the full sweep, and a per-leg check
+   that every leg still owns a killing case no other leg's mutant also
+   reaches.
+
+   **U5. Pointer row in `cepa:autonomy` §9f; manifests 1.28.2 → 1.28.3**,
+   same commit (plugin content changes in U1 and U5).
+
+   Verification contract: the five gates in the task prompt, the leg-5 mutant
+   proof (rename `## Compliance` in the real tree → red; restore → green),
+   and the sweep result. Plan written as `U<N>` bold labels inside this item
+   rather than `### U<N>.` headings: a heading inside a numbered residual
+   breaks the item the integrity checker reads.
+
 2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
    Because it runs over the whole payload file, ordinary engineering prose is
    collateral: `Celery task 4567890 ... PR #1234567` becomes two
