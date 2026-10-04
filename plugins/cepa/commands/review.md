@@ -420,7 +420,7 @@ it touches no config, dependencies, Docker/compose, env, or migration files
 AND changes no task signatures, beat/cron schedules, API contracts, model
 fields, or external-service client code. When in doubt, run the agent. Every
 skipped agent is recorded in the `agents_skipped` frontmatter field (see the
-`file-todos` skill's Run Metadata section) with the rule that skipped it — a
+`cepa:file-todos` skill's `## Run Metadata` section) with the rule that skipped it — a
 silent skip is indistinguishable from a clean pass. When deployment-verifier
 is skipped, set `deploy_verdict: not-evaluated` with the skip rule as basis.
 
@@ -449,7 +449,7 @@ project opts out of one by adding `- !agent-name` to its
 **When in doubt, dispatch** — an unnecessary conditional agent costs one
 subagent run; a missed one costs the coverage the tier exists for. Record
 ALL THREE conditional agents every run in the `conditional_dispatch`
-frontmatter field (see the `file-todos` skill's Run Metadata section):
+frontmatter field (see the `cepa:file-todos` skill's `## Run Metadata` section):
 `dispatched: true` with the signal, or `dispatched: false` with the reason
 (signal absent, or excluded by config) — a non-dispatch must never be
 indistinguishable from a clean pass.

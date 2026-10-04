@@ -91,7 +91,7 @@ Each finding under `## Findings` uses this structure:
 
 | Field | Required | Values | Description |
 |---|---|---|---|
-| `status` | yes | `pending`, `ready`, `skipped`, `applied`, `deferred`, `completed` | Triage state (see Status Lifecycle) |
+| `status` | yes | `pending`, `ready`, `skipped`, `applied`, `deferred`, `completed` | Triage state (see `cepa:file-todos` `## Status Lifecycle`) |
 | `severity` | yes | `P1`, `P2`, `P3` | Priority level |
 | `agent` | yes | agent name | Which agent found it |
 | `category` | yes | free text | Agent-specific category (OWASP, Database, Migration, etc.) |

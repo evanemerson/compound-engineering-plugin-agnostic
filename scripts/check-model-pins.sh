@@ -37,8 +37,11 @@
 #   Leg 4: every section citation — `§N` or `§N<letter>` — resolves to a
 #   heading in the skill that owns it. Scope and stated limits live in
 #   autonomy §9f — read them there.
+#   Leg 5: every section-NAME citation resolves to a heading in the skill it
+#   names. Unlike leg 4, its form, scope and stated limits live in its own
+#   block below — read them there.
 #
-# All four legs fail the run. A warning channel that can never fail is not
+# All five legs fail the run. A warning channel that can never fail is not
 # enforcement — so leg 2's escape hatch is an explicit, diff-reviewable
 # marker on the line that needs it:
 #
@@ -624,6 +627,10 @@ done
 
 cite_raw=''
 roots_scanned=0
+# Every file of every root this loop ACCEPTS, for leg 5. Appended only after a
+# root passed every check below, so a refused root (already a MISS here) is
+# never re-read and never reported twice.
+CITE_FILES=()
 for r in $CITE_ROOTS; do
   if [ ! -e "$r" ]; then
     miss "model-pin: leg 4 citation root '${r}' does not exist — coverage shrank silently"
@@ -657,6 +664,7 @@ for r in $CITE_ROOTS; do
     misses=$((misses + 1)); continue
   fi
   roots_scanned=$((roots_scanned + 1))
+  CITE_FILES+=("${rfilelist[@]}")
   cite_raw="${cite_raw}${rout}"$'\n'
 done
 cite_raw=$(printf '%s' "$cite_raw" | grep -v '^$' | sort -u)
@@ -758,6 +766,201 @@ if [ "$checked" -eq 0 ] && [ "$skill_files" -gt 0 ]; then
 fi
 
 info "section citations checked: ${checked} distinct (qualifier, anchor) pairs across ${roots_scanned} of $(printf '%s\n' $CITE_ROOTS | grep -c .) roots; ${anchor_count} anchors defined by ${skill_files} skill files"
+
+# --- Leg 5: section-NAME citations resolve ----------------------------------
+# Leg 4 resolves NUMBERED anchors. A skill section cited by NAME had no check
+# at all, so renaming or demoting a heading rotted every pointer to it with no
+# failure anywhere. That is the known cost of citing instead of restating, and
+# checking that a citation resolves is the third part of the contract in
+# docs/solutions/logic-errors/cross-cutting-policy-must-be-cited-once-not-restated-at-every-site.md.
+# Residual 2c in memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md is
+# the plan, the plan review, and the measurement behind every choice below.
+#
+# THE CITATION FORM — this block is its one home; cite it, never restate it.
+# A section-name citation is a skill's qualified name, optionally the word
+# `skill's`, then the cited heading's own `#` level and title, each in
+# backticks, with nothing but whitespace between them: for example the
+# `cepa:brain` skill's `## Compliance` section. The qualifier's backticks are
+# optional. A line break inside a paragraph counts as whitespace, so the
+# tokens may sit on separate lines.
+#
+# WHY A REQUIRED FORM. The same backticked heading literal also names a section
+# a REPO declares in its own cepa.local.md — a condition about a repo, with no
+# heading here to resolve. No heuristic separates the two senses, and a leg
+# that flagged the repo sense everywhere would be turned off. The qualifier
+# next to the literal is what separates them: the repo sense never has one.
+#
+# RESOLUTION. Only a qualifier `<plugin>:<skill>` whose plugin is a directory
+# under plugins/ is matched at all. Within one, a skill with no SKILL.md is a
+# MISS. The title resolves against a heading of the SAME level, outside code
+# fences, whose text equals the title or begins with it followed by ` — ` or
+# ` (`, so a heading may carry a subtitle that citations do not repeat. A bare
+# prefix of a title does not resolve. A citation that matches more than one
+# heading in its skill is a MISS: a sibling such as a "legacy" variant would
+# otherwise keep it green after the real heading is renamed away.
+#
+# JOINING. Each file is read whole, so a citation may wrap. Leading
+# indentation is dropped. A blank line ends a paragraph, and nothing joins
+# across it. In .sh, .yml and .yaml only, a continuation line's `#` comment
+# marker is dropped too, and a marker-only `#` line also ends a paragraph. In
+# markdown a line-initial `#` is a heading, so it is never stripped there.
+#
+# FENCES. A fence opens on a line whose first non-blank characters are three or
+# more backticks or tildes, and closes only on a run of the SAME character at
+# least as long, with nothing after it. A four-backtick fence can therefore
+# wrap a three-backtick example. An unterminated fence is a MISS, because
+# every heading after it would silently leave the index.
+#
+# THE NEAR-MISS HALF. The required form helps only if the old prose form
+# cannot come back unseen. A skill name directly before the word `skill's`,
+# then words that are not a heading literal, then the word `section`, is a
+# MISS: it names a section nothing can resolve. Described in words on purpose:
+# this file sits under `scripts/`, a scanned root, so a literal example of a
+# broken or prose-form citation anywhere in it would be a real finding — the
+# trap leg 4's header records for its own examples. The controls and the
+# mutant registry build every such string at runtime for the same reason.
+#
+# SCOPE — the whole skill family, discovered from the SAME SKILL.md list leg 4
+# indexes; no skill is named here. Leg 5 reads only CITE_FILES, the files leg
+# 4's root loop accepted, so the two legs scan one root set by construction
+# and leg 5 never walks a tree itself. A root leg 4 refused is already a MISS
+# and is not reported twice.
+#
+# STATED LIMITS — a green leg 5 does not mean:
+#   - every section reference is checked. Only the form above and the one
+#     near-miss spelling are seen. A possessive with no `skill's`, "the X
+#     heading", a lowercase or capitalized skill name, and a heading literal
+#     with no qualifier are all invisible. Widening the near-miss arm was
+#     deferred: a wider trigger reaches prose that names no section at all.
+#   - headings outside SKILL.md resolve. A skill's references/ files are not
+#     indexed; a citation into one MISSes, which is loud, not silent.
+#   - every heading can be cited. Only levels 2-4 are indexed, and a title
+#     that contains a backtick cannot be written in the form.
+#   - fences are parsed as CommonMark does. Indented code blocks, and a fence
+#     inside a block quote, are not modelled.
+#   - the cited section still SAYS what the citer assumes. Like leg 4, this
+#     checks resolution only.
+declare -A SECTION_HITS SKILL_PATH LEG5_SEEN
+# ONE key builder for both sides of the lookup, so the index and the citation
+# cannot disagree about what a key is — and so the level stays part of it.
+l5key() { L5KEY="${1}|${2}|${3}"; }
+leg5_plugins=''
+leg5_skills=''
+headings_indexed=0
+leg5_skill_files=0
+# `while read` over a here-string, NOT a pipe: the loop body must update the
+# arrays above in THIS shell.
+while IFS= read -r sk; do
+  [ -n "$sk" ] && [ -r "$sk" ] || continue
+  sdir=$(dirname "$sk")
+  sname=$(basename "$sdir" | tr '[:upper:]' '[:lower:]')
+  pname=$(basename "$(dirname "$(dirname "$sdir")")" | tr '[:upper:]' '[:lower:]')
+  case "${pname}${sname}" in
+    *[!a-z0-9-]*)
+      miss "model-pin: leg 5: ${sk} has a plugin or skill name outside [a-z0-9-], so no citation can name it"
+      misses=$((misses + 1)); continue ;;
+  esac
+  q="${pname}:${sname}"
+  SKILL_PATH["$q"]="$sk"
+  leg5_skill_files=$((leg5_skill_files + 1))
+  case "|${leg5_plugins}|" in *"|${pname}|"*) : ;; *) leg5_plugins="${leg5_plugins:+${leg5_plugins}|}${pname}" ;; esac
+  case "|${leg5_skills}|" in *"|${sname}|"*) : ;; *) leg5_skills="${leg5_skills:+${leg5_skills}|}${sname}" ;; esac
+  while IFS= read -r hl; do
+    if [ "$hl" = 'UNTERMINATED-FENCE' ]; then
+      miss "model-pin: leg 5: ${sk} opens a code fence it never closes — every heading after it is missing from the index"
+      misses=$((misses + 1)); continue
+    fi
+    lvl=${hl%% *}
+    title=${hl#* }
+    headings_indexed=$((headings_indexed + 1))
+    # One heading counts once per distinct key, however many of its truncated
+    # forms coincide.
+    l5key "$q" "$lvl" "$title"; k_full=$L5KEY
+    l5key "$q" "$lvl" "${title%% — *}"; k_dash=$L5KEY
+    l5key "$q" "$lvl" "${title%% (*}"; k_paren=$L5KEY
+    SECTION_HITS["$k_full"]=$(( ${SECTION_HITS["$k_full"]:-0} + 1 ))
+    [ "$k_dash" = "$k_full" ] || SECTION_HITS["$k_dash"]=$(( ${SECTION_HITS["$k_dash"]:-0} + 1 ))
+    [ "$k_paren" = "$k_full" ] || [ "$k_paren" = "$k_dash" ] ||
+      SECTION_HITS["$k_paren"]=$(( ${SECTION_HITS["$k_paren"]:-0} + 1 ))
+  done < <(sed $'1s/^\xEF\xBB\xBF//; s/\r$//' "$sk" 2>/dev/null | awk '
+    {
+      line = $0; t = line; sub(/^[ \t]+/, "", t)
+      if (infence) {
+        if (substr(t, 1, length(fence)) == fence) {
+          rest = substr(t, length(fence) + 1)
+          while (substr(rest, 1, 1) == fc) rest = substr(rest, 2)
+          if (rest ~ /^[ \t]*$/) infence = 0
+        }
+        next
+      }
+      if (t ~ /^(```|~~~)/) {
+        fc = substr(t, 1, 1); n = 0
+        while (substr(t, n + 1, 1) == fc) n++
+        fence = ""; for (i = 0; i < n; i++) fence = fence fc
+        infence = 1; next
+      }
+      if (line ~ /^(##|###|####) /) {
+        sub(/[ \t]+#+[ \t]*$/, "", line); sub(/[ \t]+$/, "", line)
+        print line
+      }
+    }
+    END { if (infence) print "UNTERMINATED-FENCE" }')
+done <<< "$(printf '%s\n' "${SKILL_FILES[@]+"${SKILL_FILES[@]}"}" | grep -v '^$' | sort)"
+
+leg5_checked=0
+leg5_files=0
+if [ -n "$leg5_plugins" ]; then
+  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill's)?[[:space:]]+\`(##|###|####) [^\`]+\`"
+  LEG5_NEAR_RE="\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill's[[:space:]]+[^\`.[:space:]][^\`.]{0,59}[[:space:]]section"
+  for f in "${CITE_FILES[@]+"${CITE_FILES[@]}"}"; do
+    if [ ! -r "$f" ]; then
+      miss "model-pin: leg 5: ${f} became unreadable after leg 4 read it — an unread file is not a pass"
+      misses=$((misses + 1)); continue
+    fi
+    leg5_files=$((leg5_files + 1))
+    case "$f" in *.sh|*.yml|*.yaml) cm='#*' ;; *) cm='' ;; esac
+    while IFS= read -r m; do
+      [ -n "$m" ] || continue
+      case "$m" in
+        *section)
+          [ -n "${LEG5_SEEN["near|${f}|${m}"]:-}" ] && continue
+          LEG5_SEEN["near|${f}|${m}"]=1
+          miss "model-pin: leg 5: ${f} names a skill section in prose (\"${m}\") — nothing can resolve it; write the qualifier and the heading's own level and title in backticks (form: leg 5's header in scripts/check-model-pins.sh)"
+          misses=$((misses + 1)); continue ;;
+      esac
+      q=${m#\`}; q=${q%%[\`[:space:]]*}
+      h=${m##*[[:space:]]\`}; h=${h%\`}
+      lvl=${h%% *}; title=${h#* }
+      title=$(printf '%s' "$title" | sed 's/[[:space:]]*$//')
+      [ -n "${LEG5_SEEN["form|${f}|${q}|${lvl}|${title}"]:-}" ] && continue
+      LEG5_SEEN["form|${f}|${q}|${lvl}|${title}"]=1
+      leg5_checked=$((leg5_checked + 1))
+      if [ -z "${SKILL_PATH["$q"]:-}" ]; then
+        miss "model-pin: leg 5: ${f} cites \`${q}\` \`${lvl} ${title}\` but there is no plugins/${q%%:*}/skills/${q#*:}/SKILL.md — a citation that resolves to nothing"
+        misses=$((misses + 1)); continue
+      fi
+      l5key "$q" "$lvl" "$title"
+      hits=${SECTION_HITS["$L5KEY"]:-0}
+      if [ "$hits" -eq 0 ]; then
+        miss "model-pin: leg 5: ${f} cites \`${q}\` \`${lvl} ${title}\` but ${SKILL_PATH["$q"]} has no '${lvl} ${title}' heading outside code fences — a citation that resolves to nothing"
+        misses=$((misses + 1))
+      elif [ "$hits" -gt 1 ]; then
+        miss "model-pin: leg 5: ${f} cites \`${q}\` \`${lvl} ${title}\`, which matches ${hits} headings in ${SKILL_PATH["$q"]} — an ambiguous citation; give one of them a distinct title"
+        misses=$((misses + 1))
+      fi
+    done < <(sed $'1s/^\xEF\xBB\xBF//; s/\r$//' "$f" 2>/dev/null |
+      sed -zE "s/\n([ \t]*${cm}[ \t]*\n)+/\x01/g; s/[ \t]*\n[ \t]*${cm:+(#+[ \t]+)?}/ /g" 2>/dev/null |
+      grep -aoE -e "$LEG5_FORM_RE" -e "$LEG5_NEAR_RE" 2>/dev/null)
+  done
+fi
+
+# Counted from citations that reached the lookup, never from raw matches.
+if [ "$leg5_checked" -eq 0 ] && [ "$leg5_skill_files" -gt 0 ]; then
+  miss "model-pin: leg 5 checked no section-name citation — a scan that verifies nothing is not a pass"
+  misses=$((misses + 1))
+fi
+
+info "section-name citations checked: ${leg5_checked} distinct (file, citation) pairs across ${leg5_files} files; ${headings_indexed} headings indexed from ${leg5_skill_files} skill files"
 
 # --- verdict ---------------------------------------------------------------
 echo "-- ${misses} MISS, ${warns} WARN --"

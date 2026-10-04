@@ -262,7 +262,7 @@ objects; the skill's call contract has the envelope).
 **PHI scrub — run `brain-client.sh scrub` over the built payload FILE before
 egress, and SUPPRESS the writeback if it cannot run.** When the scrub is
 forced, the conditions that force it, and what it does and does not redact
-are the `cepa:brain` skill's Compliance section — read it there. Four points
+are the `cepa:brain` skill's `## Compliance` section — read it there. Four points
 that bind *this* command specifically:
 
 - Refresh rewrites drifted docs, so its payloads carry freshly re-quoted code

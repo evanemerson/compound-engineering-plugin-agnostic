@@ -32,7 +32,7 @@ behaves exactly as today. Missing, unreadable, or malformed config is treated as
 **not configured** (fail-closed). This is the single participation gate. Note: a
 repo opts in explicitly, but a repo that carries a `## Compliance` section is
 NOT thereby excluded (participation is the operator's opt-in) — instead the PHI
-scrub below is FORCED on for it (see Compliance).
+scrub below is FORCED on for it (see `cepa:brain` `## Compliance` below).
 
 ## Credentials
 

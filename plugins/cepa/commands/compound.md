@@ -56,7 +56,7 @@ routine tier. §9a is why the override lives here and not in frontmatter.
 **Prompt:** "Search `docs/solutions/` for existing solution documents that relate to this problem. Look for: (1) Similar symptoms. (2) Same files or modules affected. (3) Related patterns or anti-patterns. Return a list of related document paths with brief descriptions of how they relate."
 
 ### Agent 4: Prevention Strategist
-**Prompt:** "Based on the root cause and fix, determine: (1) How could this have been prevented? (2) Should there be a linter rule, test, or CI check? (3) Should CLAUDE.md be updated with a new rule? (4) Are there other places in the codebase where the same pattern might cause issues? (5) Detection signals: 2-5 concrete, greppable code patterns a review agent should flag when it sees similar code in a future diff — name the exact construct and where it's dangerous, each with one clause on why it fails (per the `cepa:compound-docs` skill's Detection section spec; signals for automated reviewers, distinct from the prevention rules for humans). Return concrete prevention recommendations and the Detection signals separately."
+**Prompt:** "Based on the root cause and fix, determine: (1) How could this have been prevented? (2) Should there be a linter rule, test, or CI check? (3) Should CLAUDE.md be updated with a new rule? (4) Are there other places in the codebase where the same pattern might cause issues? (5) Detection signals: 2-5 concrete, greppable code patterns a review agent should flag when it sees similar code in a future diff — name the exact construct and where it's dangerous, each with one clause on why it fails (per the `cepa:compound-docs` skill's `### The Detection Section` spec; signals for automated reviewers, distinct from the prevention rules for humans). Return concrete prevention recommendations and the Detection signals separately."
 
 ### Agent 5: Category Classifier
 **Prompt:** "Based on the problem and solution, classify this into one of these categories: build-errors, database-issues, runtime-errors, performance-issues, security-issues, ui-bugs, integration-issues, logic-errors. Also suggest 3-5 tags for the document. Additionally, list candidate domain vocabulary terms this problem involved — entities, named processes, or status concepts whose meaning is project-specific and precise enough that a new engineer would need them defined (per the `cepa:compound-docs` skill's CONCEPTS.md qualifying bar; general programming vocabulary never qualifies). For each candidate: the term and a one-sentence definition drawn from how the code actually uses it. Return the category, tags, and candidate terms (or 'none qualify')."
@@ -172,7 +172,7 @@ and authoritative either way.
    and suppresses the writeback if the scrub cannot run. Do not re-implement
    it here or treat this step as a separate manual pass. When the scrub is
    forced and what it does and does not redact are the `cepa:brain` skill's
-   Compliance section — read it there. Two things worth knowing at this step:
+   `## Compliance` section — read it there. Two things worth knowing at this step:
    it redacts numeric patterns ONLY (no names, emails, phones, or
    written-month dates), so a completed scrub never means "this payload is
    safe"; and it runs over the whole file, so ordinary digits in engineering
