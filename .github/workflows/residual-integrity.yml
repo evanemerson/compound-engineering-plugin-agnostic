@@ -66,6 +66,15 @@ jobs:
       - name: Check sweep branch classification
         if: always()
         run: bash scripts/check-sweep-branch-classes.sh
+      # The batch-sibling pattern decides which open PR a `batch:` run may
+      # treat as a sibling. It must admit the worktree form <type>/<wt>/<id>-
+      # without letting a worktree NAMED <id>-x create a false sibling, and it
+      # must exist in exactly one place. The script reads the shipped pattern
+      # and carries its own fixtures and mutants. Static command, no
+      # workflow-context interpolation.
+      - name: Check batch sibling match
+        if: always()
+        run: bash scripts/check-batch-sibling-match.sh
       # Residual 2g: a fenced-block instruction file must never carry state
       # across a block boundary in a shell variable. SIX instances shipped on
       # the brain-writeback surface alone, and instances 5 and 6 were each
