@@ -107,6 +107,21 @@ fi
 # purpose — those should resolve, and leg 4 should check that they do.
 SS=$'\302\247'
 
+# Leg 5's citation form is built the same way, for the same reason: leg 5 scans
+# `scripts/` too, and a literal broken citation or prose-form section name in
+# this file would be a real finding. `BT` is a backtick and `AP` an apostrophe;
+# neither shape can be assembled from this file's source text.
+BT=$'\x60'
+AP="'"
+CA=$'\xe2\x80\x99'
+# heading <hashes> <title>   -> the backticked heading literal
+heading() { printf '%s%s %s%s' "$BT" "$1" "$2" "$BT"; }
+# cite <skill> <hashes> <title> -> qualifier, a space, the heading literal
+cite() { printf '%scepa:%s%s %s' "$BT" "$1" "$BT" "$(heading "$2" "$3")"; }
+# Leg 5's unresolved-title message, for <file> <skill> <hashes> <title>.
+l5_unres() { printf "leg 5: %s cites .cepa:%s. .%s %s. but .* has no '%s %s' heading" \
+  "$1" "$2" "$3" "$4" "$3" "$4"; }
+
 # ---------------------------------------------------------------------------
 # Case registry
 # ---------------------------------------------------------------------------
@@ -275,8 +290,8 @@ reg 28 'broken citation in a .yml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping --include=*.yml, which would make the workflow files unscanned'
 reg 37 'broken citation in a .yaml under `.github`' 1 0 "$UNQUAL_9Q" '' \
   'kills: dropping `yaml` from CITE_EXTS. Case 28 plants a .yml and nothing planted a .yaml, so half of leg 4 own extension set had no case behind it'
-reg 29 'no citations anywhere' '+' 0 'checked no .* citation' '' \
-  'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass'
+reg 29 'no citations anywhere' '+' 0 'leg 4 checked no section citation' '' \
+  'kills: removal of the checked==0 guard — a scan that verifies nothing is not a pass. The pattern names leg 4: leg 5 has a guard of the same wording, and a pattern both could satisfy would let leg 5 stand in for a deleted leg-4 guard'
 reg 30 'a SYMLINKED file inside a citation root is still read' 1 0 "$UNQUAL_9Q" '' \
   'kills: grep -R reverted to -r — grep follows symlinks named on the command line but NOT during recursion'
 reg 31 'a filesystem cycle under `plugins` is reported' 1 0 \
@@ -336,6 +351,92 @@ reg 42 'heading letters are matched case-insensitively' 0 0 '' '^MISS ' \
 reg 24 'identical content in .md and .markdown behaves identically' 2 1 \
   'zzcontrol' '' \
   'kills: a file-selection widening that reaches some of the four sites but not all'
+
+# --- Leg 5: section-NAME citations ------------------------------------------
+# Every case asserts leg 5's OWN message text, so no leg-4 finding can satisfy
+# it, and every count is exact except N1's, which is how many files cite the
+# brain heading today. Subtitle truncation on ` — ` and ` (` has no case: the
+# live tree cites through both (brain's `## Compliance`, file-todos'
+# `## Run Metadata`), so breaking either reddens the clean baseline — loud by
+# construction, which is why no silent mutant of it can be registered either.
+# Plants that touch a skill write to the fixture's brain/SKILL.md.
+reg N1 'renaming a cited skill heading breaks every citer' '+' 0 \
+  "$(l5_unres '.*' brain '##' Compliance)" '' \
+  'kills: l5-zero-hits — the unresolved-title MISS. This is the real-tree proof residual 2c asked for: the heading every brain Compliance citer names is renamed in place'
+reg N2 'a citation to a heading that does not exist' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Missing')" '' \
+  'kills: l5-zero-hits, on a planted citation rather than a renamed heading'
+reg N3 'the heading LEVEL is part of the citation' 1 0 \
+  "$(l5_unres 'README\.md' brain '###' Compliance)" '' \
+  'kills: l5-level (LOOSENING) — a key without the level lets a demoted or promoted heading keep every citation green'
+reg N4 'a bare prefix of a title does not resolve' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' Availability)" '' \
+  'kills: l5-dash-prefix (LOOSENING) — truncating at the first space instead of at the subtitle dash makes a heading resolve on its first word'
+reg N5 'a heading inside a backtick fence defines nothing' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Fenced')" '' \
+  'kills: l5-fence-open (LOOSENING) — example text inside a fence would resolve citations, the compound-docs trap'
+reg N6 'a heading inside a tilde fence defines nothing' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Tilde')" '' \
+  'kills: l5-fence-tilde (LOOSENING) — a tilde fence read as prose'
+reg N7 'a four-backtick fence wraps a three-backtick example' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Inner')" '' \
+  'kills: l5-fence-length (LOOSENING) — closing on any three backticks ends the outer fence early and indexes the rest of the example'
+reg N8 'an unterminated fence is reported' 1 0 \
+  'leg 5: .*/brain/SKILL\.md opens a code fence it never closes' '' \
+  'kills: l5-unterminated — every heading after an unclosed fence would leave the index with no signal'
+reg N9 'a citation matching two headings is ambiguous' 1 0 \
+  'leg 5: README\.md cites .cepa:brain. .## Zz Twin., which matches 2 headings' '' \
+  'kills: l5-ambiguous — a "legacy" sibling heading keeps a citation green after the real one is renamed away'
+reg N10 'a citation wrapped across a markdown line break' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Wrapped')" '' \
+  'kills: l5-join — two of the five live brain citers wrap'
+reg N11 'a citation wrapped across a shell comment line' 1 0 \
+  "$(l5_unres 'scripts/zzl5\.sh' brain '##' 'Zz Comment')" '' \
+  'kills: l5-comment-marker — the continuation line keeps its `#`, so a wrapped comment citation is never matched (brain-client.sh is this shape)'
+reg N12 'a blank line ends the paragraph — no join across it' 0 0 '' '^MISS ' \
+  'kills: l5-paragraph (LOOSENING) — joining across a blank line fabricates citations from unrelated paragraphs'
+reg N13 'a qualifier naming no skill is reported' 1 0 \
+  'leg 5: README\.md cites .cepa:zzskill. .## Anything. but there is no plugins/cepa/skills/zzskill/SKILL\.md' '' \
+  'kills: l5-unknown-skill — the case asserts the no-such-skill message, which the generic unresolved one cannot satisfy'
+reg N14 'the skill-possessive variant of the form is checked' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Skills')" '' \
+  'kills: l5-skills-form — every live citer but two uses this variant, and dropping it leaves them unmatched and unreported'
+reg N15 'a skill section named in prose is reported' 1 0 \
+  'leg 5: README\.md names a skill section in prose' '' \
+  'kills: l5-near — the old prose form comes back with nothing to notice it'
+reg N16 'repo-sense prose after a qualifier stays clean' 0 0 '' '^MISS ' \
+  'kills: l5-adjacent (LOOSENING) — any word allowed between qualifier and heading literal. Fully loosened, the same construct flagged 13 innocent sites on the 2026-10-04 tree'
+reg N17 'no section-name citation anywhere' 1 0 \
+  'leg 5 checked no section-name citation' '' \
+  'kills: l5-checked-zero — a scan that matched nothing reads as a pass'
+reg N18 'a skill whose headings all vanish is reported' 1 0 \
+  'leg 5: .*/pr-feedback/SKILL\.md yields no heading outside code fences' '' \
+  'kills: l5-zero-headings — an index that read nothing from a file reads as a skill nobody cites'
+reg N20 'the near-miss arm does not join across a paragraph break' 0 0 '' '^MISS ' \
+  'kills: l5-near-para (LOOSENING) — the near-miss classes cross the paragraph byte, so two paragraphs fuse into a prose finding. N12 covers only the form arm'
+reg N21 'a citation wrapped inside a markdown blockquote' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Quoted')" '' \
+  'kills: l5-md-quote — the continuation line keeps its `>`, so the two tokens are never adjacent'
+reg N22 'a citation wrapped in a shell comment inside a markdown fence' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Fenced Comment')" '' \
+  'kills: l5-md-comment — compound.md carries a live citation in this shape, one reflow away from going unseen'
+reg N23 'the near-miss arm needs a word boundary before the skill name' 0 0 '' '^MISS ' \
+  'kills: l5-near-boundary (LOOSENING) — a longer word ending in a skill name reads as that skill'
+reg N24 'the near-miss arm stops at sentence punctuation' 0 0 '' '^MISS ' \
+  'kills: l5-near-punct (LOOSENING) — a clause about finding fields runs on into an unrelated "each Problem section"; three live agent files carry the sentence'
+reg N25 'this-section prose names the citer, not a skill' 0 0 '' '^MISS ' \
+  'kills: l5-near-deictic (LOOSENING) — "the X skill rules apply throughout this section" is about the citing file'
+reg N26 'a half-converted title with no heading level is reported' 1 0 \
+  'leg 5: README\.md names a skill section in prose' '' \
+  'kills: l5-near-halfform — the most likely half-finished conversion is invisible to both arms'
+reg N27 'a line-initial inline code span is not a fence' 0 0 '' '^MISS ' \
+  'kills: l5-inline-span (LOOSENING) — a backtick run with a backtick after it opens a fence that is not there and swallows the rest of the file'
+reg N28 'a curly apostrophe is accepted in the form' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Curly')" '' \
+  'kills: l5-curly — a citation typed with a curly apostrophe is never matched'
+reg N19 'an unreadable skill file is reported by leg 5' '+' 0 \
+  'leg 5: .*/pr-feedback/SKILL\.md is unreadable' '' \
+  'kills: l5-skill-unreadable — the skill silently leaves the index. The count is `+` because legs 2-4 also refuse the same unreadable file under plugins/'
 
 # --- Leg 1: agent frontmatter ----------------------------------------------
 reg L1 'agent frontmatter names an unsanctioned tier' 1 0 \
@@ -427,7 +528,7 @@ reg L2i 'a SYMLINKED plugin directory is still scanned' 0 1 \
 # It was written to kill leg 2 grep read-error arm; the sweep then showed it
 # staying GREEN under that mutant, because leg 2 readability probe reads the
 # whole file first and refuses it before the arm runs. The arm is now a
-# declared survivor (see the STATED LIMIT at check-model-pins.sh:311). What
+# declared survivor (see the STATED LIMIT at check-model-pins.sh:314). What
 # this fixture actually covers is that probe — a construct NOTHING in the
 # registry sabotages. Kept for exactly that reason: it is the only case
 # standing behind it, and editing leg 2 read-error arm will not move it.
@@ -529,7 +630,7 @@ has_nul() { [ "$(tr -d '\000' < "$1" | wc -c)" -ne "$(wc -c < "$1")" ]; }
 # covered, and the case would go red for a reason that has nothing to do with
 # the checker.
 #
-# THE EXTENSION LIST IS A SECOND COPY of `CITE_EXTS` in check-model-pins.sh:525
+# THE EXTENSION LIST IS A SECOND COPY of `CITE_EXTS` in check-model-pins.sh:621
 # (`$MD_EXTS sh yml yaml`), and it is not derived from it. What actually
 # happens when they diverge, stated correctly because the previous wording here
 # claimed a mechanism the code does not have: an extension added to CITE_EXTS
@@ -939,6 +1040,81 @@ EOF
     # the whole marker passes; with it, the interactive branch is MISSING.
     L3g) printf '# zzl3g\n\n<!-- model-pin: mode-conditional noninteractive=opus headless=sonnet -->\n' \
            > "$d/plugins/cepa/commands/zzl3g.md" ;;
+
+    # --- Leg 5 ----------------------------------------------------------------
+    # brain/SKILL.md is the skill every leg-5 plant writes to. Each arm that edits
+    # it asserts the edit landed, for the reason case 18 gives.
+    N1) f="$d/plugins/cepa/skills/brain/SKILL.md"
+        grep -q '^## Compliance — content-level' "$f" || return 1
+        sed -i 's/^## Compliance — content-level/## PHI Compliance — content-level/' "$f"
+        grep -q '^## Compliance — content-level' "$f" && return 1
+        : ;;
+    N2)  say "$d" "See the $(cite brain '##' 'Zz Missing') section." ;;
+    N3)  say "$d" "See the $(cite brain '###' 'Compliance') section." ;;
+    N4)  say "$d" "See the $(cite brain '##' 'Availability') section." ;;
+    N5)  printf '\n```\n## Zz Fenced\n```\n' >> "$d/plugins/cepa/skills/brain/SKILL.md"
+         say "$d" "See the $(cite brain '##' 'Zz Fenced') section." ;;
+    N6)  printf '\n~~~\n## Zz Tilde\n~~~\n' >> "$d/plugins/cepa/skills/brain/SKILL.md"
+         say "$d" "See the $(cite brain '##' 'Zz Tilde') section." ;;
+    N7)  printf '\n````\n```\n## Zz Inner\n```\n````\n' >> "$d/plugins/cepa/skills/brain/SKILL.md"
+         say "$d" "See the $(cite brain '##' 'Zz Inner') section." ;;
+    N8)  printf '\n```\n## Zz After\n' >> "$d/plugins/cepa/skills/brain/SKILL.md" ;;
+    N9)  printf '\n## Zz Twin\n\n## Zz Twin (legacy)\n' >> "$d/plugins/cepa/skills/brain/SKILL.md"
+         say "$d" "See the $(cite brain '##' 'Zz Twin') section." ;;
+    N10) say "$d" "See the ${BT}cepa:brain${BT}
+   $(heading '##' 'Zz Wrapped') section." ;;
+    N11) printf '#!/usr/bin/env bash\n# the %scepa:brain%s skill%ss\n#   %s section\n' \
+           "$BT" "$BT" "$AP" "$(heading '##' 'Zz Comment')" > "$d/scripts/zzl5.sh" ;;
+    N12) say "$d" "The ${BT}cepa:brain${BT}
+
+$(heading '##' 'Zz Para') heading starts a new paragraph here."
+         grep -q 'Zz Para' "$d/README.md" || return 1 ;;
+    N13) say "$d" "See the $(cite zzskill '##' 'Anything') section." ;;
+    N14) say "$d" "See the ${BT}cepa:brain${BT} skill${AP}s $(heading '##' 'Zz Skills') section." ;;
+    N15) say "$d" "See the ${BT}cepa:brain${BT} skill${AP}s Zz Prose section." ;;
+    N16) say "$d" "A repo that opts into ${BT}cepa:brain${BT} declares
+$(heading '##' 'Zz Gap') in its own config."
+         grep -q 'Zz Gap' "$d/README.md" || return 1 ;;
+    # Strip the `#` run from every heading line, so the skill has none left.
+    N20) say "$d" "Follow the autonomy skill${AP}s contract
+
+the review section below applies."
+         grep -q 'the review section below' "$d/README.md" || return 1 ;;
+    N21) say "$d" "> See the ${BT}cepa:brain${BT}
+> $(heading '##' 'Zz Quoted') section." ;;
+    N22) say "$d" "${BT}${BT}${BT}bash
+# the cepa:brain skill${AP}s
+# $(heading '##' 'Zz Fenced Comment') section
+${BT}${BT}${BT}" ;;
+    N23) say "$d" "See the cerebrain skill${AP}s setup section."
+         grep -q 'cerebrain' "$d/README.md" || return 1 ;;
+    N24) say "$d" "Use the ${BT}cepa:file-todos${BT} skill${AP}s finding fields, and each Problem section."
+         grep -q 'each Problem section' "$d/README.md" || return 1 ;;
+    N25) say "$d" "The autonomy skill${AP}s rules apply throughout this section."
+         grep -q 'throughout this section' "$d/README.md" || return 1 ;;
+    N26) say "$d" "See the ${BT}cepa:brain${BT} skill${AP}s ${BT}Zz Half${BT} section." ;;
+    N27) printf '\n%sfoo%s is written inline.\n\n## Zz After Inline\n' "${BT}${BT}${BT}" "${BT}${BT}${BT}" \
+           >> "$d/plugins/cepa/skills/brain/SKILL.md"
+         say "$d" "See the $(cite brain '##' 'Zz After Inline') section." ;;
+    N28) say "$d" "See the ${BT}cepa:brain${BT} skill${CA}s $(heading '##' 'Zz Curly') section." ;;
+    N18) f="$d/plugins/cepa/skills/pr-feedback/SKILL.md"
+         grep -q '^##* ' "$f" || return 1
+         sed -i 's/^##* //' "$f"
+         grep -q '^##* ' "$f" && return 1
+         : ;;
+    N19) f="$d/plugins/cepa/skills/pr-feedback/SKILL.md"
+         chmod 000 "$f"
+         [ -r "$f" ] && return 1
+         : ;;
+    # Neutralize EVERY heading literal in every scannable file, so no form can
+    # match anywhere; assert it in both directions, as 17 and 36 do for roots.
+    # The literal becomes `#=# X`, NOT `=## X`: a backticked title with no
+    # leading `#` is the near-miss arm's half-converted form (N26), so that
+    # spelling would turn every neutralized citation into a prose finding.
+    N17) [ -n "$(grep -rl -- "${BT}##" "$d/plugins" "$d/scripts" "$d/README.md" "$d/CLAUDE.md" "$d/.github" 2>/dev/null)" ] || return 1
+         while IFS= read -r p; do sed -i "s/${BT}##/${BT}#=#/g" "$p" || return 1; done < <(scannable_in "$d/plugins" "$d/scripts" "$d/.github"; printf '%s\n' "$d/README.md" "$d/CLAUDE.md")
+         [ -z "$(scannable_in "$d/plugins" "$d/scripts" "$d/.github" -- -exec grep -l -- "${BT}##" {} +; grep -l -- "${BT}##" "$d/README.md" "$d/CLAUDE.md")" ] || return 1
+         : ;;
 
     *) printf 'no plant recipe for case %s\n' "$id" >&2; return 1 ;;
   esac

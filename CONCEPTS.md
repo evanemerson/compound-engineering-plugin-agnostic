@@ -215,6 +215,18 @@ place of it. It satisfies a citation-presence check while leaving the
 duplicated text — and so the drift — intact, which makes it harder to catch
 than a bare restatement.
 
+### Section-name citation
+A pointer to a skill's section by its heading title, written in one required
+form: the skill's qualified `<plugin>:<skill>` name, optionally `skill's`, then
+the heading's own level and title in backticks, separated only by whitespace.
+The form exists because one heading name can carry two senses — a skill's
+`## Compliance` heading and a participant repo's own `## Compliance`
+declaration — and only the author knows which is meant. Without the qualifier,
+the text is not a citation and nothing checks it; with it, a rename of the
+cited heading fails the check instead of rotting silently.
+
+*Avoid:* section reference, named anchor.
+
 ## Verification authoring
 
 ### Control case

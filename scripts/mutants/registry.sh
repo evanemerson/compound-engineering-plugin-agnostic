@@ -108,13 +108,13 @@ mut t-predicate "$CHK" \
 survivor t-rc-half "$CHK" \
   "[ \"\$_rc\" -ne 0 ] || [ -s \"\$_err\" ]" \
   "[ -s \"\$_err\" ]" \
-  scripts/check-model-pins.sh:87 \
+  scripts/check-model-pins.sh:90 \
   'declared survivor: every failure a fixture can stage sets a non-zero exit AND writes stderr, so removing the exit half is invisible to any control. Kept for death-by-signal, which no fixture can produce.'
 
 survivor t-err-half "$CHK" \
   "[ \"\$_rc\" -ne 0 ] || [ -s \"\$_err\" ]" \
   "[ \"\$_rc\" -ne 0 ]" \
-  scripts/check-model-pins.sh:87 \
+  scripts/check-model-pins.sh:90 \
   'declared survivor: the other half of the same predicate, for the same measured reason. Kept for a future find that warns at exit 0.'
 
 mut t-return "$CHK" \
@@ -201,9 +201,12 @@ mut l1-file-symlink "$CHK" \
   "if ! traverse \"\${AGENT_DIRS[@]}\" \\( \"\${find_name_args[@]}\" \\) -type f; then" \
   'kills: dropping -L from leg 1 FILE discovery — a symlinked definition is a file nobody checked. Expected killer: L1d.'
 
+# The leading newline is the anchor: leg 5 carries the same guard at four
+# spaces, and "  if" is a substring of "    if". Pinned to column 2, it is
+# leg 1's alone.
 mut l1-unreadable "$CHK" \
-  "  if [ ! -r \"\$f\" ]; then" \
-  "  if false; then" \
+  $'\n'"  if [ ! -r \"\$f\" ]; then" \
+  $'\n'"  if false; then" \
   'kills: the per-file readability guard in leg 1. Expected killer: L1g. 33/34 plant under scripts/, which is leg 4.'
 
 mut l1-bom "$CHK" \
@@ -281,7 +284,7 @@ mut l2-nul "$CHK" \
 survivor l2-grep-binary "$CHK" \
   "hits=\$(grep -naE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)" \
   "hits=\$(grep -nE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)" \
-  scripts/check-model-pins.sh:311 \
+  scripts/check-model-pins.sh:314 \
   'declared survivor: -a is observable only on a file GNU grep calls binary, and under LC_ALL=C only a NUL does that — which the NUL probe two lines above refuses first. Measured on grep 3.11: 0x80/0xFF/0x01/0x1B with no NUL matches identically with and without -a.'
 
 survivor l2-grep-rc "$CHK" \
@@ -291,7 +294,7 @@ survivor l2-grep-rc "$CHK" \
   "  hits=\$(grep -naE \"\$DISPATCH_RE\" \"\$f\" 2>/dev/null)
   grc=\$?
   if [ \"\$grc\" -gt 9 ]; then printf 'UNREADABLE\n'; return; fi" \
-  scripts/check-model-pins.sh:311 \
+  scripts/check-model-pins.sh:314 \
   'declared survivor: leg 2 readability probe reads the whole file first, so this arm never sees an unreadable one. Control L2j plants exactly that fixture and stays GREEN under this mutant while leg 3 identical arm dies to L3f — leg 3 has no probe. The redundancy runs both ways, so neither guard is individually observable.'
 
 mut l2-block-lo "$CHK" \
@@ -406,9 +409,10 @@ mut l4-owner-same-skill "$CHK" \
   '      *" $sname ZZNEVER "*) : ;;' \
   'kills: the same-owner arm, turning the collision check into a second-APPEND check — one skill repeating its own heading would then fail the build on legitimate content. Expected killer: C2.'
 
+# `done < <(` is the anchor: leg 5's index runs the same sed over "$sk".
 mut l4-index-bom "$CHK" \
-  "sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$sk\" 2>/dev/null |" \
-  "cat \"\$sk\" 2>/dev/null |" \
+  "done < <(sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$sk\" 2>/dev/null |" \
+  "done < <(cat \"\$sk\" 2>/dev/null |" \
   'kills: BOM/CRLF normalization when building the anchor index — a BOM-led skill file defines no anchors, so every citation into it MISSes. Expected killer: 41, whose heading sits on line 1 because that is the only line a BOM can reach.'
 
 mut l4-index-lowercase "$CHK" \
@@ -470,7 +474,7 @@ mut l4-range-split "$CHK" \
 survivor l4-range-inherit "$CHK" \
   "      [a-z]*) p=\"\${first_num}\${p}\" ;;" \
   "      [a-z]*) continue ;;" \
-  scripts/check-model-pins.sh:697 \
+  scripts/check-model-pins.sh:705 \
   'declared survivor: the arm is unreachable from CITE_RE, which numbers both sides of every hyphen, so no part arriving here can start with a letter. Instrumented and measured at zero firings over this repo entire citation set. Kept as the correct handling for a widened range tail; a control becomes possible the day that widening lands.'
 
 mut l4-qualified-branch "$CHK" \
@@ -482,6 +486,163 @@ mut l4-checked-zero "$CHK" \
   "if [ \"\$checked\" -eq 0 ] && [ \"\$skill_files\" -gt 0 ]; then" \
   "if false; then" \
   'kills: the guard that a scan verifying nothing is not a pass. Expected killer: 29.'
+
+# ===========================================================================
+# Leg 5: section-NAME citations
+# ===========================================================================
+
+mut l5-zero-hits "$CHK" \
+  '      if [ "$hits" -eq 0 ]; then' \
+  '      if false; then' \
+  'kills: the unresolved-title MISS — a renamed heading leaves every citer green. N1 is the real-tree brain rename. Expected killers: N1, N2.'
+
+mut l5-ambiguous "$CHK" \
+  '      elif [ "$hits" -gt 1 ]; then' \
+  '      elif [ "$hits" -gt 9 ]; then' \
+  'kills: the ambiguous-target MISS — a sibling heading keeps a citation green after the real one is renamed. Expected killer: N9.'
+
+mut l5-level "$CHK" \
+  'l5key() { L5KEY="${1}|${2}|${3}"; }' \
+  'l5key() { L5KEY="${1}||${3}"; }' \
+  'kills: LOOSENING. the heading level in the lookup key — a demoted or promoted heading keeps its citations green. Expected killer: N3.'
+
+mut l5-dash-prefix "$CHK" \
+  '"${title%% — *}"; k_dash' \
+  '"${title%% *}"; k_dash' \
+  'kills: LOOSENING. truncating a title at its first space instead of at the subtitle dash. Silent today because the one live dash-subtitled citation has a one-word title. Expected killer: N4.'
+
+mut l5-fence-open "$CHK" \
+  '        infence = 1; next' \
+  '        infence = 0; next' \
+  'kills: LOOSENING. entering a fence — example text inside one defines headings. Expected killer: N5.'
+
+mut l5-fence-tilde "$CHK" \
+  '      if (t ~ /^(```|~~~)/) {' \
+  '      if (t ~ /^(```)/) {' \
+  'kills: LOOSENING. tilde fences — read as prose, so their example headings resolve citations. Expected killer: N6.'
+
+mut l5-fence-length "$CHK" \
+  '        if (substr(t, 1, length(fence)) == fence) {' \
+  '        if (substr(t, 1, 3) == substr(fence, 1, 3)) {' \
+  'kills: LOOSENING. the closer-length rule — a three-backtick line closes a four-backtick fence early. Expected killer: N7.'
+
+mut l5-unterminated "$CHK" \
+  '    END { if (infence) print "UNTERMINATED-FENCE" }' \
+  '    END { if (0) print "UNTERMINATED-FENCE" }' \
+  'kills: the unterminated-fence MISS — every heading after an unclosed fence leaves the index with no signal. Expected killer: N8.'
+
+mut l5-inline-span "$CHK" \
+  '        if (fc == "`" && index(substr(t, n + 1), "`")) next' \
+  '        if (0) next' \
+  'kills: LOOSENING. the inline-code-span exception — a line-initial code span opens a fence that is not there. Expected killer: N27.'
+
+mut l5-join "$CHK" \
+  '      sed -zE "s/\n(${brk}\n)+/\x01/g; s/[ \t]*\n[ \t]*${cont}/ /g" 2>/dev/null |' \
+  '      sed -zE "s/\n(${brk}\n)+/\x01/g; s/[ \t]*\n[ \t]*${cont}/\n/g" 2>/dev/null |' \
+  'kills: joining lines inside a paragraph — a wrapped citation is never matched. Expected killer: N10.'
+
+mut l5-paragraph "$CHK" \
+  '      sed -zE "s/\n(${brk}\n)+/\x01/g; s/[ \t]*\n[ \t]*${cont}/ /g" 2>/dev/null |' \
+  '      sed -zE "s/[ \t]*\n[ \t]*${cont}/ /g" 2>/dev/null |' \
+  'kills: LOOSENING. the paragraph bound on the join — unrelated paragraphs fuse into a fabricated citation. Expected killer: N12.'
+
+mut l5-comment-marker "$CHK" \
+  '      *.sh|*.yml|*.yaml) brk='"'"'[ \t]*#*[ \t]*'"'"'; cont='"'"'(#+[ \t]+)?'"'"' ;;' \
+  '      *.sh|*.yml|*.yaml) brk='"'"'[ \t]*#*[ \t]*'"'"'; cont='"'"''"'"' ;;' \
+  'kills: dropping a continuation line comment marker in .sh/.yml/.yaml — brain-client.sh carries this shape. Expected killer: N11.'
+
+mut l5-md-quote "$CHK" \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'((>[ \t]?)+|#[ \t]+)?'"'"' ;;' \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'(#[ \t]+)?'"'"' ;;' \
+  'kills: dropping a blockquote marker on a markdown continuation line. Expected killer: N21.'
+
+mut l5-md-comment "$CHK" \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'((>[ \t]?)+|#[ \t]+)?'"'"' ;;' \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'((>[ \t]?)+)?'"'"' ;;' \
+  'kills: dropping a lone shell-comment marker on a markdown continuation line — compound.md carries this shape inside a fence. Expected killer: N22.'
+
+mut l5-unknown-skill "$CHK" \
+  '      if [ -z "${SKILL_PATH["$q"]:-}" ]; then' \
+  '      if false; then' \
+  'kills: the no-such-skill MISS; the generic unresolved MISS still fires, so only a message assertion can see it. Expected killer: N13.'
+
+mut l5-skills-form "$CHK" \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill${L5AP}s)?[[:space:]]+\`(##|###|####) [^\`${L5P}]+\`"' \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?[[:space:]]+\`(##|###|####) [^\`${L5P}]+\`"' \
+  'kills: the skill-possessive variant of the form — most live citers use it. Expected killer: N14.'
+
+mut l5-adjacent "$CHK" \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill${L5AP}s)?[[:space:]]+\`(##|###|####) [^\`${L5P}]+\`"' \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill${L5AP}s)?[[:space:]]+([a-z]+[[:space:]]+)?\`(##|###|####) [^\`${L5P}]+\`"' \
+  'kills: LOOSENING. one word allowed between qualifier and heading literal. Fully loosened, the construct reddened the clean tree with 13 innocent findings on 2026-10-04, so this is its silent sibling. Expected killer: N16.'
+
+mut l5-curly "$CHK" \
+  '  L5AP="('"'"'|’)"' \
+  '  L5AP="('"'"')"' \
+  'kills: the curly apostrophe in the form. Expected killer: N28.'
+
+mut l5-near "$CHK" \
+  ' -e "$LEG5_NEAR_RE" 2>/dev/null; printf' \
+  ' 2>/dev/null; printf' \
+  'kills: the near-miss arm — the old prose form returns unseen. Expected killer: N15.'
+
+mut l5-near-para "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]][^\`.,;:]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  'kills: LOOSENING. the paragraph byte excluded from the near-miss classes. Expected killer: N20.'
+
+mut l5-near-boundary "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  'kills: LOOSENING. the word boundary before the skill name in the near-miss arm. Expected killer: N23.'
+
+mut l5-near-punct "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.[:space:]${L5P}][^\`.${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  'kills: LOOSENING. sentence punctuation stopping the near-miss arm. Expected killer: N24.'
+
+mut l5-near-halfform "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59})[[:space:]]section"' \
+  'kills: the near-miss alternative for a backticked title with no heading level, the likeliest half-finished conversion. Expected killer: N26.'
+
+mut l5-near-deictic "$CHK" \
+  '*[[:space:]]next\ section|*[[:space:]]own\ section) continue ;;' \
+  '*[[:space:]]next\ section|*[[:space:]]own\ section) : ;;' \
+  'kills: LOOSENING. the this-section filter — prose about the citing file reads as a skill citation. Expected killer: N25.'
+
+mut l5-checked-zero "$CHK" \
+  'if [ "$leg5_checked" -eq 0 ] && [ "$leg5_skill_files" -gt 0 ]; then' \
+  'if false; then' \
+  'kills: the guard that a leg-5 scan matching nothing is not a pass. Expected killer: N17.'
+
+mut l5-zero-headings "$CHK" \
+  '  if [ "$sk_headings" -eq 0 ]; then' \
+  '  if false; then' \
+  'kills: the zero-headings guard — an index that read nothing from a file reads as a skill nobody cites. Expected killer: N18.'
+
+mut l5-skill-unreadable "$CHK" \
+  '  if [ ! -r "$sk" ]; then' \
+  '  if false; then' \
+  'kills: the unreadable-skill MISS — the skill silently leaves the index. Expected killer: N19.'
+
+survivor l5-scan-rc "$CHK" \
+  '      '"'"'0 0 0'"'"'|'"'"'0 0 1'"'"') : ;;' \
+  '      *) : ;;' \
+  scripts/check-model-pins.sh:858 \
+  'declared survivor: the per-file scan exit-status check. No fixture can make sed or grep fail on a file leg 4 has just read; proven by hand with a PATH stub on 2026-10-04.'
+
+survivor l5-index-rc "$CHK" \
+  '  if [ "$idx_rc" != '"'"'0 0'"'"' ]; then' \
+  '  if false; then' \
+  scripts/check-model-pins.sh:858 \
+  'declared survivor: the heading-index exit-status check, for the same measured reason as l5-scan-rc.'
+
+survivor l5-unreadable-race "$CHK" \
+  '    if [ ! -r "$f" ]; then' \
+  '    if false; then' \
+  scripts/check-model-pins.sh:855 \
+  'declared survivor: the became-unreadable arm. Leg 4 refuses any root it cannot read, so only a race reaches it.'
 
 # ===========================================================================
 # The verdict and exit path

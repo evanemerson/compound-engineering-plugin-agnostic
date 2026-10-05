@@ -116,7 +116,7 @@ export LC_ALL=C
 # non-empty stderr) has neither half individually pinned by any control, HERE OR
 # IN THE SIBLING, and cannot be: every failure a fixture can stage sets both, so
 # a control that removes either half still passes. Documented at
-# check-model-pins.sh:87-95 with the full measurement; cited rather than
+# check-model-pins.sh:90-98 with the full measurement; cited rather than
 # restated, and named here because a reader of only this file would otherwise
 # have no way to know the gap exists. `each-fix-reintroduced-the-defect-class-
 # one-layer-down` is explicit that copying a shape obliges enumerating what it
@@ -196,8 +196,8 @@ STATES='pending ready skipped applied deferred completed'
 #
 # The authority for WHICH spellings are live, WHY each fragment is load-bearing,
 # and the inherent frontmatter ambiguity is the `cepa:file-todos` skill's
-# "Verify against the body" section — plus its committed fixture,
-# plugins/cepa/skills/file-todos/fixtures/status-spellings.md. Cited, not
+# `## Frontmatter Summary` section (its "verify against the body" paragraph)
+# — plus its committed fixture, plugins/cepa/skills/file-todos/fixtures/status-spellings.md. Cited, not
 # restated; if the two ever disagree, the spec governs and this is the bug.
 #
 # Every use needs `-i`: the FIELD NAME is capitalised in real files
