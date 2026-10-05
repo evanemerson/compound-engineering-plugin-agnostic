@@ -668,7 +668,9 @@ The `**Next step:**` line for a weekly file names `/cepa:sweep` rather than
 
 Present a summary as labeled content, then close with the `## Next steps`
 numbered tail per the **`cepa:autonomy` skill §6** — the same shape every
-cepa command ends with. (Headless mode never reaches here: it returns the
+cepa command ends with. In a worker session the tail is the Handoff block
+instead (`cepa:autonomy` §10d): the candidates below become its `Decisions`,
+kept to this branch's own PR and findings. (Headless mode never reaches here: it returns the
 structured summary from the Modes section instead — the interactive tail
 is for a human picker and callers can't parse it.)
 

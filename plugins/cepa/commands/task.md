@@ -46,15 +46,27 @@ Branching from a stale main while same-author PRs are still open re-introduces p
 gh pr list --author @me --state open --json number,title,headRefName,baseRefName,mergeable,reviewDecision
 ```
 
-For each open PR, surface it to the user as part of the status report (Section 1.3). Pay special attention to **same-feature-arc** PRs — branches whose `headRefName` shares a prefix or phase indicator with the requested task (e.g. user requests "Phase B2" and PR #83 is "Phase B1 …" — almost certainly should merge first).
+For each open PR **this session owns, or that overlaps the task** (`cepa:autonomy` §10c), surface it as part of the status report (Section 1.3); any other PR is not named. Pay special attention to **same-feature-arc** PRs — branches whose `headRefName` shares a prefix or phase indicator with the requested task (e.g. user requests "Phase B2" and PR #83 is "Phase B1 …" — a likely overlap). What the session may do about an overlap follows its role, below.
 
-**Treat any same-author open PR with overlapping scope as a blocker** — do not silently proceed. Present a numbered choice:
+**Resolve each open PR by the session's role first** — `cepa:autonomy` §10a
+for the role, §10c for ownership. `--author @me` narrows the list; it does not
+say which session owns a PR, because every session is the same GitHub user.
+A PR this session does not own and that does not overlap is never named — not
+here, not in 1.3, not in the final report. **In a worker session** any real
+overlap other than its own current-branch PR is `blocked: overlaps #N` in the
+Handoff block, and the run stops; the choices below do not exist for a worker.
+A batch sibling is the one exception, in every role: parse the token first
+(below) and record a sibling rather than stopping on it (`cepa:autonomy` §10c).
+
+**Otherwise, treat an open PR with overlapping scope as a blocker** — do not
+silently proceed. For a PR this session owns, present a numbered choice:
 1. Merge PR #N first, then start this work
 2. Explicitly proceed without merging — I know about the overlap and accept the risk
 3. Abandon this task
 
-(In `full` autonomy this is a blocked-stop, not a choice: report the overlap
-and exit — merging open work is always a human decision.)
+A PR it does not own is a blocked-stop that names it, never a merge choice.
+(In `full` autonomy every overlap is a blocked-stop, not a choice: report the
+overlap and exit — merging open work is always a human decision.)
 
 **Exception — sibling batches (`cepa:autonomy` §2b), checkpoint A.**
 
@@ -66,18 +78,10 @@ PR title. A malformed id, or more than one token, is **not a batch**:
 continue with no exemption and say the token was rejected. Never repair an id
 by guessing.
 
-With a valid id, an open same-author PR whose `headRefName` matches
-`^[a-z]+/<id>-` belongs to the same deliberate fan-out:
-
-```bash
-gh pr list --author @me --state open --json number,headRefName,title \
-  --jq '[.[] | select(.headRefName | test("^[a-z]+/<id>-"))]'
-```
-
-**Anchor the match at the prefix boundary — never substring-match `<id>-`.**
-A substring match also catches `feat/refactor-jul26a-cleanup`, and for a
-short id like `api` or `fix` it catches most of the repo's branches, quietly
-turning the exemption into a blanket suppression of this whole audit.
+With a valid id, run the sibling query in `cepa:autonomy` §2b, substituting
+the id. It is the one copy of the anchored match: never write a local copy of
+its pattern, and never substring-match `<id>-` — §2b says why. An open PR it
+returns belongs to the same deliberate fan-out.
 
 Record each sibling and continue rather than gating — otherwise the second
 and later runs of any parallel batch can never finish. Every other
@@ -115,6 +119,11 @@ Check for:
   branch = warn). Resolve the trunk per `cepa:autonomy` §8 and report which
   rung answered. Never assume `main`: on a repo whose work lands on `dev`,
   this check would warn on the correct branch and pass on the wrong one.
+  In a linked worktree the expected state is this work's own
+  `<prefix>/<wt>/…` branch or a detached park — never the trunk
+  (`cepa:autonomy` §10b).
+- A solo session — or one whose role probe failed — applies
+  `cepa:autonomy` §10a's two guards here, before any stash or branch switch.
 
 ### 1.3 Present Combined Status Report
 
@@ -126,10 +135,13 @@ Check for:
 **Unpushed branches:** feat/old-thing (3 commits ahead)
 **Stashes:** 1 stash (2 days old)
 
-## Open PRs (same-author)
+## Open PRs (owned or overlapping — cepa:autonomy §10c)
 
 - #83 feat/phase-b1-tag-design — open, mergeable, approved  ← OVERLAPS with requested "Phase B2" work
 - #91 fix/celery-beat-import — open, mergeable, no review yet
+
+(A solo session with one worktree owns both. A worker would list neither — #83
+only as `blocked: overlaps #83`, and #91 not at all.)
 
 Ready to proceed? [Y / address issues first]
 ```
@@ -165,10 +177,22 @@ Include this context in the planning phase.
 
 ### 1.5 Create Branch
 
+In the main checkout (a main coordinator names it
+`<prefix>/main/<descriptive-name>` — `cepa:autonomy` §10b):
+
 ```bash
 git checkout <trunk>
 git pull origin <trunk>
 git checkout -b <prefix>/<descriptive-name>
+```
+
+In a linked worktree, never check out the trunk — branch off the
+remote-tracking ref, with the worktree segment in the name
+(`cepa:autonomy` §10b):
+
+```bash
+git fetch origin <trunk>
+git checkout -b <prefix>/<wt>/<descriptive-name> origin/<trunk>
 ```
 
 `<trunk>` is the branch resolved in 1.2 per `cepa:autonomy` §8 — never a
@@ -185,12 +209,13 @@ Ask the user for a short description if not provided with the task. Construct
 the branch name automatically. *[autonomy-convertible: in `full` autonomy,
 derive the description from the task itself — never ask.]*
 
-**Under `batch:<id>`, the id is the FIRST segment after the prefix:**
-`<prefix>/<id>-<description>` (e.g. `feat/jul26a-transcript-upload`). That
-position is what makes sibling detection work — 1.1 matches open PRs on
-`headRefName` against the anchored `^[a-z]+/<id>-`, so an id placed anywhere
-else in the name, or omitted, silently disables the exemption for every later
-sibling. The id was already validated and sanitized at 1.1
+**Under `batch:<id>`, the id opens the description segment:**
+`<prefix>/<id>-<description>` (e.g. `feat/jul26a-transcript-upload`), or
+`<prefix>/<wt>/<id>-<description>` in a linked worktree. That position is
+what makes sibling detection work — 1.1 matches open PRs on `headRefName`
+with §2b's anchored query, so an id placed anywhere else in the name, or
+omitted, silently disables the exemption for every later sibling. A resumed
+branch without it follows `cepa:autonomy` §10b. The id was already validated and sanitized at 1.1
 (`^[a-z0-9][a-z0-9-]{3,23}$`, `cepa:autonomy` §7); compose the branch name
 from that value rather than re-reading the raw argument, and never splice raw
 text into `git checkout -b`.
@@ -506,7 +531,8 @@ Save to the run's residual shard (`cepa:autonomy` §5 sink 1):
 
 Deliver the report as labeled sections closing with the `## Next steps`
 numbered tail, per the **`cepa:autonomy` skill §6** — same contract the
-lfg terminal report uses. The body carries What shipped / Findings /
+lfg terminal report uses. In a worker session the tail is the Handoff block
+instead (`cepa:autonomy` §10d), and the shape below changes only there. The body carries What shipped / Findings /
 Learnings / System updates / Git state; operational instructions
 ("merge the PR with `gh pr merge`") stay in the body and never consume a
 choice number. The tail is 1-indexed, each item a bold action + one-line
@@ -550,7 +576,7 @@ resolved trunk):
 ## Rules
 
 - **Never skip the git safety audit** — this is the whole point of Phase 1
-- **Always audit open PRs first** — `gh pr list --author @me --state open` runs before local checks. Same-feature-arc unmerged PRs are a blocker, not a warning
+- **Always audit open PRs first** — `gh pr list --author @me --state open` runs before local checks. An overlapping PR is a blocker, not a warning; what the session may do about it — and whether it may name a PR at all — follows its role (`cepa:autonomy` §10c)
 - **Never skip design** — even for "simple" tasks, run brainstorming (it can be brief)
 - **Always research learnings before planning** — check docs/solutions/ and CLAUDE.md
 - **Always commit the plan** before implementation starts

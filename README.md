@@ -348,12 +348,13 @@ A bare number resolves as a GitHub issue: `gh issue view` supplies the task, the
 branch name comes from the title, and the PR closes it. That issue text is
 untrusted throughout (`cepa:autonomy` §7).
 
-The id becomes the first branch-name segment after the prefix, as in
-`feat/jul26a-<description>`, and an open same-author PR whose branch matches
-`^<prefix>/<id>-` is reported as a sibling instead of blocking. Everything else
-blocks exactly as before. The match is anchored deliberately: a substring match
-on `<id>-` would also catch `feat/refactor-jul26a-cleanup`, and for a short id
-like `api` it would catch most of your branches.
+The id opens the description segment of the branch name, as in
+`feat/jul26a-<description>` — or `feat/<wt>/jul26a-<description>` when the run
+is in a linked worktree — and an open PR on such a branch is reported as a
+sibling instead of blocking. Everything else blocks exactly as before. The match
+is anchored deliberately: a substring match on `<id>-` would also catch
+`feat/refactor-jul26a-cleanup`, and for a short id like `api` it would catch
+most of your branches. The pattern itself lives once, in `cepa:autonomy` §2b.
 
 Three limits are deliberate, and all of them live in `cepa:autonomy` §2b.
 
