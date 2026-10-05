@@ -701,6 +701,8 @@
    than instantiating it.
 
 2c. **The `cepa:brain` Compliance citation has no resolves-check.** P2.
+   **CLOSED by PR #83** — leg 5 of `scripts/check-model-pins.sh`. Build
+   record at the end of this item.
    `check-model-pins.sh` Leg 4 resolves anchors only for the `§9<letter>`
    autonomy family; nothing resolves a `cepa:brain` section-name citation
    against `SKILL.md`'s actual heading. Rename or reorder that heading and
@@ -907,6 +909,45 @@
    - Should the form also live in a skill doc that command authors read
      (feasibility)? Decision: no for now — the MISS message names the form,
      and a second home is the restatement this item exists to avoid.
+
+   **Build record (2026-10-04, PR #83).** What shipped differs from U3/U4 in
+   two deliberate ways. The subtitle-truncation cases and a plain
+   "correct citation" case were dropped: the live tree cites through both
+   ` — ` and ` (` subtitles, so breaking either reddens the clean baseline —
+   no silent mutant of them exists, and a control would kill nothing. And the
+   PR review added constructs U3 never listed, each with a control and a
+   mutant (the list lives in the controls file, not here).
+
+   - **Real-tree proof:** renaming `## Compliance` in `brain/SKILL.md` gives
+     `5 MISS`, rc=1 — one per citing file; restoring gives `0 MISS`, rc=0.
+   - **Old prose form:** restoring the six pre-conversion lines for one run
+     gives 5 distinct near-miss MISSes (two identical `review.md` lines
+     count once).
+   - **Adjacency is load-bearing, measured:** loosening it to "any text
+     between" gave 13 innocent MISSes on today's tree.
+   - **PR review** (`todos/review-2026-10-04-*.md`, the second file of that
+     date): two P2s were real silent passes and are fixed. A failing scan
+     pipeline dropped a file's citations with no MISS (reproduced with a
+     PATH stub). A citation wrapped in a blockquote or in a fenced shell
+     comment inside markdown was invisible; `compound.md:388` sat one
+     reflow from that shape. The near-miss arm also matched across a
+     paragraph break.
+
+   **Follow-ups, filed here, not built:**
+
+   - [ ] 2c-r1. Headings inside an HTML comment are still indexed, so a
+     commented-out section keeps its citations green. P3. Stated limit in
+     leg 5's header.
+   - [ ] 2c-r2. Leg 5 does not see a bold qualifier, an upper-case
+     qualifier, plugin or skill name, or "the X skill's section on Y". P3.
+     Stated limit in leg 5's header. Leg 4 folds case; whether leg 5 should
+     is a judgment about false-positive cost.
+   - [ ] 2c-r3. Leg 4's anchor index is not fence-aware; leg 5's is. P3.
+     Stated limit in leg 5's header. Unify only if a numbered heading ever
+     appears inside a skill's fence.
+   - [ ] 2c-r4. The scan- and index-failure arms are declared survivors
+     because the control harness cannot set PATH per case. P3. A per-case
+     environment hook would let a PATH-stub control pin both.
 
 2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
    Because it runs over the whole payload file, ordinary engineering prose is

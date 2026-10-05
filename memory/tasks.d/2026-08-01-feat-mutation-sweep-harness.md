@@ -146,7 +146,7 @@ not exempt the detector from the class.
   |---|---|---|
   | `l2-grep-binary` | `-a` is observable only on a file GNU grep calls binary; under the `LC_ALL=C` the checker exports, only a NUL does that, and the NUL probe two lines above refuses the file first. Measured on grep 3.11: `0x80/0xFF/0x01/0x1B` with no NUL matches identically with and without `-a` | `check-model-pins.sh:311` |
   | `l2-grep-rc` | leg 2's readability probe reads the whole file before this arm runs. Control L2j plants exactly that fixture and stays GREEN under the mutant, while leg 3's identical arm dies to L3f — leg 3 has no probe. The guards are redundant in both directions, so neither is individually observable | `check-model-pins.sh:311` |
-  | `l4-range-inherit` | the bare-letter arm is unreachable from `CITE_RE`, which numbers both sides of every hyphen. Instrumented and measured at **zero firings** across every citation in this repo | `check-model-pins.sh:614` |
+  | `l4-range-inherit` | the bare-letter arm is unreachable from `CITE_RE`, which numbers both sides of every hyphen. Instrumented and measured at **zero firings** across every citation in this repo | `check-model-pins.sh`, the bare-letter arm's STATED LIMIT (was line 614 when written; line numbers drift — the registry's `survivor` entry carries the live one) |
 
   This is the distinction §9f's no-relabel rule turns on, and it was applied in
   the direction the rule intends: a declared survivor cites a limit, and open

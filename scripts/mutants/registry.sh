@@ -490,7 +490,7 @@ mut l4-checked-zero "$CHK" \
 mut l5-zero-hits "$CHK" \
   '      if [ "$hits" -eq 0 ]; then' \
   '      if false; then' \
-  'kills: the unresolved-title MISS — a renamed heading leaves every citer green. Expected killers: N1 (the real-tree brain rename), N2.'
+  'kills: the unresolved-title MISS — a renamed heading leaves every citer green. N1 is the real-tree brain rename. Expected killers: N1, N2.'
 
 mut l5-ambiguous "$CHK" \
   '      elif [ "$hits" -gt 1 ]; then' \
@@ -505,7 +505,7 @@ mut l5-level "$CHK" \
 mut l5-dash-prefix "$CHK" \
   '"${title%% — *}"; k_dash' \
   '"${title%% *}"; k_dash' \
-  'kills: LOOSENING. truncating a title at its first space instead of at the subtitle dash, so a heading resolves on its first word. Silent today because the one live dash-subtitled citation has a one-word title. Expected killer: N4.'
+  'kills: LOOSENING. truncating a title at its first space instead of at the subtitle dash. Silent today because the one live dash-subtitled citation has a one-word title. Expected killer: N4.'
 
 mut l5-fence-open "$CHK" \
   '        infence = 1; next' \
@@ -520,27 +520,42 @@ mut l5-fence-tilde "$CHK" \
 mut l5-fence-length "$CHK" \
   '        if (substr(t, 1, length(fence)) == fence) {' \
   '        if (substr(t, 1, 3) == substr(fence, 1, 3)) {' \
-  'kills: LOOSENING. the closer-length rule — a three-backtick line closes a four-backtick fence and indexes the rest of the example. Expected killer: N7.'
+  'kills: LOOSENING. the closer-length rule — a three-backtick line closes a four-backtick fence early. Expected killer: N7.'
 
 mut l5-unterminated "$CHK" \
   '    END { if (infence) print "UNTERMINATED-FENCE" }' \
   '    END { if (0) print "UNTERMINATED-FENCE" }' \
   'kills: the unterminated-fence MISS — every heading after an unclosed fence leaves the index with no signal. Expected killer: N8.'
 
-mut l5-join "$CHK" \
-  's/[ \t]*\n[ \t]*${cm:+(#+[ \t]+)?}/ /g' \
-  's/[ \t]*\n[ \t]*${cm:+(#+[ \t]+)?}/\n/g' \
-  'kills: joining lines inside a paragraph — a wrapped citation is never matched. Expected killers: N10, N11.'
+mut l5-inline-span "$CHK" \
+  '        if (fc == "`" && index(substr(t, n + 1), "`")) next' \
+  '        if (0) next' \
+  'kills: LOOSENING. the inline-code-span exception — a line-initial code span opens a fence that is not there. Expected killer: N27.'
 
-mut l5-comment-marker "$CHK" \
-  '[ \t]*${cm:+(#+[ \t]+)?}/ /g' \
-  '[ \t]*/ /g' \
-  'kills: dropping a continuation line comment marker in .sh/.yml/.yaml — a citation wrapped inside a shell comment is never matched. Expected killer: N11.'
+mut l5-join "$CHK" \
+  '      sed -zE "s/\n(${brk}\n)+/\x01/g; s/[ \t]*\n[ \t]*${cont}/ /g" 2>/dev/null |' \
+  '      sed -zE "s/\n(${brk}\n)+/\x01/g; s/[ \t]*\n[ \t]*${cont}/\n/g" 2>/dev/null |' \
+  'kills: joining lines inside a paragraph — a wrapped citation is never matched. Expected killer: N10.'
 
 mut l5-paragraph "$CHK" \
-  's/\n([ \t]*${cm}[ \t]*\n)+/\x01/g; ' \
-  '' \
+  '      sed -zE "s/\n(${brk}\n)+/\x01/g; s/[ \t]*\n[ \t]*${cont}/ /g" 2>/dev/null |' \
+  '      sed -zE "s/[ \t]*\n[ \t]*${cont}/ /g" 2>/dev/null |' \
   'kills: LOOSENING. the paragraph bound on the join — unrelated paragraphs fuse into a fabricated citation. Expected killer: N12.'
+
+mut l5-comment-marker "$CHK" \
+  '      *.sh|*.yml|*.yaml) brk='"'"'[ \t]*#*[ \t]*'"'"'; cont='"'"'(#+[ \t]+)?'"'"' ;;' \
+  '      *.sh|*.yml|*.yaml) brk='"'"'[ \t]*#*[ \t]*'"'"'; cont='"'"''"'"' ;;' \
+  'kills: dropping a continuation line comment marker in .sh/.yml/.yaml — brain-client.sh carries this shape. Expected killer: N11.'
+
+mut l5-md-quote "$CHK" \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'((>[ \t]?)+|#[ \t]+)?'"'"' ;;' \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'(#[ \t]+)?'"'"' ;;' \
+  'kills: dropping a blockquote marker on a markdown continuation line. Expected killer: N21.'
+
+mut l5-md-comment "$CHK" \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'((>[ \t]?)+|#[ \t]+)?'"'"' ;;' \
+  '      *) brk='"'"'[ \t]*(>[ \t]*)*'"'"'; cont='"'"'((>[ \t]?)+)?'"'"' ;;' \
+  'kills: dropping a lone shell-comment marker on a markdown continuation line — compound.md carries this shape inside a fence. Expected killer: N22.'
 
 mut l5-unknown-skill "$CHK" \
   '      if [ -z "${SKILL_PATH["$q"]:-}" ]; then' \
@@ -548,24 +563,82 @@ mut l5-unknown-skill "$CHK" \
   'kills: the no-such-skill MISS; the generic unresolved MISS still fires, so only a message assertion can see it. Expected killer: N13.'
 
 mut l5-skills-form "$CHK" \
-  '([[:space:]]+skill'"'"'s)?[[:space:]]+\`(##' \
-  '[[:space:]]+\`(##' \
-  'kills: the skill-possessive variant of the form — most live citers use it, and they go unmatched and unreported. Expected killer: N14.'
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill${L5AP}s)?[[:space:]]+\`(##|###|####) [^\`${L5P}]+\`"' \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?[[:space:]]+\`(##|###|####) [^\`${L5P}]+\`"' \
+  'kills: the skill-possessive variant of the form — most live citers use it. Expected killer: N14.'
 
 mut l5-adjacent "$CHK" \
-  '([[:space:]]+skill'"'"'s)?[[:space:]]+\`(##' \
-  '([[:space:]]+skill'"'"'s)?[[:space:]]+([a-z]+[[:space:]]+)?\`(##' \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill${L5AP}s)?[[:space:]]+\`(##|###|####) [^\`${L5P}]+\`"' \
+  '  LEG5_FORM_RE="\`?(${leg5_plugins}):[a-z0-9][a-z0-9-]*\`?([[:space:]]+skill${L5AP}s)?[[:space:]]+([a-z]+[[:space:]]+)?\`(##|###|####) [^\`${L5P}]+\`"' \
   'kills: LOOSENING. one word allowed between qualifier and heading literal. Fully loosened, the construct reddened the clean tree with 13 innocent findings on 2026-10-04, so this is its silent sibling. Expected killer: N16.'
 
+mut l5-curly "$CHK" \
+  '  L5AP="('"'"'|’)"' \
+  '  L5AP="('"'"')"' \
+  'kills: the curly apostrophe in the form. Expected killer: N28.'
+
 mut l5-near "$CHK" \
-  ' -e "$LEG5_NEAR_RE" 2>/dev/null)' \
-  ' 2>/dev/null)' \
+  ' -e "$LEG5_NEAR_RE" 2>/dev/null; printf' \
+  ' 2>/dev/null; printf' \
   'kills: the near-miss arm — the old prose form returns unseen. Expected killer: N15.'
+
+mut l5-near-para "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]][^\`.,;:]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  'kills: LOOSENING. the paragraph byte excluded from the near-miss classes. Expected killer: N20.'
+
+mut l5-near-boundary "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  'kills: LOOSENING. the word boundary before the skill name in the near-miss arm. Expected killer: N23.'
+
+mut l5-near-punct "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.[:space:]${L5P}][^\`.${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  'kills: LOOSENING. sentence punctuation stopping the near-miss arm. Expected killer: N24.'
+
+mut l5-near-halfform "$CHK" \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59}|\`[^\`#${L5P}][^\`${L5P}]*\`)[[:space:]]section"' \
+  '  LEG5_NEAR_RE="(^|[^a-z0-9-])\`?((${leg5_plugins}):)?(${leg5_skills})\`?[[:space:]]+skill${L5AP}s[[:space:]]+([^\`.,;:[:space:]${L5P}][^\`.,;:${L5P}]{0,59})[[:space:]]section"' \
+  'kills: the near-miss alternative for a backticked title with no heading level, the likeliest half-finished conversion. Expected killer: N26.'
+
+mut l5-near-deictic "$CHK" \
+  '*[[:space:]]next\ section|*[[:space:]]own\ section) continue ;;' \
+  '*[[:space:]]next\ section|*[[:space:]]own\ section) : ;;' \
+  'kills: LOOSENING. the this-section filter — prose about the citing file reads as a skill citation. Expected killer: N25.'
 
 mut l5-checked-zero "$CHK" \
   'if [ "$leg5_checked" -eq 0 ] && [ "$leg5_skill_files" -gt 0 ]; then' \
   'if false; then' \
   'kills: the guard that a leg-5 scan matching nothing is not a pass. Expected killer: N17.'
+
+mut l5-zero-headings "$CHK" \
+  '  if [ "$sk_headings" -eq 0 ]; then' \
+  '  if false; then' \
+  'kills: the zero-headings guard — an index that read nothing from a file reads as a skill nobody cites. Expected killer: N18.'
+
+mut l5-skill-unreadable "$CHK" \
+  '  if [ ! -r "$sk" ]; then' \
+  '  if false; then' \
+  'kills: the unreadable-skill MISS — the skill silently leaves the index. Expected killer: N19.'
+
+survivor l5-scan-rc "$CHK" \
+  '      '"'"'0 0 0'"'"'|'"'"'0 0 1'"'"') : ;;' \
+  '      *) : ;;' \
+  scripts/check-model-pins.sh:858 \
+  'declared survivor: the per-file scan exit-status check. No fixture can make sed or grep fail on a file leg 4 has just read; proven by hand with a PATH stub on 2026-10-04.'
+
+survivor l5-index-rc "$CHK" \
+  '  if [ "$idx_rc" != '"'"'0 0'"'"' ]; then' \
+  '  if false; then' \
+  scripts/check-model-pins.sh:858 \
+  'declared survivor: the heading-index exit-status check, for the same measured reason as l5-scan-rc.'
+
+survivor l5-unreadable-race "$CHK" \
+  '    if [ ! -r "$f" ]; then' \
+  '    if false; then' \
+  scripts/check-model-pins.sh:855 \
+  'declared survivor: the became-unreadable arm. Leg 4 refuses any root it cannot read, so only a race reaches it.'
 
 # ===========================================================================
 # The verdict and exit path

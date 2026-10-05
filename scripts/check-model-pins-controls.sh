@@ -113,6 +113,7 @@ SS=$'\302\247'
 # neither shape can be assembled from this file's source text.
 BT=$'\x60'
 AP="'"
+CA=$'\xe2\x80\x99'
 # heading <hashes> <title>   -> the backticked heading literal
 heading() { printf '%s%s %s%s' "$BT" "$1" "$2" "$BT"; }
 # cite <skill> <hashes> <title> -> qualifier, a space, the heading literal
@@ -408,6 +409,34 @@ reg N16 'repo-sense prose after a qualifier stays clean' 0 0 '' '^MISS ' \
 reg N17 'no section-name citation anywhere' 1 0 \
   'leg 5 checked no section-name citation' '' \
   'kills: l5-checked-zero — a scan that matched nothing reads as a pass'
+reg N18 'a skill whose headings all vanish is reported' 1 0 \
+  'leg 5: .*/pr-feedback/SKILL\.md yields no heading outside code fences' '' \
+  'kills: l5-zero-headings — an index that read nothing from a file reads as a skill nobody cites'
+reg N20 'the near-miss arm does not join across a paragraph break' 0 0 '' '^MISS ' \
+  'kills: l5-near-para (LOOSENING) — the near-miss classes cross the paragraph byte, so two paragraphs fuse into a prose finding. N12 covers only the form arm'
+reg N21 'a citation wrapped inside a markdown blockquote' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Quoted')" '' \
+  'kills: l5-md-quote — the continuation line keeps its `>`, so the two tokens are never adjacent'
+reg N22 'a citation wrapped in a shell comment inside a markdown fence' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Fenced Comment')" '' \
+  'kills: l5-md-comment — compound.md carries a live citation in this shape, one reflow away from going unseen'
+reg N23 'the near-miss arm needs a word boundary before the skill name' 0 0 '' '^MISS ' \
+  'kills: l5-near-boundary (LOOSENING) — a longer word ending in a skill name reads as that skill'
+reg N24 'the near-miss arm stops at sentence punctuation' 0 0 '' '^MISS ' \
+  'kills: l5-near-punct (LOOSENING) — a clause about finding fields runs on into an unrelated "each Problem section"; three live agent files carry the sentence'
+reg N25 'this-section prose names the citer, not a skill' 0 0 '' '^MISS ' \
+  'kills: l5-near-deictic (LOOSENING) — "the X skill rules apply throughout this section" is about the citing file'
+reg N26 'a half-converted title with no heading level is reported' 1 0 \
+  'leg 5: README\.md names a skill section in prose' '' \
+  'kills: l5-near-halfform — the most likely half-finished conversion is invisible to both arms'
+reg N27 'a line-initial inline code span is not a fence' 0 0 '' '^MISS ' \
+  'kills: l5-inline-span (LOOSENING) — a backtick run with a backtick after it opens a fence that is not there and swallows the rest of the file'
+reg N28 'a curly apostrophe is accepted in the form' 1 0 \
+  "$(l5_unres 'README\.md' brain '##' 'Zz Curly')" '' \
+  'kills: l5-curly — a citation typed with a curly apostrophe is never matched'
+reg N19 'an unreadable skill file is reported by leg 5' '+' 0 \
+  'leg 5: .*/pr-feedback/SKILL\.md is unreadable' '' \
+  'kills: l5-skill-unreadable — the skill silently leaves the index. The count is `+` because legs 2-4 also refuse the same unreadable file under plugins/'
 
 # --- Leg 1: agent frontmatter ----------------------------------------------
 reg L1 'agent frontmatter names an unsanctioned tier' 1 0 \
@@ -1038,17 +1067,53 @@ EOF
            "$BT" "$BT" "$AP" "$(heading '##' 'Zz Comment')" > "$d/scripts/zzl5.sh" ;;
     N12) say "$d" "The ${BT}cepa:brain${BT}
 
-$(heading '##' 'Zz Para') heading starts a new paragraph here." ;;
+$(heading '##' 'Zz Para') heading starts a new paragraph here."
+         grep -q 'Zz Para' "$d/README.md" || return 1 ;;
     N13) say "$d" "See the $(cite zzskill '##' 'Anything') section." ;;
     N14) say "$d" "See the ${BT}cepa:brain${BT} skill${AP}s $(heading '##' 'Zz Skills') section." ;;
     N15) say "$d" "See the ${BT}cepa:brain${BT} skill${AP}s Zz Prose section." ;;
     N16) say "$d" "A repo that opts into ${BT}cepa:brain${BT} declares
-$(heading '##' 'Zz Gap') in its own config." ;;
+$(heading '##' 'Zz Gap') in its own config."
+         grep -q 'Zz Gap' "$d/README.md" || return 1 ;;
+    # Strip the `#` run from every heading line, so the skill has none left.
+    N20) say "$d" "Follow the autonomy skill${AP}s contract
+
+the review section below applies."
+         grep -q 'the review section below' "$d/README.md" || return 1 ;;
+    N21) say "$d" "> See the ${BT}cepa:brain${BT}
+> $(heading '##' 'Zz Quoted') section." ;;
+    N22) say "$d" "${BT}${BT}${BT}bash
+# the cepa:brain skill${AP}s
+# $(heading '##' 'Zz Fenced Comment') section
+${BT}${BT}${BT}" ;;
+    N23) say "$d" "See the cerebrain skill${AP}s setup section."
+         grep -q 'cerebrain' "$d/README.md" || return 1 ;;
+    N24) say "$d" "Use the ${BT}cepa:file-todos${BT} skill${AP}s finding fields, and each Problem section."
+         grep -q 'each Problem section' "$d/README.md" || return 1 ;;
+    N25) say "$d" "The autonomy skill${AP}s rules apply throughout this section."
+         grep -q 'throughout this section' "$d/README.md" || return 1 ;;
+    N26) say "$d" "See the ${BT}cepa:brain${BT} skill${AP}s ${BT}Zz Half${BT} section." ;;
+    N27) printf '\n%sfoo%s is written inline.\n\n## Zz After Inline\n' "${BT}${BT}${BT}" "${BT}${BT}${BT}" \
+           >> "$d/plugins/cepa/skills/brain/SKILL.md"
+         say "$d" "See the $(cite brain '##' 'Zz After Inline') section." ;;
+    N28) say "$d" "See the ${BT}cepa:brain${BT} skill${CA}s $(heading '##' 'Zz Curly') section." ;;
+    N18) f="$d/plugins/cepa/skills/pr-feedback/SKILL.md"
+         grep -q '^##* ' "$f" || return 1
+         sed -i 's/^##* //' "$f"
+         grep -q '^##* ' "$f" && return 1
+         : ;;
+    N19) f="$d/plugins/cepa/skills/pr-feedback/SKILL.md"
+         chmod 000 "$f"
+         [ -r "$f" ] && return 1
+         : ;;
     # Neutralize EVERY heading literal in every scannable file, so no form can
     # match anywhere; assert it in both directions, as 17 and 36 do for roots.
-    N17) [ -n "$(grep -rl -- "${BT}#" "$d/plugins" "$d/scripts" "$d/README.md" "$d/CLAUDE.md" "$d/.github" 2>/dev/null)" ] || return 1
-         while IFS= read -r p; do sed -i "s/${BT}#/${BT}=#/g" "$p" || return 1; done < <(scannable_in "$d/plugins" "$d/scripts" "$d/.github"; printf '%s\n' "$d/README.md" "$d/CLAUDE.md")
-         [ -z "$(scannable_in "$d/plugins" "$d/scripts" "$d/.github" -- -exec grep -l -- "${BT}#" {} +; grep -l -- "${BT}#" "$d/README.md" "$d/CLAUDE.md")" ] || return 1
+    # The literal becomes `#=# X`, NOT `=## X`: a backticked title with no
+    # leading `#` is the near-miss arm's half-converted form (N26), so that
+    # spelling would turn every neutralized citation into a prose finding.
+    N17) [ -n "$(grep -rl -- "${BT}##" "$d/plugins" "$d/scripts" "$d/README.md" "$d/CLAUDE.md" "$d/.github" 2>/dev/null)" ] || return 1
+         while IFS= read -r p; do sed -i "s/${BT}##/${BT}#=#/g" "$p" || return 1; done < <(scannable_in "$d/plugins" "$d/scripts" "$d/.github"; printf '%s\n' "$d/README.md" "$d/CLAUDE.md")
+         [ -z "$(scannable_in "$d/plugins" "$d/scripts" "$d/.github" -- -exec grep -l -- "${BT}##" {} +; grep -l -- "${BT}##" "$d/README.md" "$d/CLAUDE.md")" ] || return 1
          : ;;
 
     *) printf 'no plant recipe for case %s\n' "$id" >&2; return 1 ;;
