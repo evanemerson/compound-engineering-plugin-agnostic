@@ -46,7 +46,7 @@ Branching from a stale main while same-author PRs are still open re-introduces p
 gh pr list --author @me --state open --json number,title,headRefName,baseRefName,mergeable,reviewDecision
 ```
 
-For each open PR, surface it to the user as part of the status report (Section 1.3). Pay special attention to **same-feature-arc** PRs — branches whose `headRefName` shares a prefix or phase indicator with the requested task (e.g. user requests "Phase B2" and PR #83 is "Phase B1 …" — almost certainly should merge first).
+For each open PR **this session owns, or that overlaps the task** (`cepa:autonomy` §10c), surface it as part of the status report (Section 1.3); any other PR is not named. Pay special attention to **same-feature-arc** PRs — branches whose `headRefName` shares a prefix or phase indicator with the requested task (e.g. user requests "Phase B2" and PR #83 is "Phase B1 …" — a likely overlap). What the session may do about an overlap follows its role, below.
 
 **Resolve each open PR by the session's role first** — `cepa:autonomy` §10a
 for the role, §10c for ownership. `--author @me` narrows the list; it does not
@@ -120,8 +120,8 @@ Check for:
   In a linked worktree the expected state is this work's own
   `<prefix>/<wt>/…` branch or a detached park — never the trunk
   (`cepa:autonomy` §10b).
-- A solo session applies `cepa:autonomy` §10a's two guards here, before any
-  stash or branch switch.
+- A solo session — or one whose role probe failed — applies
+  `cepa:autonomy` §10a's two guards here, before any stash or branch switch.
 
 ### 1.3 Present Combined Status Report
 
@@ -137,6 +137,9 @@ Check for:
 
 - #83 feat/phase-b1-tag-design — open, mergeable, approved  ← OVERLAPS with requested "Phase B2" work
 - #91 fix/celery-beat-import — open, mergeable, no review yet
+
+(A solo session with one worktree owns both. A worker would list neither — #83
+only as `blocked: overlaps #83`, and #91 not at all.)
 
 Ready to proceed? [Y / address issues first]
 ```

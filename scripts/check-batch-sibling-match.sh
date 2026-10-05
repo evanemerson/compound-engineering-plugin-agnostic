@@ -7,10 +7,13 @@
 # this control green while it checked something nobody runs.
 #
 # What it asserts, in order:
-#   1. COPIES — the pattern's distinctive head `^[a-z]+/` occurs exactly once
-#      under plugins/, inside a jq `test("...")` call, in the autonomy skill.
-#      A second copy (a command restating the query) is a MISS: that is how the
-#      five copies this pattern once had came to need five edits.
+#   1. COPIES — across plugins/ and the repo-root *.md docs, the pattern's
+#      distinctive head `^[a-z]+/` occurs exactly once, inside a jq
+#      `test("...")` call, in the autonomy skill; and no OTHER backticked span
+#      or `test("...")` call pairs a `^` with `<id>`. A second copy (a command
+#      or README restating the query, in any spelling that keeps `^` and
+#      `<id>` together) is a MISS: that is how the five copies this pattern
+#      once had came to need five edits, and how README.md kept a stale one.
 #   2. FIXTURES — the extracted pattern, with a fixture id substituted, matches
 #      every sibling shape and rejects every non-sibling shape below.
 #   3. MUTANTS — each mutant is built FROM the extracted pattern by a single
@@ -37,6 +40,9 @@
 #     optional group and a negated class — constructs both engines treat alike.
 #     The equivalence was spot-checked once through `gh api ... --jq` on
 #     2026-10-05; nothing re-checks it.
+#   - every restatement is seen. A copy that drops the `<id>` placeholder or
+#     the `^` (a worked example such as `feat/jul26a-x`, or prose) is
+#     invisible, and so is one outside plugins/ and the root *.md docs.
 #   - one id cannot shadow another. Ids may contain `-`, so id `jul26a` matches
 #     a branch for id `jul26a-b`. The pre-worktree pattern had the same
 #     property; the id grammar, not this pattern, would have to change.
@@ -54,7 +60,7 @@ def ok(msg):
     global passed; passed += 1; print("PASS", msg)
 
 def miss(msg):
-    global failed; failed += 1; print("FAIL", msg)
+    global failed; failed += 1; print("MISS", msg)
 
 def finish():
     print("-- %d/%d checks passed --" % (passed, passed + failed))
@@ -62,20 +68,30 @@ def finish():
 
 # 1. COPIES
 head = "^[a-z]+/"
-hits = []
-for root, _, files in os.walk("plugins"):
-    for name in files:
-        path = os.path.join(root, name)
-        try:
-            text = open(path, encoding="utf-8").read()
-        except (UnicodeDecodeError, OSError):
-            continue
-        for n, line in enumerate(text.splitlines(), 1):
-            if head in line:
-                hits.append((path, n, line))
-if len(hits) != 1:
-    miss("expected exactly one occurrence of %r under plugins/, found %d: %s"
-         % (head, len(hits), ", ".join("%s:%d" % (p, n) for p, n, _ in hits) or "none"))
+walk_errors = []
+paths = sorted(f for f in os.listdir(".") if f.endswith(".md") and os.path.isfile(f))
+for root, _, files in os.walk("plugins", onerror=walk_errors.append):
+    paths += [os.path.join(root, name) for name in files]
+if walk_errors:
+    miss("unreadable under plugins/ — a tree that was not scanned is not a pass: %s"
+         % "; ".join(str(e) for e in walk_errors))
+    finish()
+hits, others = [], []
+restated = re.compile(r'`[^`\n]*\^[^`\n]*<id>[^`\n]*`|test\("[^"]*\^[^"]*<id>[^"]*"\)')
+for path in paths:
+    try:
+        # errors="replace": a stray byte must not hide a copy elsewhere in the file
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError as e:
+        miss("cannot read %s (%s) — an unread file is not a pass" % (path, e))
+        finish()
+    for n, line in enumerate(text.splitlines(), 1):
+        hits += [(path, n, line)] * line.count(head)
+        others += [(path, n) for m in restated.finditer(line) if head not in m.group(0)]
+if len(hits) != 1 or others:
+    miss("expected exactly one copy of the sibling pattern; found %d with the head %r (%s) and %d other restatement(s) (%s)"
+         % (len(hits), head, ", ".join("%s:%d" % (p, n) for p, n, _ in hits) or "none",
+            len(others), ", ".join("%s:%d" % o for o in others) or "none"))
     finish()
 path, n, line = hits[0]
 m = re.search(r'test\("([^"]+)"\)', line)
