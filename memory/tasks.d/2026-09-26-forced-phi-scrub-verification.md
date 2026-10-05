@@ -933,6 +933,14 @@
      reflow from that shape. The near-miss arm also matched across a
      paragraph break.
 
+   **Solution doc:** `docs/solutions/logic-errors/a-heading-name-with-two-senses-needs-a-required-citation-form.md`
+   (local only — `docs/` is gitignored), written by `/cepa:compound` on
+   2026-10-04. Its Prevention pass filed 2c-r5 and 2c-r6 below. Brain:
+   8 rows written, 8 promoted. The first attempt was SUPPRESSED by
+   `scrub-verify` (the 2i gate, working as built): the agent filled
+   `workspace_id` after the seal, outside the two authorized fields. Nothing
+   was sent; the retry filled it before the seal.
+
    **Follow-ups, filed here, not built:**
 
    - [ ] 2c-r1. Headings inside an HTML comment are still indexed, so a
@@ -948,6 +956,18 @@
    - [ ] 2c-r4. The scan- and index-failure arms are declared survivors
      because the control harness cannot set PATH per case. P3. A per-case
      environment hook would let a PATH-stub control pin both.
+   - [ ] 2c-r5. Leg 4's anchor index discards pipeline status. P3.
+     `scripts/check-model-pins.sh:585` reads
+     `sed … 2>/dev/null | grep … 2>/dev/null | sed | tr` through
+     `done < <(…)` with no `PIPESTATUS`, so a failed stage drops anchors with
+     no MISS — the silent pass f3edeb4 closed in leg 5. Legs 2-3 read
+     `scan_body` / `scan_conditional` through process substitutions too; not
+     yet verified whether those functions discard status. Found by the
+     2026-10-04 `/cepa:compound` prevention pass.
+   - [ ] 2c-r6. `scripts/check-residual-integrity.sh:336` toggles fences on
+     any line whose first non-blank text is three backticks, ignoring fence
+     character and length. P3. A four-backtick fence wrapping a three-backtick one, or a
+     `~~~` fence, flips the wrong text. Leg 5's `L5_INDEX_AWK` is the model.
 
 2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
    Because it runs over the whole payload file, ordinary engineering prose is
