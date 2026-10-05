@@ -44,8 +44,8 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    as an open question, not a settled task.
    Needs a fresh session and a plan. Run via `/cepa:task`.
 
-5. **Work residual 2i, then 2j, then 2g, then 2c.** (2i, 2j, 2g closed; 2c open)
-   status: in_progress
+5. **Work residual 2i, then 2j, then 2g, then 2c.** (all four closed)
+   status: completed
    severity: P2
    **2i CLOSED** — PR #80 (`afe7ce1`), merged 2026-10-03. The re-Write PHI gate
    is executable: `scrub-seal` before the hand-edit, `scrub-verify` before
@@ -60,7 +60,13 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    measurably not holding. `extract-fenced-blocks.py` (committed in #80) did
    the extraction half; #82 added the gate, the allowlist, and four probe
    fixes the gate's own first cut needed. The shard owns the detail.
-   **Remaining: 2c.**
+   **2c CLOSED** — PR #83 (`d92d3c3`), merged 2026-10-05. Leg 5 of
+   `check-model-pins.sh` resolves skill section-NAME citations. Plugin
+   freshness verified after merge: both hops OK at `d92d3c3`.
+   **Left open by #83, filed in the shard, NOT on this list:** 2c-r7 (the full
+   mutation sweep takes 224 min locally; CI bounds the step at 150, so the
+   weekly run is expected to be CANCELLED and open a failure issue) and 2c-r8
+   (five model-pin legs own no unique killer). See item 11.
    Also surfaced by #81's review and still open: **2k/2l** — document the
    seal/verify contract in the `cepa:brain` skill, and state the non-zero-block
    stop rule once in `cepa:autonomy` rather than per command file.
@@ -136,6 +142,52 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    This is the "fix scoped to the reported instance leaves the rest of the
    construct live" class CLAUDE.md records three times. #77 closed the spelling
    half; this is the positional half.
+
+9. **Hop 1 of the freshness check printed `UNKNOWN` on every plugin merge.**
+   status: completed
+   severity: P3
+   **Fixed operationally 2026-10-04.** The marketplace clone at
+   `~/.claude/plugins/marketplaces/cepa` was SHALLOW — exactly 1 commit — so it
+   could never contain an older plugin-touching SHA. The checker was correct:
+   `UNKNOWN` means "could not tell", and it could not.
+   Fix: `git -C ~/.claude/plugins/marketplaces/cepa fetch --unshallow origin`.
+   Before: shallow, 1 commit, 4.1M, hop 1 UNKNOWN. After: 145 commits, 5.4M,
+   hop 1 OK. HEAD, branch and clean tree unchanged. Held through #83's merge:
+   both hops OK at `d92d3c3`.
+   **The fix first proposed for this was WRONG — keep the disproof.** The #82
+   session suggested probing ancestor-or-descendant instead of an exact object.
+   Measured on the shallow clone:
+   `git -C <clone> merge-base --is-ancestor 17271ee HEAD` →
+   `fatal: Not a valid object name 17271ee`, rc=128. The object is ABSENT,
+   not unreachable, so changing the question cannot find it. That fix would
+   have added code and still printed `UNKNOWN`.
+   This is one machine's state. A re-clone by `claude plugin` may make it
+   shallow again; the same command fixes it.
+
+10. **Make cepa agree with the global session roles.**
+    status: in_progress
+    severity: P2
+    Global `~/.claude/CLAUDE.md` § "Sessions and roles" (2026-10-04) defines
+    worker `tabN@<wt>`, coord@<wt> and coord@main; worker branches
+    `<type>/<wt>/<desc>`; a Handoff block in place of `## Next steps`; and no
+    worker ever offers or acts on a PR it did not open.
+    Dispatched 2026-10-05 as `tab1@roles` in worktree `.claude/worktrees/roles`,
+    branch `feat/roles/session-roles` off `origin/main` @ `d92d3c3`. coord@main
+    (the main-checkout coordinator) owns the merge and the plugin refresh.
+    The first prompt had four problems, all corrected before dispatch: it named
+    the worker `tab1@main` (the main checkout hosts no workers); it told the
+    worker to merge; it sent the worker into another repo for evidence; and it
+    missed three sites — `autonomy/SKILL.md:539` (the canonical
+    "return to trunk" row), `lfg.md:89`, and `task.md:553`.
+
+11. **Fix the mutation sweep's CI bound (residual 2c-r7).**
+    status: pending
+    severity: P2
+    Owned by the shard `memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md`
+    as 2c-r7 — read it there. A design call (split the mutant registry across
+    jobs, or raise the bounds toward GitHub's 6 h job limit), not a number bump.
+    Runs AFTER item 10: the sweep discards every result if the tree changes
+    mid-run, so it needs a quiet `main`.
 
 ---
 
