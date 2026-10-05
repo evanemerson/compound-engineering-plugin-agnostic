@@ -165,7 +165,13 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    shallow again; the same command fixes it.
 
 10. **Make cepa agree with the global session roles.**
-    status: in_progress
+    status: completed
+    **CLOSED 2026-10-05** — PR #84 (`3b46209`), v1.29.0. Merged by coord@main
+    after the three checks (Handoff `done`; PR head == Handoff `Head: 18e0c4c`;
+    update-branch was a no-op, CI green). Both plugin hops refreshed; freshness
+    rc=0 at `3b46209`. The roles worktree is parked detached at `origin/main`
+    and the branch is deleted. 12 review findings were deferred and are owned
+    by `memory/tasks.d/2026-10-05-feat-roles-session-roles.md` — read them there.
     severity: P2
     Global `~/.claude/CLAUDE.md` § "Sessions and roles" (2026-10-04) defines
     worker `tabN@<wt>`, coord@<wt> and coord@main; worker branches
@@ -188,6 +194,16 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
     jobs, or raise the bounds toward GitHub's 6 h job limit), not a number bump.
     Runs AFTER item 10: the sweep discards every result if the tree changes
     mid-run, so it needs a quiet `main`.
+
+12. **Make cepa enforce the coord@<wt> rule (finding #8 of PR #84).**
+    status: pending
+    severity: P2
+    No tracked-file write or commit while the worker's branch is checked out;
+    handoff writes local only; review reports only. The global CLAUDE.md
+    already states the rule; cepa does not enforce it. The #84 worker ranked
+    it the only deferred finding with a clear rule behind it. The other 11
+    deferred findings need operator decisions about the rules — see the
+    `2026-10-05-feat-roles-session-roles.md` shard.
 
 ---
 
