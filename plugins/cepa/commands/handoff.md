@@ -749,7 +749,8 @@ End with one consolidated report per **`cepa:autonomy` §6**: sink outcome
 (committed / local-only + pointer / awaiting-confirmation), per-source
 coverage lines with any `unverifiable` reasons, residuals filed with their
 sinks, stripped-content count, git state changes, and the numbered
-`## Next steps` tail.
+`## Next steps` tail — the Handoff block instead in a worker session
+(`cepa:autonomy` §10d).
 
 **Include the readiness verdict as a body section** — the `Session change:`
 block resolved in Step 5, verbatim, on every run including `GO`. §6 admits
@@ -768,9 +769,18 @@ the operator actually pastes into a fresh session. Requirements:
 - **Self-contained.** It must carry every fact the next session needs. No
   "as discussed", no "the file we were editing", no reference to this
   conversation. A reader with only the block and the repo can resume.
-- **Absolute repo path and exact starting SHA** in the first lines.
-- **Same content as the saved file**, not a summary of it. The file is the
-  durable copy; the block is the transport. That includes the read-only
+- **Line 1 is the session's name, when it has one** — `You are
+  <session>@<wt>.`, the name resolved per `cepa:autonomy` §10a — so the next
+  session keeps the role this one had. It keeps the same name: one worker
+  per checkout, and this session is ending. An unnamed session emits no name
+  line; the next session resolves its role from the checkout, as this one
+  did. Never invent a name.
+- **Absolute repo path and exact starting SHA** in the first lines after it.
+- **Same content as the saved file**, not a summary of it — with one
+  exception: the name line above lives only in the block. The saved file is
+  also read by other sessions, such as a coordinator checking the work, and
+  a file that says "You are tab1@roles" renames whoever reads it. The file is
+  the durable copy; the block is the transport. That includes the read-only
   markings on cross-worktree references (Step 5) — the block is the part
   that actually gets executed, so a marking dropped in transport is a
   licence granted.
@@ -844,7 +854,9 @@ refuses. State that inline in the emitted prompt, or a future editor
 **`<new-branch>` is resolved, never left as a placeholder.** Derive it as
 `<prefix>/slug(subject)` using `cepa:autonomy` §5's `slug(x)` — the same
 function Step 1 uses for the handoff path — with the prefix matching the
-work (`feat/`, `fix/`, `refactor/`, `chore/`). Emit the resolved value with
+work (`feat/`, `fix/`, `refactor/`, `chore/`). In a linked worktree it is
+`<prefix>/<wt>/slug(subject)` (`cepa:autonomy` §10b): the worktree segment
+is what lets that worktree's coordinator find the PR as its own. Emit the resolved value with
 a comment saying it was derived from the subject and may be renamed. A
 literal `<new-branch>` in an executed prompt produces a branch actually
 named `<new-branch>`.
@@ -892,7 +904,12 @@ is warm. Do not run worktree-clean or worktree remove.
 #### Shapes for the other dispositions
 
 Each gets a stated opening, because silence about the branch is what
-produced the original incident. Only `Merged` carries a deletion.
+produced the original incident. Only `Merged` carries a deletion — and not
+in a worker session (`cepa:autonomy` §10e): the next session did not create
+`<branch>`, so a worker's merged shape drops the `git worktree list` and
+`git branch -D` lines and says instead "`<branch>` is merged; this
+worktree's coordinator deletes it in its post-merge step. Do not delete it
+here."
 
 - **Unmerged, has commits** — "This worktree is on `<branch>`, which has
   `<n>` commits not on `<trunk>` and no merged PR. **Stay on it.** Do not
