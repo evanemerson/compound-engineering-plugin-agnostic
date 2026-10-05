@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*)
 ---
 
 # Compound Refresh
@@ -512,6 +512,8 @@ Headless rules:
   starting ref back out, always. Unrelated dirty files are protected twice:
   selective staging keeps them out of the commit, and the checkout-back
   returns them with HEAD. Never stash them — a stash is user work at risk.
+  In a linked worktree the branch is `docs/<wt>/refresh-<scope>`
+  (`cepa:autonomy` §10b), so that worktree's coordinator owns its PR.
 - **On a feature branch that is this run's own work** — the user invoked
   the refresh while working on that branch, or a pipeline caller (e.g.
   `/cepa:lfg` or `/cepa:sweep`) invoked it as part of that branch's flow:
@@ -526,7 +528,8 @@ Headless rules:
   still restore the starting ref before finishing.
 
 Interactive mode: offer commit options fitting the current branch state, as
-before. Options that create a branch default to returning to the starting
+before. Options that create a branch name it as the headless rule above does
+(worktree segment included) and default to returning to the starting
 ref; an option may explicitly offer to stay on the new branch, and choosing
 it satisfies the invariant — a destination the user picked IS where the
 user put HEAD.
