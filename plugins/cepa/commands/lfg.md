@@ -96,7 +96,8 @@ state). Resolve results without prompting:
 - **Not on trunk:** resolve the trunk per autonomy §8 and report which rung
   answered — never assume `main`. If the current branch matches the
   requested work, continue on it. Otherwise, in the main checkout,
-  `git checkout <trunk> && git pull origin <trunk>`, then branch; in a linked
+  `git checkout <trunk> && git pull origin <trunk>`, then branch with the
+  name autonomy §10b gives the session's role; in a linked
   worktree, never check out the trunk — branch off `origin/<trunk>` as
   `<prefix>/<wt>/<description>` (autonomy §10b).
 - **Branch name:** construct it from the task description automatically

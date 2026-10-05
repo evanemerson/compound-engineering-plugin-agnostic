@@ -175,7 +175,8 @@ Include this context in the planning phase.
 
 ### 1.5 Create Branch
 
-In the main checkout:
+In the main checkout (a main coordinator names it
+`<prefix>/main/<descriptive-name>` — `cepa:autonomy` §10b):
 
 ```bash
 git checkout <trunk>

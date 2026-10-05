@@ -34,8 +34,10 @@ confidence-75 bar). Numbers are the findings file's.
    or state report-only.
 9. **P2 #6 — worker overlap stop precedes the batch-sibling exemption** —
    autonomy §10c; `task.md` 1.1 vs `lfg.md` Step 1 disagree.
-10. **P2 #7 — coord@main's `<type>/main/<desc>` branch belongs to no role** —
-    autonomy §10b/§10c; a worktree named `main` collides too.
+10. ~~**P2 #7 — coord@main's `<type>/main/<desc>` branch belongs to no role** —
+    autonomy §10b/§10c; a worktree named `main` collides too.~~ Resolved
+    2026-10-05: the operator chose `<type>/main/<desc>`; applied on this
+    branch (findings file #7).
 11. **P2 #8 — §10 never constrains a worktree coordinator** — autonomy §10.
 12. **P2 #9 — worker merged-branch shape misplaced, still starts new work** —
     `plugins/cepa/commands/handoff.md:878`.

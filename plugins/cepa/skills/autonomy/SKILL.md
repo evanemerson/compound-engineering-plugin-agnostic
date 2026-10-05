@@ -953,8 +953,11 @@ slug, so `tab1@v1.2` matches a worktree directory named `v1.2`.
 **Stop before any write** — a blocked-stop, reported in the Handoff block's
 shape (§10d) because the role is unknown — when the name's `<wt>` differs
 from the measured one, when a `tab<N>@main` name appears (the main checkout
-hosts no workers), when a name fits none of the forms above, or when the
-basename's slug falls back to a short SHA (§5) and so cannot be named. A
+hosts no workers), when a name fits none of the forms above, when the
+basename's slug falls back to a short SHA (§5) and so cannot be named, or
+when a **linked worktree's** `<wt>` is `main` — that segment is reserved for
+the main checkout's coordinator (§10b), and a worktree carrying it would make
+its branches read as coord@main's. Rename the worktree. A
 wrong name usually means a prompt pasted into the wrong tab; continuing would
 do one session's work in another's checkout.
 
@@ -975,7 +978,8 @@ coordinator is also working in the main checkout:
 
 | Checkout | New work starts with | Never |
 |---|---|---|
-| Main checkout | §8's row: `git checkout <trunk> && git pull origin <trunk>`, then `git checkout -b <type>/<desc>` | — |
+| Main checkout, main coordinator | §8's row, then `git checkout -b <type>/main/<desc>` | — |
+| Main checkout, solo | §8's row, then `git checkout -b <type>/<desc>` | — |
 | Linked worktree | `git fetch origin <trunk>`, then `git checkout -b <type>/<wt>/<desc> origin/<trunk>` | `git checkout <trunk>` |
 
 **In a linked worktree, never check out the trunk.** Git lets one local
@@ -986,7 +990,10 @@ already on a `<type>/<wt>/<desc>` branch for this work — the coordinator
 created it before starting the worker — resume on it and create nothing.
 
 **The `/<wt>/` segment is what makes ownership readable** (§10c): without it,
-a worktree coordinator cannot tell its PRs from anyone else's. Under a
+a worktree coordinator cannot tell its PRs from anyone else's. The main
+coordinator's branches carry `main` in that position for the same reason,
+and for one more: it is the only thing a solo session's second guard (§10a)
+can see when the main coordinator has committed and its tree is clean. Under a
 `batch:` token the form is `<type>/<wt>/<id>-<desc>`. A resumed branch that
 does not match §2b's pattern cannot be found by its siblings: the run says
 the batch exemption is unavailable for it, rather than claiming membership
@@ -1002,7 +1009,7 @@ list; ownership is read from the PR's head branch:
 |---|---|
 | worker | only the PR whose `headRefName` equals the current branch — created or resumed (§10b) |
 | worktree coordinator | PRs whose head is `<type>/<wt>/…` for its own `<wt>` |
-| main coordinator | PRs whose head has no worktree segment: exactly `<type>/<desc>` |
+| main coordinator | PRs whose head is `<type>/main/…`, or has no worktree segment (`<type>/<desc>`) |
 | solo, one `git worktree list` entry | every open PR — no other session exists |
 | solo, more than one entry | only PRs whose head branch it created |
 

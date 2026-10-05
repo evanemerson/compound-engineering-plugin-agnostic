@@ -855,8 +855,9 @@ refuses. State that inline in the emitted prompt, or a future editor
 `<prefix>/slug(subject)` using `cepa:autonomy` §5's `slug(x)` — the same
 function Step 1 uses for the handoff path — with the prefix matching the
 work (`feat/`, `fix/`, `refactor/`, `chore/`). In a linked worktree it is
-`<prefix>/<wt>/slug(subject)` (`cepa:autonomy` §10b): the worktree segment
-is what lets that worktree's coordinator find the PR as its own. Emit the resolved value with
+`<prefix>/<wt>/slug(subject)`, and in a main coordinator's session
+`<prefix>/main/slug(subject)` (`cepa:autonomy` §10b): the segment is what
+lets the right coordinator find the PR as its own. Emit the resolved value with
 a comment saying it was derived from the subject and may be renamed. A
 literal `<new-branch>` in an executed prompt produces a branch actually
 named `<new-branch>`.
