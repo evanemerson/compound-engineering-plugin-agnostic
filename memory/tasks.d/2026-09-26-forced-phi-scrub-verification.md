@@ -933,6 +933,18 @@
      reflow from that shape. The near-miss arm also matched across a
      paragraph break.
 
+   **Mutation sweep (2026-10-04, `f3edeb4`):** rc=1 — 96/98 accounted for,
+   two ANCHOR-MISSING. Leg 5 duplicated two registry anchors: leg 1's
+   `if [ ! -r "$f" ]` guard (leg 5 has it at four spaces) and leg 4's BOM
+   `sed` over `"$sk"` (leg 5's index runs the same one). Both re-anchored,
+   not deleted; `--mutants l1-unreadable,l4-index-bom` then gave CAUGHT by
+   L1g and 41, their named killers. Combined: 98/98 — 88 CAUGHT plus these
+   2, 8 SURVIVED-DECLARED. Per-leg uniqueness, with `v-exit` excluded (it
+   reddens 81 controls, so it shadows every leg): t, dd, ext, rank and l3
+   own no killer that no other mutant reaches. That predates this PR — every
+   sharer except `l5-skills-form` is an l1-l4 mutant, and l3-grep-rc's
+   controls are shared with l2 and l4 mutants too. Runtime: 2c-r7.
+
    **Solution doc:** `docs/solutions/logic-errors/a-heading-name-with-two-senses-needs-a-required-citation-form.md`
    (local only — `docs/` is gitignored), written by `/cepa:compound` on
    2026-10-04. Its Prevention pass filed 2c-r5 and 2c-r6 below. Brain:
@@ -968,6 +980,21 @@
      any line whose first non-blank text is three backticks, ignoring fence
      character and length. P3. A four-backtick fence wrapping a three-backtick one, or a
      `~~~` fence, flips the wrong text. Leg 5's `L5_INDEX_AWK` is the model.
+   - [ ] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
+     Measured 2026-10-04 at `f3edeb4`, local, 98 mutants × 109 controls:
+     224 min (19:09:57 → 22:54:12 CDT; a second, dying sweep shared the
+     machine for ~1.5 h of it). `mutation-sweep.yml` bounds the step at
+     150 min and the job at 180, and its own header measures hosted at 1.5×
+     local — so the weekly run is expected to be CANCELLED, which opens the
+     failure issue. Leg 5 added 27 mutants and ~20 controls; per-mutant cost
+     is ~2.3 min. Needs a design call (shard the registry across jobs, or
+     raise the bounds toward GitHub's 6 h job ceiling), not a number bump.
+   - [ ] 2c-r8. Five model-pin legs own no unique killer. P3. In the
+     2026-10-04 sweep (`v-exit` excluded), every control killed by a t-,
+     dd-, ext-, rank- or l3- mutant is also killed by another leg's mutant —
+     mostly `l2-suppress-marker`, `l1-dir-symlink`, `l4-root-scripts`. Not
+     caused by leg 5 (see the sweep paragraph above). Either give each leg a
+     control only it reaches, or record why a shared kill suffices for it.
 
 2e. **The scrub is content-blind and mangles innocent digits.** P2, filed.
    Because it runs over the whole payload file, ordinary engineering prose is

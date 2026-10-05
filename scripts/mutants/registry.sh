@@ -201,9 +201,12 @@ mut l1-file-symlink "$CHK" \
   "if ! traverse \"\${AGENT_DIRS[@]}\" \\( \"\${find_name_args[@]}\" \\) -type f; then" \
   'kills: dropping -L from leg 1 FILE discovery — a symlinked definition is a file nobody checked. Expected killer: L1d.'
 
+# The leading newline is the anchor: leg 5 carries the same guard at four
+# spaces, and "  if" is a substring of "    if". Pinned to column 2, it is
+# leg 1's alone.
 mut l1-unreadable "$CHK" \
-  "  if [ ! -r \"\$f\" ]; then" \
-  "  if false; then" \
+  $'\n'"  if [ ! -r \"\$f\" ]; then" \
+  $'\n'"  if false; then" \
   'kills: the per-file readability guard in leg 1. Expected killer: L1g. 33/34 plant under scripts/, which is leg 4.'
 
 mut l1-bom "$CHK" \
@@ -406,9 +409,10 @@ mut l4-owner-same-skill "$CHK" \
   '      *" $sname ZZNEVER "*) : ;;' \
   'kills: the same-owner arm, turning the collision check into a second-APPEND check — one skill repeating its own heading would then fail the build on legitimate content. Expected killer: C2.'
 
+# `done < <(` is the anchor: leg 5's index runs the same sed over "$sk".
 mut l4-index-bom "$CHK" \
-  "sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$sk\" 2>/dev/null |" \
-  "cat \"\$sk\" 2>/dev/null |" \
+  "done < <(sed \$'1s/^\xEF\xBB\xBF//; s/\r\$//' \"\$sk\" 2>/dev/null |" \
+  "done < <(cat \"\$sk\" 2>/dev/null |" \
   'kills: BOM/CRLF normalization when building the anchor index — a BOM-led skill file defines no anchors, so every citation into it MISSes. Expected killer: 41, whose heading sits on line 1 because that is the only line a BOM can reach.'
 
 mut l4-index-lowercase "$CHK" \
