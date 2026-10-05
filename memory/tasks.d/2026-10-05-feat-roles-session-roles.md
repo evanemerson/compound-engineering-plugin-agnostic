@@ -61,3 +61,22 @@ confidence-75 bar). Numbers are the findings file's.
     `scripts/check-batch-sibling-match.sh`.
 25. **P3 #24 — post_deploy choice for a worker; `unnamed@<wt>`; README script
     list; "every reply"** — `task.md:553`, autonomy §10d, `README.md`.
+
+## 2026-10-05 — compound candidates (inline capture; a worker cannot write the main checkout's gitignored docs/solutions)
+
+26. **[learning] A git-dir comparison is only sound in absolute form, and old
+    git does not fail on the flag that makes it so.** Measured on git 2.43:
+    from a main-checkout subdirectory `git rev-parse --git-dir` prints
+    `/repo/.git` while `--git-common-dir` prints `../.git`, so a raw compare
+    calls the main checkout a linked worktree. `--path-format=absolute` fixes
+    it, but git < 2.31 echoes an unknown flag as an output line with exit 0
+    (`git rev-parse --bogus --git-dir` prints `--bogus`), so "empty output =
+    failure" is the wrong test; "one line starting with `/`" is the right one.
+    Now encoded in autonomy §10a. Candidate solution doc for `/cepa:compound`.
+27. **[learning] A single-copy control scoped to one directory proves nothing
+    about the repo.** `check-batch-sibling-match.sh`'s first cut counted the
+    pattern only under `plugins/`; README.md kept a stale restatement and the
+    control stayed green (found by previous-comments-reviewer, not by the
+    control). The scan set of a "one copy" claim must be the set of places a
+    copy could live. Same class as CLAUDE.md's "an absence claim is a fact
+    about the probe". Candidate addition to that solution doc's Detection.
