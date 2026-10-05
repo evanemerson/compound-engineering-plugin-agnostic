@@ -506,14 +506,16 @@ into work that isn't its own.**
 
 Headless rules:
 
-- **On main (or the repo's default branch):** create `docs/refresh-<scope>`
-  from the starting ref, commit the staged refresh files, push and attempt
+- **On main (or the repo's default branch):** create the refresh branch —
+  `docs/refresh-<scope>`, or `docs/main/refresh-<scope>` in a main
+  coordinator's session (`cepa:autonomy` §10b) — from the starting ref, commit the staged refresh files, push and attempt
   a PR (report the branch name if PR creation fails) — then check the
   starting ref back out, always. Unrelated dirty files are protected twice:
   selective staging keeps them out of the commit, and the checkout-back
   returns them with HEAD. Never stash them — a stash is user work at risk.
-  In a linked worktree the branch is `docs/<wt>/refresh-<scope>`
-  (`cepa:autonomy` §10b), so that worktree's coordinator owns its PR.
+  A linked worktree never takes this bullet: it is never on the trunk
+  (`cepa:autonomy` §10b). A parked worktree is detached, so it takes the
+  Detached HEAD bullet below — report-only.
 - **On a feature branch that is this run's own work** — the user invoked
   the refresh while working on that branch, or a pipeline caller (e.g.
   `/cepa:lfg` or `/cepa:sweep`) invoked it as part of that branch's flow:
@@ -528,8 +530,8 @@ Headless rules:
   still restore the starting ref before finishing.
 
 Interactive mode: offer commit options fitting the current branch state, as
-before. Options that create a branch name it as the headless rule above does
-(worktree segment included) and default to returning to the starting
+before. Options that create a branch name it per `cepa:autonomy` §10b for the
+session's role and default to returning to the starting
 ref; an option may explicitly offer to stay on the new branch, and choosing
 it satisfies the invariant — a destination the user picked IS where the
 user put HEAD.

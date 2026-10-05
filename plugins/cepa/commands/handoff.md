@@ -880,6 +880,17 @@ and this block is executed by the next session.
 
 #### Shape for a merged branch
 
+`<derived-branch>` in this shape and the ones below is the `<new-branch>`
+value derived above — worktree segment included.
+
+**In a worker session, emit none of this block** (`cepa:autonomy` §10e). A
+merged branch means the worker's item is done, and branching for new work
+here would be undone by the coordinator's post-merge step, which parks the
+worktree detached. Say instead, as the preamble: "`<branch>` is merged
+(PR #`<n>`). This worker's item is done. Do not branch, commit or delete
+anything here: coord@`<wt>` parks this worktree and deletes `<branch>` in its
+post-merge step." The block below is for every other role.
+
 ```
 FIRST, before any work — this worktree is on <branch>, which is already
 merged (PR #<n> into <trunk>, squash <sha>) and carries no commits beyond
@@ -905,12 +916,8 @@ is warm. Do not run worktree-clean or worktree remove.
 #### Shapes for the other dispositions
 
 Each gets a stated opening, because silence about the branch is what
-produced the original incident. Only `Merged` carries a deletion — and not
-in a worker session (`cepa:autonomy` §10e): the next session did not create
-`<branch>`, so a worker's merged shape drops the `git worktree list` and
-`git branch -D` lines and says instead "`<branch>` is merged; this
-worktree's coordinator deletes it in its post-merge step. Do not delete it
-here."
+produced the original incident. Only `Merged` carries a deletion, and never
+in a worker session (see the merged shape above).
 
 - **Unmerged, has commits** — "This worktree is on `<branch>`, which has
   `<n>` commits not on `<trunk>` and no merged PR. **Stay on it.** Do not

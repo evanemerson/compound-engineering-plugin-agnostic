@@ -964,10 +964,13 @@ do one session's work in another's checkout.
 **Two guards bind a solo session**, because it cannot tell whether a
 coordinator is also working in the main checkout:
 
-- When `git worktree list` shows more than one entry, it never offers to
-  review, merge or deploy a PR whose head branch it did not create (§10c).
+- Unless `git worktree list` succeeds and shows exactly one entry, it never
+  offers to review, merge or deploy a PR whose head branch it did not create
+  (§10c). An error, empty output, or more than one entry all mean "other
+  sessions may exist" — a failed probe never reads as "I am alone".
 - Before its first tracked-file write or branch switch, it runs
-  `git status --short --branch`. A tree that was already dirty when the run
+  `git status --short --branch`. If that command fails, stop as below. A
+  tree that was already dirty when the run
   started, or HEAD on a branch whose worktree segment is `main`
   (`<type>/main/<desc>`), means a main coordinator is mid-edit here: stop
   before writing anything, and ask for a name (in `full` autonomy, a
@@ -1010,15 +1013,18 @@ list; ownership is read from the PR's head branch:
 | worker | only the PR whose `headRefName` equals the current branch — created or resumed (§10b) |
 | worktree coordinator | PRs whose head is `<type>/<wt>/…` for its own `<wt>` |
 | main coordinator | PRs whose head is `<type>/main/…`, or has no worktree segment (`<type>/<desc>`) |
-| solo, one `git worktree list` entry | every open PR — no other session exists |
-| solo, more than one entry | only PRs whose head branch it created |
+| solo, `git worktree list` succeeded with exactly one entry | every open PR — no other session exists |
+| solo, any other result | only PRs whose head branch it created, plus the current branch's PR |
 
 The audit then resolves each open PR by ownership and overlap:
 
-- **The worker's own PR** is not an overlap. It is the work being resumed.
+- **The session's own current-branch PR** is not an overlap, in every
+  role. It is the work being resumed.
 - **A worker never offers a merge.** Any real overlap is
-  `blocked: overlaps #N` in its Handoff block (§10d), and the run stops. The
-  command's "merge PR #N first" choice does not exist in a worker session.
+  `blocked: overlaps #N` in its Handoff block (§10d), and the run stops —
+  except a batch sibling (below), which the audit records and does not judge.
+  The command's "merge PR #N first" choice does not exist in a worker
+  session.
 - **Other roles, owned and overlapping:** the command's own blocker — a
   numbered choice under `gated`, a blocked-stop under `full`.
 - **Other roles, not owned and overlapping:** a blocked-stop naming the PR.
@@ -1026,8 +1032,11 @@ The audit then resolves each open PR by ownership and overlap:
 - **Not owned, no overlap:** not named. Not in the status report, not in the
   final report, not a next step. Refusing it politely still costs the
   operator an interruption.
-- **A batch sibling** (§2b) is named although it is not owned: the
-  invocation's `batch:` token made it part of this run.
+- **A batch sibling** (§2b) does not stop the audit in any role, a worker's
+  included: the audit has no file scope to judge it against, so it is
+  recorded and carried to §2b's checkpoint B, where a real collision still
+  stops the run. It is named although it is not owned: the invocation's
+  `batch:` token made it part of this run.
 
 Judge an overlap on evidence — `gh pr diff <n> --name-only` against the files
 the task will touch, or a hit on §2's contention list — not on a
@@ -1064,5 +1073,6 @@ It never merges a PR, deploys, deletes a branch it did not create, or offers
 anything about another session's PR. When its task is done, it stops; it
 does not look for more work. A command step that would do one of these is
 skipped in a worker session, and the report says so. `/cepa:handoff` Step 7
-is the step this binds today: its merged-branch preamble emits no
-`git branch -D` in a worker session.
+is the step this binds today: in a worker session its merged-branch
+preamble emits no branch commands at all — the item is done, and the
+worktree's coordinator parks the worktree and deletes the branch.

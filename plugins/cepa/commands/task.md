@@ -55,6 +55,8 @@ A PR this session does not own and that does not overlap is never named — not
 here, not in 1.3, not in the final report. **In a worker session** any real
 overlap other than its own current-branch PR is `blocked: overlaps #N` in the
 Handoff block, and the run stops; the choices below do not exist for a worker.
+A batch sibling is the one exception, in every role: parse the token first
+(below) and record a sibling rather than stopping on it (`cepa:autonomy` §10c).
 
 **Otherwise, treat an open PR with overlapping scope as a blocker** — do not
 silently proceed. For a PR this session owns, present a numbered choice:

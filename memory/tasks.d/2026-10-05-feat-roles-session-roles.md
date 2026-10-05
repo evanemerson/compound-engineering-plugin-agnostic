@@ -29,23 +29,23 @@ Source: `todos/review-2026-10-05-070257.md` (24 findings; #1-#4 and #22
 applied, #23 skipped by precedent, the 18 below `judgment` or under the
 confidence-75 bar). Numbers are the findings file's.
 
-8. **P2 #5 — compound-refresh's worktree branch sentence cannot fire** —
+8. ~~**P2 #5 — compound-refresh's worktree branch sentence cannot fire** —
    `plugins/cepa/commands/compound-refresh.md:509`. Add a detached-park bullet
-   or state report-only.
-9. **P2 #6 — worker overlap stop precedes the batch-sibling exemption** —
-   autonomy §10c; `task.md` 1.1 vs `lfg.md` Step 1 disagree.
+   or state report-only.~~ Resolved 2026-10-05 on this branch (operator choice).
+9. ~~**P2 #6 — worker overlap stop precedes the batch-sibling exemption** —
+   autonomy §10c; `task.md` 1.1 vs `lfg.md` Step 1 disagree.~~ Resolved 2026-10-05 on this branch (operator choice).
 10. ~~**P2 #7 — coord@main's `<type>/main/<desc>` branch belongs to no role** —
     autonomy §10b/§10c; a worktree named `main` collides too.~~ Resolved
     2026-10-05: the operator chose `<type>/main/<desc>`; applied on this
     branch (findings file #7).
 11. **P2 #8 — §10 never constrains a worktree coordinator** — autonomy §10.
-12. **P2 #9 — worker merged-branch shape misplaced, still starts new work** —
-    `plugins/cepa/commands/handoff.md:878`.
-13. **P2 #10 — solo guard fails open when `git worktree list` fails** —
-    autonomy §10a/§10c.
+12. ~~**P2 #9 — worker merged-branch shape misplaced, still starts new work** —
+    `plugins/cepa/commands/handoff.md:878`.~~ Resolved 2026-10-05 on this branch (operator choice).
+13. ~~**P2 #10 — solo guard fails open when `git worktree list` fails** —
+    autonomy §10a/§10c.~~ Resolved 2026-10-05 on this branch (operator choice).
 14. **P2 #11 — failed probe with a coordinator name; stop vs worker** —
     autonomy §10a.
-15. **P2 #12 — solo's own resumed PR reads as not-owned** — autonomy §10c.
+15. ~~**P2 #12 — solo's own resumed PR reads as not-owned** — autonomy §10c.~~ Resolved 2026-10-05 on this branch (operator choice).
 16. **P2 #13 — untracked files trip the solo dirty-tree guard** — autonomy §10a.
 17. **P2 #14 — workers autostash on the shared stash stack** —
     `plugins/cepa/commands/lfg.md:85`.

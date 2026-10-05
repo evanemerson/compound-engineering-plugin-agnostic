@@ -73,7 +73,8 @@ state). Resolve results without prompting:
   exit — merging someone's open work is a human decision. Ownership and
   naming follow the session's role (autonomy §10c): a worker's own
   current-branch PR is not an overlap, a worker reports a real one as
-  `blocked: overlaps #N` in its Handoff block, and a PR the session does not
+  `blocked: overlaps #N` in its Handoff block (a batch sibling excepted, as
+  below — for a worker too), and a PR the session does not
   own that does not overlap is never named.
   **Exception — sibling batches (autonomy §2b, checkpoint A):** when Step 0
   produced a valid `batch:<id>`, an open PR that §2b's sibling query returns
