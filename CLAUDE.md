@@ -83,6 +83,24 @@ fixture and turned four correct files into MISS, because every backtick line in
 that fixture carries a list marker while the form it over-matched — a
 line-initial `` `status: x` `` in prose — has none.
 
+**A clean corpus diff proves nothing about a shape the corpus does not hold.**
+If no file contains the new shape, old and new agree on every file whether the
+pattern is right or wrong, so the diff cannot see over-match on a *quoted* form
+of that shape. Plant the quoted form in a control. #85's first cut read across
+inline code: a `**Fix:**` line quoting the batch shape in backticks switched off
+the counter checks for its whole file, which then reported 0 MISS with wrong
+counters. The corpus diff over this repo's 63 files showed 0 changes both
+before and after that P1 was fixed — this repo holds no positional rows. Review
+caught it, not the diff.
+
+**A count relayed from another session is not an expectation until its probe
+comes with it.** #85's proof was briefed to expect "about 29 files" to gain
+rows, a number passed along from an earlier dpc-pro session that never stated
+the command behind it. The real run gained 4, and the fix was correct: only 10
+files undercounted under the old checker at all. The unsourced number nearly
+made a sound fix read as broken. Carry the command with the count, or label the
+count as unverified.
+
 Nothing enforces this — it is a habit, like the two count rules above. The
 closest mechanism is a committed fixture plus a corpus diff; see
 `plugins/cepa/skills/file-todos/fixtures/status-spellings.md` for the shape.
