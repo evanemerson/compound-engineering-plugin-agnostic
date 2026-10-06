@@ -34,6 +34,9 @@ switch — it is not a trigger, and it never causes the command to fire.
 findings, or open PRs. It commits only its own artifacts and, when the
 tree is dirty, a checkpoint of work already in progress (Step 6).
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse `mode:headless` from anywhere in the arguments and strip it —

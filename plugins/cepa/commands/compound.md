@@ -12,6 +12,9 @@ Document a solved problem so that future work benefits from this experience. Use
 
 **Required sub-skill:** Use `cepa:compound-docs` skill for document format and categories.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse a `mode:headless` token from anywhere in the arguments and strip it.

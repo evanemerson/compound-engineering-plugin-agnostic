@@ -17,6 +17,9 @@ with `fix` it applies all non-destructive repairs and reports what it did.
 
 **Announce at start:** "Running cepa:setup (check|fix) on <project>."
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Step 1: Run the Health Script
 
 ```bash

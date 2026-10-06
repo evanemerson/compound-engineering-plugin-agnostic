@@ -14,6 +14,9 @@ available with the `interactive` argument.
 **Announce at start:** "I'm using the cepa:triage command — batch mode" (or
 "— interactive mode").
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Step 1: Load Findings (both modes)
 
 1. Search `todos/` for the most recent `review-*.md` file (by filename date, or use the most recently modified).

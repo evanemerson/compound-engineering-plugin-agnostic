@@ -24,6 +24,9 @@ allowlist or permission-mode flag) — this command declares no
 dedicated machine identity for scheduled runs, not the operator's
 interactive `gh` auth.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse `mode:headless` from anywhere in the arguments and strip it; a

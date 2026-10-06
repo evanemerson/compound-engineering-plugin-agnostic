@@ -12,6 +12,9 @@ Orchestrate the complete compound engineering loop from idea to merged PR. Each 
 
 ---
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Phase 0: Autonomy Resolution
 
 Resolve the run's autonomy level per the **`cepa:autonomy` skill §1** (first

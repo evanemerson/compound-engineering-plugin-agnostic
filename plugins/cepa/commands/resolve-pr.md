@@ -30,6 +30,9 @@ the project's own validation, so grants belong to the invoking context
 (pipeline-command precedent). The judging phase (Steps 1-4) is read-only
 BY INSTRUCTION: no Edit/Write until Step 5.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse a `mode:headless` token from anywhere in the arguments and strip it.

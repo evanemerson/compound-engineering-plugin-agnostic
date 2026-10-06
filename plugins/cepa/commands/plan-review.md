@@ -17,6 +17,9 @@ eligible findings".
 **Announce at start:** "I'm using the cepa:plan-review command to review
 the plan with a persona panel."
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse a `mode:headless` token from anywhere in the arguments and strip it.
