@@ -30,6 +30,9 @@ the project's own validation, so grants belong to the invoking context
 (pipeline-command precedent). The judging phase (Steps 1-4) is read-only
 BY INSTRUCTION: no Edit/Write until Step 5.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse a `mode:headless` token from anywhere in the arguments and strip it.
@@ -61,9 +64,6 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   every item demotes to needs-human and the run reports — an unattended
   resolver must not push commits to a PR nobody authorized it for.
   Interactive runs proceed; the user is present.
-- **Worktree coordinator:** `cepa:autonomy` §10f's probe runs before
-  Step 2. NOT-PARKED stops the run — the PR's branch is its worker's, and
-  more work on it goes to a new worker.
 
 ## Step 2: Fetch
 

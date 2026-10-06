@@ -24,6 +24,9 @@ allowlist or permission-mode flag) — this command declares no
 dedicated machine identity for scheduled runs, not the operator's
 interactive `gh` auth.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse `mode:headless` from anywhere in the arguments and strip it; a
@@ -43,9 +46,6 @@ report-only. **Never stash, anywhere in the run:** the never-stash rule
 binds every replicated lfg step for the whole scheduled run, overriding
 lfg's user-invoked autostash — nobody is present to read a pop command.
 Restore the starting ref before the report, always.
-
-In a worktree coordinator's session, `cepa:autonomy` §10f's probe runs
-before this record. NOT-PARKED stops the run before any write.
 
 ## Step 2: Assemble the Queue (fail-closed, §7-guarded)
 

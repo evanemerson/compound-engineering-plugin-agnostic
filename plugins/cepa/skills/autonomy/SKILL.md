@@ -1081,18 +1081,21 @@ worktree's coordinator parks the worktree and deletes the branch.
 
 A worktree coordinator shares its checkout with its worker. Every tracked
 file it edits, and every commit, stash or branch switch it makes, lands in the
-worker's tree or on the worker's branch. So **a worktree coordinator writes
-only when its worktree is parked**: detached at a commit `origin/<trunk>`
-already contains, with nothing in progress. Anywhere else, every command runs
-report-only or stops, per the table below.
+worker's tree or on the worker's branch. So a worktree coordinator writes
+tracked state through a command in one case only: a `/cepa:task` or
+`/cepa:lfg` run that starts in a **parked** worktree — detached at a commit
+`origin/<trunk>` already contains, with nothing in progress. Every other
+command it invokes runs report-only or stops, per the table below.
 
-**This binds the worktree coordinator only.** The main coordinator hosts no
-worker, so nothing here limits its edits in the main checkout. A worker owns
-the branch it stands on. A solo session follows §10a's two guards instead.
+**This binds the worktree coordinator only** — a session §10a resolved to
+that role. The main coordinator hosts no worker, so nothing here limits its
+edits in the main checkout. A worker owns the branch it stands on. A solo
+session follows §10a's two guards instead.
 
-**Measure once, at the start of the run, before any write.** In a worktree
-coordinator's session, run this block with `<trunk>` replaced by §8's
-resolved value:
+**The probe.** Run it once, at the start of a top-level run, before any
+write, with `<trunk>` replaced by §8's resolved value. Substitute only a value
+that passed §8's `^[A-Za-z0-9._/-]+$` check; otherwise the result is
+NOT-PARKED without running it.
 
 ```bash
 reason=
@@ -1111,7 +1114,7 @@ case "$gd" in /*) [ "$gd" = "${gd%%$'\n'*}" ] || gd= ;; *) gd= ;; esac
 if [ -z "$gd" ]; then
   reason="${reason:-git-dir unreadable}"
 else
-  for m in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG; do
+  for m in rebase-merge rebase-apply sequencer MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG; do
     [ ! -e "$gd/$m" ] || reason="${reason:-operation in progress ($m)}"
   done
 fi
@@ -1125,41 +1128,54 @@ if [ -z "$reason" ]; then echo PARKED; else echo "NOT-PARKED: $reason"; fi
 - `--untracked-files=no`: an untracked file is nobody's commit, and an
   editor's scratch file must not block a park.
 - The git-dir shape test is §10a's: one line that begins with `/`. A
-  rebase, merge, cherry-pick, revert or bisect leaves HEAD detached inside
-  the trunk with a clean tree, so its marker file is the only sign of it.
-- Any failure — an unresolved trunk, a missing `origin/<trunk>`, a git
-  error — prints NOT-PARKED. The probe never fails open.
+  rebase, `git am`, merge, cherry-pick, revert or bisect can leave HEAD
+  detached inside the trunk with a clean tree; its marker is the only sign.
+- Any failure — a missing `origin/<trunk>`, a git error — prints NOT-PARKED.
+  The probe never fails open, and neither does reading it: only a first
+  output line that is exactly `PARKED` permits a write. No output, a denied
+  or unrun block, a non-zero exit, or any other line is NOT-PARKED, reported
+  as `probe produced no verdict`.
 
-`PARKED` → the run proceeds as written. A commit needs a branch, so a run
-that commits creates one first, by §10b's linked-worktree row. That branch is
-the run's own, and it does not re-trigger this check. `NOT-PARKED` → the
-whole run follows the table below, and the report says so on its first line,
-with the probe's reason.
+**A PARKED run is a worker run for its whole length.** It branches before its
+first commit, by §10b's linked-worktree row — the step `/cepa:task` and
+`/cepa:lfg` already take. Every command it invokes as a step (plan review,
+review, triage, compound) takes its verdict and never measures again: their
+own rows below bind only a top-level invocation. While it runs, it is this
+checkout's one live worker, so no other worker starts here. A later session
+that finds the branch resumes it as a worker (§10b), never as a coordinator.
 
-**Report-only** means the run writes nothing in the work tree except at a
-path `git check-ignore -q` confirms is ignored. It runs no git command that
-changes the index, HEAD, a ref, the stash or the remote. It edits no PR body.
-A document the command would have saved goes to its normal path when that
-path is ignored. Otherwise — a failed `check-ignore` included — it goes under
-`<git-dir>/cepa/<command>/`, using the probe's own `gd` value. That directory
-is per-worktree, outside the work tree and never tracked, and
-`git worktree remove` deletes it. With no valid git-dir, the report carries
-the whole document. Every residual sink reports `no_sink (§10f)`, and the
-report lists each entry it would have filed.
-
-| Command | When NOT-PARKED |
+| Command, invoked by a worktree coordinator | Behavior |
 |---|---|
-| `/cepa:task`, `/cepa:lfg`, `/cepa:sweep` | **Stop** before Phase 1's first write. Their output is commits; a worktree's work belongs to its worker. |
-| `/cepa:resolve-pr` | **Stop.** It commits onto the PR's branch, the worker's. A PR that needs more work gets a new worker on that branch. |
-| `/cepa:review` | Report-only. The findings file goes to the local path. No fix-apply, no residual shard, no commit — the weekly durable-record exits included. Writes inside a trunk worktree the run creates itself are a separate checkout and proceed. |
-| `/cepa:plan-review` | Report-only. Findings file to the local path. No plan edits, no commit. |
-| `/cepa:triage` | Report-only. The decision table only: no fix-apply, no status write-back, no stash. |
-| `/cepa:compound` | Report-only. The draft goes to the local path. No CONCEPTS.md, no plan links, no commit. |
+| `/cepa:task`, `/cepa:lfg` | Run the probe first. NOT-PARKED → **stop** before any write. PARKED → proceed as a worker run (above). |
+| `/cepa:sweep` | **Stop.** Every item is a commit, and draining the repo's residuals is not one worktree's work. |
+| `/cepa:resolve-pr` | **Stop.** It commits onto the PR's branch, which is its worker's. A PR that needs more work gets a new worker on that branch. |
+| `/cepa:review` | Report-only. `cadence:weekly` **stops**: its only output is a pushed trunk commit. |
+| `/cepa:plan-review` | Report-only: no plan edit. |
+| `/cepa:triage` | Report-only: the decision table only — no fix, no status write-back, no stash. |
+| `/cepa:compound` | Report-only: the draft solution doc, CONCEPTS.md terms and plan links are reported, not written. |
 | `/cepa:compound-refresh` | Report-only: Phase 3's not-owned mode. A worktree coordinator never owns the branch it finds. |
-| `/cepa:handoff` | Report-only. It still emits its prompt. The document goes to the local path. No pointer, no checkpoint commit (the dirty work is the worker's), no superseded stamp on a tracked file, no push, no PR-body edit. |
-| `/cepa:setup` | Report-only. `fix` degrades to the read-only report. |
+| `/cepa:handoff` | Report-only. It still emits its prompt, which carries the document's whole content; no pointer, no checkpoint commit (the dirty work is the worker's), no push. |
+| `/cepa:setup` | Report-only. `fix` degrades to the read-only check. |
 
-**Stated limits.** The probe runs once, so a worker started in this checkout
-after it ran is not seen; nothing locks the checkout. A command cites this
-section at its write step, and `scripts/check-coord-write-guard.sh` checks
-that every command does — not that the citation sits at the right step.
+**Report-only** means the run writes nothing in the work tree except at a path
+`git check-ignore -q` confirms is ignored. It runs no git command that changes
+the index, HEAD, a ref, the stash or the remote, and it writes no external
+sink (a PR body or comment, the brain). A document the command would have
+saved goes to its normal path when that path is ignored; otherwise — a
+failed `check-ignore` included — the report carries the whole document. Each
+residual sink reports `no_sink`, with §10f as its reason, and the report
+lists every entry it would have filed.
+
+**Reporting a stop or a report-only run** follows §6: the probe's reason, or
+"worktree coordinator — report-only", goes on the report's first line and in
+its blocked section, and the `## Next steps` tail names the session that can
+do the write (a new worker in this worktree). A headless caller gets it in the
+structured summary as `blocked: §10f <reason>`. The run wrote nothing, so
+nothing else records it — by design: the operator started it.
+
+**Stated limits.** The probe runs once per top-level run, so a worker started
+in this checkout during a PARKED run is not seen; nothing locks the checkout.
+"A step of a parent run" is known from the run's own context, not from git:
+no check proves a sub-command was really invoked by a PARKED parent. A command
+cites this section at its first step, and `scripts/check-coord-write-guard.sh`
+checks that every command does — not where.

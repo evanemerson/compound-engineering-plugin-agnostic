@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [cadence:weekly] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*), Bash(git merge-base:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
 ---
 
 # Compound Review
@@ -9,6 +9,9 @@ allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*
 Orchestrate parallel review agents on the current code changes. Collect findings, score severity, and write results to `todos/`.
 
 **Announce at start:** "I'm using the cepa:review command to run parallel review agents."
+
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
 
 ## Modes
 
@@ -548,11 +551,6 @@ After all agents return:
 4. Sort by severity: P1 first, then P2, then P3
 
 ## Step 5: Write Findings to todos/
-
-A worktree coordinator measures `cepa:autonomy` §10f's probe at the start of
-the run, before Step 1. NOT-PARKED makes every write in this command
-report-only, the weekly durable-record exits included: the findings file
-goes to §10f's local path, and nothing is applied, filed or committed.
 
 Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` in the
 **`cepa:file-todos` skill format — that skill is the single canonical spec**

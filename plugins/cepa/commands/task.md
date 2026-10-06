@@ -12,6 +12,9 @@ Orchestrate the complete compound engineering loop from idea to merged PR. Each 
 
 ---
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Phase 0: Autonomy Resolution
 
 Resolve the run's autonomy level per the **`cepa:autonomy` skill §1** (first
@@ -124,9 +127,6 @@ Check for:
   (`cepa:autonomy` §10b).
 - A solo session — or one whose role probe failed — applies
   `cepa:autonomy` §10a's two guards here, before any stash or branch switch.
-- A worktree coordinator runs `cepa:autonomy` §10f's probe here, before any
-  write. NOT-PARKED stops the run: this worktree's work belongs to its
-  worker.
 
 ### 1.3 Present Combined Status Report
 

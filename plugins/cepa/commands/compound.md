@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*), Bash(git merge-base:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*)
 ---
 
 # Compound Documentation
@@ -11,6 +11,9 @@ Document a solved problem so that future work benefits from this experience. Use
 **Announce at start:** "I'm using the cepa:compound command to document this solution."
 
 **Required sub-skill:** Use `cepa:compound-docs` skill for document format and categories.
+
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
 
 ## Modes
 
@@ -107,10 +110,6 @@ rule.]
 ```
 
 ## Step 4: Save and Link
-
-A worktree coordinator measures `cepa:autonomy` §10f's probe at the start of
-the run. NOT-PARKED runs Steps 4-4.7 report-only: the draft goes to §10f's
-local path, and no CONCEPTS.md edit, plan link or commit is made.
 
 1. Save to `docs/solutions/<category>/<descriptive-filename>.md`
 2. Create the category directory if it doesn't exist

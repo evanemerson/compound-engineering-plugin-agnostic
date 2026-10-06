@@ -2,7 +2,7 @@
 description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(git merge-base:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*)
 ---
 
 # Session Handoff
@@ -34,6 +34,9 @@ switch — it is not a trigger, and it never causes the command to fire.
 findings, or open PRs. It commits only its own artifacts and, when the
 tree is dirty, a checkpoint of work already in progress (Step 6).
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse `mode:headless` from anywhere in the arguments and strip it —
@@ -54,13 +57,6 @@ saying whether the subject was derived or given — a silently altered
 subject becomes a filename nobody looks for.
 
 ## Step 1: Resolve the Sink
-
-**A worktree coordinator runs `cepa:autonomy` §10f's probe before this
-step.** NOT-PARKED makes the run report-only: the handoff goes to §10f's
-local path instead of the table below, no pointer is written, and Step 6 is
-skipped. The prompt is still emitted. It names the document's path and says
-that `git worktree remove` deletes it, and it carries the residuals that
-would have gone to the shard.
 
 Compose the handoff path, using `slug(x)` per **`cepa:autonomy` §5**:
 
@@ -675,9 +671,6 @@ The operator caught it and constrained the run manually. Nothing was
 damaged; the licence was still wrongly granted.
 
 ## Step 6: Commit
-
-Skipped in a worktree coordinator's NOT-PARKED run (`cepa:autonomy` §10f):
-the dirty work in that tree is its worker's, never this run's checkpoint.
 
 **Stage explicit paths, never a directory.** This is the one place this
 command deliberately diverges from §5's directory-granularity guidance,

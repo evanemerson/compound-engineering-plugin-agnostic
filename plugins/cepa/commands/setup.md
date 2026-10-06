@@ -1,7 +1,7 @@
 ---
 description: "Health-check and bootstrap a project's cepa setup: validate cepa.local.md, create missing scaffold dirs, check CI and plugin-version drift, and install a stack-matched CI template. Default is a read-only report; pass 'fix' to apply."
 argument-hint: "[fix] [mode:headless]"
-allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git check-ignore:*), Bash(git ls-files:*), Bash(git add:*), Bash(git commit:*), Bash(git rev-parse:*), Bash(ls:*), Bash(find:*), Bash(mkdir:*), Bash(cp:*), Write, Edit, Bash(git symbolic-ref:*), Bash(git merge-base:*)
+allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git check-ignore:*), Bash(git ls-files:*), Bash(git add:*), Bash(git commit:*), Bash(git rev-parse:*), Bash(ls:*), Bash(find:*), Bash(mkdir:*), Bash(cp:*), Write, Edit
 ---
 
 # cepa:setup — Project Health Check & Bootstrap
@@ -16,6 +16,9 @@ argument applies repairs. `mode:headless` never prompts (per the
 with `fix` it applies all non-destructive repairs and reports what it did.
 
 **Announce at start:** "Running cepa:setup (check|fix) on <project>."
+
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
 
 ## Step 1: Run the Health Script
 
@@ -212,9 +215,6 @@ Beyond the script's facts, check:
 In check mode, stop here.
 
 ## Step 4: Fix (only with the `fix` argument)
-
-A worktree coordinator runs `cepa:autonomy` §10f's probe at the start of the
-run. NOT-PARKED skips this step: the run stays the read-only check.
 
 Apply, in order — all idempotent, none destructive:
 

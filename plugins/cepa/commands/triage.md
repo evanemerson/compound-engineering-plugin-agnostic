@@ -1,7 +1,7 @@
 ---
 description: Triage findings from /cepa:review. Default batch mode auto-applies safe verified fixes and presents the rest as one decision table; pass "interactive" for the classic one-at-a-time flow.
 argument-hint: "[interactive]"
-allowed-tools: Bash(git diff:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git merge-base:*), Bash(git status:*), Bash(git rev-parse:*)
+allowed-tools: Bash(git diff:*), Bash(git show:*)
 ---
 
 # Compound Triage
@@ -13,6 +13,9 @@ available with the `interactive` argument.
 
 **Announce at start:** "I'm using the cepa:triage command — batch mode" (or
 "— interactive mode").
+
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
 
 ## Step 1: Load Findings (both modes)
 
@@ -39,10 +42,6 @@ If no pending findings exist, report that — naming the file — and stop.
 Apply the auto-apply rubric from the **`cepa:autonomy` skill §4**:
 `mechanical` or `corroborated` findings with `confidence ≥ 75` are eligible;
 `judgment` findings never are.
-
-A worktree coordinator measures `cepa:autonomy` §10f's probe at the start of
-the run. NOT-PARKED skips every write in this command — this step, status
-write-backs and stashes — and presents the decision table only.
 
 1. **Checkpoint first:** if the tree is clean, record the current HEAD SHA
    as the checkpoint (no new commit needed). If the tree is dirty, stash the

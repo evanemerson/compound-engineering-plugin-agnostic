@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*), Bash(git symbolic-ref:*), Bash(git merge-base:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*)
 ---
 
 # Compound Refresh
@@ -18,6 +18,9 @@ docs/solutions."
 **Required sub-skill:** `cepa:compound-docs` is the canonical spec for the
 solution-doc format (including the mandatory Detection section) and the
 CONCEPTS.md vocabulary-map rules. Read it before classifying anything.
+
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
 
 ## Modes
 
@@ -189,9 +192,7 @@ branch. Own means the user invoked the refresh while working on this
 branch, or a pipeline caller (e.g. `/cepa:lfg` or `/cepa:sweep`) invoked it as part of this
 branch's flow; a scheduled or standalone headless run does not own a
 feature branch it merely finds itself on. Ambiguous ownership or detached
-HEAD counts as not owned. A worktree coordinator never owns the branch it
-finds, even when the user invoked it there: that branch is its worker's
-(`cepa:autonomy` §10f). Two rules consume this record:
+HEAD counts as not owned. Two rules consume this record:
 
 - **Not-owned branch → report-only mode.** Phases 3 and 4 make NO writes
   and stage nothing — no Edit, no `git rm`, no CONCEPTS.md changes. Every
