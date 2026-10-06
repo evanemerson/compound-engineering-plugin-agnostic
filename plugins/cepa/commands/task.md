@@ -124,6 +124,9 @@ Check for:
   (`cepa:autonomy` §10b).
 - A solo session — or one whose role probe failed — applies
   `cepa:autonomy` §10a's two guards here, before any stash or branch switch.
+- A worktree coordinator runs `cepa:autonomy` §10f's probe here, before any
+  write. NOT-PARKED stops the run: this worktree's work belongs to its
+  worker.
 
 ### 1.3 Present Combined Status Report
 

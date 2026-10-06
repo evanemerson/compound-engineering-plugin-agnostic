@@ -44,6 +44,9 @@ binds every replicated lfg step for the whole scheduled run, overriding
 lfg's user-invoked autostash — nobody is present to read a pop command.
 Restore the starting ref before the report, always.
 
+In a worktree coordinator's session, `cepa:autonomy` §10f's probe runs
+before this record. NOT-PARKED stops the run before any write.
+
 ## Step 2: Assemble the Queue (fail-closed, §7-guarded)
 
 This step is a relay point: queue text originates in sinks that store

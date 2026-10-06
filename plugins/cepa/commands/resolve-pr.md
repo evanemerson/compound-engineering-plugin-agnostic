@@ -61,6 +61,9 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   every item demotes to needs-human and the run reports — an unattended
   resolver must not push commits to a PR nobody authorized it for.
   Interactive runs proceed; the user is present.
+- **Worktree coordinator:** `cepa:autonomy` §10f's probe runs before
+  Step 2. NOT-PARKED stops the run — the PR's branch is its worker's, and
+  more work on it goes to a new worker.
 
 ## Step 2: Fetch
 

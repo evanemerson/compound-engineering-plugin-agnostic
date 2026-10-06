@@ -88,6 +88,8 @@ state). Resolve results without prompting:
   (§7). Because a batch token is present, this run executes its own
   implementation units **serially** (§2b — N is unknowable, so it is never
   reasoned about).
+- **Worktree coordinator:** run autonomy §10f's probe before any other
+  bullet here. NOT-PARKED stops the run before its first write.
 - **Dirty working tree:** a solo session, or one whose role probe failed,
   applies autonomy §10a's guards first — they outrank this bullet. Otherwise stash it
   (`git stash push -m "lfg-autostash-<date>"`).

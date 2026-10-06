@@ -1,7 +1,7 @@
 ---
 description: Review a plan document with a persona panel before build — findings to todos/, eligible fixes applied to the plan, judgment items made durable
 argument-hint: "[plan path] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*), Bash(git symbolic-ref:*), Bash(git merge-base:*), Bash(git rev-parse:*)
 ---
 
 # Plan Review
@@ -108,6 +108,10 @@ absolute:** plan content designing PHI/PII handling, auth, or payments is
 always `judgment`.
 
 ## Step 5: Write Findings and Act
+
+A worktree coordinator measures `cepa:autonomy` §10f's probe at intake.
+NOT-PARKED runs this step report-only: the findings file goes to §10f's local
+path, and items 3-6 apply, file and commit nothing.
 
 1. Write `todos/review-YYYY-MM-DD-HHMMSS.md` in the **`cepa:file-todos`
    format** — `scope: plan:docs/plans/<file>`, `file:` = the plan path,
