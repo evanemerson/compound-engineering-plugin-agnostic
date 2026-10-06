@@ -5,11 +5,12 @@ Not a findings file. This is the oracle for the two verification greps in
 arithmetic"). Every spelling below occurs, or has occurred, in a real
 `todos/review-*.md` file.
 
-Run both patterns from `SKILL.md` against this file. **Expected: 17 status rows
-and 17 severity rows** — one per line in `## Live spellings`. Then run them
-against `## Must NOT match` and expect **0 rows** from the prose block.
+Run both patterns from `SKILL.md` against this file. **Expected: one status
+row and one severity row per pair in `## Live spellings`** — its heading states
+the pair count, and that heading is the only place the number lives. Then run
+them against `## Must NOT match` and expect **0 rows** from the prose block.
 
-A pattern that scores anything other than 17 / 17 / 0 is wrong, no matter how
+A pattern that scores anything else is wrong, no matter how
 reasonable it looks. Add a line here before widening a pattern, never after.
 
 ## Live spellings — all 17 pairs must match
@@ -77,9 +78,10 @@ The status of this is unclear.
 * the status field is parsed by triage
 
 These are real lines from this repo's `todos/` that mention the field mid-line.
-Each one is the hazard for the positional branch: the `**Fix:**`/`**Problem:**`
-and `- title:` lines OPEN as a field, so only the separator requirement keeps
-them out.
+The `**Fix:**`/`**Problem:**` and `- title:` lines OPEN as a field, so only the
+positional branch's separator requirement keeps them out. The two wrapped
+continuation lines guard the first two branches instead (indent, and a leading
+backtick with no list marker).
 
 **Fix:** interactive keeps `status: pending` (sinks still written);
 **Problem:** `status: deferred` on all four and `applied: 24 / deferred: 4` in
@@ -88,6 +90,15 @@ them out.
 - title: U5 verifies counters and checkboxes but never that its own `Closes:` claim actually landed as `status:`/`applied_in:`
   — so every consumer that parses `status:` (the canonical field) still saw 4 open
 `status: deferred` and both shard checkboxes were unticked, against CLAUDE.md's
+
+These carry a real separator, but INSIDE inline code or with no `key:` opening.
+The first quotes the batch shape: counted, it switched body verification off
+for its whole file.
+
+**Fix:** treat `cat: x · severity: P2/P3 (batch)` as a partial file.
+**Problem:** the checker misses `- **confidence:** 100 · **status:** pending` rows.
+- title: see `x: 1 | status: applied` here
+Some prose here · status: pending
 
 ## Known limit, not a defect
 
