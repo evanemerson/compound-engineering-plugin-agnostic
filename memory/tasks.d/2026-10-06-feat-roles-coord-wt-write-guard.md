@@ -38,3 +38,22 @@ branch, the 3 below deferred). Numbers are the findings file's.
     `git symbolic-ref --short HEAD` re-check at every commit site is not built.
 11. **P3 #17 — roles items 17 (lfg autostash) and 18 (resolve-pr author
     gating) stay open** — the new pointers sit above them and change neither.
+
+## 2026-10-06 — compound candidates (inline capture; a worker cannot write the main checkout's gitignored docs/solutions)
+
+12. **[learning] A state guard that every command measures for itself turns
+    on its own parent run.** The first cut of §10f had each command run the
+    probe at its own start. A PARKED `/cepa:task` then branched — correctly —
+    and its own plan-review and review steps re-measured, read "on a branch",
+    and wrote their findings outside `todos/`, where lfg would parse zero.
+    Measure once per top-level run, and let every step inherit the verdict.
+    Found by three review agents, not by the checker: the checker tests the
+    measurement, and the defect was in where the measurement was called.
+    Candidate solution doc for `/cepa:compound`, with a Detection bullet: "a
+    guard cited at the top of a command that other commands invoke as a step".
+13. **[learning] `sequencer/` is the only trace of a paused multi-commit
+    cherry-pick or revert after `git reset --hard`.** `CHERRY_PICK_HEAD`,
+    `MERGE_MSG` and `AUTO_MERGE` are gone, the tree is clean, HEAD is detached
+    inside the trunk, and `git status` still says "Cherry-pick currently in
+    progress". Reproduced by the adversarial reviewer. Any "is an operation in
+    progress" probe needs it in its marker list.
