@@ -224,8 +224,8 @@ field, which no consumer has asked for.
 Verify against the body, never against the block's own arithmetic:
 
 ```bash
-grep -oiE '^[[:space:]]*[-*+]?[[:space:]]*(\*\*|__|\*|_|`)?severity[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?P[123]' todos/review-<stamp>.md | sort | uniq -c
-grep -oiE '^[[:space:]]*[-*+]?[[:space:]]*(\*\*|__|\*|_|`)?status[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?[a-z_-]+'   todos/review-<stamp>.md | sort | uniq -c
+grep -oiE '^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?|[[:space:]]*([-*+][[:space:]]*)?(\*\*|__|\*|_)?[a-z][a-z0-9_-]*[[:space:]]*:(\*\*|__|\*|_)?[^`]*(`[^`]*`[^`]*)*[[:space:]](·|\|)[[:space:]]*(\*\*|__|\*|_)?)severity[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?P[123]' todos/review-<stamp>.md | sort | uniq -c
+grep -oiE '^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?|[[:space:]]*([-*+][[:space:]]*)?(\*\*|__|\*|_)?[a-z][a-z0-9_-]*[[:space:]]*:(\*\*|__|\*|_)?[^`]*(`[^`]*`[^`]*)*[[:space:]](·|\|)[[:space:]]*(\*\*|__|\*|_)?)status[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?[a-z_-]+'   todos/review-<stamp>.md | sort | uniq -c
 ```
 
 **The list marker, the indentation, the emphasis markers, and the field's case
@@ -240,6 +240,7 @@ spellings are all live in real files:
 | `  status: applied` | **indented, no marker** — YAML list-item findings (`- id: 1` with indented fields); 50 of 193 files in one corpus |
 | `` - `status: applied` `` | backticked value |
 | `* status: x` / `+ status: x` | alternative markdown list markers |
+| `- **confidence:** 100 · **status:** pending` / `category: X \| status: pending` | **positional** — the field follows other fields on one line |
 
 A pattern anchored to one returns **zero rows on the others, silently**. A zero
 count is not a clean file; it is a pattern that did not fire. Compare the row
@@ -252,7 +253,7 @@ for using it would suppress a real file rather than grandfather an old one. Of
 193 review files in one project corpus, 24 use bold — including files written the
 same week as this paragraph. The pre-fix pattern fired zero on every one of them.
 
-Five details of that pattern are load-bearing, each for a case that returned a
+These details of that pattern are load-bearing, each for a case that returned a
 silent zero — or a silent over-count — before it was added:
 
 - **`-i` on the whole match.** Capitalised fields and uppercase values both
@@ -286,6 +287,11 @@ silent zero — or a silent over-count — before it was added:
   explicitly; `_`/`__` are valid markdown a writer may reach for. Verify a
   candidate against a fixture holding all spellings — do not reason about it.
 - **A backticked value** — `- \`status: applied\`` — needs the trailing `` `? ``.
+- **A leading backtick only behind a list marker** — hence the marker and
+  no-marker alternatives. `` - `status: applied` `` is a field; a line-initial
+  `` `status: deferred` and both shard checkboxes… `` with no marker is
+  inline-code prose wrapped onto a new line, and allowing it turned four correct
+  files into MISS in one corpus.
 - **The colon is required, not optional** (though surrounding space is not —
   hence `status[[:space:]]*:`). Writing it `status:?` to absorb the bold form's
   placement makes the pattern match any **wrapped prose line that begins with
@@ -295,6 +301,26 @@ silent zero — or a silent over-count — before it was added:
   outside the plain ones (`status:`), so put the optional marker on **both
   sides** of a mandatory `:` rather than making the `:` optional. An over-match
   is as wrong as a zero, and harder to notice: it reads as a plausible count.
+- **A third branch, for a positional field — and it keeps the `^`.** A field
+  after another field on the same line (`- **Agent:** x · **Status:** done`) is
+  out of reach of the first two branches, which reach only the first field on a
+  line. In one 200-file corpus, 29 files undercounted on this shape. Dropping
+  the `^` reaches it and also makes every prose mention a match:
+  `**Fix:** interactive keeps \`status: pending\`` opens as a field and
+  mentions one mid-line. So the branch requires BOTH that the line opens as a
+  field (`key:`, no spaces in the key) AND that the field sits behind a ` · `
+  or ` | ` separator **outside inline code**. Prose that opens with words fails
+  the first test. A `**Fix:**`/`**Problem:**` paragraph fails the second, even
+  when it quotes a positional row in backticks: the prefix crosses only
+  balanced code spans (`` [^`]*(`[^`]*`[^`]*)* ``), never `.*`. With `.*`, a
+  `**Fix:**` line quoting `` `x · severity: P2/P3 (batch)` `` matched the batch
+  shape and switched body verification off for its whole file.
+  **Stated limit:** a line that opens as a field and carries ` | status: x` or
+  ` · status: x` in plain prose still matches. A wrong extra row fails loudly as
+  a heading/row mismatch, not silently.
+  A value-anchored count (a tally of one `status:` value, pinned with `$`) must
+  also accept a separator after the value, or a status-first line followed by
+  another field is a row with no countable value.
 
 **Read the row total, not the per-row counts.** `-o` prints each match as it was
 written, so `uniq -c` buckets by spelling rather than by meaning, in two
@@ -303,15 +329,15 @@ different ways: one status occupies several rows (`- **Status:** FIXED` and
 character outside it, so two distinct values sharing a prefix merge into one row
 (`not-attempted` and `not-configured` both print as `status: not` under a
 `[a-z]+` class — which is why the class above is `[a-z_-]+`). Neither affects the
-row **total**, which is the only figure the `### N` comparison needs.
+row **total**, which is the only figure the `### N` comparison needs. (For a
+positional row, `-o` also prints the fields before it.)
 
 **Confirm any replacement pattern against the committed fixture** —
 `fixtures/status-spellings.md`, next to this file. It holds one line per known
 spelling plus the prose lines that must NOT match, so the check is runnable from
-inside this repo with no external corpus. Expected: **14 status rows, 14 severity
-rows, and 0 rows from the "Must NOT match" block** (the fixture's own heading
-states the current count — trust it over this sentence if they ever disagree, and
-fix this one). Anything else means the
+inside this repo with no external corpus. Expected: the status and severity row
+counts the fixture's `## Live spellings` heading states, and **0 rows from the
+"Must NOT match" block**. Anything else means the
 pattern is wrong, however reasonable it looks. Add a line to the fixture *before*
 widening a pattern, never after.
 
@@ -319,8 +345,9 @@ Then run it across a real `todos/` corpus and check that **no file drops to zero
 except files with genuinely no such field.** The rule in this section applies to
 its own grep. Each remaining zero must be explained before the pattern is
 trusted — in the 193-file corpus these patterns were validated against, the six
-survivors were four files with no `status:` field, one prose-only sweep file, and
-one mid-line file.
+survivors (measured with the pre-positional pattern) were four files with no
+`status:` field, one prose-only sweep file, and one positional file — the shape
+the third branch exists for.
 
 **Compare old against new, not just new against the fixture.** A widened pattern
 can score full marks on a fixture and still lose rows on real files: requiring a
@@ -328,7 +355,7 @@ list marker on indented lines passed a 13-case fixture while dropping 51 corpus
 files, 17 of them to zero, because it excluded the indented-no-marker form. Count
 rows per file under both patterns and treat **any** loss as a regression.
 
-**Four shapes are NOT tallyable**, and all must be reported as such rather than
+**These shapes are NOT tallyable**, and all must be reported as such rather than
 counted as disagreement:
 
 - a **severity suffix** naming a range or batch — `severity: P2/P3 (batch)`;
@@ -339,10 +366,14 @@ counted as disagreement:
   a `(Merges Fx+Fy)` citation and sometimes not. Where the citations are
   present the counts reconcile; where they are absent the file cannot be
   verified from its body at all.
-- a **mid-line** field, out of reach of any line-anchored pattern — e.g.
-  `- **Agent:** security-sentinel · **Status:** done`, where `status` follows
-  another field on the same line. Do NOT widen the pattern to reach it:
-  dropping the `^` anchor makes every prose mention of the word a match.
+
+**A heading-less file is not on that list — it fails.** Field rows with no
+`### N` headings (titles written without numbers) leave the row count with no
+denominator, so nothing about the file can be verified, and a checker reports a
+MISS that names the missing denominator. It is NOT a `counter_convention:` case:
+that field marks a superseded *counter* convention and exempts the sums too,
+while here the counters may be fine and only the headings are off-spec. The fix
+is in the file — number the headings.
 
 A file whose counters follow a superseded convention carries
 `counter_convention:` in its frontmatter naming it — `legacy-total-shrink`,

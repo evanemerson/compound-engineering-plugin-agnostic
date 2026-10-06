@@ -251,6 +251,49 @@ reg bold 'bold-spelled field rows are still counted'             0 0 'summary bl
 # turns a correct file into "N headings but N+1 status rows".
 reg codeprose 'line-initial inline-code prose is not a field row' 0 0 'summary blocks checked: 1' '^MISS ' \
   'kills: allowing a leading backtick with no list marker in FIELD_PRE'
+# The POSITIONAL half — punch-list item 8. #77 fixed the spelling half of the
+# same construct; these pin the other half from both directions. Each fold
+# moves ONE field so each case has a mutant only it kills.
+#
+# `midline`: status FOLLOWS other fields, once after ` · ` (bold) and once
+# after ` | ` (plain) — the two dpc-pro shapes. Severity rows are untouched.
+# Counters unchanged, so a correct checker stays clean; the pre-fix FIELD_PRE
+# saw zero status rows and fired the tally-did-not-fire guard.
+reg midline 'a status: field after other fields is still counted' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: FIELD_PRE without its third (positional) branch, or with either separator dropped'
+# `midsev`: the same for severity — the p1/p2/p3 agreement sites.
+reg midsev 'a severity: field after other fields is still counted' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: the pre-fix FIELD_PRE at the per-severity tally only'
+# `trailfield`: status FIRST, another field after it. The row was always
+# counted, but a value pinned with `$` was not, so the row total and the
+# per-state tally disagreed.
+reg trailfield 'a status: value followed by another field is countable' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: VAL_TAIL without its separator alternative — a counted row whose value no per-state tally can see'
+# `midskip`: a RETAINED skip written positionally. body_skipped composes the
+# same fragments; if it cannot see the row, the gap equality breaks.
+reg midskip 'a positional retained skip is counted in the gap equality' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: the pre-fix FIELD_PRE or the $-only tail at the body_skipped site'
+# `midbatch`: a positional batch-suffix severity must still be recognised as
+# non-tallyable (INFO), never miscounted as a P2 mismatch.
+reg midbatch 'a positional batch suffix is reported, not miscounted' 0 0 'contains 1 batch-suffix' '^MISS ' \
+  'kills: BATCH_RE built from the pre-fix FIELD_PRE'
+# `midprose`: the over-match direction. Lines that OPEN as a field and mention
+# `status:` mid-line with no separator (verbatim from todos/), a separator
+# with no `key:` opening, and a separator INSIDE inline code.
+reg midprose 'prose that mentions status: mid-line is not a row' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: the positional branch without its separator requirement, without its ^ anchor, or crossing code spans'
+# `batchprose`: the P1 the first cut of this fix shipped. A real counter drift
+# plus a **Fix:** line quoting the batch shape in backticks. With `.*` in the
+# branch, the quote set has_batch and 1b/1c were skipped: 0 MISS on a wrong
+# file. A correct checker still reports the drift.
+reg batchprose 'a quoted batch shape does not switch verification off' 2 0 'but the body carries' 'batch-suffix' \
+  'kills: a positional branch that crosses inline code (.* instead of balanced code spans)'
+# `nodenom`: rows but no `### N` headings (titles written without numbers).
+# No denominator, so the tally cannot be verified — a MISS that names that
+# cause, not "a row that belongs to no heading". counter_convention: does NOT
+# cover it; see the checker.
+reg nodenom 'rows with no numbered headings name the missing denominator' 1 0 'no denominator' '' \
+  'kills: removal of the no-denominator branch — the file reads as N orphaned rows instead of unnumbered headings'
 
 # --- the env-override surface ----------------------------------------------
 # RESIDUAL_TODOS_DIR / RESIDUAL_SHARDS_DIR are real configuration the checker
@@ -467,6 +510,24 @@ plant() {  # plant <id> <dir>
             # row and must not be tallied. Deliberately unfenced and outside any
             # heading, so neither fence-stripping nor the heading bound hides it.
             printf '\n**Fix:** assert\n`status: applied`\nbefore the commit.\n' >> "$f" ;;
+    midline) # Status lines only: odd ones behind ` · ` (bold), even behind ` | `.
+            awk '/^- status: /{n++; v=substr($0,11); if (n%2) print "- **confidence:** 100 · **agent:** x · **status:** " v; else print "category: X | agent: Y | status: " v; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f" ;;
+    midsev) sed -i -E 's/^- severity: (P[123])$/- **agent:** x · **severity:** \1/' "$f" ;;
+    trailfield) sed -i -E 's/^- status: (.+)$/- status: \1 | agent: x/' "$f" ;;
+    midskip) # Finding 3 becomes a retained skip, written positionally.
+            sed -i -E '/^### 3$/,/^Body text\.$/s/^- status: applied$/- **agent:** x · **status:** skipped/' "$f"
+            sed -i 's/^  applied: 3$/  applied: 2/; s/^  skipped: 0$/  skipped: 1/' "$f" ;;
+    midbatch) sed -i -E 's/^- severity: P2$/- **agent:** x · **severity:** P2\/P3 (batch)/' "$f" ;;
+    midprose) # Appended inside finding 3, outside any fence.
+            printf '%s\n' '' \
+              '**Fix:** interactive keeps `status: pending` (sinks still written);' \
+              '- title: Two findings still status:deferred on the exact question this PR settled' \
+              'Some prose here · status: pending' \
+              '**Problem:** the checker misses `- **confidence:** 100 · **status:** pending` rows.' >> "$f" ;;
+    batchprose) # Real drift: finding 3 deferred, counters still say applied: 3.
+            sed -i -E '/^### 3$/,/^Body text\.$/s/^- status: applied$/- status: deferred/' "$f"
+            printf '\n**Fix:** treat `cat: x · severity: P2/P3 (batch)` as a partial file.\n' >> "$f" ;;
+    nodenom) sed -i -E 's/^### ([0-9]+)$/### Finding without a number/' "$f" ;;
     trav)  chmod 000 "$d/todos" ;;
     empty) rm -f "$d/$FIX_TODOS" "$d/$FIX_SHARD" ;;
     envdir) # Relocate the whole tree to non-default names. The runner sets the

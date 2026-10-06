@@ -172,7 +172,7 @@ SHARDS_DIR=${RESIDUAL_SHARDS_DIR:-memory/tasks.d}
 STATES='pending ready skipped applied deferred completed'
 
 # ---------------------------------------------------------------------------
-# Non-tallyable shapes. All three are REPORTED, never counted as disagreement.
+# Non-tallyable shapes. These are REPORTED, never counted as disagreement.
 # Miscounting these is not hypothetical: a scan of this repo called twelve
 # files bad when six were, by treating batch suffixes as drift; a later pass
 # then shrank a CORRECT file's total from 30 to 26 and declared four findings
@@ -182,6 +182,9 @@ STATES='pending ready skipped applied deferred completed'
 #   - severity suffix naming a range or batch: `severity: P2/P3 (batch)`
 #   - heading range: `### 21-25`, one severity/status pair covering several
 #   - persona-merged entries (pre-2026-07-18 plan reviews)
+#
+# NOT one of them: a heading-less file (rows, no `### N`). That is off-spec
+# and fails as a MISS that names the missing denominator — see leg 1.
 #
 # A file whose counters follow a superseded convention carries
 # `counter_convention:` in frontmatter. This skips on THAT FIELD, never on a
@@ -203,8 +206,8 @@ STATES='pending ready skipped applied deferred completed'
 # Every use needs `-i`: the FIELD NAME is capitalised in real files
 # (`- **Status:** FIXED`), so widening the value class alone does not reach it.
 #
-# TWO BRANCHES, and the split is load-bearing. A leading backtick is a real
-# field spelling ONLY behind a list marker:
+# THREE BRANCHES. The split between the first two is load-bearing: a leading
+# backtick is a real field spelling ONLY behind a list marker:
 #
 #   - `status: applied`     a field. 8 occurrences across two corpora.
 #   `status: applied`       line-initial inline-code PROSE, mid-sentence in a
@@ -216,12 +219,26 @@ STATES='pending ready skipped applied deferred completed'
 # uniform off-by-one, which this file's own comment below names as the signature
 # of a broken pattern rather than of real drift. The spec's fixture does not
 # catch it (its backtick line carries a marker), so only the corpus run does.
-FIELD_PRE='^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?)'
+#
+# The THIRD branch is the POSITIONAL half: a field that follows other fields on
+# the same line (`- **confidence:** 100 · **status:** pending`). The first two
+# reach only the FIRST field on a line, so these rows were never counted (the
+# spec records the measured undercount). The `^` anchor stays: the branch admits
+# a line only if it OPENS as a field (`key:`) and the field sits behind a ` · `
+# or ` | ` separator OUTSIDE inline code — `[^`]*` with balanced code spans,
+# never `.*`. With `.*`, a `**Fix:**` line quoting `` `x · severity: P2/P3
+# (batch)` `` set has_batch and switched 1b/1c off for the whole file: 0 MISS on
+# a file with wrong counters. Which shapes are live and which prose must stay out
+# is the spec's (cited above), not restated here.
+FIELD_PRE='^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?|[[:space:]]*([-*+][[:space:]]*)?(\*\*|__|\*|_)?[a-z][a-z0-9_-]*[[:space:]]*:(\*\*|__|\*|_)?[^`]*(`[^`]*`[^`]*)*[[:space:]](·|\|)[[:space:]]*(\*\*|__|\*|_)?)'
 FIELD_POST='[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?'
 # Tail for a VALUE-ANCHORED match: sites that interpolate an expected value and
 # pin it with `$` must still allow the bold form's closing `**`/backtick, or
-# every emphasised row reads as a zero.
-VAL_TAIL='(\*\*|__|\*|_|`)?[[:space:]]*$'
+# every emphasised row reads as a zero. The `·`/`|` alternative is the same
+# positional half from the other side: a field FOLLOWED by another field
+# (`- status: applied | severity: P3`) is counted as a row, so its value must be
+# countable too, or the row total and the per-state tally disagree.
+VAL_TAIL='(\*\*|__|\*|_|`)?[[:space:]]*($|(·|\|))'
 
 BATCH_RE="${FIELD_PRE}severity${FIELD_POST}P[123](/P[123])*[[:space:]]*\(batch\)"
 RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
@@ -398,6 +415,19 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   # verifies nothing is not a pass" guard, at the per-file level.
   if [ "$headings" -gt 0 ] && [ "$body_status_rows" -eq 0 ]; then
     miss "residual: ${f} has ${headings} finding heading(s) but zero status: rows matched — the tally pattern did not fire; a zero count is not a clean file"
+    misses=$((misses + 1))
+    continue
+  fi
+
+  # NO DENOMINATOR. Rows but zero `### N` headings — titles written without
+  # numbers. The row-vs-heading comparison cannot apply, and the spec makes it
+  # mandatory because the pattern alone over-counts (frontmatter-like indented
+  # rows are byte-identical to findings). `counter_convention:` does NOT cover
+  # this: that field marks a SUPERSEDED counter convention and skips 1a too,
+  # while here the counters may be fine and only the headings are off-spec. The
+  # fix is in the file — number its headings — so name that, not a mismatch.
+  if [ "$headings" -eq 0 ] && [ "$body_status_rows" -gt 0 ]; then
+    miss "residual: ${f} has ${body_status_rows} status: row(s) but no '### N' finding headings — no denominator, so the tally cannot be verified; number the headings per the file-todos spec"
     misses=$((misses + 1))
     continue
   fi

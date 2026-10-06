@@ -29,11 +29,10 @@ codebase while nobody is looking.
    skip decision here is fail-open: a counter that has drifted to a false zero
    retires a file with real open findings from every future continuity check,
    silently and permanently. So confirm a skip against the body before taking
-   it — one grep, tolerant of both field formats:
-
-   ```bash
-   grep -oE '^-?[[:space:]]*status: [a-z]+' <file> | sort | uniq -c
-   ```
+   it — run the `status:` grep from the `cepa:file-todos` skill's
+   `## Frontmatter Summary` section ("Verify against the body") on the file.
+   Use that pattern, never a local copy: it is the one that tolerates every
+   live spelling, and a hand-written copy here was missing most of them.
 
    If it disagrees with the frontmatter, the frontmatter is wrong: parse the
    file and report the drift as a finding.
