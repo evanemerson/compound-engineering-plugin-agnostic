@@ -216,12 +216,24 @@ STATES='pending ready skipped applied deferred completed'
 # uniform off-by-one, which this file's own comment below names as the signature
 # of a broken pattern rather than of real drift. The spec's fixture does not
 # catch it (its backtick line carries a marker), so only the corpus run does.
-FIELD_PRE='^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?)'
+#
+# A THIRD BRANCH, for the POSITIONAL half: a field that follows other fields on
+# the same line (`- **confidence:** 100 · **status:** pending`,
+# `category: X | status: pending`). The first two branches reach only the FIRST
+# field on a line, so these rows were never counted — 29 of 200 files in one
+# corpus undercounted, and the two worst tallied 21 rows to 21 headings. The `^`
+# anchor stays: the branch admits a line only if it OPENS as a field (`key:`)
+# and the field sits behind a ` · ` or ` | ` separator. Which shapes are live
+# and which prose must stay out is the spec's (cited above), not restated here.
+FIELD_PRE='^([[:space:]]*[-*+][[:space:]]*(\*\*|__|\*|_|`)?|[[:space:]]*(\*\*|__|\*|_)?|[[:space:]]*([-*+][[:space:]]*)?(\*\*|__|\*|_)?[a-z][a-z0-9_-]*[[:space:]]*:(\*\*|__|\*|_|`)?.*[[:space:]](·|\|)[[:space:]]*(\*\*|__|\*|_)?)'
 FIELD_POST='[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?'
 # Tail for a VALUE-ANCHORED match: sites that interpolate an expected value and
 # pin it with `$` must still allow the bold form's closing `**`/backtick, or
-# every emphasised row reads as a zero.
-VAL_TAIL='(\*\*|__|\*|_|`)?[[:space:]]*$'
+# every emphasised row reads as a zero. The `·`/`|` alternative is the same
+# positional half from the other side: a field FOLLOWED by another field
+# (`- status: applied | severity: P3`) is counted as a row, so its value must be
+# countable too, or the row total and the per-state tally disagree.
+VAL_TAIL='(\*\*|__|\*|_|`)?[[:space:]]*($|(·|\|))'
 
 BATCH_RE="${FIELD_PRE}severity${FIELD_POST}P[123](/P[123])*[[:space:]]*\(batch\)"
 RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
@@ -398,6 +410,19 @@ for f in "${leg1_list[@]+"${leg1_list[@]}"}"; do
   # verifies nothing is not a pass" guard, at the per-file level.
   if [ "$headings" -gt 0 ] && [ "$body_status_rows" -eq 0 ]; then
     miss "residual: ${f} has ${headings} finding heading(s) but zero status: rows matched — the tally pattern did not fire; a zero count is not a clean file"
+    misses=$((misses + 1))
+    continue
+  fi
+
+  # NO DENOMINATOR. Rows but zero `### N` headings — titles written without
+  # numbers. The row-vs-heading comparison cannot apply, and the spec makes it
+  # mandatory because the pattern alone over-counts (frontmatter-like indented
+  # rows are byte-identical to findings). `counter_convention:` does NOT cover
+  # this: that field marks a SUPERSEDED counter convention and skips 1a too,
+  # while here the counters may be fine and only the headings are off-spec. The
+  # fix is in the file — number its headings — so name that, not a mismatch.
+  if [ "$headings" -eq 0 ] && [ "$body_status_rows" -gt 0 ]; then
+    miss "residual: ${f} has ${body_status_rows} status: row(s) but no '### N' finding headings — no denominator, so the tally cannot be verified; number the headings per the file-todos spec"
     misses=$((misses + 1))
     continue
   fi

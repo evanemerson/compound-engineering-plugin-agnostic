@@ -5,14 +5,14 @@ Not a findings file. This is the oracle for the two verification greps in
 arithmetic"). Every spelling below occurs, or has occurred, in a real
 `todos/review-*.md` file.
 
-Run both patterns from `SKILL.md` against this file. **Expected: 13 status rows
-and 13 severity rows** — one per line in `## Live spellings`. Then run them
+Run both patterns from `SKILL.md` against this file. **Expected: 17 status rows
+and 17 severity rows** — one per line in `## Live spellings`. Then run them
 against `## Must NOT match` and expect **0 rows** from the prose block.
 
-A pattern that scores anything other than 13 / 13 / 0 is wrong, no matter how
+A pattern that scores anything other than 17 / 17 / 0 is wrong, no matter how
 reasonable it looks. Add a line here before widening a pattern, never after.
 
-## Live spellings — all 14 must match
+## Live spellings — all 17 pairs must match
 
 - status: plain-dash-marker
 - severity: P1
@@ -42,6 +42,12 @@ severity: P2
 - severity: P1
 - status: `value-only-backtick`
 - severity: `P2`
+- **confidence:** 100 · **class:** judgment · **status:** positional-middot
+- **confidence:** 100 · **class:** judgment · **severity:** P3
+category: X | agent: Y | status: positional-pipe
+category: X | agent: Y | severity: P1
+- **Agent:** security-sentinel · **Status:** done
+- **Agent:** security-sentinel · **Severity:** P2
 
 ## Notes on two of those lines
 
@@ -70,10 +76,18 @@ STATUS block, which records the mutation run.
 The status of this is unclear.
 * the status field is parsed by triage
 
-A **mid-line** field is out of reach of any line-anchored pattern and is
-deliberately not matched — it is one of the four non-tallyable shapes:
+These are real lines from this repo's `todos/` that mention the field mid-line.
+Each one is the hazard for the positional branch: the `**Fix:**`/`**Problem:**`
+and `- title:` lines OPEN as a field, so only the separator requirement keeps
+them out.
 
-- **Agent:** security-sentinel · **Status:** done
+**Fix:** interactive keeps `status: pending` (sinks still written);
+**Problem:** `status: deferred` on all four and `applied: 24 / deferred: 4` in
+**Fix:** finding #12 → `status: completed` with a `resolved:` line citing this
+- title: Two findings still status:deferred on the exact question this PR settled
+- title: U5 verifies counters and checkboxes but never that its own `Closes:` claim actually landed as `status:`/`applied_in:`
+  — so every consumer that parses `status:` (the canonical field) still saw 4 open
+`status: deferred` and both shard checkboxes were unticked, against CLAUDE.md's
 
 ## Known limit, not a defect
 

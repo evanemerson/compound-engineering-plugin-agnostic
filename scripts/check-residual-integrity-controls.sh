@@ -251,6 +251,30 @@ reg bold 'bold-spelled field rows are still counted'             0 0 'summary bl
 # turns a correct file into "N headings but N+1 status rows".
 reg codeprose 'line-initial inline-code prose is not a field row' 0 0 'summary blocks checked: 1' '^MISS ' \
   'kills: allowing a leading backtick with no list marker in FIELD_PRE'
+# The POSITIONAL half — punch-list item 8. #77 fixed the spelling half of the
+# same construct; these three pin the other half from both directions.
+# `midline`: status FOLLOWS other fields on its line, the dpc-pro shape (29 of
+# 200 files undercounted there). Counters unchanged, so a correct checker stays
+# clean; the pre-fix FIELD_PRE saw zero status rows and fired the
+# tally-did-not-fire guard.
+reg midline 'a status: field after other fields is still counted' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: FIELD_PRE without its third (positional) branch — the pre-item-8 anchor that reads only the first field on a line'
+# `trailfield`: status FIRST, another field after it. The row was always
+# counted, but a value pinned with `$` was not — so the row total and the
+# per-state tally disagreed. Also puts severity mid-line, after a `|`.
+reg trailfield 'a status: value followed by another field is countable' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: VAL_TAIL without its separator alternative — a counted row whose value no per-state tally can see'
+# `midprose`: the over-match direction. Real lines from this repo's todos/ that
+# OPEN as a field and mention `status:` mid-line with no separator. Measured on
+# 767fe6b: 66 such prose lines across 63 files, none a field.
+reg midprose 'a field-opening prose line that mentions status: is not a row' 0 0 'summary blocks checked: 1' '^MISS ' \
+  'kills: the positional branch without its separator requirement, or FIELD_PRE without its ^ anchor'
+# `nodenom`: rows but no `### N` headings (titles written without numbers).
+# No denominator, so the tally cannot be verified — a MISS that names that
+# cause, not "a row that belongs to no heading". counter_convention: does NOT
+# cover it; see the checker.
+reg nodenom 'rows with no numbered headings name the missing denominator' 1 0 'no denominator' '' \
+  'kills: removal of the no-denominator branch — the file reads as N orphaned rows instead of unnumbered headings'
 
 # --- the env-override surface ----------------------------------------------
 # RESIDUAL_TODOS_DIR / RESIDUAL_SHARDS_DIR are real configuration the checker
@@ -467,6 +491,13 @@ plant() {  # plant <id> <dir>
             # row and must not be tallied. Deliberately unfenced and outside any
             # heading, so neither fence-stripping nor the heading bound hides it.
             printf '\n**Fix:** assert\n`status: applied`\nbefore the commit.\n' >> "$f" ;;
+    midline) # Fold each severity/status pair onto ONE line, status last.
+            sed -i -E '/^- severity: P[123]$/{N;s/^- severity: (P[123])\n- status: (.+)$/- **severity:** \1 · **agent:** x · **status:** \2/}' "$f" ;;
+    trailfield) # Fold each pair onto one line, status FIRST, severity after a `|`.
+            sed -i -E '/^- severity: P[123]$/{N;s/^- severity: (P[123])\n- status: (.+)$/- status: \2 | severity: \1/}' "$f" ;;
+    midprose) # Verbatim from todos/; outside any fence, inside finding 3.
+            printf '\n**Fix:** interactive keeps `status: pending` (sinks still written);\n- title: Two findings still status:deferred on the exact question this PR settled\n' >> "$f" ;;
+    nodenom) sed -i -E 's/^### ([0-9]+)$/### Finding without a number/' "$f" ;;
     trav)  chmod 000 "$d/todos" ;;
     empty) rm -f "$d/$FIX_TODOS" "$d/$FIX_SHARD" ;;
     envdir) # Relocate the whole tree to non-default names. The runner sets the
