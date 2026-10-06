@@ -107,7 +107,19 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
 
 8. **`check-residual-integrity.sh` counts `status:` only as the FIRST field on
    a bullet.**
-   status: pending
+   status: completed
+   **CLOSED 2026-10-06** — PR #85 (`fe342a6`), v1.29.1. FIELD_PRE gained a
+   third branch: a `status:`/`severity:` field after ` · ` or ` | ` on a line
+   that starts as a field, outside inline code. 4 deferred review findings are
+   owned by `memory/tasks.d/2026-10-06-fix-integrity-positional-status-field.md`.
+   **Proven on dpc-pro's 206-file corpus by two read-only hand-off probes** (the
+   only corpus holding the positive shapes): 0 files LOST rows; 4 GAINED,
+   including `08-14-224500` 6->21 and `08-28-215841` 8->21, each now equal to
+   its 21 headings. `08-20-115716` went 12->24: the 12 new lines are genuine
+   `| **status:** pending` fields, the exact target shape, verified line by line.
+   **The expected "about 29 files" was wrong** — relayed from the first dpc-pro
+   session without the command that produced it. Kept as the lesson: a relayed
+   count with no probe is not an expectation. Remaining dpc-pro gaps are item 13.
    severity: P2
    Filed 2026-10-03 from item 6's dpc-pro answer. **Positional, not a spelling
    gap** — `-i` and the bold alternation cannot reach it, so this is a DIFFERENT
@@ -204,6 +216,29 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
     it the only deferred finding with a clear rule behind it. The other 11
     deferred findings need operator decisions about the rules — see the
     `2026-10-05-feat-roles-session-roles.md` shard.
+
+13. **dpc-pro findings files the checker still cannot reconcile.**
+    status: pending
+    severity: P3
+    From the PR #85 proof run, 2026-10-06, dpc-pro `todos/` (206 files). Mostly
+    a question about dpc-pro's FILES, so the deliverable here is a hand-off
+    prompt, never a run in that repo.
+    - **State in the heading, no status field at all:** `20260719-210914`
+      (`### 1 [P2 applied] ...`) and `20260721-181500` (`### 1. [P1 · ...] —
+      APPLIED`) count 0 rows against 15 and 11 headings. `20260718-pr27-reconcile`
+      (0 vs 4) is likely the same. A third field shape, not a pattern bug —
+      decide whether the spec admits it or `counter_convention:` covers it.
+    - **Fewer rows than headings, cause unknown:** `08-01-060253` 9/10,
+      `08-01-193000` 21/28, `09-01-032223` 6/12, `20260715-idempotency-pr20` 5/6.
+    - **More rows than headings, pre-existing:** `08-28-141500` 26/22 under both
+      checkers. Not caused by #85.
+    - **21 files have no numbered headings** (no denominator), e.g.
+      `08-20-115716`. #85's checker gives these a named MISS; it runs only in
+      this repo's CI, so dpc-pro is not failing.
+    **Proof-script artifact, not a pattern gap:** the #85 diff script's
+    `body()` prints only lines after a CLOSED frontmatter, so a file with no
+    frontmatter (`20260627-162353`) reads 0 rows. The pattern itself matches
+    that file's `- **Agent:** ... · **Status:** done` line (tested, new=1).
 
 ---
 
