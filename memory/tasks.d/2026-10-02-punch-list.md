@@ -12,18 +12,18 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
 
 ## Closed
 
-1. **File the missing handoff for the #75–#78 session.**
+L1. **File the missing handoff for the #75–#78 session.**
    status: completed
    Done 2026-10-02. `docs/handoff/2026-10-02-file-todos-grep-spellings-and-ci-enforcer.md`,
    plus `3e5e974` recording that a concurrent session resolved.
 
-2. **Write back the four OB1 policy decisions in tab 2.**
+L2. **Write back the four OB1 policy decisions in tab 2.**
    status: completed
    Done 2026-10-02 as PR #79 (`86332d8`). Findings #1, #3, #4 closed
    `completed`; #2 left `deferred` pending OpenRouter zero-retention
    verification, which has no record in this repo. Open P1s 8 → 7.
 
-3. **Close tabs 1, 3, 4.**
+L3. **Close tabs 1, 3, 4.**
    status: completed
    Done 2026-10-02. Nothing was owed in any of them.
 
@@ -31,8 +31,9 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
 
 ## Open — in dependency order
 
-4. **Build `scripts/check-doc-greps.sh`.**
+L4. **Build `scripts/check-doc-greps.sh`.**
    status: pending
+   owner: unassigned
    severity: P2
    The last prevention item with no mechanism behind it. Must assert a skill's
    fenced grep patterns against BOTH its committed fixture AND a corpus diff —
@@ -44,7 +45,7 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    as an open question, not a settled task.
    Needs a fresh session and a plan. Run via `/cepa:task`.
 
-5. **Work residual 2i, then 2j, then 2g, then 2c.** (all four closed)
+L5. **Work residual 2i, then 2j, then 2g, then 2c.** (all four closed)
    status: completed
    severity: P2
    **2i CLOSED** — PR #80 (`afe7ce1`), merged 2026-10-03. The re-Write PHI gate
@@ -79,7 +80,7 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    goes through the filesystem. 2i was the first real test of 2g's rule — and
    it failed it, which is instance 5.
 
-6. **Hand the dpc-pro discrepancy to that repo.**
+L6. **Hand the dpc-pro discrepancy to that repo.**
    status: completed
    severity: P3
    **Done 2026-10-03. Answer: NO DRIFT. The checker was wrong, not the files.**
@@ -97,15 +98,16 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    that repo's own session. An unrun command with clear instructions is a
    completed task here.
 
-7. **Build the anchor-digit checker.**
+L7. **Build the anchor-digit checker.**
    status: pending
+   owner: unassigned
    severity: P3
    Filed as the unchecked P3 in `memory/tasks.d/2026-09-25-main.md:29`. Extracts
    headings matching `^#{2,4} .*\(\d+\)` and resolves in-page anchors. Gates the
    heading half of the count-drift rule. The other two legs of that class are
    NOT hard-gateable and the checker's header must say so.
 
-8. **`check-residual-integrity.sh` counts `status:` only as the FIRST field on
+L8. **`check-residual-integrity.sh` counts `status:` only as the FIRST field on
    a bullet.**
    status: completed
    **CLOSED 2026-10-06** — PR #85 (`fe342a6`), v1.29.1. FIELD_PRE gained a
@@ -155,7 +157,7 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    construct live" class CLAUDE.md records three times. #77 closed the spelling
    half; this is the positional half.
 
-9. **Hop 1 of the freshness check printed `UNKNOWN` on every plugin merge.**
+L9. **Hop 1 of the freshness check printed `UNKNOWN` on every plugin merge.**
    status: completed
    severity: P3
    **Fixed operationally 2026-10-04.** The marketplace clone at
@@ -176,7 +178,7 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
    This is one machine's state. A re-clone by `claude plugin` may make it
    shallow again; the same command fixes it.
 
-10. **Make cepa agree with the global session roles.**
+L10. **Make cepa agree with the global session roles.**
     status: completed
     **CLOSED 2026-10-05** — PR #84 (`3b46209`), v1.29.0. Merged by coord@main
     after the three checks (Handoff `done`; PR head == Handoff `Head: 18e0c4c`;
@@ -198,8 +200,10 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
     missed three sites — `autonomy/SKILL.md:539` (the canonical
     "return to trunk" row), `lfg.md:89`, and `task.md:553`.
 
-11. **Fix the mutation sweep's CI bound (residual 2c-r7).**
+L11. **Fix the mutation sweep's CI bound (residual 2c-r7).**
     status: pending
+    owner: unassigned. Weekly runs 2026-10-05 and 2026-10-12 both FAILED, as
+    predicted; issue #61 has stayed open since 2026-09-21.
     severity: P2
     Owned by the shard `memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md`
     as 2c-r7 — read it there. A design call (split the mutant registry across
@@ -207,8 +211,12 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
     Runs AFTER item 10: the sweep discards every result if the tree changes
     mid-run, so it needs a quiet `main`.
 
-12. **Make cepa enforce the coord@<wt> rule (finding #8 of PR #84).**
-    status: pending
+L12. **Make cepa enforce the coord@<wt> rule (finding #8 of PR #84).**
+    status: in_progress
+    owner: roles (`tab2@roles`). PR #87, `feat/roles/coord-wt-write-guard`,
+    head `a32e3a8`, opened 2026-10-06: CI green, CLEAN, 0 commits behind main
+    (measured 2026-10-16). Not merged: coord@main has no Handoff block from
+    the worker yet, and check 1 needs one.
     severity: P2
     No tracked-file write or commit while the worker's branch is checked out;
     handoff writes local only; review reports only. The global CLAUDE.md
@@ -217,8 +225,40 @@ Each item carries a `status:` line so `check-residual-integrity.sh` and
     deferred findings need operator decisions about the rules — see the
     `2026-10-05-feat-roles-session-roles.md` shard.
 
-13. **dpc-pro findings files the checker still cannot reconcile.**
+L13. **dpc-pro findings files the checker still cannot reconcile.**
     status: pending
+    owner: dpc-pro (hand-off only; nothing in this repo is owed yet).
+    **Measured 2026-10-06 in a dpc-pro session** with the item 13 probe (cepa
+    pattern pinned at `fe342a6`): 206 review files, 36 listed. The full output
+    was written to that session's /tmp scratchpad and is NOW GONE (checked
+    2026-10-16) — this entry, copied from the session's on-screen summary, is
+    the only durable copy. Open findings were judged by reading each file; the
+    session did NOT check whether later PRs closed them.
+
+    | file | open | how state is written |
+    |---|---|---|
+    | review-20260718-pr27-reconcile | 0 | headings only (`HIGH/applied`) |
+    | review-20260719-210914 | 5 or 6 | headings only; #10 says APPLIED, its text says deferred |
+    | review-20260721-181500 | 5 | headings only; #7–#11 open only via a `## Deferred` section |
+    | review-2026-08-01-060253 | 4 | `status:` rows; `### 10-21` is ONE heading over 12 findings |
+    | review-2026-08-01-193000 | 7 headings (16 items) | #22–#28 have no row; open only via `## Deferred` |
+    | review-2026-09-01-032223 | 6 | #1–#6 state in headings (applied); open #7–#12 HAVE rows |
+    | review-20260715-idempotency-pr20 | 4 | `### 6-9 [DEFERRED -> tasks.md]`, one heading, no row |
+    | review-20260627-154203 | 0 | NOT a findings file: a note that PR #13 needed no review |
+
+    **The answer item 13 was waiting on: YES, open work is invisible.** At least
+    5 files hold open findings with no `status:` row, so `/cepa:triage` and
+    `/cepa:sweep` cannot see them. `032223` is the exception: its open findings
+    have rows, so only its closed history is heading-only.
+    Also reported: headings that cover a RANGE of findings; findings filed
+    under the wrong section; frontmatter, footer and heading counts that
+    disagree; and one `verify` state, which is not in the file-todos vocabulary.
+    **Every one of these is a dpc-pro file departing from the `cepa:file-todos`
+    spec, not a cepa defect** — the spec already requires one finding per
+    heading with its own `status:` field. So the fix is in dpc-pro: first
+    confirm each "open" finding against later dpc-pro PRs, then write the
+    missing rows in spec form. cepa changes only if that work finds a shape the
+    spec cannot express.
     severity: P3
     From the PR #85 proof run, 2026-10-06, dpc-pro `todos/` (206 files). Mostly
     a question about dpc-pro's FILES, so the deliverable here is a hand-off
