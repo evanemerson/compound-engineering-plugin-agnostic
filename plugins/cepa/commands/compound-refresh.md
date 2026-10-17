@@ -19,6 +19,9 @@ docs/solutions."
 solution-doc format (including the mandatory Detection section) and the
 CONCEPTS.md vocabulary-map rules. Read it before classifying anything.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse a `mode:headless` token from anywhere in the arguments and strip it;

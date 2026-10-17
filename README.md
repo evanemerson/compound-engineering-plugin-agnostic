@@ -205,6 +205,8 @@ findings files and residual shards. Also wired into CI per PR
 There is also `check-sweep-branch-classes.sh`, which fixtures branch shapes no
 real repo in the portfolio produces (a non-trunk base, multiple merged PRs on one
 head), and `check-brain-client-args.sh` for the brain client's argument guards.
+`check-coord-write-guard.sh` runs the worktree-coordinator write guard's own
+probe against fixture repos, and checks that every command cites it.
 
 CI pins its actions and Dependabot keeps them current.
 [CHANGELOG.md](CHANGELOG.md) is generated from GitHub Releases rather than

@@ -38,7 +38,8 @@ confidence-75 bar). Numbers are the findings file's.
     autonomy §10b/§10c; a worktree named `main` collides too.~~ Resolved
     2026-10-05: the operator chose `<type>/main/<desc>`; applied on this
     branch (findings file #7).
-11. **P2 #8 — §10 never constrains a worktree coordinator** — autonomy §10.
+11. ~~**P2 #8 — §10 never constrains a worktree coordinator** — autonomy §10.~~
+    Resolved 2026-10-06 on `feat/roles/coord-wt-write-guard`: autonomy §10f.
 12. ~~**P2 #9 — worker merged-branch shape misplaced, still starts new work** —
     `plugins/cepa/commands/handoff.md:878`.~~ Resolved 2026-10-05 on this branch (operator choice).
 13. ~~**P2 #10 — solo guard fails open when `git worktree list` fails** —

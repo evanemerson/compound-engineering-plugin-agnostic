@@ -22,6 +22,9 @@ always-gated destructive actions and the blocked states named below.
 the loop completes." That announcement is the run's **only** forward-looking
 statement — autonomy §6 forbids ending any later turn on a promise to report.
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Step 0: Resolve the Arguments
 
 Do this before Step 1; every later step depends on it.

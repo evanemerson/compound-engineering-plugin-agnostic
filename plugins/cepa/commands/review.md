@@ -10,6 +10,9 @@ Orchestrate parallel review agents on the current code changes. Collect findings
 
 **Announce at start:** "I'm using the cepa:review command to run parallel review agents."
 
+**Worktree coordinator:** before the first step, apply this command's row
+in `cepa:autonomy` §10f. It outranks every write step below.
+
 ## Modes
 
 Parse a `mode:headless` token from anywhere in the arguments and strip it.

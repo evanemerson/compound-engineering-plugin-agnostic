@@ -75,6 +75,14 @@ jobs:
       - name: Check batch sibling match
         if: always()
         run: bash scripts/check-batch-sibling-match.sh
+      # A worktree coordinator writes only when its worktree is parked
+      # (autonomy section 10f). The script runs 10f's own probe against
+      # fixture repos and checks that every command cites 10f and grants the
+      # probe's git verbs; its header owns the legs and limits. Static
+      # command, no workflow-context interpolation.
+      - name: Check worktree-coordinator write guard
+        if: always()
+        run: bash scripts/check-coord-write-guard.sh
       # Residual 2g: a fenced-block instruction file must never carry state
       # across a block boundary in a shell variable. SIX instances shipped on
       # the brain-writeback surface alone, and instances 5 and 6 were each
