@@ -212,18 +212,20 @@ L11. **Fix the mutation sweep's CI bound (residual 2c-r7).**
     mid-run, so it needs a quiet `main`.
 
 L12. **Make cepa enforce the coord@<wt> rule (finding #8 of PR #84).**
-    status: in_progress
-    owner: roles (`tab2@roles`). PR #87, `feat/roles/coord-wt-write-guard`,
-    head `a32e3a8`, opened 2026-10-06: CI green, CLEAN, 0 commits behind main
-    (measured 2026-10-16). Not merged: coord@main has no Handoff block from
-    the worker yet, and check 1 needs one.
-    severity: P2
-    No tracked-file write or commit while the worker's branch is checked out;
-    handoff writes local only; review reports only. The global CLAUDE.md
-    already states the rule; cepa does not enforce it. The #84 worker ranked
-    it the only deferred finding with a clear rule behind it. The other 11
-    deferred findings need operator decisions about the rules — see the
-    `2026-10-05-feat-roles-session-roles.md` shard.
+    status: completed
+    **CLOSED 2026-10-17** — PR #87 (`c5b0932`), v1.30.0, by `tab2@roles`. New
+    `cepa:autonomy` §10f: a worktree coordinator writes tracked state only in a
+    `/cepa:task` or `/cepa:lfg` run whose probe reads PARKED; every other command
+    stops or runs report-only, and each command file points at §10f once.
+    Gated by `scripts/check-coord-write-guard.sh` in `residual-integrity.yml`.
+    Merged by coord@main after the three checks: Handoff `done`; PR head ==
+    Handoff `Head: a32e3a8`; update-branch -> `543df03`, CI green. Plugin hops
+    refreshed; freshness rc=0 at `c5b0932`. Roles worktree parked; branch deleted.
+    Merged as-is, which accepts the worker's two recommendations: keep its
+    judgment-class review fixes (`todos/review-2026-10-06-095036.md` #4-#6, #10,
+    #11, #13-#15, #18, #19), and leave #16 (a re-check before every commit)
+    deferred. The 3 deferred findings are owned by
+    `memory/tasks.d/2026-10-06-feat-roles-coord-wt-write-guard.md`.
 
 L13. **dpc-pro findings files the checker still cannot reconcile.**
     status: pending
