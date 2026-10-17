@@ -11,4 +11,5 @@ Canonical findings: `todos/review-2026-10-06-120000.md`.
 
 ## Owed proof (not runnable from this repo)
 
-- [ ] P2 — Positive-shape proof on dpc-pro's `todos/`: old vs new per-file row diff. The prompt is in PR #85's body. This repo has no positional rows, so its corpus diff can only prove zero over-match.
+- [x] P2 — Positive-shape proof on dpc-pro's `todos/`: old vs new per-file row diff. The prompt is in PR #85's body. This repo has no positional rows, so its corpus diff can only prove zero over-match.
+  **Done 2026-10-06** by two read-only dpc-pro hand-off probes (206 files): 0 files lost rows, 4 gained. Results are recorded under punch-list L8 in `memory/tasks.d/2026-10-02-punch-list.md`; the remaining dpc-pro gaps are L13.
