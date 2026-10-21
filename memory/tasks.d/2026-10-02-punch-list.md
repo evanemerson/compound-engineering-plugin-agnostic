@@ -282,6 +282,45 @@ L13. **dpc-pro findings files the checker still cannot reconcile.**
     frontmatter (`20260627-162353`) reads 0 rows. The pattern itself matches
     that file's `- **Agent:** ... · **Status:** done` line (tested, new=1).
 
+L14. **Stop `/cepa:review` (and other dispatching commands) leaving `agent-*`
+    worktrees behind.**
+    status: pending
+    severity: P2
+    owner: unassigned (`roles` worktree is parked and free)
+    Filed 2026-10-21 from Evan. **Measured in dpc-pro 2026-10-21 (relayed, not
+    re-measured here):** 48 leftover `.claude/worktrees/agent-*` worktrees
+    (2.2 GB) and 50 `worktree-agent-*` branches across 5 PR reviews, all
+    clean, every HEAD a PR head commit still on origin. Same shape here: #85's
+    review left 4 (removed 2026-10-06), and `agent-a457670e5009ffa76` from 2j
+    is still present.
+    **Relayed cause:** the Agent tool removes an isolated worktree only when it
+    is "unchanged"; review agents `git checkout`/detach to the PR head, HEAD
+    leaves the `worktree-agent-*` branch, so the tool keeps the worktree.
+    **Measured here 2026-10-21, and it changes the fix:** NO cepa command or
+    agent file asks for `isolation: "worktree"`. Across every `.md` under
+    `plugins/cepa` on `origin/main`, only 2 lines contain "isolation"
+    (compound-refresh.md:153, autonomy/SKILL.md:240), and neither is about
+    worktrees; agent frontmatter carries only name, description and model. So
+    the dispatching SESSION chooses isolation by itself. The upstream fix is to
+    tell dispatch sites that a read-only reviewer needs NO isolation — it reads
+    at the PR head SHA via `git show <sha>:<path>` and `git diff
+    <base>...<sha>`, never `git checkout`/detach/fetch.
+    Evan's requested changes, kept: (1) the brief gives the PR head SHA and
+    forbids checkout/detach/fetch; (2) an orchestrator cleanup step after all
+    agents return — remove only `agent-*` worktrees created after this run's
+    dispatch started, only if `git status --porcelain --ignored` is empty and
+    HEAD is reachable from an origin ref, `git worktree remove` without
+    `--force`, then `git branch -D` its `worktree-agent-*` branch if nothing
+    holds it, and report anything kept with the reason; (3) a check that the
+    brief carries the do-not-checkout line. Sites: review, plan-review,
+    resolve-pr, sweep — re-measure which commands dispatch agents.
+    **Two conflicts to resolve in the plan:** `cepa:autonomy` §10f (#87) makes
+    report-only runs change no ref, and `git worktree remove` / `git branch -D`
+    both do; and the global worker rule forbids deleting a branch the worker
+    did not create — decide whether its own review's agent branches count.
+    After merge, coord@main runs both plugin refresh hops and
+    `scripts/check-plugin-freshness.sh` (must print rc=0).
+
 ---
 
 ## How this list is used
