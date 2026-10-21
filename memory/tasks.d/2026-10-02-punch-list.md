@@ -201,15 +201,22 @@ L10. **Make cepa agree with the global session roles.**
     "return to trunk" row), `lfg.md:89`, and `task.md:553`.
 
 L11. **Fix the mutation sweep's CI bound (residual 2c-r7).**
-    status: pending
-    owner: unassigned. Weekly runs 2026-10-05 and 2026-10-12 both FAILED, as
-    predicted; issue #61 has stayed open since 2026-09-21.
+    status: in_progress
     severity: P2
-    Owned by the shard `memory/tasks.d/2026-09-26-forced-phi-scrub-verification.md`
-    as 2c-r7 — read it there. A design call (split the mutant registry across
-    jobs, or raise the bounds toward GitHub's 6 h job limit), not a number bump.
-    Runs AFTER item 10: the sweep discards every result if the tree changes
-    mid-run, so it needs a quiet `main`.
+    owner: coord@main — code merged; waiting only on the proof below.
+    **MERGED 2026-10-21** — PR #89 (`9a140d3`), v1.32.0, by `tab2@integrity`.
+    The sweep now runs as 8 parallel shards plus a merge job, and only the merge
+    job can turn the run green. A shard that hits its limit still reports: each
+    unrun mutant is `NOT-RUN`, and the issue opens with "classified X of Y". The
+    run goes red when a shard uses over 60% of its limit, before a timeout can
+    erase results. Hosted proof: run 39619703190 at `135257c`, 98/98 classified,
+    43.4 min wall-clock, slowest shard 34% of its 120-min limit.
+    The worker's first cut had bumped to 1.31.0, which #88 had already shipped;
+    coord@main caught it before merge (a trial merge was CLEAN, so git gave no
+    warning) and the worker re-bumped to 1.32.0.
+    **To close:** the next SCHEDULED run (Monday 2026-10-26, 06:17 UTC cron)
+    passes. Then coord@main closes issue #61, which the worker left untouched.
+    7 P3s deferred as 2c-r7a–g in the forced-PHI-scrub shard.
 
 L12. **Make cepa enforce the coord@<wt> rule (finding #8 of PR #84).**
     status: completed
@@ -339,6 +346,37 @@ L15. **Do read-only review agents write into the shared tree when they run code?
     to reduce leftover worktrees. Withdrawn after reading the hook: it would
     trade disk clutter (all leftovers were clean) for unprotected writes to
     the shared tree, in every repo. #88 already fixed leftovers at the source.
+
+L16. **`/cepa:review` and `/cepa:plan-review` write findings files their own
+    checker rejects.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    Filed 2026-10-21 from dpc-pro's coord@main (relayed; NOT re-measured here).
+    After dpc-pro's L33 cleaned 8 old files (dpc-pro PR #258, `9ccfd55e`), its
+    whole-tree MISS count rose 240 -> 249 the same day, from 6 files that
+    /cepa:review and /cepa:plan-review wrote on 2026-10-21:
+    `review-2026-10-21-083212` (counters sum 0, `total:` 11);
+    `-095500` (7 headings, zero `status:` rows); `-plan-l34` (`p2: 8`, body 9);
+    `-planreview-couples-parent-orders` (no `summary:` block);
+    `-pr256-couples-parent-orders` (counters sum 24, `total:` 26);
+    `-pr260` (`p2: 5`, body 6). Checked with check-residual-integrity.sh @
+    `0a23a235`. Every cleanup pass is undone by the next review wave.
+    **Measured here 2026-10-21, and it changes dpc-pro's suggested fix**
+    ("run check-residual-integrity.sh as the command's last step"): that
+    checker is repo tooling in this repo's `scripts/`, NOT in the plugin. The
+    loaded copy (`~/.claude/plugins/cache/cepa/cepa/1.32.0`) has no
+    `check-residual*` file, so a command running in another repo cannot call
+    it. And no producer self-checks today: review.md, plan-review.md and
+    resolve-pr.md have no step that recounts what they wrote.
+    **The design call:** ship ONE executable copy of the counting rule inside
+    the plugin, run it as the last step of every command that writes a
+    findings file (fail or self-correct before reporting), and make this
+    repo's CI call that same copy. Two copies of the rule would be the
+    restatement drift CLAUDE.md records four times. Re-measure which commands
+    write findings files.
+    dpc-pro chose to leave its 6 files until this lands, then clean them all
+    in one pass.
 
 ---
 
