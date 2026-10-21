@@ -1,6 +1,6 @@
 ---
 name: autonomy
-description: The cepa autonomy contract — how commands resolve gated vs autonomous behavior, execute plans to completion, auto-apply review findings safely, pin the model tier of every dispatch, make residual work durable instead of asking, and act within the session's role when several sessions share one repo. Referenced by /cepa:task, /cepa:lfg, /cepa:review, /cepa:triage, /cepa:plan-review, /cepa:sweep, /cepa:resolve-pr, /cepa:compound, and /cepa:compound-refresh.
+description: The cepa autonomy contract — how commands resolve gated vs autonomous behavior, execute plans to completion, auto-apply review findings safely, pin the model tier of every dispatch, make residual work durable instead of asking, act within the session's role when several sessions share one repo, and keep read-only dispatches out of worktrees. Referenced by /cepa:task, /cepa:lfg, /cepa:review, /cepa:triage, /cepa:plan-review, /cepa:sweep, /cepa:resolve-pr, /cepa:compound, and /cepa:compound-refresh.
 ---
 
 # The cepa Autonomy Contract
@@ -1077,6 +1077,10 @@ is the step this binds today: in a worker session its merged-branch
 preamble emits no branch commands at all — the item is done, and the
 worktree's coordinator parks the worktree and deletes the branch.
 
+A `worktree-agent-*` branch that §11b's guards prove its own run's dispatch
+created counts as one it created: the rule protects a branch someone else
+stands on or holds work in, and those guards prove neither (§11c).
+
 ### 10f. What a worktree coordinator may write
 
 A worktree coordinator shares its checkout with its worker. Every tracked
@@ -1166,6 +1170,12 @@ failed `check-ignore` included — the report carries the whole document. Each
 residual sink reports `no_sink`, with §10f as its reason, and the report
 lists every entry it would have filed.
 
+A dispatch cleanup (§11b) runs in `report` mode: it prints what it would
+remove and runs no `git worktree remove` and no `git branch -D`. Its snapshot
+file is the one write outside an ignored path that report-only allows: it
+lives in the checkout's own git dir, which is not the work tree, a ref or the
+index.
+
 **Reporting a stop or a report-only run** follows §6: the probe's reason, or
 "worktree coordinator — report-only", goes on the report's first line and in
 its blocked section, and the `## Next steps` tail names the session that can
@@ -1179,3 +1189,205 @@ in this checkout during a PARKED run is not seen; nothing locks the checkout.
 no check proves a sub-command was really invoked by a PARKED parent. A command
 cites this section at its first step, and `scripts/check-coord-write-guard.sh`
 checks that every command does — not where.
+
+## 11. Dispatch Isolation
+
+A subagent the harness runs with `isolation: "worktree"` gets its own
+checkout, `<main>/.claude/worktrees/agent-<id>`, on a new branch
+`worktree-agent-<id>`. The harness removes that worktree when the agent
+returns **only if the agent changed nothing**. A reviewer that runs
+`git checkout`, `gh pr checkout` or a detach to reach the PR head has changed
+its HEAD, so the harness keeps the worktree and its branch — forever. Measured
+on 2026-10-21: 48 such worktrees (2.2 GB) and 50 branches in one repo after
+five PR reviews (relayed from that repo's session), every one clean, every
+HEAD a PR head commit on origin.
+
+No cepa file asked for that isolation (`git grep -i isolation` over every
+`.md` under `plugins/cepa` found 2 lines, neither about worktrees). The
+session chose it — and a harness hook that denies a dispatch with neither
+`isolation: "worktree"` nor a `READ-ONLY:` prompt line pushes it that way. So
+there are two layers: §11a tells each dispatch which class it is, and §11b
+removes what a dispatch left anyway. Commands cite this section; they do not
+restate it.
+
+### 11a. Which dispatch needs a worktree
+
+| Class | Dispatches | Isolation | Brief |
+|---|---|---|---|
+| **Reader** | review roster and companions, `learnings-researcher`, plan-review personas, compound's five, compound-refresh's investigators and drafters (a drafter RETURNS content; the orchestrator writes it) | **none** | the brief line below, then one source line |
+| **Parallel writer** | lfg Step 3 unit builders that pass §2's parallel safety check | `isolation: "worktree"`, passed explicitly | no READ-ONLY line; integrated per §2 |
+| **Sequential writer** | task 3.2's `subagent-driven-development` builders | none — one at a time, in the run's own checkout | no READ-ONLY line |
+
+A reader's prompt **opens** with this line, at the start of a line, with
+`<why>` replaced by what the agent does:
+
+```text
+READ-ONLY: <why>. Never run `git checkout`, `git switch`, `git worktree`, `git fetch`, `git stash` or `gh pr checkout`, never detach HEAD, and write files only under a `mktemp -d` directory outside the repo.
+```
+
+Then one source line. For a PR or a commit range, `<sha>` is the head
+commit (`gh pr view <n> --json headRefOid`) and `<base>` the base it is
+diffed against; for anything else — uncommitted work, a plan, the session's
+own tree — the second form:
+
+```text
+Read the code at commit `<sha>`: `git show <sha>:<path>` for a file, `git diff <base>...<sha>` for the change. Do not assume this checkout is on that commit.
+Read the files in this checkout as they are.
+```
+
+- **Never tell a reader its checkout is on the PR branch.** A worker reviews
+  its own PR from its branch, but a coordinator or a sweep does not, and the
+  `<sha>` form is correct in both.
+- **A writer never carries the READ-ONLY line.** That line is a claim a
+  harness admits the dispatch on. A harness that admits only isolation or a
+  read-only declaration has no honest form for a sequential writer: give it
+  `isolation: "worktree"` and integrate its commits per §2.
+- `cepa:brain` and `cepa:grounding` dispatch nothing themselves; the command
+  that dispatches the researcher briefs it.
+- **Stated limit:** READ-ONLY is a prompt contract. Nothing enforces that a
+  reader obeys it, which is why §11b runs at every site, not only lfg.
+
+### 11b. Removing what a dispatch left
+
+Two blocks, run by the orchestrator. Substitute `<run>` with the command's
+name (`review`, `plan-review`, `compound`, `compound-refresh`, `task`, `lfg`)
+— a nested command keeps its own snapshot. Substitute `<mode>` per §11c.
+Substitute `<paths>` with the worktree paths that this run's **completed**
+Agent results report, separated by spaces, each passing
+`^/[A-Za-z0-9._/-]+$`; a path that fails it is reported, not substituted.
+No path → `<paths>` is empty and the block only reports.
+
+**Before the run's first dispatch** — the snapshot:
+
+```bash
+run='<run>'
+case "$run" in ''|*[!a-z-]*) run= ;; esac
+gd=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || gd=
+case "$gd" in /*) [ "$gd" = "${gd%%$'\n'*}" ] || gd= ;; *) gd= ;; esac
+if [ -z "$run" ]; then
+  echo "SNAPSHOT-FAILED: run name is not [a-z-]+"
+elif [ -z "$gd" ]; then
+  echo "SNAPSHOT-FAILED: git-dir unreadable"
+elif git worktree list --porcelain > "$gd/cepa-dispatch-before-$run" 2>/dev/null; then
+  echo "SNAPSHOT $gd/cepa-dispatch-before-$run"
+else
+  : > "$gd/cepa-dispatch-before-$run"
+  echo "SNAPSHOT-FAILED: git worktree list failed"
+fi
+```
+
+**After every agent of the run has returned**, once, before the report — the
+cleanup. Never while an agent is still running: a running agent's fresh
+worktree is clean and passes every guard below.
+
+```bash
+set -f
+run='<run>'
+mode='<mode>'
+paths='<paths>'
+nl=$'\n'
+case "$run" in ''|*[!a-z-]*) run= ;; esac
+case "$mode" in remove|report) ;; *) mode=report ;; esac
+gd=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || gd=
+case "$gd" in /*) [ "$gd" = "${gd%%$'\n'*}" ] || gd= ;; *) gd= ;; esac
+snapf=
+[ -z "$gd" ] || [ -z "$run" ] || snapf="$gd/cepa-dispatch-before-$run"
+snap=
+if [ -n "$snapf" ] && [ -f "$snapf" ]; then snap=$(< "$snapf"); fi
+now=$(git worktree list --porcelain 2>/dev/null) || now=
+main=${now%%$'\n'*}
+main=${main#worktree }
+for wt in $paths; do
+  name=${wt##*/}
+  if [ -z "$snap" ]; then echo "KEPT $wt: no pre-dispatch snapshot"; continue; fi
+  if [ -z "$now" ]; then echo "KEPT $wt: git worktree list failed"; continue; fi
+  case "$name" in agent-*[!a-z0-9]*|agent-) name= ;; agent-*) ;; *) name= ;; esac
+  if [ -z "$name" ] || [ "$wt" != "$main/.claude/worktrees/$name" ]; then
+    echo "KEPT $wt: not <main>/.claude/worktrees/agent-<id>"; continue
+  fi
+  case "$nl$now$nl" in *"${nl}worktree $wt$nl"*) ;; *) echo "KEPT $wt: not a worktree of this repo"; continue ;; esac
+  case "$nl$snap$nl" in *"${nl}worktree $wt$nl"*) echo "KEPT $wt: existed before this run's dispatch"; continue ;; esac
+  st=$(cd "$wt" 2>/dev/null && git status --porcelain --ignored 2>/dev/null) || st='git status failed'
+  if [ -n "$st" ]; then echo "KEPT $wt: has status lines (${st%%$'\n'*})"; continue; fi
+  head=$(cd "$wt" 2>/dev/null && git rev-parse --verify -q HEAD 2>/dev/null) || head=
+  if [ -z "$head" ]; then echo "KEPT $wt: HEAD unreadable"; continue; fi
+  on=$(git for-each-ref --contains "$head" --format='%(refname)' refs/remotes/origin/ 2>/dev/null) || on=
+  if [ -z "$on" ]; then echo "KEPT $wt: HEAD $head is on no origin ref"; continue; fi
+  br="worktree-$name"
+  if [ "$mode" != remove ]; then echo "WOULD-REMOVE $wt (branch $br)"; continue; fi
+  if ! git worktree remove "$wt" 2>/dev/null; then echo "KEPT $wt: git worktree remove refused"; continue; fi
+  tip=$(git rev-parse --verify -q "refs/heads/$br" 2>/dev/null) || tip=
+  if [ -z "$tip" ]; then echo "REMOVED $wt; no branch $br"; continue; fi
+  held=$(git worktree list --porcelain 2>/dev/null) || held="branch refs/heads/$br"
+  case "$nl$held$nl" in *"${nl}branch refs/heads/$br$nl"*) echo "REMOVED $wt; kept branch $br: a worktree holds it"; continue ;; esac
+  bon=$(git for-each-ref --contains "$tip" --format='%(refname)' refs/remotes/origin/ 2>/dev/null) || bon=
+  if [ -z "$bon" ]; then echo "REMOVED $wt; kept branch $br: tip $tip is on no origin ref"; continue; fi
+  if git branch -D "$br" >/dev/null 2>&1; then echo "REMOVED $wt; deleted branch $br"; else echo "REMOVED $wt; kept branch $br: git branch -D failed"; fi
+done
+claimed=" $(echo $paths) "
+if [ -n "$snap" ] && [ -n "$now" ]; then
+  while IFS= read -r line; do
+    case "$line" in "worktree $main/.claude/worktrees/agent-"*) ;; *) continue ;; esac
+    p=${line#worktree }
+    case "$nl$snap$nl" in *"${nl}worktree $p$nl"*) continue ;; esac
+    case "$claimed" in *" $p "*) continue ;; esac
+    echo "UNCLAIMED $p: new since this run's snapshot, not named by its agents — left alone"
+  done <<< "$now"
+fi
+if [ -n "$snapf" ] && [ -f "$snapf" ]; then : > "$snapf"; fi
+```
+
+What each guard refuses, and why:
+
+- **No snapshot** (missing, empty, or a failed snapshot block) — every
+  candidate is kept. The cleanup empties the snapshot when it finishes, so a
+  run that skips its own snapshot step finds nothing, not a stale list.
+- **Not `<main>/.claude/worktrees/agent-<id>`**, byte for byte, where `<main>`
+  is the first entry of `git worktree list --porcelain`. A relative path, a
+  `..`, another directory, or a worktree with any other name is kept.
+  `set -f` stops a glob in `<paths>` from expanding to every agent worktree,
+  other sessions' included.
+- **Not a worktree of this repo** — the path must appear in that listing.
+- **Existed before this run's dispatch** — it is in the snapshot. The leftover
+  of an earlier run is never this run's to remove.
+- **Any status line**, ignored files included. `git worktree remove` without
+  `--force` deletes a worktree that holds only ignored files (measured,
+  git 2.43), so this guard is the only one that protects them.
+- **HEAD on no origin ref** — the worktree holds a commit the remote does not
+  have. A parallel writer's integrated commits are this case until the
+  remote has them; §2's integration owns that worktree, and it is kept.
+- **`git worktree remove` refuses** (a locked worktree, or a race) — kept;
+  never `--force`, never unlocked.
+- The branch `worktree-<name>` is deleted only when no worktree holds it and
+  its tip is on an origin ref; otherwise it is kept, with the reason.
+- **UNCLAIMED** — a new `agent-*` worktree that no completed result of this
+  run named. It may be another session's live agent. Report it; never touch
+  it.
+
+Every output line goes in the run's report — the §6 body, or a headless
+caller's structured summary as `agent_worktrees:`. A KEPT line is not an
+error; it is a worktree the operator decides about.
+
+### 11c. Modes and roles
+
+- **`<mode>` is `remove`** for a worker, a solo session, the main
+  coordinator, and a PARKED worktree-coordinator run (§10f). **It is
+  `report`** in a §10f report-only run: the block prints `WOULD-REMOVE` and
+  runs no `git worktree remove` and no `git branch -D`. Any other value reads
+  as `report`.
+- **The snapshot file is the one write a report-only run makes for this
+  section.** It lives in the checkout's own git dir: not the work tree, not a
+  ref, not the index (§10f names it).
+- **A worker removes only what its own run created.** A `worktree-agent-*`
+  branch counts as one the worker created (§10e) when §11b's guards prove it:
+  its worktree was named by this run's own completed result, was absent from
+  this run's snapshot, and nothing holds the branch, whose every commit is
+  already on origin. A branch that fails any guard is not provably the
+  run's, and is kept.
+- **Stated limits.** Ownership rests on the Agent result naming the path —
+  the harness's documented behavior, not measured here; a result that names
+  none removes nothing, and the worktree reports UNCLAIMED. A concurrent
+  session's worktree that a result misnames passes every guard. Nothing
+  locks `.claude/worktrees/` between the guards and the remove.
+  `scripts/check-dispatch-isolation.sh` tests the blocks and the citations,
+  not the agent that follows them.

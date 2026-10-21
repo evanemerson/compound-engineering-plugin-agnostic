@@ -256,7 +256,10 @@ rule for this no-findings-file phase: any `SUSPECT-BRAIN` strip, skipped
 arg, or degradation is appended to the run's residual shard
 (`- brain: <event> — <source> — <date>`).
 
-Dispatch the `learnings-researcher` agent with the task description. It searches:
+Dispatch the `learnings-researcher` agent with the task description — a
+reader (`cepa:autonomy` §11a): no `isolation`, its prompt opening with §11a's
+READ-ONLY line and the checkout source line, inside a §11b snapshot and
+cleanup with `<run>` = `task`. It searches:
 - `docs/solutions/` — past problems and fixes
 - `CLAUDE.md` — existing rules and patterns
 - `todos/*.md` — the canonical store of open findings (any `pending`/`ready`/`deferred` finding in the task area)
@@ -387,6 +390,13 @@ iteration, not just the first — §9a's rule that a skill's dispatch shape is
 pinned at every invoker. (`executing-plans` runs in a separate session whose
 model is fixed at launch — outside this command's reach; choose the model
 when launching that session.)
+
+**Isolation per `cepa:autonomy` §11a:** the implementer is a sequential
+writer — no `isolation`, no READ-ONLY line, one at a time in this checkout.
+The spec-reviewer and code-quality-reviewer are readers and carry §11a's
+READ-ONLY line. Take the §11b snapshot (`<run>` = `task`) before the first
+build dispatch and run the cleanup once after the last one returns
+(`<mode>` per §11c).
 
 These skills handle:
 - Task-by-task implementation

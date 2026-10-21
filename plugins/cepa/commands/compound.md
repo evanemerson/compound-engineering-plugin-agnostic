@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git worktree:*)
 ---
 
 # Compound Documentation
@@ -49,6 +49,10 @@ Launch these 5 agents simultaneously using Task tool calls.
 subagents doing extraction and search, which autonomy §9c places at the
 routine tier. §9a is why the override lives here and not in frontmatter.
 
+**Each is a reader** (`cepa:autonomy` §11a): no `isolation`, and its prompt
+opens with §11a's READ-ONLY line and the checkout source line. Take the §11b
+snapshot (`<run>` = `compound`) before the dispatch.
+
 ### Agent 1: Context Analyzer
 **Prompt:** "Analyze the conversation context and git history. Extract: (1) What problem was being solved — symptoms, error messages, unexpected behavior. (2) What was tried that didn't work. (3) The timeline of investigation. Return a structured summary."
 
@@ -66,7 +70,9 @@ routine tier. §9a is why the override lives here and not in frontmatter.
 
 ## Step 3: Assemble Solution Document
 
-After all agents return, combine their outputs into a single document following the `compound-docs` skill format:
+After all agents return, run the `cepa:autonomy` §11b cleanup once
+(`<run>` = `compound`, `<mode>` per §11c) and carry its lines into the
+report. Then combine their outputs into a single document following the `compound-docs` skill format:
 
 ```markdown
 ---
