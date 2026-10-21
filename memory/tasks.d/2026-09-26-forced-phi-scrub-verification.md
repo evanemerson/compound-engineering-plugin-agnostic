@@ -991,7 +991,7 @@
      raise the bounds toward GitHub's 6 h job ceiling), not a number bump.
 
      **Fixed on `fix/integrity/sweep-ci-bound` (PR #89, 2026-10-21,
-     tab2@integrity, punch-list L11), 1.31.0. Hosted proof: run 39619703190
+     tab2@integrity, punch-list L11), 1.32.0 (1.31.0 was taken by #88). Hosted proof: run 39619703190
      at 135257c — success, 98 of 98 classified, 43.4 min wall-clock, slowest
      shard 2426 s (34% of its 120-min bound, under the 4320-s BUDGET line).**
      The first hosted run (39612283167) passed every shard but fetched no
