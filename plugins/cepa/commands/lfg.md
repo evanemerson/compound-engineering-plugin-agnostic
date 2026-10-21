@@ -120,6 +120,11 @@ not assumption.
 
 ## Step 2: Learnings + Plan
 
+Take the `cepa:autonomy` §11b snapshot (`<run>` = `lfg`) before this step's
+first dispatch. Every dispatch in Steps 2-2.6 is a reader (§11a): no
+`isolation`, its prompt opening with §11a's READ-ONLY line and the checkout
+source line.
+
 1. Dispatch `learnings-researcher` with the task description. Fold its
    findings into planning context. When `cepa.local.md` has an
    `## Integrations` `grounding:` key, run the `cepa:grounding` skill's
@@ -244,6 +249,14 @@ pipeline's contract.
   order per §2's integration rules. Dispatch each unit subagent with an
   explicit `model: sonnet` override (autonomy §9c — builders are routine
   work, and Step 4's review loop catches unit mistakes at sonnet prices).
+  A parallel unit builder is a parallel writer (§11a): pass
+  `isolation: "worktree"` explicitly, and give it no READ-ONLY line. A
+  serial unit runs in this checkout with no isolation.
+- Once every builder has returned and been merged, run the §11b cleanup
+  once (`<run>` = `lfg`, `<mode>` per §11c) and carry its lines into the
+  report. A builder worktree whose commits the remote does not have yet is
+  KEPT, and nothing in this run removes it later: report it, and leave its
+  removal to the operator.
 - Test-first per task where the plan specifies tests; commit per task.
 - A blocked task gets recorded (autonomy §5) and skipped; the run continues
   with the remaining tasks.

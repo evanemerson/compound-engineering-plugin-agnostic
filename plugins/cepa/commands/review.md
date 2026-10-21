@@ -1,7 +1,7 @@
 ---
 description: Run parallel review agents on current changes, collect findings with P1/P2/P3 severity, write results to todos/
 argument-hint: "[PR number] [cadence:weekly] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git show:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(command -v:*), Bash(git check-ignore:*), Bash(timeout -k 5 60 graphify update:*), Bash(timeout -k 5 60 graphify affected:*), Bash(timeout -k 5 60 graphify explain:*), Bash(timeout -k 5 60 graphify query:*), Bash(bash:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git rev-list:*)
 ---
 
 # Compound Review
@@ -33,7 +33,9 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   and 6), and — whenever `cepa.local.md` configures a `grounding:` key —
   the `grounding` status line verbatim (a caller must be told when the
   run silently ran grep-only), and — whenever `cepa.local.md` configures a
-  `brain:` key — the `brain` status line verbatim (same reason). The caller
+  `brain:` key — the `brain` status line verbatim (same reason), and the
+  `agent_worktrees:` lines of the `cepa:autonomy` §11b cleanup verbatim (a
+  KEPT or UNCLAIMED worktree is the operator's to decide about). The caller
   decides what to apply. If `cepa.local.md` is missing in headless mode, run the
   cepa review agents with stack details inferred from the repo, note the
   missing config in the findings file, and continue — never block.
@@ -334,9 +336,17 @@ executes here, at the top of Step 3, unlike the post-return providers in
 Integration Dispatch below — grounding output must exist BEFORE the
 prompts it feeds are assembled.
 
+Before the first dispatch below (the researcher included), take the
+`cepa:autonomy` §11b snapshot with `<run>` = `review`.
+
 Launch agents in parallel. For each active agent listed in `cepa.local.md`, dispatch a Task with:
 - `subagent_type`: The agent name from this plugin (e.g., `security-sentinel`, `performance-oracle`)
-- `prompt`: Include the full diff and instruct the agent to perform its review
+- **no `isolation`** — every review agent is a reader (`cepa:autonomy` §11a)
+- `prompt`: opens with §11a's READ-ONLY line, then its source line — the
+  `<sha>` form for a PR (`<sha>` = `gh pr view <n> --json headRefOid`) or a
+  branch range, the checkout form for uncommitted changes. Then the full
+  diff and the instruction to perform its review. Never tell an agent its
+  checkout is on the PR branch.
 - **no model override** — every agent in this plugin pins its tier in its
   own frontmatter (`model: sonnet` across the roster, `model: opus` for
   `adversarial-reviewer`), and per autonomy §9a a Task-call override beats
@@ -347,7 +357,9 @@ Launch agents in parallel. For each active agent listed in `cepa.local.md`, disp
 **Research agents (run first, feed context to review agents):**
 - `learnings-researcher` — Search `docs/solutions/` and `CLAUDE.md` for relevant past learnings
 
-Run `learnings-researcher` first with the diff summary. Include its output as
+Run `learnings-researcher` first with the diff summary — a reader like every
+review agent and companion below: no `isolation`, and its prompt opens with
+§11a's READ-ONLY line and source line. Include its output as
 additional context when dispatching review agents below. When grounding is
 available (block above), say so in the researcher's dispatch and state how
 many of the 5 shared queries remain — its optional pre-step activates only
@@ -460,7 +472,8 @@ indistinguishable from a clean pass.
 **Companion agents (from `pr-review-toolkit` plugin — install if missing):**
 These cover angles the cepa agents intentionally don't, so they're part of the
 default rotation when active in `cepa.local.md`. Dispatch via the Task tool
-using the bare name; the runtime resolves which plugin owns each.
+using the bare name; the runtime resolves which plugin owns each. Each is a
+reader: no `isolation`, and its prompt opens with §11a's READ-ONLY line.
 **Companion dispatch model rule — apply autonomy §9e:** check each
 companion's frontmatter `model:` field before dispatch, pass an explicit
 `model: sonnet` override when it is absent or `inherit`, and pass NO
@@ -538,7 +551,11 @@ otherwise):
 
 ## Step 4: Collect and Deduplicate Findings
 
-After all agents return:
+After all agents return, run the `cepa:autonomy` §11b cleanup once, with
+`<run>` = `review`, `<mode>` per §11c (`report` in a §10f report-only run),
+and `<ids>` = the agent ids of any dispatch this run made with isolation
+(normally none). Its output lines go in the report (Step 6, or the headless summary's
+`agent_worktrees:`). Then:
 1. Collect all findings from all agents
 2. Deduplicate: If multiple agents flagged the same location for similar reasons, merge into one finding with combined reasoning
 3. Score each finding with `confidence` (0-100) and `action_class`

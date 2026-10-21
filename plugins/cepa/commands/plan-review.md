@@ -1,7 +1,7 @@
 ---
 description: Review a plan document with a persona panel before build — findings to todos/, eligible fixes applied to the plan, judgment items made durable
 argument-hint: "[plan path] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git rev-parse:*), Bash(git worktree:*), Bash(git rev-list:*)
 ---
 
 # Plan Review
@@ -66,6 +66,10 @@ headless even without the token.
 
 ## Step 2: Learnings Context
 
+Take the `cepa:autonomy` §11b snapshot (`<run>` = `plan-review`) first.
+Every dispatch in this command is a reader (§11a): no `isolation`, and each
+prompt opens with §11a's READ-ONLY line and the checkout source line.
+
 Dispatch `learnings-researcher` with the plan's topic, modules, and file
 paths. Its briefing — including `### Detection Signals` — feeds every
 persona with the same instruction used by `/cepa:review` Step 3: Detection
@@ -102,6 +106,10 @@ gap in the findings file, never a blocked run. Record non-dispatched conditional
 reason — a non-dispatch must never be indistinguishable from a clean pass.
 
 ## Step 4: Synthesize and Score
+
+When every persona has returned, run the `cepa:autonomy` §11b cleanup once
+(`<run>` = `plan-review`, `<mode>` per §11c — `report` in a §10f report-only
+run) and carry its lines into the report.
 
 Run the skill's synthesis order: validate → anchor gate (0/25 dropped and
 counted, 50 → P3, 75/100 actionable) → fingerprint dedup → cross-persona

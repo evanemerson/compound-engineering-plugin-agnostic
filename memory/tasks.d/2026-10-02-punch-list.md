@@ -282,6 +282,36 @@ L13. **dpc-pro findings files the checker still cannot reconcile.**
     frontmatter (`20260627-162353`) reads 0 rows. The pattern itself matches
     that file's `- **Agent:** ... · **Status:** done` line (tested, new=1).
 
+L14. **Stop `/cepa:review` (and other dispatching commands) leaving `agent-*`
+    worktrees behind.**
+    status: completed
+    **CLOSED 2026-10-21** — PR #88 (`8ebf28c`), v1.31.0, by `tab3@roles`.
+    New `cepa:autonomy` §11, cited by every dispatching command: §11a gives a
+    read-only agent NO worktree and opens its prompt with a `READ-ONLY:` line
+    (no checkout, switch, worktree, fetch, stash, commit, push or detach; read
+    at `<sha>` with `git show` / `git diff`); only lfg's parallel builders get a
+    worktree. §11b cleans up after dispatch: removes an `agent-*` worktree only
+    if this run's own agent calls made it, it did not exist before the run, it
+    has no status line (ignored files included), and its HEAD and whole HEAD
+    reflog are on origin; never `--force`. Report-only runs print
+    `WOULD-REMOVE` and change no ref (§10f names the snapshot file as its one
+    allowed write). Gated by `scripts/check-dispatch-isolation.sh` in CI.
+    **Live test passed:** the PR's own 8 review agents and 3 plan-review agents
+    left no `agent-*` worktree.
+    **The real source of isolation on this machine:** the worker found Evan's
+    global hook `~/.claude/hooks/require_worktree_isolation.py`. It refuses an
+    agent dispatch that has neither `isolation: "worktree"` nor a `READ-ONLY:`
+    line, and its message suggests isolation first. §11a's `READ-ONLY:` line
+    satisfies it. The hook was not changed.
+    **L14's site list was wrong:** sweep and resolve-pr dispatch no agents;
+    compound, compound-refresh, task and lfg do.
+    Merged as-is, taking the worker's decision 2 (leave the 2 open items and 4
+    other deferred findings in
+    `memory/tasks.d/2026-10-21-fix-roles-review-agent-worktrees.md`). Its
+    decision 1, a CLAUDE.md rule, was not added on the branch: "a value filled
+    from agent output never goes into a quoted shell string; read it through a
+    quoted heredoc and check it inside the block."
+
 ---
 
 ## How this list is used
