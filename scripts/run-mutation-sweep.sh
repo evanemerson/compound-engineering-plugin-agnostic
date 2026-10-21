@@ -43,6 +43,19 @@
 #   scripts/run-mutation-sweep.sh --list          list the registry, run nothing
 #   scripts/run-mutation-sweep.sh --selftest      exercise the classifier
 #   scripts/run-mutation-sweep.sh --allow-dirty   permit a dirty tree under CI
+#   scripts/run-mutation-sweep.sh --shard K/N     run shard K of N (FILTERED)
+#   scripts/run-mutation-sweep.sh --shard K/N --list
+#                                                 print shard K's plan, run nothing
+#   scripts/run-mutation-sweep.sh --merge DIR --shards N [--merge-budget S]
+#                                                 judge DIR/shard-1.log ..
+#                                                 shard-N.log as one sweep
+#
+# SHARDS. One full sweep no longer fits one CI job (residual 2c-r7), so the
+# workflow runs N shards in parallel and `--merge` judges their logs together.
+# A shard takes every mutant whose registry index i has i % N == K-1 —
+# round-robin, so a run of same-leg mutants spreads across shards. A shard is
+# a filtered run and exits 3 when clean; `--merge` is the only green a sharded
+# sweep has. `cepa:autonomy` §9f owns what each exit means to a caller.
 #
 # Exit: 0 a complete run with no findings   1 a finding, or a run that
 #       asserted nothing   2 usage or environment   3 a FILTERED run that found
@@ -57,6 +70,11 @@ SELFTEST=0
 ALLOW_DIRTY=0
 KEEP=0
 PARTIAL_OK=0
+SHARD=''
+SHARD_SET=0
+MERGE_DIR=''
+MERGE_SHARDS=''
+MERGE_BUDGET=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -69,6 +87,13 @@ while [ $# -gt 0 ]; do
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --partial-ok) PARTIAL_OK=1 ;;
     --keep) KEEP=1 ;;
+    # Same bare-flag guard as --mutants: a trailing flag with no value must
+    # never fall through to a default that changes what the run selects.
+    --shard) shift; [ $# -gt 0 ] || { printf -- '--shard needs K/N\n' >&2; exit 2; }; SHARD="$1"; SHARD_SET=1 ;;
+    --shard=*) SHARD="${1#--shard=}"; SHARD_SET=1 ;;
+    --merge) shift; [ $# -gt 0 ] || { printf -- '--merge needs a directory\n' >&2; exit 2; }; MERGE_DIR="$1" ;;
+    --shards) shift; [ $# -gt 0 ] || { printf -- '--shards needs a count\n' >&2; exit 2; }; MERGE_SHARDS="$1" ;;
+    --merge-budget) shift; [ $# -gt 0 ] || { printf -- '--merge-budget needs seconds\n' >&2; exit 2; }; MERGE_BUDGET="$1" ;;
     # Print the header to the first line of code, never a line count — a fixed
     # window spills code into the help text the moment the header grows.
     -h|--help) awk '/^set /{exit} {print}' "$0"; exit 0 ;;
@@ -76,6 +101,36 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# A malformed shard spec must never select a different set than it names: a
+# K that matches no index would run zero mutants, and one that wrapped would
+# run another shard's set twice while a third shard ran nowhere.
+SHARD_K=''; SHARD_N=''
+# An EMPTY value is refused too: read as "no shard", it would widen a shard
+# job to the full registry — the job then runs ~8x its budget.
+if [ "$SHARD_SET" -eq 1 ]; then
+  case "$SHARD" in
+    *[!0-9/]*|/*|*/|*/*/*|'') ;;
+    */*) SHARD_K="${SHARD%/*}"; SHARD_N="${SHARD#*/}" ;;
+  esac
+  if [ -z "$SHARD_K" ] || [ "$SHARD_N" -lt 1 ] || [ "$SHARD_K" -lt 1 ] || [ "$SHARD_K" -gt "$SHARD_N" ]; then
+    printf -- '--shard wants K/N with 1 <= K <= N, got %s\n' "$SHARD" >&2; exit 2
+  fi
+  # Base 10 explicitly: `08` would otherwise be read as an invalid octal.
+  SHARD_K=$((10#$SHARD_K)); SHARD_N=$((10#$SHARD_N))
+  [ -z "$MUTANTS" ] || { printf -- '--shard and --mutants each choose the set; pass one\n' >&2; exit 2; }
+fi
+if [ -n "$MERGE_DIR" ]; then
+  [ "$SHARD_SET" -eq 0 ] && [ -z "$MUTANTS" ] || {
+    printf -- '--merge judges shard logs; it runs no mutants, so --shard/--mutants do not apply\n' >&2; exit 2; }
+  case "$MERGE_SHARDS" in
+    ''|*[!0-9]*|0) printf -- '--merge needs --shards N with N >= 1\n' >&2; exit 2 ;;
+  esac
+  case "$MERGE_BUDGET" in
+    ''|*[!0-9]*) printf -- '--merge-budget wants whole seconds, got %s\n' "$MERGE_BUDGET" >&2; exit 2 ;;
+  esac
+  [ -d "$MERGE_DIR" ] || { printf 'FATAL: %s is not a directory\n' "$MERGE_DIR" >&2; exit 2; }
+fi
 
 # A harness mutant runs THIS driver, from a copy, with --selftest. If its
 # mutation breaks argument parsing, --selftest is not honoured and the child
@@ -217,10 +272,25 @@ fi
 # ---------------------------------------------------------------------------
 # Selection
 # ---------------------------------------------------------------------------
-selected() {
+selected() {  # selected <id> <registry index>
+  if [ -n "$SHARD_K" ]; then
+    [ $(( $2 % SHARD_N )) -eq $(( SHARD_K - 1 )) ]; return
+  fi
   [ -z "$MUTANTS" ] && return 0
   case ",$MUTANTS," in *",$1,"*) return 0 ;; esac
   return 1
+}
+
+# The plan line is a machine token read by --merge, which compares it against
+# the outcomes the shard actually printed. One spelling, used by both the
+# --list form and a real run.
+shard_plan() {
+  local i=0 ids=''
+  while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
+    selected "${MUT_IDS[$i]}" "$i" && ids="${ids} ${MUT_IDS[$i]}"
+    i=$((i + 1))
+  done
+  printf 'SHARD-PLAN %s/%s%s\n' "$SHARD_K" "$SHARD_N" "$ids"
 }
 
 if [ -n "$MUTANTS" ]; then
@@ -229,6 +299,11 @@ if [ -n "$MUTANTS" ]; then
     case "$seen_ids" in *" $want "*) ;; *) unknown="${unknown}${want} " ;; esac
   done
   [ -z "$unknown" ] || { printf 'FATAL: no such mutant: %s\n' "$unknown" >&2; exit 2; }
+fi
+
+if [ "$LIST_ONLY" -eq 1 ] && [ -n "$SHARD_K" ]; then
+  shard_plan
+  exit 0
 fi
 
 if [ "$LIST_ONLY" -eq 1 ]; then
@@ -382,6 +457,160 @@ resolve_outcome() {  # resolve_outcome <class> <is_declared_survivor 0|1>
 }
 
 # ---------------------------------------------------------------------------
+# Shard merge — what a sharded sweep MEANS, so --selftest drives it too
+# ---------------------------------------------------------------------------
+# Judges N shard logs as one sweep. It is the only green a sharded sweep has:
+# each shard on its own is a filtered run (exit 3), which proves nothing about
+# the mutants it skipped.
+#
+# The logs are CI job logs fetched from the API, so each line is normalized
+# first: a UTF-8 BOM on the first line, a leading ISO timestamp on every line,
+# and ANSI colour codes. A raw `^SHARD-PLAN` anchor misses the BOM line, and an
+# unstripped timestamp hides every token. The step's own `run:` source is
+# echoed into the same log ABOVE the sweep header, so nothing before the
+# header is read — except FATAL, which can legitimately precede it.
+#
+# A timed-out shard is not discarded. Its classified outcomes count, its
+# unexercised mutants print as NOT-RUN, and the shard prints as INCOMPLETE: a
+# partial result is the point, provided it never claims more than ran.
+#
+# Free text taken from a log (a FATAL line, an outcome's detail) is relayed
+# behind a fixed prefix, with backticks removed and a length cap: the log came
+# from a run of sabotaged code, a line opening with `::` is a runner command,
+# and this report is pasted into an issue that later sessions read
+# (`cepa:autonomy` §7). Ids are relayed only when they are registered.
+MERGE_FAIL_TOKENS='CAUGHT-DECLARED|SURVIVED-UNDECLARED|ANCHOR-MISSING|BASELINE-DIRTY'
+MERGE_PASS_TOKENS='CAUGHT|SURVIVED-DECLARED'
+merge_sanitize() { tr -d '\140\r' | cut -c1-300; }
+merge_shards() {  # <dir> <shard count> <registered ids, space-separated> <HEAD sha> <budget seconds, 0 = off>
+  local dir="$1" n="$2" ids="$3" head="$4" budget="$5"
+  local bom=$'\357\273\277' esc=$'\033'
+  local k f recs plan hdr done_rec el rc tok id rest why
+  local seen=' ' fails=0 incomplete=0 notrun=0 passed=0 total=0 shard_fail
+  for id in $ids; do total=$((total + 1)); done
+
+  printf '== model-pin mutation sweep — merge of %s shard(s) at %s ==\n\n' "$n" "${head:0:12}"
+  k=1
+  while [ "$k" -le "$n" ]; do
+    f="$dir/shard-$k.log"
+    if [ ! -s "$f" ]; then
+      printf 'INCOMPLETE shard %s/%s — no log (the job never ran, or its log could not be fetched)\n' "$k" "$n"
+      incomplete=$((incomplete + 1)); k=$((k + 1)); continue
+    fi
+    recs=$(LC_ALL=C sed -E "s/^${bom}//; s/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z //; s/${esc}\[[0-9;]*m//g" "$f" \
+      | LC_ALL=C awk -v fail="^(${MERGE_FAIL_TOKENS}) +[^ ]" -v pass="^(${MERGE_PASS_TOKENS}) +[^ ]" '
+          /^FATAL/ && !fat { fat = 1; print "F " $0 }
+          !hdr { if ($0 == "== model-pin mutation sweep ==") hdr = 1; next }
+          !h && /^clean tree at [0-9a-f]+ / { print "H " $4 " clean"; h = 1; next }
+          !h && /^LOCAL \(dirty at [0-9a-f]+\)/ { s = $4; sub(/\).*/, "", s); print "H " s " dirty"; h = 1; next }
+          /^SHARD-PLAN [0-9]+\/[0-9]+( |$)/ { print "P " substr($0, 12); next }
+          /^-- [0-9]+\/[0-9]+ mutants accounted for --$/ { t = 1; next }
+          !t && ($0 ~ fail || $0 ~ pass) { print "O " $0; next }
+          /^INVALID / { print "I"; next }
+          /^SHARD-DONE [0-9]+\/[0-9]+ elapsed=[0-9]+ rc=[0-9]+$/ { print "D " $2 " " substr($3, 9) " " substr($4, 4) }
+        ') || recs=''
+
+    hdr=$(printf '%s\n' "$recs" | sed -n 's/^H //p' | head -1)
+    plan=$(printf '%s\n' "$recs" | sed -n 's/^P //p' | head -1)
+    done_rec=$(printf '%s\n' "$recs" | sed -n 's/^D //p' | tail -1)
+    why=$(printf '%s\n' "$recs" | sed -n 's/^F //p' | head -1 | merge_sanitize)
+
+    # Results about a tree other than the one being judged are not evidence
+    # about it. The shard prints a short SHA; prefix-match the full one.
+    case "$hdr" in
+      '')
+        printf 'INCOMPLETE shard %s/%s — no sweep header in its log\n' "$k" "$n"
+        [ -n "$why" ] && printf '  | %s\n' "$why"
+        incomplete=$((incomplete + 1)); k=$((k + 1)); continue ;;
+      *' clean')
+        case "$head" in
+          "${hdr%% *}"*) ;;
+          *) printf 'INCOMPLETE shard %s/%s — it ran at %s, not at %s\n' "$k" "$n" "${hdr%% *}" "${head:0:12}"
+             incomplete=$((incomplete + 1)); k=$((k + 1)); continue ;;
+        esac ;;
+      *)
+        printf 'INCOMPLETE shard %s/%s — it ran on a dirty tree, so it is not a gate result\n' "$k" "$n"
+        incomplete=$((incomplete + 1)); k=$((k + 1)); continue ;;
+    esac
+    case "$plan" in
+      "$k/$n"|"$k/$n "*) ;;
+      *) printf 'INCOMPLETE shard %s/%s — its plan line names a different shard or is missing\n' "$k" "$n"
+         incomplete=$((incomplete + 1)); k=$((k + 1)); continue ;;
+    esac
+
+    shard_fail=0
+    while IFS= read -r rest; do
+      [ -n "$rest" ] || continue
+      tok="${rest%% *}"; rest="${rest#"$tok"}"; rest="${rest#"${rest%%[! ]*}"}"
+      id="${rest%% *}"
+      case " $ids " in
+        *" $id "*) ;;
+        *) printf 'UNREGISTERED shard %s/%s classified an id the registry does not define\n' "$k" "$n"
+           fails=$((fails + 1)); shard_fail=1; continue ;;
+      esac
+      case " ${plan#* } " in
+        *" $id "*) ;;
+        *) printf 'UNPLANNED %s — classified by shard %s/%s, which did not plan it\n' "$id" "$k" "$n"
+           fails=$((fails + 1)); shard_fail=1; continue ;;
+      esac
+      case "$seen" in
+        *" $id "*) printf 'DUPLICATE %s — classified more than once across shards\n' "$id"
+                   fails=$((fails + 1)); shard_fail=1; continue ;;
+      esac
+      seen="${seen}${id} "
+      case "$tok" in
+        CAUGHT|SURVIVED-DECLARED) passed=$((passed + 1)) ;;
+        *) printf '%s %s (shard %s/%s)\n' "$tok" "$(printf '%s' "$rest" | merge_sanitize)" "$k" "$n"
+           fails=$((fails + 1)); shard_fail=1 ;;
+      esac
+    done <<< "$(printf '%s\n' "$recs" | sed -n 's/^O //p')"
+
+    if printf '%s\n' "$recs" | grep -qx 'I'; then
+      printf 'INVALID shard %s/%s — the tree changed mid-run, so its results describe no tree\n' "$k" "$n"
+      fails=$((fails + 1)); shard_fail=1
+    fi
+
+    # Finished means the driver reached its verdict: SHARD-DONE with rc 3 (a
+    # clean filtered run) or rc 1 (a finding, already counted above). rc 0 is
+    # a shard run with --partial-ok, which §9f calls a gate that has disabled
+    # itself — refused here rather than trusted.
+    if [ -z "$done_rec" ]; then
+      printf 'INCOMPLETE shard %s/%s — no SHARD-DONE line: it hit its bound or died before its verdict\n' "$k" "$n"
+      [ -n "$why" ] && printf '  | %s\n' "$why"
+      incomplete=$((incomplete + 1)); k=$((k + 1)); continue
+    fi
+    set -- $done_rec
+    el="$2"; rc="$3"
+    if [ "$1" != "$k/$n" ]; then
+      printf 'INCOMPLETE shard %s/%s — its SHARD-DONE line names shard %s\n' "$k" "$n" "$1"
+      incomplete=$((incomplete + 1))
+    elif [ "$rc" = 3 ] || { [ "$rc" = 1 ] && [ "$shard_fail" -eq 1 ]; }; then
+      printf 'shard %s/%s finished: rc=%s, %ss\n' "$k" "$n" "$rc" "$el"
+      if [ "$budget" -gt 0 ] && [ "$el" -gt "$budget" ]; then
+        printf 'BUDGET shard %s/%s used %ss, over its %ss budget — raise the shard count before it times out\n' \
+          "$k" "$n" "$el" "$budget"
+        fails=$((fails + 1))
+      fi
+    else
+      printf 'INCOMPLETE shard %s/%s — the driver exited rc=%s with no failing outcome to explain it\n' "$k" "$n" "$rc"
+      incomplete=$((incomplete + 1))
+    fi
+    k=$((k + 1))
+  done
+
+  for id in $ids; do
+    case "$seen" in
+      *" $id "*) ;;
+      *) printf 'NOT-RUN %s\n' "$id"; notrun=$((notrun + 1)) ;;
+    esac
+  done
+
+  printf '\nclassified %d of %d registered mutants\n' "$(( total - notrun ))" "$total"
+  printf -- '-- %d/%d mutants accounted for; %d not run --\n' "$passed" "$total" "$notrun"
+  [ "$fails" -eq 0 ] && [ "$incomplete" -eq 0 ] && [ "$notrun" -eq 0 ] && [ "$passed" -eq "$total" ]
+}
+
+# ---------------------------------------------------------------------------
 # Controls capture — the guarded path, shared by the mutant loop and --selftest
 # ---------------------------------------------------------------------------
 # Extracted so the selftest drives the REAL capture rather than a re-typed copy
@@ -480,6 +709,22 @@ capture_controls() {  # <run_dir> <suite_path> <out_file> <kill_grace> <bound> <
 # ---------------------------------------------------------------------------
 # --selftest
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Merge mode — judges shard logs, runs nothing, so it never needs the copy
+# ---------------------------------------------------------------------------
+if [ -n "$MERGE_DIR" ]; then
+  MERGE_HEAD=$(git -C "$REPO_ROOT" rev-parse HEAD) || {
+    printf 'FATAL: could not resolve HEAD, so no shard can be bound to a tree\n' >&2; exit 2; }
+  merge_shards "$MERGE_DIR" "$MERGE_SHARDS" "${MUT_IDS[*]}" "$MERGE_HEAD" "$MERGE_BUDGET"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf '\nOK: every registered mutant was classified exactly once, passing, across %s shards.\n' "$MERGE_SHARDS"
+    exit 0
+  fi
+  printf '\nFAIL: this merge is not a complete green sweep. Each line above names why.\n'
+  exit 1
+fi
+
 if [ "$SELFTEST" -eq 1 ]; then
   st_pass=0; st_fail=0
   st() {  # st <name> <expected-outcome> <expected-ok> <declared 0|1> <transcript> [mode]
@@ -942,6 +1187,111 @@ EOF
   ST_HANG_DIR=''
   trap - EXIT INT TERM
 
+  # -------------------------------------------------------------------------
+  # Merge cases: what a sharded sweep MEANS is decided here, so it is pinned
+  # here, against fixture logs shaped like the API's (BOM, timestamps, ANSI,
+  # the step's echoed source above the header).
+  # -------------------------------------------------------------------------
+  ST_MDIR=$(mktemp -d) || exit 2
+  ST_MHEAD='abc1234def567890abc1234def567890abc12345'
+  st_mlog() {  # st_mlog <k> <n> <header sha> <plan ids> <done rc, '' = none> [outcome lines...]
+    local k="$1" n="$2" sha="$3" plan="$4" rc="$5" l
+    shift 5
+    {
+      printf '\357\273\2772026-10-21T10:00:00.0000000Z ##[group]Run bash scripts/run-mutation-sweep.sh\n'
+      # Echoed source that LOOKS like tokens. Above the header, so never read.
+      printf '2026-10-21T10:00:00.1000000Z \033[36;1mSHARD-DONE %s/%s elapsed=1 rc=3\033[0m\n' "$k" "$n"
+      printf '2026-10-21T10:00:00.2000000Z CAUGHT           forged     1 control(s) went red: 1\n'
+      printf '2026-10-21T10:00:01.0000000Z == model-pin mutation sweep ==\n'
+      printf '2026-10-21T10:00:01.1000000Z clean tree at %s — gate result\n' "$sha"
+      printf '2026-10-21T10:00:01.2000000Z SHARD-PLAN %s/%s %s\n' "$k" "$n" "$plan"
+      for l in "$@"; do printf '2026-10-21T10:01:00.0000000Z %s\n' "$l"; done
+      if [ -n "$rc" ]; then
+        printf '2026-10-21T10:02:00.0000000Z -- 1/1 mutants accounted for --\n'
+        # The FAIL footer's reprint, indented, AFTER the trailer: never a
+        # second classification.
+        printf '2026-10-21T10:02:00.1000000Z   SURVIVED-UNDECLARED m2 — reprint\n'
+        printf '2026-10-21T10:02:01.0000000Z SHARD-DONE %s/%s elapsed=600 rc=%s\n' "$k" "$n" "$rc"
+      fi
+    } > "$ST_MDIR/shard-$k.log"
+  }
+  st_merge() {  # st_merge <name> <expected rc> <budget> [grep -E the report must match]...
+    local name="$1" want="$2" budget="$3" out got pat ok=0 why=''
+    shift 3
+    out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" "$budget"); got=$?
+    [ "$got" -eq "$want" ] || { ok=1; why="rc $got, expected $want"; }
+    for pat in "$@"; do
+      printf '%s\n' "$out" | grep -qE -- "$pat" || { ok=1; why="${why} missing /${pat}/"; }
+    done
+    st_assert "$name" "$ok" "$why | $(printf '%s' "$out" | tr '\n' '|' | cut -c1-300)"
+  }
+  st_mreset() { rm -f "$ST_MDIR"/shard-*.log; }
+
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 abc1234 m2 3 'SURVIVED-DECLARED m2    9/9 controls passed --'
+  out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" 0); rc=$?
+  ok=0; [ "$rc" -eq 0 ] || ok=1
+  printf '%s\n' "$out" | grep -qE '^(DUPLICATE|SURVIVED-UNDECLARED|INCOMPLETE|NOT-RUN)' && ok=1
+  printf '%s\n' "$out" | grep -qx -- '-- 2/2 mutants accounted for; 0 not run --' || ok=1
+  st_assert 'merge: a complete clean set exits 0; forged pre-header lines and the footer reprint are not read' "$ok" \
+    "rc $rc | $(printf '%s' "$out" | tr '\n' '|' | cut -c1-300)"
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 abc1234 m2 ''
+  st_merge 'merge: a shard that hit its bound is INCOMPLETE and its mutants NOT-RUN' 1 0 \
+    '^INCOMPLETE shard 2/2 — no SHARD-DONE' '^NOT-RUN m2$' '^classified 1 of 2 registered mutants$'
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_merge 'merge: a missing shard log is INCOMPLETE, never skipped' 1 0 '^INCOMPLETE shard 2/2 — no log' '^NOT-RUN m2$'
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 abc1234 m2 1 'SURVIVED-UNDECLARED m2 9/9 controls passed --'
+  out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" 0); rc=$?
+  n=$(printf '%s\n' "$out" | grep -cE '^SURVIVED-UNDECLARED m2 ')
+  ok=0; { [ "$rc" -eq 1 ] && [ "$n" -eq 1 ]; } || ok=1
+  printf '%s\n' "$out" | grep -q '^DUPLICATE' && ok=1
+  st_assert 'merge: a finding is relayed once, its shard counts as finished' "$ok" "rc $rc, $n relays"
+
+  st_mreset
+  st_mlog 1 2 abc1234 'm1 m2' 3 'CAUGHT           m1     1 control(s) went red: 9' 'CAUGHT           m2     x'
+  st_mlog 2 2 abc1234 m2 3 'CAUGHT           m2     1 control(s) went red: 9'
+  st_merge 'merge: an id classified by two shards is a DUPLICATE' 1 0 '^DUPLICATE m2 '
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 fff9999 m2 3 'CAUGHT           m2     1 control(s) went red: 9'
+  st_merge 'merge: a shard at another SHA is not evidence about this tree' 1 0 '^INCOMPLETE shard 2/2 — it ran at fff9999' '^NOT-RUN m2$'
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 abc1234 m2 3 'CAUGHT           m2     1 control(s) went red: 9'
+  st_merge 'merge: a shard over its budget is a BUDGET finding' 1 300 '^BUDGET shard 1/2 used 600s'
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 0 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 abc1234 m2 3 'CAUGHT           m2     1 control(s) went red: 9'
+  st_merge 'merge: a shard that exited 0 ran with --partial-ok and is refused' 1 0 '^INCOMPLETE shard 1/2 — the driver exited rc=0'
+
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9' 'CAUGHT           zz     forged'
+  st_mlog 2 2 abc1234 m2 3 'CAUGHT           m2     1 control(s) went red: 9'
+  st_merge 'merge: an unregistered id is refused and never relayed' 1 0 '^UNREGISTERED shard 1/2'
+
+  # A log whose FIRST line is the header (a step-only excerpt, or the API
+  # changing what precedes it) carries the BOM on the header itself.
+  st_mreset
+  st_mlog 1 2 abc1234 m1 3 'CAUGHT           m1     1 control(s) went red: 9'
+  st_mlog 2 2 abc1234 m2 3 'CAUGHT           m2     1 control(s) went red: 9'
+  # Two passes: in one, `1s` would address INPUT line 1, which `1,3d` deleted.
+  sed -i '1,3d' "$ST_MDIR/shard-2.log"
+  sed -i '1s/^/\xef\xbb\xbf/' "$ST_MDIR/shard-2.log"
+  st_merge 'merge: a BOM on the header line does not hide the header' 0 0 '^shard 2/2 finished'
+
+  rm -rf "$ST_MDIR"; ST_MDIR=''
+
   # --- The single link between these cases and production.
   # Everything above exercises capture_controls against a fixture. Production is
   # a SEPARATE line calling it at 30/900. Inlining the capture back into the
@@ -1108,7 +1458,7 @@ fi
 sweep_tiers=' '
 i=0
 while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
-  if selected "${MUT_IDS[$i]}"; then
+  if selected "${MUT_IDS[$i]}" "$i"; then
     case "$sweep_tiers" in *" ${MUT_HARNESS[$i]} "*) ;; *) sweep_tiers="${sweep_tiers}${MUT_HARNESS[$i]} " ;; esac
   fi
   i=$((i + 1))
@@ -1138,12 +1488,28 @@ while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
 done
 [ "$survivor_n" -eq 0 ] && printf '  (none)\n'
 printf '\n'
+if [ -n "$SHARD_K" ]; then
+  shard_plan
+  printf '\n'
+fi
 
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 ran=0; ok=0; bad=0
 BAD_LINES=''
+
+# Printed before EVERY exit the verdict can take, never only the clean one:
+# --merge counts a shard as finished only when this line is present, so a
+# shard that finished with a finding and printed nothing would be reported
+# INCOMPLETE and its finding would read as a timeout. The aborts before the
+# verdict (FATAL, HARNESS-ERROR) print none, on purpose — that shard did not
+# finish. $SECONDS is the shell's own clock since this script started, so the
+# figure includes the copy and is what the step's bound actually measures.
+shard_done() {  # shard_done <exit code about to be returned>
+  [ -n "$SHARD_K" ] || return 0
+  printf 'SHARD-DONE %s/%s elapsed=%s rc=%s\n' "$SHARD_K" "$SHARD_N" "$SECONDS" "$1"
+}
 
 record() {  # record <id> <outcome> <ok> <detail> <why>
   printf '%-16s %-20s %s\n' "$2" "$1" "$4"
@@ -1164,7 +1530,7 @@ record() {  # record <id> <outcome> <ok> <detail> <why>
 i=0
 while [ "$i" -lt "${#MUT_IDS[@]}" ]; do
   id="${MUT_IDS[$i]}"
-  if ! selected "$id"; then i=$((i + 1)); continue; fi
+  if ! selected "$id" "$i"; then i=$((i + 1)); continue; fi
   ran=$((ran + 1))
 
   target="$COPY/${MUT_TARGET[$i]}"
@@ -1259,11 +1625,15 @@ printf '\n'
 # applies to itself and the checker applies to its own coverage counters.
 if [ "$ran" -eq 0 ]; then
   printf 'FATAL: no mutants ran — a sweep that asserts nothing is not a pass\n'
-  exit 1
+  shard_done 1; exit 1
 fi
 
 # A filtered run must never read as a complete one.
-if [ -n "$MUTANTS" ]; then
+FILTERED=0; { [ -n "$MUTANTS" ] || [ -n "$SHARD_K" ]; } && FILTERED=1
+if [ -n "$SHARD_K" ]; then
+  printf -- '** SHARD %s/%s — %d of %d mutants ran here; only --merge over every shard is a sweep result **\n\n' \
+    "$SHARD_K" "$SHARD_N" "$ran" "${#MUT_IDS[@]}"
+elif [ -n "$MUTANTS" ]; then
   printf -- '** PARTIAL RUN — only %s ran; %d of %d mutants were not exercised **\n\n' \
     "$MUTANTS" "$(( ${#MUT_IDS[@]} - ran ))" "${#MUT_IDS[@]}"
 fi
@@ -1273,7 +1643,7 @@ END_DIGEST=$(target_digest)
 if [ "$END_STATUS" != "$START_STATUS" ] || [ "$END_DIGEST" != "$START_DIGEST" ]; then
   printf 'INVALID — tree changed mid-run. Every result above is about a snapshot that no\n'
   printf 'longer describes the tree. Re-run on a quiescent tree.\n'
-  exit 1
+  shard_done 1; exit 1
 fi
 
 printf -- '-- %d/%d mutants accounted for --\n' "$ok" "$ran"
@@ -1292,7 +1662,7 @@ if [ "$bad" -gt 0 ]; then
   printf 'of the same construct. A gap found here becomes a residual, not an edit to the\n'
   printf 'checker in the same change — a detection change and the thing it detects must\n'
   printf 'not hide each other.\n'
-  exit 1
+  shard_done 1; exit 1
 fi
 
 # A filtered run that found nothing exits 3, NOT 0. What each exit code means
@@ -1300,10 +1670,10 @@ fi
 # this site is only why the banner above is not sufficient on its own: prose in
 # the middle of a report is invisible to `set -e` and to every caller that
 # reads `$?`, so without this branch a subset run was green by construction.
-if [ -n "$MUTANTS" ] && [ "$PARTIAL_OK" -eq 0 ]; then
+if [ "$FILTERED" -eq 1 ] && [ "$PARTIAL_OK" -eq 0 ]; then
   printf '\nFiltered run: %d of %d mutants were never exercised, so this is not a sweep\n' \
     "$(( ${#MUT_IDS[@]} - ran ))" "${#MUT_IDS[@]}"
   printf 'result. Exiting 3 — pass --partial-ok if a subset pass is what you wanted.\n'
-  exit 3
+  shard_done 3; exit 3
 fi
-exit 0
+shard_done 0; exit 0
