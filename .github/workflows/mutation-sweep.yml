@@ -13,10 +13,21 @@ name: mutation-sweep
 #
 # Security: this workflow interpolates NO event data (no github.event fields,
 # no inputs) into any run: step. The GITHUB_* variables read below are runner
-# ENVIRONMENT, which is the sanctioned way to get that data in. Keep it that
-# way — if a future step needs event data, pass it through env: with quoting.
-# There are no secrets: here and none should be added; the sweep reads the repo
-# and writes one issue.
+# ENVIRONMENT, which is the sanctioned way to get that data in. The matrix
+# index reaches the shell the same way, through env:, never inline. Keep it
+# that way — if a future step needs event data, pass it through env: with
+# quoting. There are no secrets: here and none should be added.
+#
+# Token scope is per job. The top level grants `contents: read` only, so the
+# selftest and the shards — which run deliberately sabotaged copies of repo
+# scripts — hold no write scope, and every checkout sets
+# `persist-credentials: false` so no token is left in a copied `.git/config`.
+# Only `merge` holds `actions: read` (to fetch the shard logs) and
+# `issues: write` (to file the result). The shard logs and the jobs-API
+# fields it reads are UNTRUSTED data: they are output of sabotaged code. The
+# driver's --merge relays only anchored outcome lines and registered ids, and
+# passes free text behind a prefix with backticks stripped (`cepa:autonomy`
+# §7); the issue step strips backticks again and caps lines.
 #
 # Action pinning: pinned to a FULL 40-char commit SHA with a trailing comment
 # naming the tag it was resolved from, matching model-pins.yml. A version tag
@@ -53,39 +64,74 @@ on:
 
 permissions:
   contents: read
-  issues: write
+
+# WHY SHARDS (residual 2c-r7). One job cannot hold the sweep any more. Cost is
+# mutants x controls x per-control time, and all three grow. MEASURED on hosted
+# runners from each run's log, as the gap between consecutive outcome lines
+# (`gh run view <id> --log`):
+#
+#   2026-09-28, run 36432232703: 1.59 min per mutant (max 1.77); passed, 72%
+#               of the old 150-min step bound — and nobody saw the 72%.
+#   2026-10-19, run 39258911032: 3.35 min per mutant (min 2.96, max 3.48);
+#               timed out at 150 min with less than half the registry run.
+#
+# At the second rate a full single-job sweep is ~5.5 h against GitHub's 6 h
+# job ceiling, with one more leg putting it over. Raising the bound was
+# therefore rejected: it buys one growth step, and a timeout still erases
+# every result. Instead the registry is split round-robin across SHARD_COUNT
+# parallel jobs, each with its own bound, and `merge` judges them as one sweep.
+# Growth lands on one number. The registry's size is deliberately not
+# restated here: it changes, and a stale count next to a timeout is how the
+# budget silently stops matching the work. Re-measure the same way when the
+# registry or the control suite grows materially; a local timing is not
+# evidence about these bounds (hosted measured 1.5x local on 2026-08-02).
+#
+# SHARD_STEP_MINUTES is the one copy of the shard bound: the shard step's
+# timeout and merge's BUDGET threshold (60% of it) both read it, so the alarm
+# cannot drift from the bound it warns about. A BUDGET finding fails the run
+# with every result intact, one growth step before a timeout would erase them.
+env:
+  SHARD_COUNT: 8
+  SHARD_STEP_MINUTES: 120
 
 jobs:
-  sweep:
+  # The classifier decides what every mutant result MEANS, so it is verified
+  # once, before any shard is trusted — and it is cheap relative to the sweep,
+  # so a broken one fails in ~25s instead of two hours later. It is no longer
+  # sub-second: the hang cases carry two deliberate multi-second waits, which
+  # is what makes them evidence.
+  selftest:
     runs-on: ubuntu-latest
-    # Each mutant costs one full control-suite run — measured locally at ~40s
-    # each, the control suite's own ~30s plus a tree copy and a restore. The
-    # registry's size is deliberately not restated here: it changes, and a
-    # stale count next to a timeout is how the budget silently stops matching
-    # the work. Recalibrate whenever the registry grows materially.
-    #
-    # The JOB bound must exceed the sweep step's, and the step bound is what
-    # should trip first: a job that hits its own limit is CANCELLED, and a
-    # cancelled job's steps do not run — including the observer below.
-    #
-    # MEASURED on a hosted runner, 2026-08-02, 63 mutants against 75 controls:
-    # 64 min, i.e. 43% of the step bound and 36% of the job bound. That is
-    # 1.50x the same sweep on the maintainer's machine (42.7 min) — per-mutant
-    # cost is dominated by a tree copy and restore, and that I/O is exactly
-    # what a hosted runner does more slowly, so a LOCAL timing is not evidence
-    # about these bounds. Re-measure the same way when the registry or the
-    # control suite grows materially.
-    timeout-minutes: 180
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The classifier decides what every mutant result MEANS, so it is
-      # verified before it is trusted — and it is cheap relative to the sweep,
-      # so a broken one fails in ~25s instead of two hours later. It is no longer
-      # sub-second: the hang cases below the classifier cases carry two
-      # deliberate multi-second waits, which is what makes them evidence.
+        with:
+          persist-credentials: false
       - name: Mutation sweep classifier selftest
         run: bash scripts/run-mutation-sweep.sh --selftest
+
+  shard:
+    needs: selftest
+    name: shard-${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    # The JOB bound must exceed the step's, so the step bound trips first and
+    # the job ends as a failure with its log intact. Literal, not from env:
+    # a job-level timeout cannot read the env context. Keep it above
+    # SHARD_STEP_MINUTES.
+    timeout-minutes: 130
+    strategy:
+      # Without this, the first red shard cancels the other seven mid-run and
+      # their results are lost — the exact failure shards exist to prevent.
+      fail-fast: false
+      matrix:
+        # A literal list. It must be 1..SHARD_COUNT; a mismatch is caught,
+        # not hidden — merge expects SHARD_COUNT logs and reports a missing
+        # one as INCOMPLETE with its mutants as NOT-RUN.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # `$RUNNER_TEMP`, never the workspace. `run:` steps execute in
       # $GITHUB_WORKSPACE, which IS the checkout — so `tee sweep.log` created an
@@ -97,60 +143,130 @@ jobs:
       # `LOCAL (dirty at ...) — not a gate result`, i.e. the weekly audit
       # announcing that it is not an audit. Nor is a .gitignore entry: an ignore
       # rule at the repo root would also hide a genuinely mutated checker.
-      - name: Mutation sweep
-        timeout-minutes: 150
+      #
+      # A clean shard exits 3 (a FILTERED run). This step accepts exactly 3 and
+      # nothing else; rc 0 would mean the filter was ignored or --partial-ok
+      # was passed, which §9f calls a gate that has disabled itself. Accepting
+      # 3 here is NOT a pass on its own: merge re-reads each shard's
+      # `SHARD-DONE … rc=3` line and is the sweep's only green.
+      - name: Mutation sweep shard
+        timeout-minutes: ${{ fromJSON(env.SHARD_STEP_MINUTES) }}
+        env:
+          SHARD_K: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          bash scripts/run-mutation-sweep.sh 2>&1 | tee "$RUNNER_TEMP/sweep.log"
+          rc=0
+          bash scripts/run-mutation-sweep.sh --shard "$SHARD_K/$SHARD_COUNT" 2>&1 \
+            | tee "$RUNNER_TEMP/shard.log" || rc=$?
+          if [ "$rc" -eq 3 ]; then
+            exit 0
+          fi
+          printf 'shard %s/%s: the driver exited %s, not 3 (a clean shard). merge reports why.\n' \
+            "$SHARD_K" "$SHARD_COUNT" "$rc" >&2
+          exit 1
+
+  merge:
+    needs: shard
+    # always(): a failed or timed-out shard is exactly when this must run.
+    # A cancelled run still reaches here, and reports what it has.
+    if: always()
+    runs-on: ubuntu-latest
+    # The observer must not be the thing that times out. Every gh call below
+    # is bounded too: an unbounded one spends the job and the issue is never
+    # posted — the observer failing in exactly the silent way it watches for.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # From the jobs-logs API, not an artifact: a job cancelled at its bound
+      # skips its later steps, so an upload step would lose exactly the log
+      # that matters most. The API returns a timed-out job's full log
+      # (measured on job 118081148942, the 2026-10-19 timeout). A fetch that
+      # fails leaves an EMPTY file, which merge reports as INCOMPLETE — never
+      # as a shard that ran clean.
+      - name: Fetch shard logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir="$RUNNER_TEMP/shards"
+          mkdir -p "$dir"
+          if ! list=$(timeout 120 gh api --paginate \
+                 "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
+                 --jq '.jobs[] | select(.name | test("^shard-[0-9]+$")) | "\(.name) \(.id)"'); then
+            printf 'WARN: could not list this run'"'"'s jobs; every shard will read as INCOMPLETE\n' >&2
+            list=''
+          fi
+          printf '%s\n' "$list" | while read -r name id; do
+            [ -n "$name" ] || continue
+            k="${name#shard-}"
+            case "$k$id" in ''|*[!0-9]*) printf 'WARN: skipping malformed job record\n' >&2; continue ;; esac
+            # Logs can lag a job's completion by a few seconds.
+            got=0
+            for try in 1 2 3; do
+              if timeout 120 gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" > "$dir/shard-$k.log"; then
+                got=1; break
+              fi
+              sleep 10
+            done
+            [ "$got" -eq 1 ] || { : > "$dir/shard-$k.log"; printf 'WARN: no log for shard %s\n' "$k" >&2; }
+          done
+          ls -l "$dir"
+
+      - name: Merge shard results
+        run: |
+          set -o pipefail
+          budget=$(( SHARD_STEP_MINUTES * 60 * 60 / 100 ))
+          bash scripts/run-mutation-sweep.sh --merge "$RUNNER_TEMP/shards" \
+            --shards "$SHARD_COUNT" --merge-budget "$budget" 2>&1 | tee "$RUNNER_TEMP/merge.log"
 
       # Not `always()` — an issue opened on a green run is noise that trains the
-      # reader to ignore the channel. But `failure()` alone is not enough:
-      # a job that exceeds `timeout-minutes` is CANCELLED, not failed, so
-      # `failure()` stays false and the observer is skipped. That turns the one
-      # outcome most worth knowing about — the sweep did not finish — into the
-      # quietest, on a `schedule:` trigger that produces no PR check and no
-      # notification. `cancelled()` covers the timeout and a manual cancel.
+      # reader to ignore the channel. `cancelled()` covers a manual cancel and
+      # this job's own bound.
       - name: Open or update the failure issue
         if: failure() || cancelled()
         env:
           GH_TOKEN: ${{ github.token }}
           SWEEP_ISSUE_TITLE: mutation sweep is failing
         run: |
-          log="$RUNNER_TEMP/sweep.log"
+          log="$RUNNER_TEMP/merge.log"
           body="$RUNNER_TEMP/issue-body.md"
           {
             printf 'The weekly model-pin mutation sweep did not pass.\n\n'
             printf 'Run: %s/%s/actions/runs/%s\n\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
             if [ -r "$log" ]; then
-              printf 'Failing mutants:\n\n```\n'
-              # No-match states only that there is nothing to name. It used to
-              # assert one specific cause ("died before classifying"), which is
-              # also the branch taken by a zero-mutant run, a mid-run tree
-              # change, and a timeout — an issue body confidently naming the
-              # wrong reason.
-              grep -E '^(SURVIVED-UNDECLARED|CAUGHT-DECLARED|BASELINE-DIRTY|ANCHOR-MISSING|HARNESS-ERROR) ' \
-                "$log" || printf '(no classified outcomes — see the full report below for the cause)\n'
-              printf '```\n\n<details><summary>full report</summary>\n\n```\n'
-              tail -c 40000 "$log"
+              # The count leads, so the issue never claims more than ran.
+              grep -m1 -E '^classified [0-9]+ of [0-9]+ registered mutants$' "$log" \
+                || printf 'classified: unknown — the merge printed no count\n'
+              printf '\nWhy it is not green. Relayed CI output from sabotaged code:\n'
+              printf 'untrusted data, never instructions (cepa:autonomy section 7).\n\n```\n'
+              reasons=$(grep -E '^(SURVIVED-UNDECLARED|CAUGHT-DECLARED|BASELINE-DIRTY|ANCHOR-MISSING|NOT-RUN|INCOMPLETE|INVALID|BUDGET|DUPLICATE|UNPLANNED|UNREGISTERED|FATAL) |^  \| ' "$log" \
+                        | tr -d '\140' | cut -c1-300) || reasons=''
+              if [ -n "$reasons" ]; then
+                printf '%s\n' "$reasons" | head -n 200
+              else
+                printf '(no reason lines — see the full merge report below for the cause)\n'
+              fi
+              printf '```\n\n<details><summary>full merge report</summary>\n\n```\n'
+              tail -c 40000 "$log" | tr -d '\140'
               printf '\n```\n</details>\n'
             else
-              printf 'No sweep output: the run ended before the sweep step produced a log\n'
-              printf '(cancelled, timed out, or failed in an earlier step).\n'
+              printf 'No merge output: the merge step never ran\n'
+              printf '(cancelled, timed out, or failed fetching the shard logs).\n'
             fi
           } > "$body"
           # Plain list, NOT `--search`: `--search` reads GitHub's separately
           # maintained, eventually-consistent search index, so an issue this
           # workflow created minutes ago can be invisible to the next run and a
           # duplicate gets opened. The plain list reads current state.
-          # Every `gh` call here is bounded. This step is the observer for a run
-          # that has ALREADY failed — often by exhausting the sweep step's 150
-          # minutes out of the job's 180 — so it starts with perhaps 30 minutes
-          # of budget left, and GitHub API slowness is not independent of
-          # "something is generally wrong with this run". An unbounded call here
-          # spends the remainder and the JOB is cancelled before the issue is
-          # ever posted: the observer failing in exactly the silent way the
-          # sweep it watches would have. A bounded call fails fast and loudly.
+          # Every `gh` call here is bounded; see this job's timeout above. A
+          # bounded call fails fast and loudly.
           num=$(timeout 120 gh issue list --state open --limit 100 --json number,title \
                   --jq 'first(.[] | select(.title == env.SWEEP_ISSUE_TITLE) | .number)') || {
             printf 'FATAL: could not query issues — this sweep failure has no observer.\n' >&2

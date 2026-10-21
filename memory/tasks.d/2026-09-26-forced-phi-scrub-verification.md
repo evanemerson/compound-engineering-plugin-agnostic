@@ -980,7 +980,7 @@
      any line whose first non-blank text is three backticks, ignoring fence
      character and length. P3. A four-backtick fence wrapping a three-backtick one, or a
      `~~~` fence, flips the wrong text. Leg 5's `L5_INDEX_AWK` is the model.
-   - [ ] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
+   - [x] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
      Measured 2026-10-04 at `f3edeb4`, local, 98 mutants × 109 controls:
      224 min (19:09:57 → 22:54:12 CDT; a second, dying sweep shared the
      machine for ~1.5 h of it). `mutation-sweep.yml` bounds the step at
@@ -989,6 +989,23 @@
      failure issue. Leg 5 added 27 mutants and ~20 controls; per-mutant cost
      is ~2.3 min. Needs a design call (shard the registry across jobs, or
      raise the bounds toward GitHub's 6 h job ceiling), not a number bump.
+
+     **Fixed on `fix/integrity/sweep-ci-bound` (2026-10-21, tab2@integrity,
+     punch-list L11), 1.31.0.** Design call: shard, not raise. Hosted
+     per-mutant cost measured from the run logs (`gh run view <id> --log`,
+     gap between outcome lines): 1.59 min on 2026-09-28 (run 36432232703),
+     3.35 min on 2026-10-19 (run 39258911032, 44 classified before the
+     150-min timeout). 98 mutants (`run-mutation-sweep.sh --list | tail -1`)
+     × 3.35 ≈ 328 min against the 360-min job ceiling, 9% margin — raising
+     the bound buys one growth step and a timeout still erases everything.
+     The workflow now runs 8 round-robin shards (`--shard K/N`, ≤13 mutants,
+     ≈45 min each against a 120-min step bound) and a `merge` job
+     (`--merge`) that is the only green. A shard that hits its bound reports
+     `INCOMPLETE` plus `NOT-RUN <id>` per unexercised mutant, and the issue
+     body leads with "classified X of Y". `BUDGET` fails a run in which a
+     shard passes 60% of its bound. §9f states the contract. Hosted proof:
+     the PR body links the dispatched run and its per-job times. Plan
+     review: `todos/review-2026-10-21-083530.md`.
    - [ ] 2c-r8. Five model-pin legs own no unique killer. P3. In the
      2026-10-04 sweep (`v-exit` excluded), every control killed by a t-,
      dd-, ext-, rank- or l3- mutant is also killed by another leg's mutant —
