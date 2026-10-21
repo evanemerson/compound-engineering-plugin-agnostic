@@ -219,8 +219,16 @@ jobs:
             case "$k$id" in ''|*[!0-9]*) printf 'WARN: skipping malformed job record\n' >&2; continue ;; esac
             # Logs can lag a job's completion by a few seconds.
             got=0
+            # curl, not `gh api`: a job log carries ANSI codes, and the runner's
+            # gh refuses to write a response containing terminal escape
+            # sequences — every fetch failed that way on the first hosted run
+            # (39612283167), while an older local gh wrote them happily. The
+            # redirect goes to a pre-signed blob URL; curl drops the
+            # Authorization header on that cross-host hop.
             for try in 1 2; do
-              if timeout 30 gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" > "$dir/shard-$k.log"; then
+              if timeout 30 curl -fsSL --proto '=https' \
+                   -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+                   -o "$dir/shard-$k.log" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs"; then
                 got=1; break
               fi
               sleep 5
