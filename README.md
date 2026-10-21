@@ -193,8 +193,10 @@ into a green light that means nothing.
 **`run-mutation-sweep.sh`** sabotages the checker deliberately and confirms the
 controls notice. This one is too slow for a per-PR check, so it runs weekly on a
 schedule ([mutation-sweep.yml](.github/workflows/mutation-sweep.yml)) and on
-demand. Takes about 43 minutes locally, and it refuses a tree that changed
-mid-run, so don't edit tracked files while it works.
+demand. In CI it runs as parallel shards (`--shard K/N`) that a merge job
+judges as one sweep (`--merge`); `cepa:autonomy` §9f says what each exit means.
+A full local run takes hours. It refuses a tree that changed mid-run, so don't
+edit tracked files while it works.
 
 **`check-residual-integrity.sh`** catches a narrower failure. A findings file can
 say "resolved" in its prose while the frontmatter field a consumer parses still

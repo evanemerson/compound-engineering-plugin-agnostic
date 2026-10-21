@@ -980,7 +980,7 @@
      any line whose first non-blank text is three backticks, ignoring fence
      character and length. P3. A four-backtick fence wrapping a three-backtick one, or a
      `~~~` fence, flips the wrong text. Leg 5's `L5_INDEX_AWK` is the model.
-   - [ ] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
+   - [x] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
      Measured 2026-10-04 at `f3edeb4`, local, 98 mutants × 109 controls:
      224 min (19:09:57 → 22:54:12 CDT; a second, dying sweep shared the
      machine for ~1.5 h of it). `mutation-sweep.yml` bounds the step at
@@ -989,6 +989,48 @@
      failure issue. Leg 5 added 27 mutants and ~20 controls; per-mutant cost
      is ~2.3 min. Needs a design call (shard the registry across jobs, or
      raise the bounds toward GitHub's 6 h job ceiling), not a number bump.
+
+     **Fixed on `fix/integrity/sweep-ci-bound` (PR #89, 2026-10-21,
+     tab2@integrity, punch-list L11), 1.32.0 (1.31.0 was taken by #88). Hosted proof: run 39619703190
+     at 135257c — success, 98 of 98 classified, 43.4 min wall-clock, slowest
+     shard 2426 s (34% of its 120-min bound, under the 4320-s BUDGET line).**
+     The first hosted run (39612283167) passed every shard but fetched no
+     logs: the runner's `gh` refuses a response holding terminal escape
+     sequences, which every job log does. It failed closed (8 INCOMPLETE,
+     98 NOT-RUN, issue #61 commented); curl replaced it in 135257c. Design call: shard, not raise. Hosted
+     per-mutant cost measured from the run logs (`gh run view <id> --log`,
+     gap between outcome lines): 1.59 min on 2026-09-28 (run 36432232703),
+     3.35 min on 2026-10-19 (run 39258911032, 44 classified before the
+     150-min timeout). 98 mutants (`run-mutation-sweep.sh --list | tail -1`)
+     × 3.35 ≈ 328 min against the 360-min job ceiling, 9% margin — raising
+     the bound buys one growth step and a timeout still erases everything.
+     The workflow now runs 8 round-robin shards (`--shard K/N`, ≤13 mutants,
+     ≈45 min each against a 120-min step bound) and a `merge` job
+     (`--merge`) that is the only green. A shard that hits its bound reports
+     `INCOMPLETE` plus `NOT-RUN <id>` per unexercised mutant, and the issue
+     body leads with "classified X of Y". `BUDGET` fails a run in which a
+     shard passes 60% of its bound. §9f states the contract. Plan review:
+     `todos/review-2026-10-21-083530.md`; code review:
+     `todos/review-2026-10-21-091500.md`. Decided at build (plan-review
+     finding 17): a BUDGET-only failure uses the same tracking issue, its
+     BUDGET line naming the cause; an empty shard (N above the registry
+     size) exits 1, "no mutants ran".
+
+     Deferred from the PR #89 code review (`todos/review-2026-10-21-091500.md`
+     findings 18-24, all P3, none can turn a run green):
+     - [ ] 2c-r7a. A log fetched before its tail is final would read
+       INCOMPLETE; retry on a missing SHARD-DONE when the job succeeded.
+     - [ ] 2c-r7b. Relayed text still passes markdown images, links, `#N`
+       and non-SGR escapes (only `@`, backticks and control bytes are
+       defused).
+     - [ ] 2c-r7c. Shard output is not wrapped in `::stop-commands::`.
+     - [ ] 2c-r7d. The shard job's literal `timeout-minutes: 130` must be
+       kept above `SHARD_STEP_MINUTES` by hand.
+     - [ ] 2c-r7e. A partial re-run (failed jobs only) under `filter=latest`
+       is unverified.
+     - [ ] 2c-r7f. No committed real API log as a `--merge` corpus fixture.
+     - [ ] 2c-r7g. HARNESS-ERROR detail and the cause of a failed job
+       listing do not reach the issue body.
    - [ ] 2c-r8. Five model-pin legs own no unique killer. P3. In the
      2026-10-04 sweep (`v-exit` excluded), every control killed by a t-,
      dd-, ext-, rank- or l3- mutant is also killed by another leg's mutant —

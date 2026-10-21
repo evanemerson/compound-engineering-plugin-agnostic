@@ -193,7 +193,7 @@ jobs:
             exit 0
           fi
           if [ -z "$out" ]; then
-            printf '::warning::the mutation sweep has no SUCCESSFUL run on record — it has either never run, or never passed. Dispatch it once; that also calibrates its timeout-minutes, which is still an unmeasured 3x of a local figure\n'
+            printf '::warning::the mutation sweep has no SUCCESSFUL run on record — it has either never run, or never passed. Dispatch it once; a run that never passes is also reported on the issue the sweep itself files\n'
             exit 0
           fi
           # Parsed into a variable and gated, NOT inlined into the arithmetic.
