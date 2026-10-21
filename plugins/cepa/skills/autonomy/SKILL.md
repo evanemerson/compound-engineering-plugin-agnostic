@@ -833,7 +833,7 @@ because the classifier deliberately never reads exit status.
 
 | Exit | Meaning | Caller rule |
 |---|---|---|
-| 0 | a COMPLETE run with no findings | the only green |
+| 0 | a COMPLETE run with no findings | the only green for a single run; a sharded sweep's is `--merge`, below |
 | 1 | a finding, or a run that asserted nothing (no mutants ran, tree changed mid-run) | fail |
 | 2 | usage or environment — a broken invocation, not a fact about the controls | fail, and never record it as a finding |
 | 3 | a FILTERED run that found nothing | **not a pass.** A subset proves nothing about the mutants it skipped. `--partial-ok` converts it to 0 for an operator verifying one mutant by hand; a gate that passes `--partial-ok` has disabled itself |

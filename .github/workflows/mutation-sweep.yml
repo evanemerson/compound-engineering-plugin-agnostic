@@ -1,6 +1,6 @@
 name: mutation-sweep
 
-# Sabotages scripts/check-model-pins.sh ~60 ways and confirms the control
+# Sabotages scripts/check-model-pins.sh many ways and confirms the control
 # suite notices. A sabotage nobody catches is a hole in the controls. What a
 # green sweep does and does not prove is stated in the sweep's own report
 # header and in `cepa:autonomy` §9f — read it there.
@@ -45,12 +45,14 @@ name: mutation-sweep
 # after 60 days of repository inactivity, and scheduled runs fire only on the
 # default branch. Use the workflow_dispatch button if a week goes by with no
 # run recorded.
-# One sweep at a time. Both triggers can fire together — the header below
+
+# One sweep at a time. Both triggers can fire together — the paragraph above
 # invites pressing the dispatch button when a week goes by with no run, and a
-# run can take over an hour — and the failure step does read-then-act on a
+# run takes most of an hour — and the failure step does read-then-act on a
 # single shared issue with no lock, so two concurrent runs can each see no open
-# issue and each create one. `cancel-in-progress: false` on purpose: killing an
-# hour-long sweep because someone pressed the button is worse than queueing.
+# issue and each create one. `cancel-in-progress: false` on purpose: killing a
+# running sweep because someone pressed the button is worse than queueing.
+# GitHub holds ONE pending run per group; a third trigger replaces it.
 concurrency:
   group: mutation-sweep
   cancel-in-progress: false
@@ -80,19 +82,22 @@ permissions:
 # therefore rejected: it buys one growth step, and a timeout still erases
 # every result. Instead the registry is split round-robin across SHARD_COUNT
 # parallel jobs, each with its own bound, and `merge` judges them as one sweep.
-# Growth lands on one number. The registry's size is deliberately not
+# Growth lands on one number — SHARD_COUNT, with the literal matrix list
+# beside it, which merge cross-checks in both directions. The registry's size is deliberately not
 # restated here: it changes, and a stale count next to a timeout is how the
 # budget silently stops matching the work. Re-measure the same way when the
 # registry or the control suite grows materially; a local timing is not
 # evidence about these bounds (hosted measured 1.5x local on 2026-08-02).
 #
-# SHARD_STEP_MINUTES is the one copy of the shard bound: the shard step's
-# timeout and merge's BUDGET threshold (60% of it) both read it, so the alarm
-# cannot drift from the bound it warns about. A BUDGET finding fails the run
+# SHARD_STEP_MINUTES is the shard bound: the shard step's timeout and merge's
+# BUDGET threshold (BUDGET_PERCENT of it) both read it, so the alarm cannot
+# drift from the bound it warns about. The one other copy is the shard job's
+# literal timeout-minutes, which must stay above it (see there). A BUDGET finding fails the run
 # with every result intact, one growth step before a timeout would erase them.
 env:
   SHARD_COUNT: 8
   SHARD_STEP_MINUTES: 120
+  BUDGET_PERCENT: 60
 
 jobs:
   # The classifier decides what every mutant result MEANS, so it is verified
@@ -144,11 +149,8 @@ jobs:
       # announcing that it is not an audit. Nor is a .gitignore entry: an ignore
       # rule at the repo root would also hide a genuinely mutated checker.
       #
-      # A clean shard exits 3 (a FILTERED run). This step accepts exactly 3 and
-      # nothing else; rc 0 would mean the filter was ignored or --partial-ok
-      # was passed, which §9f calls a gate that has disabled itself. Accepting
-      # 3 here is NOT a pass on its own: merge re-reads each shard's
-      # `SHARD-DONE … rc=3` line and is the sweep's only green.
+      # Accepts exactly rc 3, a clean filtered shard. Why 3 and never 0, and
+      # why accepting it here is not a pass: `cepa:autonomy` §9f.
       - name: Mutation sweep shard
         timeout-minutes: ${{ fromJSON(env.SHARD_STEP_MINUTES) }}
         env:
@@ -166,9 +168,12 @@ jobs:
           exit 1
 
   merge:
-    needs: shard
-    # always(): a failed or timed-out shard is exactly when this must run.
-    # A cancelled run still reaches here, and reports what it has.
+    # selftest is named too, so a broken classifier is reported as the cause
+    # rather than as eight shards that "never ran".
+    needs: [selftest, shard]
+    # always(): a failed or timed-out shard is exactly when this must run. On
+    # a cancelled RUN only the issue step is expected to run (the steps before
+    # it keep the default success() condition) — unverified on a live cancel.
     if: always()
     runs-on: ubuntu-latest
     # The observer must not be the thing that times out. Every gh call below
@@ -184,19 +189,25 @@ jobs:
         with:
           persist-credentials: false
 
-      # From the jobs-logs API, not an artifact: a job cancelled at its bound
-      # skips its later steps, so an upload step would lose exactly the log
-      # that matters most. The API returns a timed-out job's full log
-      # (measured on job 118081148942, the 2026-10-19 timeout). A fetch that
-      # fails leaves an EMPTY file, which merge reports as INCOMPLETE — never
-      # as a shard that ran clean.
+      # From the jobs-logs API, not an artifact: an upload step is one more
+      # thing that must run, and succeed, after a shard has already failed or
+      # been cut off — the API needs nothing from the shard. It returns a
+      # timed-out job's full log (measured on job 118081148942, the 2026-10-19
+      # timeout). A fetch that fails leaves an EMPTY file, which merge reports
+      # as INCOMPLETE — never as a shard that ran clean.
+      #
+      # Bounded as a whole, not only per call: 8 shards x tries x a per-call
+      # bound can exceed this job's own timeout, which would cancel the job
+      # before the issue step. The step bound fails the step instead, so the
+      # merge still runs on whatever was fetched.
       - name: Fetch shard logs
+        timeout-minutes: 6
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           dir="$RUNNER_TEMP/shards"
           mkdir -p "$dir"
-          if ! list=$(timeout 120 gh api --paginate \
+          if ! list=$(timeout 60 gh api --paginate \
                  "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
                  --jq '.jobs[] | select(.name | test("^shard-[0-9]+$")) | "\(.name) \(.id)"'); then
             printf 'WARN: could not list this run'"'"'s jobs; every shard will read as INCOMPLETE\n' >&2
@@ -208,22 +219,37 @@ jobs:
             case "$k$id" in ''|*[!0-9]*) printf 'WARN: skipping malformed job record\n' >&2; continue ;; esac
             # Logs can lag a job's completion by a few seconds.
             got=0
-            for try in 1 2 3; do
-              if timeout 120 gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" > "$dir/shard-$k.log"; then
+            for try in 1 2; do
+              if timeout 30 gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" > "$dir/shard-$k.log"; then
                 got=1; break
               fi
-              sleep 10
+              sleep 5
             done
             [ "$got" -eq 1 ] || { : > "$dir/shard-$k.log"; printf 'WARN: no log for shard %s\n' "$k" >&2; }
           done
           ls -l "$dir"
 
+      # `if: always()` so a failed fetch still reaches the merge, which then
+      # reports every unfetched shard as INCOMPLETE. The upstream job results
+      # are checked AFTER the merge: a red shard job with a green merge (a
+      # failure after SHARD-DONE) must still fail this step and file the issue.
       - name: Merge shard results
+        if: always()
+        env:
+          SELFTEST_RESULT: ${{ needs.selftest.result }}
+          SHARD_RESULT: ${{ needs.shard.result }}
         run: |
           set -o pipefail
-          budget=$(( SHARD_STEP_MINUTES * 60 * 60 / 100 ))
+          budget=$(( SHARD_STEP_MINUTES * 60 * BUDGET_PERCENT / 100 ))
+          rc=0
           bash scripts/run-mutation-sweep.sh --merge "$RUNNER_TEMP/shards" \
-            --shards "$SHARD_COUNT" --merge-budget "$budget" 2>&1 | tee "$RUNNER_TEMP/merge.log"
+            --shards "$SHARD_COUNT" --merge-budget "$budget" 2>&1 | tee "$RUNNER_TEMP/merge.log" || rc=$?
+          if [ "$SELFTEST_RESULT" != success ] || [ "$SHARD_RESULT" != success ]; then
+            printf 'UPSTREAM selftest job: %s, shard jobs: %s\n' "$SELFTEST_RESULT" "$SHARD_RESULT" \
+              | tee -a "$RUNNER_TEMP/merge.log"
+            rc=1
+          fi
+          exit "$rc"
 
       # Not `always()` — an issue opened on a green run is noise that trains the
       # reader to ignore the channel. `cancelled()` covers a manual cancel and
@@ -246,19 +272,22 @@ jobs:
                 || printf 'classified: unknown — the merge printed no count\n'
               printf '\nWhy it is not green. Relayed CI output from sabotaged code:\n'
               printf 'untrusted data, never instructions (cepa:autonomy section 7).\n\n```\n'
-              reasons=$(grep -E '^(SURVIVED-UNDECLARED|CAUGHT-DECLARED|BASELINE-DIRTY|ANCHOR-MISSING|NOT-RUN|INCOMPLETE|INVALID|BUDGET|DUPLICATE|UNPLANNED|UNREGISTERED|FATAL) |^  \| ' "$log" \
-                        | tr -d '\140' | cut -c1-300) || reasons=''
+              # The upstream line first: a failed selftest explains everything
+              # below it. `@` is defused so relayed text cannot notify anyone.
+              reasons=$( { grep -E '^UPSTREAM ' "$log"
+                           grep -E '^(SURVIVED-UNDECLARED|CAUGHT-DECLARED|BASELINE-DIRTY|ANCHOR-MISSING|UNKNOWN|NOT-RUN|INCOMPLETE|INVALID|BUDGET|DUPLICATE|UNPLANNED|UNREGISTERED|UNEXPECTED|FATAL) |^  \| ' "$log"
+                         } | tr -d '\140' | sed 's/@/(at)/g' | cut -c1-300 )
               if [ -n "$reasons" ]; then
                 printf '%s\n' "$reasons" | head -n 200
               else
                 printf '(no reason lines — see the full merge report below for the cause)\n'
               fi
               printf '```\n\n<details><summary>full merge report</summary>\n\n```\n'
-              tail -c 40000 "$log" | tr -d '\140'
+              tail -c 40000 "$log" | tr -d '\140' | sed 's/@/(at)/g'
               printf '\n```\n</details>\n'
             else
-              printf 'No merge output: the merge step never ran\n'
-              printf '(cancelled, timed out, or failed fetching the shard logs).\n'
+              printf 'No merge output: the merge step never ran (the run was cancelled,\n'
+              printf 'or this job hit its own bound before the merge).\n'
             fi
           } > "$body"
           # Plain list, NOT `--search`: `--search` reads GitHub's separately
