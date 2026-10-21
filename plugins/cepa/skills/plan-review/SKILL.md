@@ -68,7 +68,10 @@ never be indistinguishable from a clean pass).
 
 Personas are **reference prompts, not registered agents**: the
 orchestrator dispatches generic subagents seeded with
-`references/subagent-template.md` plus the persona file.
+`references/subagent-template.md` plus the persona file. Personas are
+readers (`cepa:autonomy` §11a): no `isolation`, and the template opens with
+§11a's READ-ONLY line; every invoker runs §11b's snapshot and cleanup around
+the panel.
 <!-- model-pin: mode-conditional interactive=opus headless=sonnet -->
 The dispatch tier is mode-conditional per `cepa:autonomy` §9c-9d — **an
 explicit `model: opus` override on an interactive run, `model: sonnet` when

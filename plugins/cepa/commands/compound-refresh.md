@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*), Bash(git for-each-ref:*), Bash(git worktree:*), Bash(git rev-list:*)
 ---
 
 # Compound Refresh
@@ -162,6 +162,13 @@ metadata edits centrally — subagents never write.
 **Dispatch each with an explicit `model: sonnet` override** — every
 investigation and replacement subagent, at the routine tier per
 autonomy §9c; §9a is why the override lives here rather than in frontmatter.
+
+**Each is a reader** (`cepa:autonomy` §11a) — a drafter returns its draft and
+writes nothing — so no `isolation`, and its prompt opens with §11a's
+READ-ONLY line and the checkout source line. Take the §11b snapshot
+(`<run>` = `compound-refresh`) before the first subagent; run the §11b
+cleanup once after the last one returns (`<mode>` per §11c), and carry its
+lines into the report.
 
 ## Phase 2: Document-Set Analysis
 
