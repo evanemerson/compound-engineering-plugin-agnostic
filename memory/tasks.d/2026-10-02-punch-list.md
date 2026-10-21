@@ -312,6 +312,34 @@ L14. **Stop `/cepa:review` (and other dispatching commands) leaving `agent-*`
     from agent output never goes into a quoted shell string; read it through a
     quoted heredoc and check it inside the block."
 
+L15. **Do read-only review agents write into the shared tree when they run code?**
+    status: pending
+    severity: P3
+    owner: unassigned
+    Filed 2026-10-21. A QUESTION, not a finding: nothing here has been measured.
+    `cepa:autonomy` §11a (#88) gives a Reader agent no worktree and a
+    `READ-ONLY:` brief that says "write files only under a `mktemp -d`
+    directory outside the repo". That is an instruction, not a control —
+    the exact weakness the header of Evan's global hook
+    `~/.claude/hooks/require_worktree_isolation.py` names ("an instruction is
+    not a control"; the shared-tree failure it guards fired 7 times, once as a
+    false review result). The hook checks only that the `READ-ONLY:` line
+    EXISTS; it does not stop a write.
+    Readers do run code: #88's adversarial reviewer REPRODUCED a shell
+    injection. Running the repo's own tests in place would write caches into
+    the shared checkout (`__pycache__/`, `.pytest_cache/`, coverage files),
+    and nothing stops it.
+    **Measure first:** run `/cepa:review` on a real PR and diff
+    `git status --porcelain --ignored` of the shared checkout before and after.
+    Only if it changes, decide: send code-running readers to isolation, or
+    point their caches outside the repo (e.g. `PYTHONDONTWRITEBYTECODE=1`,
+    `-p no:cacheprovider`), and say which in §11a.
+    **Decided 2026-10-21: do NOT weaken the hook.** coord@main first proposed
+    re-ordering its refusal message to suggest `READ-ONLY:` before isolation,
+    to reduce leftover worktrees. Withdrawn after reading the hook: it would
+    trade disk clutter (all leftovers were clean) for unprotected writes to
+    the shared tree, in every repo. #88 already fixed leftovers at the source.
+
 ---
 
 ## How this list is used
