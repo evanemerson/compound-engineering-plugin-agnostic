@@ -980,7 +980,7 @@
      any line whose first non-blank text is three backticks, ignoring fence
      character and length. P3. A four-backtick fence wrapping a three-backtick one, or a
      `~~~` fence, flips the wrong text. Leg 5's `L5_INDEX_AWK` is the model.
-   - [ ] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
+   - [x] 2c-r7. **The full mutation sweep no longer fits its CI bound.** P2.
      Measured 2026-10-04 at `f3edeb4`, local, 98 mutants × 109 controls:
      224 min (19:09:57 → 22:54:12 CDT; a second, dying sweep shared the
      machine for ~1.5 h of it). `mutation-sweep.yml` bounds the step at
@@ -990,9 +990,14 @@
      is ~2.3 min. Needs a design call (shard the registry across jobs, or
      raise the bounds toward GitHub's 6 h job ceiling), not a number bump.
 
-     **Fix on `fix/integrity/sweep-ci-bound` (PR #89, 2026-10-21,
-     tab2@integrity, punch-list L11), 1.31.0 — left unchecked until a hosted
-     run of the PR's final head passes; the PR body links it.** Design call: shard, not raise. Hosted
+     **Fixed on `fix/integrity/sweep-ci-bound` (PR #89, 2026-10-21,
+     tab2@integrity, punch-list L11), 1.31.0. Hosted proof: run 39619703190
+     at 135257c — success, 98 of 98 classified, 43.4 min wall-clock, slowest
+     shard 2426 s (34% of its 120-min bound, under the 4320-s BUDGET line).**
+     The first hosted run (39612283167) passed every shard but fetched no
+     logs: the runner's `gh` refuses a response holding terminal escape
+     sequences, which every job log does. It failed closed (8 INCOMPLETE,
+     98 NOT-RUN, issue #61 commented); curl replaced it in 135257c. Design call: shard, not raise. Hosted
      per-mutant cost measured from the run logs (`gh run view <id> --log`,
      gap between outcome lines): 1.59 min on 2026-09-28 (run 36432232703),
      3.35 min on 2026-10-19 (run 39258911032, 44 classified before the
