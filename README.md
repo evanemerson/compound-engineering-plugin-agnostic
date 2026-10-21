@@ -208,8 +208,9 @@ head), and `check-brain-client-args.sh` for the brain client's argument guards.
 `check-coord-write-guard.sh` runs the worktree-coordinator write guard's own
 probe against fixture repos, and checks that every command cites it.
 `check-dispatch-isolation.sh` runs the dispatch-cleanup blocks against fixture
-repos with planted `agent-*` worktrees, and checks that every dispatch site
-puts the READ-ONLY brief line in a reader's prompt.
+repos with planted `agent-*` worktrees, and checks that every dispatch-site
+file cites the isolation rule and tells the orchestrator to carry the
+READ-ONLY brief line.
 
 CI pins its actions and Dependabot keeps them current.
 [CHANGELOG.md](CHANGELOG.md) is generated from GitHub Releases rather than

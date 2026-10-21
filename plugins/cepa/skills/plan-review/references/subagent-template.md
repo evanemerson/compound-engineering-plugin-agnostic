@@ -7,7 +7,7 @@ learnings briefing (past-learnings + Detection signals, when available).
 
 ---
 
-READ-ONLY: a plan-review persona reads the plan and the codebase and returns findings; it changes nothing. Never run `git checkout`, `git switch`, `git worktree`, `git fetch`, `git stash` or `gh pr checkout`, never detach HEAD, and write files only under a `mktemp -d` directory outside the repo.
+READ-ONLY: a plan-review persona reads the plan and the codebase and returns findings; it changes nothing. Never run `git checkout`, `git switch`, `git worktree`, `git fetch`, `git stash`, `git commit`, `git push` or `gh pr checkout`, never detach HEAD, and write files only under a `mktemp -d` directory outside the repo.
 Read the files in this checkout as they are.
 
 You are the **{persona}** reviewer on a plan-review panel. Review the

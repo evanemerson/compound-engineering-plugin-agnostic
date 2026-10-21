@@ -393,10 +393,11 @@ when launching that session.)
 
 **Isolation per `cepa:autonomy` §11a:** the implementer is a sequential
 writer — no `isolation`, no READ-ONLY line, one at a time in this checkout.
-The spec-reviewer and code-quality-reviewer are readers and carry §11a's
-READ-ONLY line. Take the §11b snapshot (`<run>` = `task`) before the first
-build dispatch and run the cleanup once after the last one returns
-(`<mode>` per §11c).
+The spec-reviewer and code-quality-reviewer are readers: add §11a's
+READ-ONLY line to each of their dispatches, as for the tier above. Take the
+§11b snapshot again (`<run>` = `task` — the researcher's cleanup emptied the
+first one) before the first build dispatch, and run the cleanup once after
+the last one returns (`<mode>` per §11c).
 
 These skills handle:
 - Task-by-task implementation

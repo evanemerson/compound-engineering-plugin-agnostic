@@ -24,3 +24,27 @@ took at build; the decision is reviewable in the PR.
    and its message lists isolation first for any agent that "may run a
    probe". It has no form for a sequential writer (task 3.2's builders). The
    hook is Evan's global file; this branch does not edit it.
+4. **Re-measured dispatch sites (L14 asked; recorded so "checked" reads
+   differently from "forgotten")** — sites = files that declare a dispatch
+   tier: `grep -l -E "model: (sonnet|opus|haiku)|no model override|model-pin:"
+   plugins/cepa/commands/*.md plugins/cepa/skills/*/SKILL.md` → compound,
+   compound-refresh, lfg, plan-review, review, task, the plan-review skill,
+   and autonomy (the home). sweep and resolve-pr dispatch no agent themselves;
+   sweep runs other commands and resolve-pr only suggests `/cepa:review`.
+
+## 2026-10-21 — /cepa:review PR #88 findings deferred
+
+Source: `todos/review-2026-10-21-090921.md` (34 findings; 28 applied on this
+branch, 1 skipped, the 5 below deferred). Numbers are the findings file's.
+
+5. **P2 #14 — builder worktrees are always kept** — same as item 1; lfg's
+   wording now says so plainly.
+6. **P2 #16 — a mutant that only crashes would count as killed** — none does
+   today (python-reviewer counted); a `bash -n` pre-check is the guard when a
+   mutant is added.
+7. **P3 #22 — allowed-tools and a multi-statement block** — unverified in
+   headless mode; the §10f probe has the same open question.
+8. **P3 #31 — SITES is a per-file substring test** — a per-dispatch placement
+   check is not built.
+9. **P3 #32 — TOOLS reads one frontmatter shape** — CRLF or a YAML list is not
+   parsed; matches check-coord-write-guard.sh.

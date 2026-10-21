@@ -255,7 +255,8 @@ pipeline's contract.
 - Once every builder has returned and been merged, run the §11b cleanup
   once (`<run>` = `lfg`, `<mode>` per §11c) and carry its lines into the
   report. A builder worktree whose commits the remote does not have yet is
-  KEPT by design; that is §2's integration, not a leak.
+  KEPT, and nothing in this run removes it later: report it, and leave its
+  removal to the operator.
 - Test-first per task where the plan specifies tests; commit per task.
 - A blocked task gets recorded (autonomy §5) and skipped; the run continues
   with the remaining tasks.

@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*), Bash(git for-each-ref:*), Bash(git worktree:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*), Bash(git for-each-ref:*), Bash(git worktree:*), Bash(git rev-list:*)
 ---
 
 # Compound Refresh
