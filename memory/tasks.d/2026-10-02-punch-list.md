@@ -235,7 +235,13 @@ L12. **Make cepa enforce the coord@<wt> rule (finding #8 of PR #84).**
     `memory/tasks.d/2026-10-06-feat-roles-coord-wt-write-guard.md`.
 
 L13. **dpc-pro findings files the checker still cannot reconcile.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-22, in dpc-pro** (reported by dpc-pro's coord@main; not
+    re-measured here). dpc-pro L33 (PR #258, `9ccfd55e`) fixed the 8 old files;
+    dpc-pro L39 (PR #262, `ce647150`) fixed the 6 files written 2026-10-21,
+    which now exit 0 under the shipped `check-findings-file.sh`. Whole-tree
+    MISS 249 -> 240; the remaining 240 are dpc-pro's own older files.
+    Its follow-up question became L17.
     owner: dpc-pro (hand-off only; nothing in this repo is owed yet).
     **Measured 2026-10-06 in a dpc-pro session** with the item 13 probe (cepa
     pattern pinned at `fe342a6`): 206 review files, 36 listed. The full output
@@ -382,6 +388,34 @@ L16. **`/cepa:review` and `/cepa:plan-review` write findings files their own
     `memory/tasks.d/2026-10-22-fix-integrity-producer-self-check.md`.
     **Unblocks L13:** dpc-pro can clean its 6 new files once its sessions run
     1.33.0 (new sessions load it).
+
+L17. **The self-check does not require the spec's field names.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    Filed 2026-10-22 from dpc-pro's coord@main (relayed): two plan-review
+    findings files there use row fields `class`, `anchor` and `summary` instead
+    of the spec's `action_class`, `file` and `title`, and both PASS
+    `check-findings-file.sh`.
+    **Measured here 2026-10-22:** no cepa file prescribes those names. The
+    persona return format (`plan-review/references/subagent-template.md`) is
+    title, severity, section, finding_type, autofix, confidence,
+    why_it_matters, evidence, suggested_fix; the plan-review skill's table
+    (SKILL.md:140-147) maps them onto `action_class`, `file`, `lines`. "Anchor"
+    appears only as the name of a confidence level. So the writing session
+    invented the names, and nothing caught it: #90's check counts status and
+    severity rows but never requires the spec's REQUIRED fields
+    (`## Finding Fields`: status, severity, agent, category, confidence,
+    action_class, file, title).
+    **Answer given to dpc-pro:** emit the standard names; the spec does NOT
+    get a second, plan-review row shape (repo convention: the file-todos spec
+    is the single canonical spec — never invent variants).
+    **Consequence today:** `/cepa:triage` decides auto-apply by
+    `action_class`, so findings without it are not classified as intended.
+    **Fix to plan:** make the shipped check require each finding's required
+    fields, with the old-vs-new corpus diff over this repo's todos/ (and a
+    dpc-pro hand-off diff) before it becomes a MISS — older files may lack
+    fields legitimately (counter_convention, superseded formats).
 
 ---
 
