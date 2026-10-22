@@ -32,18 +32,23 @@ L3. **Close tabs 1, 3, 4.**
 ## Open — in dependency order
 
 L4. **Build `scripts/check-doc-greps.sh`.**
-   status: pending
-   owner: unassigned
+   status: completed
+   owner: none
    severity: P2
-   The last prevention item with no mechanism behind it. Must assert a skill's
-   fenced grep patterns against BOTH its committed fixture AND a corpus diff —
-   #77 proved the fixture half alone is insufficient (a fix scored 13/13 on the
-   fixture, then lost rows on 51 of 193 corpus files).
-   **Undecided before starting:** whether to adopt the
-   `(skill, fixture, expected)` triple convention at all. Marginal for one
-   pattern pair; pays off as a house style. The 2026-10-02 handoff lists this
-   as an open question, not a settled task.
-   Needs a fresh session and a plan. Run via `/cepa:task`.
+   **CLOSED 2026-10-22 without code — done by #90.** L4 wanted a doc-prescribed
+   grep pattern tested against its fixture AND a corpus diff. #90 moved the
+   file-todos counting grep into the shipped
+   `plugins/cepa/scripts/check-findings-file.sh`, and
+   `scripts/check-findings-file-controls.sh` runs it against
+   `plugins/cepa/skills/file-todos/fixtures/status-spellings.md` in CI. #90 also
+   ran the old-vs-new corpus diff by hand: 70 files, 0 changes.
+   Measured by coord@main on origin/main, from a script file (fenced-block
+   `grep -[Eco]` lines per .md under plugins/cepa): only 3 remain —
+   `handoff.md:616-617`, an example comparing two version strings, and
+   `review.md:495`, which reads one `model:` line. Neither counts rows, so a
+   checker built as L4 describes would have 0 targets.
+   Not built: a preventive rule ("a new counting grep in plugin docs must live
+   in shipped code or name a fixture"). File a new item if one ever appears.
 
 L5. **Work residual 2i, then 2j, then 2g, then 2c.** (all four closed)
    status: completed
