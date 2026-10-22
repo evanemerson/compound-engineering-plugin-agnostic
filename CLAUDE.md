@@ -43,15 +43,9 @@ subject names a different defect, so read the diff rather than the message when
 verifying this. A review agent caught it, not a script. #65 then swept the four
 latent count-bearing headings out of `plugins/cepa/README.md`.
 
-**Nothing enforces this rule today** — no checker, no CI job, and `main` is
-deliberately unprotected. It holds by review alone, which is what caught the
-#64 instance. A checker for the heading half is filed in
-`memory/tasks.d/2026-09-25-main.md`; when it lands, the scope limits belong in
-its header, and this paragraph should shrink to a pointer rather than grow a
-second copy. Two sibling claims are not gateable even then: whether prose
-correctly characterizes a CI trigger (interpretation, not arithmetic), and
-whether a branch-protection claim still holds (mutable platform state that
-drifts with no commit).
+**Enforced by `scripts/check-anchor-counts.sh`**, gated in `anchor-counts.yml`
+with its controls. Its header owns what it flags, what it only reports, its
+limits, and the two sibling claims no checker can gate — read them there.
 
 ### An absence claim is a fact about the probe, not about the corpus
 "Zero occurrences" is the output of one command. Aim that command at the wrong

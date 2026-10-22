@@ -1,0 +1,50 @@
+name: anchor-counts
+
+# Enforces CLAUDE.md § "Anchors must not encode a count that can drift". A
+# heading like `## Commands (11)` slugifies to `#commands-11`, and a link to it
+# breaks silently when the count changes — the link resolves in the reader's
+# browser, so nothing else fails. PR #64 shipped one; review caught it, not a
+# script. Before this workflow the rule held by review alone.
+#
+# The check is read-only and takes seconds. Its legs, what it flags vs only
+# reports, the two sibling claims it cannot gate, and its stated limits are
+# defined in scripts/check-anchor-counts.sh's own header — read them there
+# rather than inferring them from this comment.
+#
+# A separate workflow rather than a step in residual-integrity.yml only to keep
+# this change's files disjoint from concurrent edits to that file. It follows
+# that workflow's shape exactly; folding it in later is a pure move.
+#
+# Security: this workflow interpolates NO event data (no ${{ github.event.* }})
+# into any run: step — both steps are static `bash scripts/...` invocations, so
+# there is no injection surface. Keep it that way.
+#
+# Action pinning, the bump recipe, and the JS-runtime eligibility constraint on
+# major versions are documented in .github/workflows/model-pins.yml. This
+# workflow CITES that file rather than restating it.
+
+# Deliberately NOT path-filtered, for the reason model-pins.yml states.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Both checks finish in seconds. Same bound and rationale as
+    # model-pins.yml's `check` job.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Policy check first, controls second with `if: always()`, so neither
+      # hides the other — model-pins.yml records why the reverse order inverts
+      # the diagnostic.
+      - name: Check anchor counts
+        run: bash scripts/check-anchor-counts.sh
+      - name: Check anchor-count checker controls
+        if: always()
+        run: bash scripts/check-anchor-counts-controls.sh
