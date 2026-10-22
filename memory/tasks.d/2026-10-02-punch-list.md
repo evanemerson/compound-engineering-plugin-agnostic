@@ -336,6 +336,17 @@ L15. **Do read-only review agents write into the shared tree when they run code?
     injection. Running the repo's own tests in place would write caches into
     the shared checkout (`__pycache__/`, `.pytest_cache/`, coverage files),
     and nothing stops it.
+    **First measurement, 2026-10-22, NEGATIVE BUT BLIND:** coord@main took
+    `git status --porcelain --ignored` of the integrity worktree at 14:05 and
+    14:29 CDT, around PR #90's `/cepa:review` (findings file stamped 14:10:57).
+    No new ignored or untracked path, and no `__pycache__`, `.pytest_cache`,
+    `.coverage` or `*.pyc` anywhere in the worktree. The only change was the
+    worker's own committed edit. **This cannot answer L15:** cepa's tests are
+    shell scripts, so a review here has no pytest to run, and the shape L15
+    asks about cannot appear (CLAUDE.md, "A clean corpus diff proves nothing
+    about a shape the corpus does not hold"). It also cannot see a file
+    written and removed between the two pictures. The real measurement needs
+    a repo with Python tests, e.g. dpc-pro, as a hand-off.
     **Measure first:** run `/cepa:review` on a real PR and diff
     `git status --porcelain --ignored` of the shared checkout before and after.
     Only if it changes, decide: send code-running readers to isolation, or
@@ -349,34 +360,28 @@ L15. **Do read-only review agents write into the shared tree when they run code?
 
 L16. **`/cepa:review` and `/cepa:plan-review` write findings files their own
     checker rejects.**
-    status: pending
-    severity: P2
-    owner: unassigned
-    Filed 2026-10-21 from dpc-pro's coord@main (relayed; NOT re-measured here).
-    After dpc-pro's L33 cleaned 8 old files (dpc-pro PR #258, `9ccfd55e`), its
-    whole-tree MISS count rose 240 -> 249 the same day, from 6 files that
-    /cepa:review and /cepa:plan-review wrote on 2026-10-21:
-    `review-2026-10-21-083212` (counters sum 0, `total:` 11);
-    `-095500` (7 headings, zero `status:` rows); `-plan-l34` (`p2: 8`, body 9);
-    `-planreview-couples-parent-orders` (no `summary:` block);
-    `-pr256-couples-parent-orders` (counters sum 24, `total:` 26);
-    `-pr260` (`p2: 5`, body 6). Checked with check-residual-integrity.sh @
-    `0a23a235`. Every cleanup pass is undone by the next review wave.
-    **Measured here 2026-10-21, and it changes dpc-pro's suggested fix**
-    ("run check-residual-integrity.sh as the command's last step"): that
-    checker is repo tooling in this repo's `scripts/`, NOT in the plugin. The
-    loaded copy (`~/.claude/plugins/cache/cepa/cepa/1.32.0`) has no
-    `check-residual*` file, so a command running in another repo cannot call
-    it. And no producer self-checks today: review.md, plan-review.md and
-    resolve-pr.md have no step that recounts what they wrote.
-    **The design call:** ship ONE executable copy of the counting rule inside
-    the plugin, run it as the last step of every command that writes a
-    findings file (fail or self-correct before reporting), and make this
-    repo's CI call that same copy. Two copies of the rule would be the
-    restatement drift CLAUDE.md records four times. Re-measure which commands
-    write findings files.
-    dpc-pro chose to leave its 6 files until this lands, then clean them all
-    in one pass.
+    status: completed
+    **CLOSED 2026-10-22** — PR #90 (`2d02c5a`), v1.33.0, by `tab3@integrity`.
+    The counting rule ships ONCE in the plugin as
+    `plugins/cepa/scripts/check-findings-file.sh`; `scripts/check-residual-
+    integrity.sh` sources it, and the file-todos spec points at it. review,
+    plan-review, resolve-pr, lfg, triage, sweep and task run the spec's new
+    `## Self-check` after their last findings-file write and before the commit.
+    On a mismatch a writer may repair ONCE by rebuilding counters from the
+    findings; it never deletes a finding or changes a status; a second mismatch
+    is a failed self-check; no plugin copy found -> "unavailable", never a pass.
+    The todos/ scan and shard checks stay repo-only.
+    Verified by coord@main after merge, from a scratch repo outside cepa, with
+    the LOADED 1.33.0 copy: an off-spec file exits 1 naming the problem, a
+    correct file exits 0.
+    Merged as-is, accepting the worker's decisions 1 (keep plan-review fixes
+    4–7 and 9 of `todos/review-2026-10-22-134226.md`) and 3 (keep triage's added
+    grants). Its decision 2 stays open: finding 28 — `Bash(bash:*)` may not
+    cover the multi-line Self-check block, so an UNATTENDED run could stop at a
+    permission prompt; measure before relying on it. 5 deferred findings in
+    `memory/tasks.d/2026-10-22-fix-integrity-producer-self-check.md`.
+    **Unblocks L13:** dpc-pro can clean its 6 new files once its sessions run
+    1.33.0 (new sessions load it).
 
 ---
 
