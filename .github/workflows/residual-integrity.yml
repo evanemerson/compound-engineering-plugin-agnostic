@@ -58,6 +58,16 @@ jobs:
       - name: Check residual-integrity checker controls
         if: always()
         run: bash scripts/check-residual-integrity-controls.sh
+      # The counting rule ships in the plugin
+      # (plugins/cepa/scripts/check-findings-file.sh) and every findings-file
+      # writer runs it through the cepa:file-todos Self-check block. The step
+      # above already drives it through the repo checker; this one pins the
+      # standalone contract, the block itself (extracted and run from a
+      # non-cepa directory), and each writer's citation. Static command, no
+      # workflow-context interpolation.
+      - name: Check shipped findings-file check controls
+        if: always()
+        run: bash scripts/check-findings-file-controls.sh
       # Fixtures for the three sweep branch-classes no repo in the portfolio
       # can produce: multiple merged PRs on one head, non-trunk base's
       # negative path, and MERGED+OPEN on one head. Field runs cannot cover
