@@ -1,7 +1,7 @@
 ---
 description: Review a plan document with a persona panel before build — findings to todos/, eligible fixes applied to the plan, judgment items made durable
 argument-hint: "[plan path] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git rev-parse:*), Bash(git worktree:*), Bash(git rev-list:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git rev-parse:*), Bash(git worktree:*), Bash(git rev-list:*), Bash(bash:*)
 ---
 
 # Plan Review
@@ -34,7 +34,9 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   plan edits applied (with the revision commit SHA), deferred findings
   with their sinks, any personas that failed (with reasons), and whether
   any P1 is `judgment`-class — a caller must never build past a critical
-  plan finding it was never told about. If the run stops with no findings
+  plan finding it was never told about — and the Step 5 `self_check:`
+  result (`clean`, `repaired`, `failed` with its MISS lines, or
+  `unavailable`). If the run stops with no findings
   file (every persona failed, unreadable document), return
   `review_failed: <reason>` and NO findings-file path — callers gate on
   that mechanically instead of mistaking silence for a clean review.
@@ -153,7 +155,12 @@ always `judgment`.
 5. Mark `applied` only after the self-review passes; a plan edit the
    self-review rejects is reverted and filed as deferred with an
    "attempted, reverted (reason)" note.
-6. **Commit the tracked review artifacts** (the `todos/` findings file,
+6. **Self-check, then commit.** Run the **`cepa:file-todos` `## Self-check`**
+   block on the findings file — after items 3-5, which are the last writes
+   to it, and before this commit. Exit 1: repair once as that section bounds
+   it, and re-run; a second MISS or `self-check UNAVAILABLE` is reported
+   verbatim (headless: `self_check:` in the summary), never as clean.
+   Then **commit the tracked review artifacts** (the `todos/` findings file,
    and the `memory/tasks.d/` shard when touched) as
    `docs(review): plan-review findings <timestamp>` — gitignore-checked
    like the plan commit, and independent of it, so a gitignored-plan repo

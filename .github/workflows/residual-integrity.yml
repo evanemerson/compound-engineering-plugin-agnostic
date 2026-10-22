@@ -9,7 +9,8 @@ name: residual-integrity
 #
 # The check is read-only and takes seconds. Its pass condition, its four legs,
 # and its stated limits are defined in scripts/check-residual-integrity.sh's
-# own header — read them there rather than inferring them from this comment or
+# own header (leg 1 itself is plugins/cepa/scripts/check-findings-file.sh,
+# which that script sources) — read them there rather than inferring them from this comment or
 # from any one leg's output verb.
 #
 # WHY LEG 1 FAILS AND LEGS 2-4 DO NOT: legs 2-4 read prose written by people,
@@ -18,7 +19,7 @@ name: residual-integrity
 # lines in the log is the designed state, not a deferred failure.
 #
 # Security: this workflow interpolates NO event data (no ${{ github.event.* }})
-# into any run: step — both steps are static `bash scripts/...` invocations, so
+# into any run: step — every step is a static `bash scripts/...` invocation, so
 # there is no injection surface. Keep it that way: if a future step needs event
 # data, pass it through env: with quoting rather than interpolating it into the
 # run: body.
@@ -58,6 +59,16 @@ jobs:
       - name: Check residual-integrity checker controls
         if: always()
         run: bash scripts/check-residual-integrity-controls.sh
+      # The counting rule ships in the plugin
+      # (plugins/cepa/scripts/check-findings-file.sh) and every findings-file
+      # writer runs it through the cepa:file-todos Self-check block. The step
+      # above already drives it through the repo checker; this one pins the
+      # standalone contract, the block itself (extracted and run from a
+      # non-cepa directory), and each writer's citation. Static command, no
+      # workflow-context interpolation.
+      - name: Check shipped findings-file check controls
+        if: always()
+        run: bash scripts/check-findings-file-controls.sh
       # Fixtures for the three sweep branch-classes no repo in the portfolio
       # can produce: multiple merged PRs on one head, non-trunk base's
       # negative path, and MERGED+OPEN on one head. Field runs cannot cover
