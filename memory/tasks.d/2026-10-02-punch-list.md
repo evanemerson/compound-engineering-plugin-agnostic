@@ -104,13 +104,31 @@ L6. **Hand the dpc-pro discrepancy to that repo.**
    completed task here.
 
 L7. **Build the anchor-digit checker.**
-   status: pending
-   owner: unassigned
-   severity: P3
-   Filed as the unchecked P3 in `memory/tasks.d/2026-09-25-main.md:29`. Extracts
-   headings matching `^#{2,4} .*\(\d+\)` and resolves in-page anchors. Gates the
-   heading half of the count-drift rule. The other two legs of that class are
-   NOT hard-gateable and the checker's header must say so.
+   status: completed
+   owner: none
+   **CLOSED 2026-10-22** — PR #91 (`14dd48a`), by `tab4@roles`.
+   `scripts/check-anchor-counts.sh`, its own workflow `anchor-counts.yml`:
+   leg 0 MISS when the scan finds no files or headings; leg 1 MISS on a
+   `(N)` count in a heading; leg 2 MISS on an in-page link whose fragment
+   matches no heading; leg 3 WARN only on a working link whose fragment
+   carries a number. CLAUDE.md's "Nothing enforces this rule today" is now a
+   pointer. Preventive: 0 count-bearing headings on main. Merged after the
+   three checks (update -> `d4556a3`, all 3 workflows green). Repo tooling
+   only, no version bump.
+   **coord@main DECLINED the worker's decision 1** (write an "enclosing guard"
+   exception into CLAUDE.md's "Adding a leg to ANY checker" paragraph). That
+   exception — ignore a shared kill when another guard's kill set contains
+   this one's — is the exact shape of the 2g incident the rule records: a
+   later leg caught leg 1's only case, so removing leg 1 killed nothing.
+   CLAUDE.md's own remedy applies instead: assert the exact finding set. The
+   controls assert rc, MISS count and text, so a unique kill is reachable;
+   a guard whose removal leaves the output byte-identical has no observable
+   effect, and needs either a case only it decides or deletion.
+   **Residual (P3):** `scripts/check-anchor-counts-controls.sh` implements
+   that containment exception in its own uniqueness check (~line 293). Replace
+   it with inner-only cases or remove the redundant guards. Decision 2 (README
+   mention) declined as optional. 2 deferred findings in
+   `memory/tasks.d/2026-10-22-feat-roles-anchor-count-checker.md`.
 
 L8. **`check-residual-integrity.sh` counts `status:` only as the FIRST field on
    a bullet.**
