@@ -19,7 +19,7 @@ Do not add new count claims; prefer wording that doesn't restate totals.
 ### Anchors must not encode a count that can drift
 `## Commands (11)` slugifies to `#commands-11`, so a link to it 404s **silently**
 the moment the count changes — in-page anchors resolve in the reader's browser,
-so nothing in git, CI, or a markdown renderer fails. This is the anchor-shaped
+so nothing in git or a markdown renderer fails. This is the anchor-shaped
 sibling of the count-drift rule above: same root cause, different failure
 surface. Drop counts from headings that are link targets.
 
@@ -43,15 +43,11 @@ subject names a different defect, so read the diff rather than the message when
 verifying this. A review agent caught it, not a script. #65 then swept the four
 latent count-bearing headings out of `plugins/cepa/README.md`.
 
-**Nothing enforces this rule today** — no checker, no CI job, and `main` is
-deliberately unprotected. It holds by review alone, which is what caught the
-#64 instance. A checker for the heading half is filed in
-`memory/tasks.d/2026-09-25-main.md`; when it lands, the scope limits belong in
-its header, and this paragraph should shrink to a pointer rather than grow a
-second copy. Two sibling claims are not gateable even then: whether prose
-correctly characterizes a CI trigger (interpretation, not arithmetic), and
-whether a branch-protection claim still holds (mutable platform state that
-drifts with no commit).
+**Enforced by `scripts/check-anchor-counts.sh`**, gated in `anchor-counts.yml`
+with its controls. Its header owns what it flags, what it only reports, its
+limits, and the two sibling claims no checker can gate — read them there.
+`main` is not branch-protected, so a red check does not block a merge: treat it
+as blocking anyway.
 
 ### An absence claim is a fact about the probe, not about the corpus
 "Zero occurrences" is the output of one command. Aim that command at the wrong
@@ -101,7 +97,7 @@ files undercounted under the old checker at all. The unsourced number nearly
 made a sound fix read as broken. Carry the command with the count, or label the
 count as unverified.
 
-Nothing enforces this — it is a habit, like the two count rules above. The
+Nothing enforces this — it is a habit, like the hardcoded-counts rule above. The
 closest mechanism is a committed fixture plus a corpus diff; see
 `plugins/cepa/skills/file-todos/fixtures/status-spellings.md` for the shape.
 
