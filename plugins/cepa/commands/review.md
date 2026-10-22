@@ -35,7 +35,10 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   run silently ran grep-only), and — whenever `cepa.local.md` configures a
   `brain:` key — the `brain` status line verbatim (same reason), and the
   `agent_worktrees:` lines of the `cepa:autonomy` §11b cleanup verbatim (a
-  KEPT or UNCLAIMED worktree is the operator's to decide about). The caller
+  KEPT or UNCLAIMED worktree is the operator's to decide about), and the
+  Step 5 `self_check:` result (`clean`, `repaired`, `failed` with its MISS
+  lines, or `unavailable` with its line — a caller must never commit a file
+  the run could not verify as if it were clean). The caller
   decides what to apply. If `cepa.local.md` is missing in headless mode, run the
   cepa review agents with stack details inferred from the repo, note the
   missing config in the findings file, and continue — never block.
@@ -594,6 +597,15 @@ End the file body with:
 **Summary:** X findings (Y P1, Z P2, W P3)
 **Next step:** Run `/cepa:triage` (batch auto-apply by default; pass `interactive` for one-at-a-time).
 ```
+
+### Self-check the file — before any commit
+
+Run the **`cepa:file-todos` `## Self-check`** block on the file just written —
+after the last write to it and before any commit, the weekly commit below
+included. Exit 1: repair once as that section bounds it, and re-run. A second
+MISS, or `self-check UNAVAILABLE`, goes in the Step 6 report and the headless
+`self_check:` line verbatim — never a clean claim. A weekly run checks after
+its §5 filing below and before its `chore(review)` commit.
 
 ### Weekly cadence — file shape
 

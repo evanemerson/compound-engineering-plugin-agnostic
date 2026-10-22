@@ -335,8 +335,12 @@ unreviewed plan. *[autonomy-convertible]*
   absolute carve-out — lead the numbered choices, never auto-fixed. For
   P2/P3 decisions, run `/cepa:triage interactive` on the findings file
   (they stay `status: pending` so triage can see them); anything the
-  user declines is set `status: deferred` and appended (deduped) to the
-  run's residual shard (§5 sink 1) before build starts — never left stranded.
+  user declines is set `status: deferred` (its counter moved in the same
+  edit) and appended (deduped) to the run's residual shard (§5 sink 1)
+  before build starts — never left stranded. That write is this command's
+  own, so it runs the **`cepa:file-todos` `## Self-check`** block on the
+  findings file after it and before committing the file; a second MISS or
+  `self-check UNAVAILABLE` goes in the final report verbatim.
 - **Full autonomy:** run `mode:headless`; eligible fixes auto-apply to the
   plan per autonomy §4 (committed as `docs: revise plan per plan review`),
   judgment findings go durable per §5, and a judgment-class P1 plan

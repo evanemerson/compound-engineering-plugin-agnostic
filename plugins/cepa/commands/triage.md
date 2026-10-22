@@ -1,7 +1,7 @@
 ---
 description: Triage findings from /cepa:review. Default batch mode auto-applies safe verified fixes and presents the rest as one decision table; pass "interactive" for the classic one-at-a-time flow.
 argument-hint: "[interactive]"
-allowed-tools: Bash(git diff:*), Bash(git show:*)
+allowed-tools: Edit, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*)
 ---
 
 # Compound Triage
@@ -58,8 +58,10 @@ Apply the auto-apply rubric from the **`cepa:autonomy` skill §4**:
    gets reverted, set back to `status: pending`, and demoted to the decision
    table with an "attempted, reverted (reason)" note — never left recorded
    as applied.
-5. Commit: `fix(review): apply triaged findings` (stage only the files the
-   batch touched).
+5. Run the `cepa:file-todos` `## Self-check` block on the findings file
+   (Step 4a states the rule), then commit:
+   `fix(review): apply triaged findings` (stage only the files the batch
+   touched).
 
 ### Step 3a: Present the Decision Table
 
@@ -102,6 +104,14 @@ Per `cepa:file-todos` — cited, not restated here:
   leaves it only in the `triage:` prose;
 - re-derive the counters from the body afterwards rather than adjusting them
   from memory, and check the severity counters too, not only the sums.
+
+**Then prove it: run the `cepa:file-todos` `## Self-check` block** on the
+findings file before every commit that stages it — Step 2a.5, each Step 4a
+fix commit, and the interactive mode's commits — and once more after the
+run's last transition. Exit 1: repair once as that section bounds it (a
+triage repair touches counters only; it never re-statuses a finding the
+user decided), and re-run. A second MISS, or `self-check UNAVAILABLE`, goes
+in the summary verbatim, never as a clean file.
 
 Finish with the summary: applied / fixed / deferred / skipped counts and the
 findings file path.
