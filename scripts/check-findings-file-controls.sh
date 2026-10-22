@@ -89,6 +89,25 @@ reg shape-nosummary 'a bare return on a missing summary: block (L16 shape 4)'
 reg shape-sum24     'removal of the 1a state-sum check (L16 shape 5: counters sum 24, total 26)'
 reg shape-p2five    'removal of the per-severity agreement check (L16 shape 6: p2 5, body 6)'
 reg shape-good      'any over-match that fails a correct file'
+reg cli-multi       'per-file accounting or the summary denominator breaking on several files'
+reg main-tripwire   'removal of the standalone accounting tripwire'
+reg src-tripwire    'removal of the repo checker accounting tripwire'
+reg tally-delim     'an unguarded count at the closing-delimiter check'
+reg tally-skip      'removal of the _cff_numeric guard at the retained-skip tally'
+reg tally-state     'removal of the _cff_numeric guard in the per-state loop'
+reg tally-sev       'removal of the _cff_numeric guard in the per-severity loop'
+reg src-octal       'a zero-padded counter read as octal — aborts the walk mid-run'
+reg cli-sevmissing  'missing p1/p2/p3 counters silently skipping the severity checks'
+reg cli-ctrlpath    'a control character in a path forging an output line'
+reg cli-help        'a --help that prints code or exits non-zero'
+reg rows-unreadable '--rows on an unreadable file exiting 0'
+reg rows-argc       '--rows accepting no file or a second file'
+reg rows-grep2      '--rows printing totals after grep errored'
+reg ci-refuse       'a checker override accepted while CI is set, in either suite or the checker'
+reg block-multi     'a Self-check block that checks only its first file or breaks on spaces'
+reg block-claude-root 'a broken CLAUDE_PLUGIN_ROOT leg in the resolver loop'
+reg block-marketplace 'a broken marketplace-glob leg in the resolver loop'
+reg block-inherited 'a Self-check block that trusts an inherited CEPA_ROOT'
 reg cli-noargs      'a no-argument run that exits 0 — a check over nothing reads as a pass'
 reg cli-missing     'folding grep exit 2 into exit 1, or dropping the per-file accounting'
 reg cli-noprose     'interpolating file text into a MISS/INFO line — makes the writer path a prose relay'
@@ -109,6 +128,11 @@ reg wire-tools      'a declared allowed-tools set without Bash(bash:*)'
 reg wire-onecopy    'a second copy of FIELD_PRE/STATES, or the spec''s inline grep, reappearing'
 
 if [ "$LIST_ONLY" -eq 1 ]; then printf '%s\n' "${IDS[@]}"; exit 0; fi
+if [ -n "$ONLY" ]; then
+  for want in ${ONLY//,/ }; do
+    case " ${IDS[*]} " in *" $want "*) ;; *) printf 'FATAL: --only names no case: %s\n' "$want" >&2; exit 2 ;; esac
+  done
+fi
 
 TMPROOT=$(mktemp -d "${TMPDIR:-/tmp}/cepa-cff-controls.XXXXXX") || exit 2
 cleanup() {
@@ -144,19 +168,49 @@ sumblock() {  # sumblock total p1 p2 p3 pending applied
 # The Self-check block, extracted from the skill — never retyped here.
 BLOCKDIR="$TMPROOT/blocks"
 mkdir -p "$BLOCKDIR"
-python3 "$REPO_ROOT/scripts/extract-fenced-blocks.py" "$SKILL" --emit "$BLOCKDIR" >/dev/null 2>&1
-SELFCHECK=$(grep -l 'check-findings-file.sh' "$BLOCKDIR"/*.sh 2>/dev/null | head -1)
+# An extraction failure, or a second block naming the script, must say so
+# loudly — never leave the block-* cases testing nothing or the wrong block.
+SELFCHECK=''
+if ! python3 "$REPO_ROOT/scripts/extract-fenced-blocks.py" "$SKILL" --emit "$BLOCKDIR" >/dev/null 2>"$TMPROOT/extract.err"; then
+  printf 'FATAL: extract-fenced-blocks.py failed on %s:\n' "$SKILL" >&2; cat "$TMPROOT/extract.err" >&2; exit 2
+fi
+n_blocks=$(grep -l 'check-findings-file.sh' "$BLOCKDIR"/*.sh 2>/dev/null | wc -l)
+[ "$n_blocks" -eq 1 ] || { printf 'FATAL: %s bash blocks in %s run check-findings-file.sh; expected exactly 1\n' "$n_blocks" "$SKILL" >&2; exit 2; }
+SELFCHECK=$(grep -l 'check-findings-file.sh' "$BLOCKDIR"/*.sh)
 
-# run_block <workdir> <findings-path> [env...] — the block with `files=` set to
-# one path, run under `bash -e` in its own process from <workdir>, with HOME
-# empty so no installed plugin can answer for the block.
+# run_block <workdir> <env...> -- <findings-path>... — the block with `files=`
+# set to the paths (each quoted), run under `bash -e` in its own process from
+# <workdir>, with HOME empty unless an env arg sets it, so no installed plugin
+# can answer for the block. The substitution is verified: a block whose
+# `files=` line stopped matching would otherwise run on its placeholder.
 run_block() {
-  local wd="$1" fp="$2" b="$TMPROOT/block-run.sh"
-  shift 2
-  [ -n "$SELFCHECK" ] || { echo 'NO SELF-CHECK BLOCK EXTRACTED'; return 99; }
-  sed "s#^files=(.*)#files=($fp)#" "$SELFCHECK" > "$b"
+  local wd="$1" b="$TMPROOT/block-run.sh" envs=() q='' a
+  shift
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do envs+=("$1"); shift; done
+  shift
+  for a in "$@"; do q="$q $(printf '%q' "$a")"; done
+  FILES_LINE="files=(${q# })" awk '/^files=\(/ && !done { print ENVIRON["FILES_LINE"]; done = 1; next } { print }' "$SELFCHECK" > "$b"
+  grep -qxF "files=(${q# })" "$b" || { echo 'FILES SUBSTITUTION DID NOT APPLY'; return 98; }
   mkdir -p "$TMPROOT/emptyhome"
-  ( cd "$wd" && env -i PATH="$PATH" HOME="$TMPROOT/emptyhome" "$@" bash -e "$b" ) 2>&1
+  ( cd "$wd" && env -i PATH="$PATH" HOME="$TMPROOT/emptyhome" "${envs[@]+"${envs[@]}"}" bash -e "$b" ) 2>&1
+}
+
+# failgrep <dir> — a grep that exits 2 on a COUNT call whose arguments contain
+# $FAIL_SUB, so one chosen tally site can be made to error and the rest left
+# working. Proves each _cff_numeric guard, not only the first one reached.
+failgrep() {
+  mkdir -p "$1/bin"
+  cat > "$1/bin/grep" <<EOF
+#!/bin/bash
+cnt=0; hit=0
+for a in "\$@"; do
+  case "\$a" in -c*|-*c|-*c*) case "\$a" in --*) ;; -*) cnt=1 ;; esac ;; esac
+  case "\$a" in *"\$FAIL_SUB"*) hit=1 ;; esac
+done
+if [ "\$cnt" = 1 ] && [ "\$hit" = 1 ]; then echo "grep: planted failure" >&2; exit 2; fi
+exec $(command -v grep) "\$@"
+EOF
+  chmod +x "$1/bin/grep"
 }
 
 line_of() { grep -nF -- "$2" "$1" | head -1 | cut -d: -f1; }
@@ -221,22 +275,106 @@ run_case() {
       # A pattern that errors must not read as zero rows. Simulated by a grep
       # wrapper that fails on the tally's -c calls only.
       findings "$f" "$(sumblock 1 0 1 0 1 0)" P2:pending
+      failgrep "$d"
+      OUT=$(FAIL_SUB='###' PATH="$d/bin:$PATH" bash "$CHECKER" "$f" 2>/dev/null); RC=$?
+      expect 1 'a body tally returned .*not a count' 'accounted for only' && expect 1 ' 0 of 1 file' ;;
+    tally-delim|tally-skip|tally-state|tally-sev)
+      # One case per later tally site: FAIL_SUB picks the pattern that errors.
+      # A RETAINED skip in the body: without the guard at the retained-skip
+      # tally, an errored count reads as 0 there and the gap check fires a
+      # wrong diagnosis before the per-state loop could catch the error.
+      findings "$f" "  total: 3\n  p1: 1\n  p2: 2\n  p3: 0\n  pending: 2\n  skipped: 1" P1:pending P2:pending P2:skipped
+      sed -i 's/\\n/\n/g' "$f"
+      failgrep "$d"
+      case "$id" in
+        tally-delim) sub='^---' ;;
+        tally-skip)  sub='skipped' ;;
+        tally-state) sub='pending' ;;
+        tally-sev)   sub='P1' ;;
+      esac
+      OUT=$(FAIL_SUB="$sub" PATH="$d/bin:$PATH" bash "$CHECKER" "$f" 2>/dev/null); RC=$?
+      expect 1 'a body tally returned .*not a count' 'accounted for only' ;;
+    cli-multi)
+      # Three inputs, three outcomes, one accounting line.
+      findings "$d/todos/a.md" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      findings "$d/todos/b.md" "$(sumblock 1 1 0 0 1 0)" P2:pending
+      OUT=$(bash "$CHECKER" "$d/todos/a.md" "$d/todos/b.md" "$d/todos/gone.md" 2>&1); RC=$?
+      expect 1 'b\.md declares p1: 1' 'accounted for only|a\.md' && expect 1 'gone\.md could not be read' && expect 1 '— 2 of 3 file\(s\) checked' ;;
+    main-tripwire|src-tripwire)
+      # A counting rule that DROPS a file — the only thing that can redden the
+      # accounting tripwire. Built from the real rule with cff_check_file
+      # replaced, so everything else is genuine.
+      cp "$CHECKER" "$d/stub.sh"
+      printf '\ncff_check_file() { return 0; }\n' >> "$d/stub.sh"
+      sed -i 's/^if \[ "\${BASH_SOURCE\[0\]}" = "\$0" \]; then$/cff_check_file() { return 0; }\n&/' "$d/stub.sh"
+      findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      if [ "$id" = main-tripwire ]; then
+        OUT=$(bash "$d/stub.sh" "$f" 2>&1); RC=$?
+        expect 1 'checked 1 findings file\(s\) but accounted for only 0'
+      else
+        mkdir -p "$d/memory/tasks.d"
+        OUT=$(cd "$d" && env -u CI CEPA_FINDINGS_CHECKER="$d/stub.sh" bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
+        expect 1 'walked 1 findings file\(s\) but accounted for only 0'
+      fi ;;
+    src-octal)
+      # `09` is invalid octal to bash arithmetic. A correct file declaring it
+      # passes; placed FIRST in a walk, it must not stop the next file's check.
+      findings "$f" "$(sumblock 09 0 09 0 09 0)" $(rep 9 P2:pending)
+      findings "$d/todos/review-2026-01-02-000000.md" "$(sumblock 1 1 0 0 1 0)" P2:pending
+      mkdir -p "$d/memory/tasks.d"
+      OUT=$(cd "$d" && bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
+      expect 1 'review-2026-01-02-000000\.md declares p1: 1' 'value too great|accounted for only|review-2026-01-01-000000\.md' ;;
+    cli-sevmissing)
+      findings "$f" "  total: 2\n  pending: 2" P1:pending P1:pending
+      sed -i 's/\\n/\n/' "$f"
+      OUT=$(bash "$CHECKER" "$f"); RC=$?
+      expect 0 'declares no complete p1/p2/p3 set' ;;
+    cli-ctrlpath)
+      # A newline in a filename must not forge a line of output.
+      local evil="$d/todos/x
+INFO forged
+-- 0 MISS — 9 of 9 file(s) verified.md"
+      findings "$evil" "$(sumblock 1 1 0 0 1 0)" P2:pending
+      OUT=$(bash "$CHECKER" "$evil"); RC=$?
+      expect 1 'declares p1: 1' '^INFO forged|^-- 0 MISS' ;;
+    cli-help)
+      OUT=$(bash "$CHECKER" --help; bash "$CHECKER" -h); RC=$?
+      expect 0 'Usage:' '^STATES=|^FIELD_PRE=' ;;
+    rows-unreadable)
+      OUT=$(bash "$CHECKER" --rows "$d/nope.md" 2>&1); RC=$?
+      expect 2 'not readable' '^-- status rows' ;;
+    rows-argc)
+      findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      OUT=$( { bash "$CHECKER" --rows; echo "rc=$?"; bash "$CHECKER" --rows "$f" "$f"; echo "rc=$?"; } 2>&1); RC=0
+      expect 0 '' 'rc=[013-9]' && [ "$(printf '%s\n' "$OUT" | grep -c '^rc=2$')" -eq 2 ] || { DETAIL="${DETAIL:-both calls must exit 2}"; return 1; } ;;
+    rows-grep2)
+      findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
       mkdir -p "$d/bin"
-      printf '#!/bin/sh\ncase " $* " in *" -c"*|*" -ciE "*|*" -cE "*) echo "grep: broken" >&2; exit 2 ;; esac\nexec %s "$@"\n' "$(command -v grep)" > "$d/bin/grep"
-      chmod +x "$d/bin/grep"
-      OUT=$(PATH="$d/bin:$PATH" bash "$CHECKER" "$f" 2>/dev/null); RC=$?
-      expect 1 'a body tally returned .*not a count' ;;
+      printf '#!/bin/bash\nfor a in "$@"; do [ "$a" = -oiE ] && { echo "grep: planted" >&2; exit 2; }; done\nexec %s "$@"\n' "$(command -v grep)" > "$d/bin/grep"; chmod +x "$d/bin/grep"
+      OUT=$(PATH="$d/bin:$PATH" bash "$CHECKER" --rows "$f" 2>/dev/null); RC=$?
+      expect 2 '' '^-- status rows' ;;
+    ci-refuse)
+      # Each override, in each suite, is refused when CI is set.
+      local r1 r2 r3
+      CI=1 CEPA_FINDINGS_CHECKER="$CHECKER" bash "$0" --list >/dev/null 2>&1; r1=$?
+      CI=1 CEPA_RESIDUAL_CHECKER="$RESIDUAL_CHECKER" bash "$0" --list >/dev/null 2>&1; r2=$?
+      CI=1 CEPA_FINDINGS_CHECKER="$CHECKER" bash "$REPO_ROOT/scripts/check-residual-integrity-controls.sh" --list >/dev/null 2>&1; r3=$?
+      mkdir -p "$d/memory/tasks.d"; findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      OUT=$(cd "$d" && CI=1 CEPA_FINDINGS_CHECKER="$CHECKER" bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
+      [ "$r1$r2$r3" = 222 ] || { DETAIL="controls under CI exited $r1 $r2 $r3, wanted 2 2 2"; return 1; }
+      expect 1 'CEPA_FINDINGS_CHECKER is set in CI' ;;
     src-survives)
       findings "$f" "$(sumblock 2 0 1 1 2 0)" P2:pending P2:pending
-      OUT=$(bash -c 'set -eu; o=$(. "$1"); [ -z "$o" ] || { echo "SOURCING PRINTED: $o"; exit 1; }; . "$1"; cff_reset; cff_check_file "$2" >/dev/null; echo "survived misses=$CFF_MISSES"' _ "$CHECKER" "$f" 2>&1); RC=$?
-      expect 0 '^survived misses=[1-9]' ;;
+      findings "$d/todos/nosum.md" NONE P1:pending
+      OUT=$(bash -c 'set -eu; o=$(. "$1"); [ -z "$o" ] || { echo "SOURCING PRINTED: $o"; exit 1; }; . "$1"; cff_reset; cff_check_file "$2" >/dev/null; cff_check_file "$3" >/dev/null; cff_check_file "$4" >/dev/null; echo "survived misses=$CFF_MISSES"' _ "$CHECKER" "$f" "$d/todos/nosum.md" "$d/todos/gone.md" 2>&1); RC=$?
+      expect 0 '^survived misses=[3-9]' ;;
     src-locale)
       OUT=$(LC_ALL=en_US.UTF-8 bash -c '. "$1"; cff_reset; cff_check_file /dev/null >/dev/null; echo "after=${LC_ALL:-unset}"' _ "$CHECKER" 2>&1); RC=$?
       expect 0 '^after=en_US\.UTF-8$' ;;
     src-repomiss)
       mkdir -p "$d/memory/tasks.d"
       findings "$f" "$(sumblock 1 0 1 0 1 0)" P2:pending
-      OUT=$(cd "$d" && CEPA_FINDINGS_CHECKER="$d/absent.sh" bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
+      OUT=$(cd "$d" && env -u CI CEPA_FINDINGS_CHECKER="$d/absent.sh" bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
       expect 1 'could not load the counting rule' ;;
     rows-live|rows-not)
       awk -v l="$d/live.md" -v n="$d/not.md" '/^## Live spellings/{o=l} /^## Must NOT match/{o=n} o{print > o}' "$FIXTURE"
@@ -251,22 +389,47 @@ run_case() {
       fi ;;
     block-clean)
       findings "$f" "$(sumblock 2 1 1 0 2 0)" P1:pending P2:pending
-      OUT=$(run_block "$d" "$f" CEPA_PLUGIN_ROOT="$PLUGIN_DIR"); RC=$?
+      OUT=$(run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
       expect 0 '^-- 0 MISS' ;;
     block-miss)
       findings "$f" "$(sumblock 2 1 1 0 2 0)" P1:pending P1:pending
-      OUT=$(run_block "$d" "$f" CEPA_PLUGIN_ROOT="$PLUGIN_DIR"); RC=$?
+      OUT=$(run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
       expect 1 '^MISS .*declares p1: 1' ;;
+    block-multi)
+      # Two files, one in a directory with a space; the second is wrong.
+      mkdir -p "$d/two words"
+      findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      findings "$d/two words/review-b.md" "$(sumblock 1 1 0 0 1 0)" P2:pending
+      OUT=$(run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f" "$d/two words/review-b.md"); RC=$?
+      expect 1 'two words/review-b\.md declares p1: 1' 'accounted for only' && expect 1 '— 2 of 2 file' ;;
+    block-claude-root|block-marketplace)
+      findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      if [ "$id" = block-claude-root ]; then
+        OUT=$(run_block "$d" CLAUDE_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
+      else
+        mkdir -p "$d/home/.claude/plugins/marketplaces/m/plugins/cepa"
+        cp -r "$PLUGIN_DIR/scripts" "$d/home/.claude/plugins/marketplaces/m/plugins/cepa/"
+        OUT=$(run_block "$d" HOME="$d/home" -- "$f"); RC=$?
+      fi
+      expect 0 '^-- 0 MISS' ;;
+    block-inherited)
+      # An exported CEPA_ROOT naming a planted copy must not be used.
+      mkdir -p "$d/evil/scripts"
+      printf '#!/bin/sh\ntouch "%s/EVIL-RAN"\n' "$d" > "$d/evil/scripts/check-findings-file.sh"
+      findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
+      OUT=$(run_block "$d" CEPA_ROOT="$d/evil" -- "$f"); RC=$?
+      [ ! -e "$d/EVIL-RAN" ] || { DETAIL='an inherited CEPA_ROOT was trusted'; return 1; }
+      expect 3 'plugin root unresolved' ;;
     block-unres)
       findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
-      OUT=$(run_block "$d" "$f"); RC=$?
+      OUT=$(run_block "$d" -- "$f"); RC=$?
       expect 3 '^self-check UNAVAILABLE: plugin root unresolved' ;;
     block-predates)
       # A resolvable plugin root that is an OLDER copy: no check-findings-file.sh.
       mkdir -p "$d/old/scripts"
       cp "$PLUGIN_DIR/scripts/resolve-plugin-root.sh" "$PLUGIN_DIR/scripts/brain-client.sh" "$d/old/scripts/"
       findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
-      OUT=$(run_block "$d" "$f" CEPA_PLUGIN_ROOT="$d/old"); RC=$?
+      OUT=$(run_block "$d" CEPA_PLUGIN_ROOT="$d/old" -- "$f"); RC=$?
       expect 3 'has no scripts/check-findings-file.sh' ;;
     block-planted)
       # The cwd is a repo carrying a complete plugins/cepa whose checker would
@@ -277,9 +440,12 @@ run_case() {
       chmod +x "$d/plugins/cepa/scripts/check-findings-file.sh"
       git -C "$d" init -q 2>/dev/null
       findings "$f" "$(sumblock 1 1 0 0 1 0)" P1:pending
-      OUT=$(run_block "$d" "$f"); RC=$?
+      OUT=$(run_block "$d" -- "$f"); RC=$?
       [ ! -e "$d/PLANTED-RAN" ] || { DETAIL='the planted cwd checker RAN'; return 1; }
-      expect 3 'UNAVAILABLE' ;;
+      expect 3 'UNAVAILABLE' || return 1
+      # The opt-in still works: with CEPA_DEV=1 the operator chose the cwd copy.
+      OUT=$(run_block "$d" CEPA_DEV=1 -- "$f"); RC=$?
+      [ -e "$d/PLANTED-RAN" ] || { DETAIL='CEPA_DEV=1 did not select the repo-local copy'; return 1; } ;;
     wire-cite|wire-order)
       # writer : a phrase that marks its commit after the self-check
       local w anchor c a bad=''
@@ -311,8 +477,18 @@ run_case() {
       expect 0 '^bad: none$' ;;
     wire-onecopy)
       local hits
-      hits=$(cd "$REPO_ROOT" && { grep -rlE '^[[:space:]]*(FIELD_PRE|STATES|VAL_TAIL)=' scripts plugins --include='*.sh' | grep -vxF 'plugins/cepa/scripts/check-findings-file.sh'
-             grep -lE "^grep -oiE '\^\(" plugins/cepa/skills/file-todos/SKILL.md; } | sort -u | tr '\n' ' ')
+      # Probe scope, stated so its zero means something: an ASSIGNMENT of any
+      # pattern name in a script, OR the full FIELD_PRE value written out
+      # anywhere in scripts/, plugins/, CLAUDE.md or CONCEPTS.md (prose may
+      # quote a fragment; a full copy is a second rule). A grep error fails.
+      local fp_val rc1 rc2
+      fp_val=$(sed -nE "s/^FIELD_PRE='(.*)'$/\1/p" "$CHECKER")
+      [ -n "$fp_val" ] || { DETAIL='could not read FIELD_PRE from the checker'; return 1; }
+      hits=$(cd "$REPO_ROOT" && {
+               grep -rlE '^[[:space:]]*(FIELD_PRE|FIELD_POST|STATES|VAL_TAIL|BATCH_RE)=' scripts plugins --include='*.sh' --include='*.md'; rc1=$?
+               grep -rlF -- "$fp_val" scripts plugins CLAUDE.md CONCEPTS.md; rc2=$?
+               [ "$rc1" -le 1 ] && [ "$rc2" -le 1 ] || echo GREP-ERROR
+             } | grep -vxF 'plugins/cepa/scripts/check-findings-file.sh' | sort -u | tr '\n' ' ')
       OUT="extra copies:${hits:- none}"; RC=0
       expect 0 '^extra copies: none$' ;;
     *) DETAIL="no such case"; return 1 ;;

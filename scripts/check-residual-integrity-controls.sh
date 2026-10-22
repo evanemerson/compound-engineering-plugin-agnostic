@@ -238,6 +238,11 @@ reg orphan 'a status: row bound to no heading is caught'         1 0 'belongs to
   'kills: computing headings and never comparing it to anything but zero'
 
 # --- the field-spelling surface ---------------------------------------------
+# The fragments these cases pin are defined in the shipped counting rule,
+# plugins/cepa/scripts/check-findings-file.sh, which the checker sources; mutate
+# them through CEPA_FINDINGS_CHECKER. check-findings-file-controls.sh scores the
+# spec fixture through `--rows`; THESE cases drive real findings-file shapes.
+#
 # These two pin the FIELD_PRE/FIELD_POST fragments from both sides. They exist
 # because the checker carried the pre-fix single-spelling patterns for weeks
 # while the file-todos spec was fixed four times beside it: it saw ZERO status

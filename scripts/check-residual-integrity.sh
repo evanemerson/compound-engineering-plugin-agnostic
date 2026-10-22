@@ -60,12 +60,15 @@
 # papering over it; closing it needs a per-severity removal field no consumer
 # has asked for. Such files are reported INFO, not silently passed.
 #
-# FOR WHOEVER WIRES THE NEXT CONSUMER — this script's output is written for a
+# FOR WHOEVER WIRES THE NEXT CONSUMER — THIS script's output is written for a
 # human or a CI log. Its MISS/WARN messages interpolate repo-tracked file paths
-# and line numbers (never file prose, deliberately), so nothing here is an
-# autonomy §7 relay point TODAY: verified at the time of writing that no
-# workflow, command, skill, or agent reads this script's stdout. The moment one
-# does — a sweep summarizer, a CI-annotation-to-agent bridge — that consumer
+# and line numbers (never file prose, deliberately), and at the time of writing
+# no workflow, command, skill, or agent reads ITS stdout. Its leg-1 lines come
+# from the sourced counting rule, whose standalone output the findings-file
+# writers DO read — that relay point is the `cepa:file-todos` `## Self-check`
+# section, and it carries its own §7 clause. The moment anything reads THIS
+# script's stdout
+# — a sweep summarizer, a CI-annotation-to-agent bridge — that consumer
 # becomes a relay point and owes a §7 untrusted-data clause AT THE RELAY SITE,
 # per CLAUDE.md. Recorded here because PR #9's Detection relay shipped as an
 # injection channel precisely by being wired up without anyone re-asking the
@@ -174,6 +177,14 @@ SHARDS_DIR=${RESIDUAL_SHARDS_DIR:-memory/tasks.d}
 # would verify this tree against some other version's rule.
 # CEPA_FINDINGS_CHECKER exists for MUTATION TESTING only — the controls point
 # it at a deliberately broken copy — and the controls refuse it in CI.
+# Refused in CI here too, not only in the controls: CI runs THIS script
+# directly, and an override in the job environment would verify the tree
+# against a rule nobody reviewed.
+if [ -n "${CEPA_FINDINGS_CHECKER:-}" ] && [ -n "${CI:-}" ]; then
+  miss "residual: CEPA_FINDINGS_CHECKER is set in CI — refusing to source a counting rule nobody reviewed"
+  echo "-- 1 MISS, 0 WARN --"
+  exit 1
+fi
 FINDINGS_CHECKER=${CEPA_FINDINGS_CHECKER:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/plugins/cepa/scripts/check-findings-file.sh}
 if [ -r "$FINDINGS_CHECKER" ] && . "$FINDINGS_CHECKER" && declare -F cff_check_file >/dev/null; then
   :
@@ -222,24 +233,20 @@ fi
 # EVERY WALKED FILE MUST BE ACCOUNTED FOR. The guard above fires only when the
 # whole run verified nothing, so a single well-formed sibling — which every
 # real run has — disarms it permanently while other files fall through
-# silently. Each `continue` above now emits its own MISS, and this reconciles
-# the totals so a FUTURE `continue` added without one cannot go unnoticed: the
-# arithmetic fails even though no individual check does.
+# silently. Every early `return` inside cff_check_file (the sourced counting
+# rule) emits its own MISS; this reconciles the totals so a FUTURE return added
+# there without one cannot go unnoticed: the arithmetic fails even though no
+# individual check does. The sum is the counting rule's own cff_accounted, so
+# the two cannot disagree about which counters exist.
 #
-# This is the accounting the sibling checker learned to keep after a truncated
+# This is the accounting check-model-pins.sh learned to keep after a truncated
 # walk reported `5 of 5 roots`. Same lesson, per-file rather than per-root.
 #
-# STATED LIMIT — NO CONTROL CAN REDDEN THIS, and that is not an oversight.
-# Every `continue` in the loop above either increments one of the four counters
-# or runs after `leg1_files` was incremented, so the arithmetic cannot fail on
-# any fixture that can be planted TODAY. Verified by mutation: replacing this
-# condition with `false` leaves the suite at 28/28. It is a tripwire for a
-# FUTURE edit — the next `continue` added without its own MISS — which is
-# precisely the shape that produced the P1 this check closes. Recorded here per
-# `an-assertion-must-name-the-edit-that-reddens-it`: the edit that reddens it
-# has not been written yet, so no control names it, and pretending otherwise
-# would make an unpinnable guard look pinned.
-leg1_accounted=$(( leg1_files + leg1_skipped + leg1_unreadable + leg1_nototal ))
+# The real counting rule cannot redden this on any file — every path through it
+# lands in exactly one counter. What reddens it is a counting rule that drops a
+# file, so the control plants exactly that: check-findings-file-controls.sh
+# `src-tripwire` sources a stub through CEPA_FINDINGS_CHECKER.
+leg1_accounted=$(cff_accounted)
 if [ "$leg1_accounted" -ne "${#leg1_list[@]}" ]; then
   miss "residual: leg 1 walked ${#leg1_list[@]} findings file(s) but accounted for only ${leg1_accounted} — some file was dropped by a path that emits no finding of its own"
   misses=$((misses + 1))

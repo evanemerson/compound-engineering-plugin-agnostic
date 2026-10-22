@@ -9,7 +9,8 @@ name: residual-integrity
 #
 # The check is read-only and takes seconds. Its pass condition, its four legs,
 # and its stated limits are defined in scripts/check-residual-integrity.sh's
-# own header — read them there rather than inferring them from this comment or
+# own header (leg 1 itself is plugins/cepa/scripts/check-findings-file.sh,
+# which that script sources) — read them there rather than inferring them from this comment or
 # from any one leg's output verb.
 #
 # WHY LEG 1 FAILS AND LEGS 2-4 DO NOT: legs 2-4 read prose written by people,
@@ -18,7 +19,7 @@ name: residual-integrity
 # lines in the log is the designed state, not a deferred failure.
 #
 # Security: this workflow interpolates NO event data (no ${{ github.event.* }})
-# into any run: step — both steps are static `bash scripts/...` invocations, so
+# into any run: step — every step is a static `bash scripts/...` invocation, so
 # there is no injection surface. Keep it that way: if a future step needs event
 # data, pass it through env: with quoting rather than interpolating it into the
 # run: body.

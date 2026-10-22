@@ -42,21 +42,22 @@
 # counters and its own exit code. The main path runs only when executed.
 #
 # The rationale for every check below was written for, and measured on, the
-# cepa repo's own `todos/` corpus; it moved here verbatim with the code.
+# cepa repo's own `todos/` corpus; it moved here with the code and was then
+# edited for this location.
 
 # ---------------------------------------------------------------------------
 # The states the spec's lifecycle defines. Declared ONCE and consumed by every
-# site: the sibling checker shipped a widening that landed at three sites out
-# of four, which made a file readable by one leg and invisible to the others.
+# site: a widening once landed at three of four sites in a sibling checker,
+# which made a file readable by one leg and invisible to the others.
 #
 # THIS LIST MUST TRACK `plugins/cepa/skills/file-todos/SKILL.md`'s `status`
-# field enum (its frontmatter field table, ~line 94, and the Status Lifecycle
+# field enum (its frontmatter field table and the Status Lifecycle
 # block below it). Unlike the autonomy skill, file-todos has no `### N<letter>.`
-# anchors, so check-model-pins.sh leg 4 has nothing to resolve here and NO
-# machine link forces this array to follow a spec edit. A seventh lifecycle
-# state added there would silently go uncounted here — the counter for it would
-# read 0 against a body that has one. The internal-duplication defence above
-# does not cover that; this note is the only thing that does, so grep for this
+# anchors, so the cepa repo's check-model-pins.sh anchor-resolution leg has
+# nothing to resolve here and NO machine link forces this array to follow a
+# spec edit. A seventh lifecycle state added there would silently go uncounted
+# here — the counter for it would read 0 against a body that has one.
+# Declaring the list once does not cover that; this note is the only thing that does, so grep for this
 # comment when editing the enum.
 STATES='pending ready skipped applied deferred completed'
 
@@ -81,16 +82,17 @@ STATES='pending ready skipped applied deferred completed'
 # unreadable to every consumer, which is the defect the spec exists to prevent.
 # --- field-spelling fragments -------------------------------------------------
 # EVERY status:/severity: match below composes these. Do NOT hand-roll another
-# anchor at a call site: this script and the file-todos spec both tally the same
-# counters, and the last time they carried independent patterns the script kept
-# the pre-fix ones and saw ZERO status rows on 18 of 24 real bold-spelling files
-# while exiting 0.
+# anchor at a call site: the cepa repo's checker once carried its own copy of
+# this pattern while the spec was fixed four times beside it, and saw ZERO
+# status rows on 18 of 24 real bold-spelling files while exiting 0.
 #
-# The authority for WHICH spellings are live, WHY each fragment is load-bearing,
-# and the inherent frontmatter ambiguity is the `cepa:file-todos` skill's
-# `## Frontmatter Summary` section (its "verify against the body" paragraph)
-# — plus its committed fixture, plugins/cepa/skills/file-todos/fixtures/status-spellings.md. Cited, not
-# restated; if the two ever disagree, the spec governs and this is the bug.
+# The authority for WHICH spellings are live, WHY each fragment is
+# load-bearing, and the inherent frontmatter ambiguity is the `cepa:file-todos`
+# skill's `## Frontmatter Summary` section (its "verify against the body"
+# paragraph). The ORACLE is its committed fixture,
+# plugins/cepa/skills/file-todos/fixtures/status-spellings.md, scored with
+# `--rows`. Cited, not restated; if this pattern scores the fixture wrongly,
+# this pattern is the bug.
 #
 # Every use needs `-i`: the FIELD NAME is capitalised in real files
 # (`- **Status:** FIXED`), so widening the value class alone does not reach it.
@@ -151,8 +153,11 @@ cff_reset() {
 cff_reset
 cff_accounted() { printf '%s\n' $((CFF_FILES + CFF_SKIPPED + CFF_UNREADABLE + CFF_NOTOTAL)); }
 
-_cff_miss() { printf 'MISS %s\n' "$1"; }
-_cff_info() { printf 'INFO %s\n' "$1"; }
+# A path is the one caller-supplied string in a message. A control character
+# in it (a newline in a crafted filename) could forge a `MISS`/`INFO`/summary
+# line in output an agent reads, so every message is flattened to one line.
+_cff_miss() { printf 'MISS %s\n' "${1//[[:cntrl:]]/?}"; }
+_cff_info() { printf 'INFO %s\n' "${1//[[:cntrl:]]/?}"; }
 
 # _cff_numeric <file> <value>... — every tally must be a non-negative integer.
 _cff_numeric() {
@@ -181,7 +186,8 @@ cff_check_file() {
   # file" — it is a findings file whose summary is missing or misspelled, and
   # skipping it silently is the defect this whole script exists to prevent.
   #
-  # The aggregate "checked nothing" guard below cannot cover this: it fires
+  # The caller's aggregate "checked nothing" guard (the repo checker's) cannot
+  # cover this: it fires
   # only when EVERY file falls through, so one well-formed sibling — which
   # every real run has — disarms it permanently. Measured: a two-file fixture
   # with one clean file and one whose `total:` was typo'd to `grand_total:`
@@ -194,8 +200,12 @@ cff_check_file() {
   # completed; it says nothing about whether each file was still readable when
   # its turn came. A concurrent /cepa:triage or a branch switch mid-scan is the
   # ordinary way to produce this.
-  grep -qE '^summary:' "$f"
-  case $? in
+  # Status captured with `&& … || …`, never a bare command: a caller that
+  # sources this file under `set -e` would otherwise die on grep's exit 1
+  # before the case below could report the missing block.
+  local _rc
+  grep -qE '^summary:' "$f" && _rc=0 || _rc=$?
+  case $_rc in
     0) : ;;
     1) _cff_miss "residual: ${f} has no 'summary:' block — a findings file with no parsed summary is unverifiable, not clean"
        CFF_MISSES=$((CFF_MISSES + 1)); CFF_UNREADABLE=$((CFF_UNREADABLE + 1)); return 0 ;;
@@ -228,7 +238,11 @@ cff_check_file() {
     insum                  { exit }
   ' "$f")
 
-  declared_total=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*total:[[:space:]]*([0-9]+).*/\1/p' | head -1)
+  # EVERY counter capture strips leading zeros (`0*` before the group): bash
+  # arithmetic reads `09` as invalid octal and aborts the whole top-level
+  # command — in the repo checker, the rest of the walk — with no MISS of its
+  # own. A declared `total: 09` must read as 9, like the spec means it.
+  declared_total=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*total:[[:space:]]*0*([0-9]+).*/\1/p' | head -1)
   # Same class as the missing-`summary:` case above: a summary block that
   # parses but carries no `total:` is a misspelled or truncated block, and
   # every downstream sub-invariant is derived from `total`. Falling through
@@ -275,7 +289,10 @@ cff_check_file() {
   # legitimately CAN have an empty body (total: 0, no findings yet), and
   # conflating "no body" with "unparseable frontmatter" would MISS on that
   # correct file. The delimiter count distinguishes them.
-  if [ "$(grep -cE '^---[[:space:]]*$' "$f")" -lt 2 ]; then
+  local _delims
+  _delims=$(grep -cE '^---[[:space:]]*$' "$f")
+  _cff_numeric "$f" "$_delims" || { CFF_UNREADABLE=$((CFF_UNREADABLE + 1)); return 0; }
+  if [ "$_delims" -lt 2 ]; then
     _cff_miss "residual: ${f} frontmatter has no closing '---' — the body could not be extracted, so an empty body was compared against the counters instead of the real one"
     CFF_MISSES=$((CFF_MISSES + 1))
     CFF_NOTOTAL=$((CFF_NOTOTAL + 1))
@@ -311,13 +328,13 @@ cff_check_file() {
   # even on a file whose body carries a non-tallyable shape.
   state_sum=0
   for s in $STATES; do
-    v=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*([0-9]+).*/\1/p" | head -1)
+    v=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
     state_sum=$((state_sum + ${v:-0}))
   done
   sev_sum=0
   sev_missing=0
   for s in p1 p2 p3; do
-    v=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*([0-9]+).*/\1/p" | head -1)
+    v=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
     [ -n "$v" ] || sev_missing=1
     sev_sum=$((sev_sum + ${v:-0}))
   done
@@ -338,7 +355,7 @@ cff_check_file() {
   fi
 
   # A zero tally on a file that HAS findings means the pattern did not fire —
-  # a leg failure, not a clean file. This is the sibling checker's "a scan that
+  # a leg failure, not a clean file. This is the repo checker's "a scan that
   # verifies nothing is not a pass" guard, at the per-file level.
   if [ "$headings" -gt 0 ] && [ "$body_status_rows" -eq 0 ]; then
     _cff_miss "residual: ${f} has ${headings} finding heading(s) but zero status: rows matched — the tally pattern did not fire; a zero count is not a clean file"
@@ -377,7 +394,7 @@ cff_check_file() {
   # of skip behave differently and this must not assume one: human-triage skips
   # are REMOVED from the body, /cepa:resolve-pr verdict skips are RETAINED in
   # it. A file with only retained skips has no gap.
-  declared_skipped=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*skipped:[[:space:]]*([0-9]+).*/\1/p' | head -1)
+  declared_skipped=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*skipped:[[:space:]]*0*([0-9]+).*/\1/p' | head -1)
   declared_skipped=${declared_skipped:-0}
   body_skipped=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}skipped${VAL_TAIL}" || true)
   _cff_numeric "$f" "$body_skipped" || return 0
@@ -398,7 +415,7 @@ cff_check_file() {
   # 1b — agreement, per state. Each counter equals its body count plus the
   # human-triage removals, which only `skipped` can carry.
   for s in $STATES; do
-    declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*([0-9]+).*/\1/p" | head -1)
+    declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
     declared=${declared:-0}
     actual=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}${s}${VAL_TAIL}" || true)
     _cff_numeric "$f" "$actual" || return 0
@@ -414,9 +431,13 @@ cff_check_file() {
   # unrecoverable. Reported, not silently passed.
   if [ "$gap" -gt 0 ]; then
     _cff_info "residual: ${f} has ${gap} removal(s) — p1/p2/p3 cannot be re-derived from the body and were not checked"
-  elif [ "$sev_missing" -eq 0 ]; then
+  elif [ "$sev_missing" -ne 0 ]; then
+    # Reported, never silently passed: without all three severity counters
+    # neither the p1+p2+p3 sum nor the per-severity agreement can run.
+    _cff_info "residual: ${f} declares no complete p1/p2/p3 set — the severity sum and distribution were not checked"
+  else
     for s in p1 p2 p3; do
-      declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*([0-9]+).*/\1/p" | head -1)
+      declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
       up=$(printf '%s' "$s" | tr '[:lower:]' '[:upper:]')
       actual=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}severity${FIELD_POST}${up}${VAL_TAIL}" || true)
       _cff_numeric "$f" "$actual" || return 0
@@ -456,7 +477,7 @@ _cff_main() {
   export LC_ALL=C
   set -u
   case "${1:-}" in
-    -h|--help) sed -n '2,45p' "$0"; return 0 ;;
+    -h|--help) awk 'NR > 1 && !/^#/ {exit} NR > 1 {print}' "$0"; return 0 ;;
     --rows)
       [ $# -eq 2 ] || { printf 'usage: %s --rows FILE\n' "${0##*/}" >&2; return 2; }
       [ -r "$2" ] || { printf 'not readable: %s\n' "$2" >&2; return 2; }
@@ -474,7 +495,7 @@ _cff_main() {
     _cff_miss "residual: checked $# findings file(s) but accounted for only $(cff_accounted) — some file was dropped by a path that emits no finding of its own"
     CFF_MISSES=$((CFF_MISSES + 1))
   fi
-  printf -- '-- %s MISS — %s of %s file(s) verified (%s counter_convention:, %s with a non-tallyable shape) --\n' \
+  printf -- '-- %s MISS — %s of %s file(s) checked (%s counter_convention:, %s with a non-tallyable shape) --\n' \
     "$CFF_MISSES" "$CFF_FILES" "$#" "$CFF_SKIPPED" "$CFF_PARTIAL"
   [ "$CFF_MISSES" -eq 0 ] || return 1
   return 0

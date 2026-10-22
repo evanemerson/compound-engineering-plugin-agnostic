@@ -416,6 +416,8 @@ Set `files` to the path(s) this run wrote, then run the block as one Bash call:
 ```bash
 files=(todos/review-YYYY-MM-DD-HHMMSS.md)
 # ${CLAUDE_PLUGIN_ROOT} is NOT exported into this shell; resolve the root.
+# An inherited CEPA_ROOT is never trusted: only this loop may set it.
+unset CEPA_ROOT
 for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
          "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
          "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \

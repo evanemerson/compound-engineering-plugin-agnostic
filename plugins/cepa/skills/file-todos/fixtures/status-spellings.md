@@ -5,7 +5,8 @@ Not a findings file. This is the oracle for the field-spelling pattern in
 ("Verify against the body, never against the block's own arithmetic"). Every
 spelling below occurs, or has occurred, in a real `todos/review-*.md` file.
 
-Run `check-findings-file.sh --rows` over each section. **Expected: one status
+Run `check-findings-file.sh --rows` over each section, saved as its own file
+(the totals are per file, so the whole fixture mixes the two). **Expected: one status
 row and one severity row per pair in `## Live spellings`** — its heading states
 the pair count, and that heading is the only place the number lives. Over
 `## Must NOT match`, expect **0 rows** from the prose block.

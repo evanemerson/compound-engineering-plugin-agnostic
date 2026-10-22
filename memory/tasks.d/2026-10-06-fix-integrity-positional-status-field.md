@@ -4,10 +4,10 @@
 
 Canonical findings: `todos/review-2026-10-06-120000.md`.
 
-- [ ] P2 — No mechanical guard keeps the file-todos spec's grep prefix equal to `FIELD_PRE` — `scripts/check-residual-integrity.sh:228` (finding 6). Add a leg that extracts the spec's prefix and diffs it, plus its mutation control.
+- [x] P2 — No mechanical guard keeps the file-todos spec's grep prefix equal to `FIELD_PRE` — `scripts/check-residual-integrity.sh:228` (finding 6). Add a leg that extracts the spec's prefix and diffs it, plus its mutation control. — **DONE 2026-10-22** (PR #90): closed by deletion — the spec cites the shipped script instead of restating it; `wire-onecopy` fails on a second copy.
 - [ ] P3 — Separator whitespace, key charset and widened separator sets are unpinned by any control — `scripts/check-residual-integrity.sh:228` (finding 14).
-- [ ] P3 — No suite executes the fixture's stated counts — `plugins/cepa/skills/file-todos/fixtures/status-spellings.md` (finding 15).
-- [ ] P3 — `$(grep -c … || true)` turns a grep regex error into an empty count at the tally sites — `scripts/check-residual-integrity.sh` (finding 16, pre-existing).
+- [x] P3 — No suite executes the fixture's stated counts — `plugins/cepa/skills/file-todos/fixtures/status-spellings.md` (finding 15). — **DONE 2026-10-22** (PR #90): `rows-live`/`rows-not` in check-findings-file-controls.sh.
+- [x] P3 — `$(grep -c … || true)` turns a grep regex error into an empty count at the tally sites — `scripts/check-residual-integrity.sh` (finding 16, pre-existing). — **DONE 2026-10-22** (PR #90): `_cff_numeric` at every tally site, pinned by `cli-tallyerr` and `tally-*`.
 
 ## Owed proof (not runnable from this repo)
 
