@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # cepa anchor-count check — read-only. Enforces CLAUDE.md § "Anchors must not
-# encode a count that can drift" over every tracked .md file. Run from the repo
-# root. Never modifies anything.
+# encode a count that can drift" over tracked .md files (scope and exclusions
+# under STATED LIMITS). Run from the repo root. Never modifies anything.
 #
 # The rule is cited, not restated: read it in CLAUDE.md. The one-line form this
 # script mechanizes: a heading that carries a count slugifies to an anchor that
 # carries it too, so a link to it breaks SILENTLY the day the count changes —
-# in-page anchors resolve in the reader's browser, and nothing in git, CI, or a
-# renderer fails. This script is the thing that fails.
+# anchors are resolved in the reader's browser, so nothing in git or a renderer
+# fails. This script is the thing that fails.
 #
 #   Leg 0 (MISS): the scan read zero files or indexed zero headings. That is a
 #     probe that never reached its target, not a clean tree — see CONCEPTS.md
@@ -47,26 +47,40 @@
 # either.
 #
 # STATED LIMITS — none of these can read as a pass:
-#   * Scope is `git ls-files '*.md'` minus todos/ and memory/. Those two are
-#     dated records — generated review files and residual shards — that quote
-#     defect shapes as evidence and are never navigation; gating them would
-#     make a correct record of a bad heading fail CI. Their outbound links are
-#     not checked either. docs/ is gitignored, so it is out of scope by
-#     construction.
+#   * Scope is `git ls-files -z '*.md'` minus the TOP-LEVEL todos/ and memory/.
+#     Those two are dated records — generated review files and residual
+#     shards — that quote defect shapes as evidence and are never navigation;
+#     gating them would make a correct record of a bad heading fail CI. Their
+#     outbound links are not checked, and links INTO them are skipped too.
+#     docs/ is gitignored, so it is never scanned; a tracked file's link INTO
+#     docs/ is a leg-2 MISS, because the target is not a tracked .md.
 #   * Fenced blocks (``` and ~~~) and code spans are stripped before links are
-#     read: CLAUDE.md quotes `[the full table](#commands-11)` in a code span,
-#     and that is a record, not a link. Indented (4-space) code blocks are NOT
-#     stripped, and setext headings (`===` / `---` underlines) are NOT indexed.
-#     The corpus uses neither today; a setext heading would surface as a leg-2
-#     MISS on any link to it, which is loud, not silent.
-#   * The slug is an approximation of github-slugger: rendered text, lowercase,
-#     drop everything but word characters, `-`, `_` and space, space → `-`,
-#     duplicates suffixed -1, -2. Emoji, HTML entities and exotic Unicode
-#     punctuation may slug differently on GitHub. A divergence shows up as a
-#     leg-2 MISS on a link that works, which is the safe direction.
-#   * Absolute URLs (`https://…#frag`, including github.com blob links into
-#     this repo) are not resolved. Fragments on non-.md targets (`x.sh#L10`)
-#     are line anchors, not headings, and are skipped.
+#     read: CLAUDE.md's anchors rule quotes `[the full table](#commands-11)` in
+#     a code span, and that is a record, not a link. A fence still open at end
+#     of file is a MISS, because everything after its opener went unscanned.
+#     HTML comments are blanked too: a heading or `<a id>` inside one renders
+#     nothing. Indented (4-space) code blocks are NOT stripped. Setext headings
+#     (`===` / `---` underlines) are NOT indexed: a link to one is a leg-2 MISS
+#     (loud), but an unlinked count in one is not seen (silent).
+#   * The slug approximates github-slugger: rendered text (link text kept,
+#     tags dropped, entities decoded, code-span text kept literally),
+#     lowercase, drop everything but word characters, `-`, `_` and space,
+#     space → `-`, duplicates suffixed -1, -2 with github-slugger's collision
+#     rule. Emoji and exotic Unicode punctuation may still slug differently on
+#     GitHub, and that divergence can go EITHER way: a working link reported
+#     as a MISS, or a dead one passing. A green run does not prove an anchor
+#     resolves on GitHub.
+#   * Links are read in three forms: inline `[t](dest "title")` (any title
+#     quoting, `<dest>` with spaces), reference definitions `[r]: dest`, and
+#     `<a href>`. A bare destination may hold one level of balanced
+#     parentheses; deeper nesting is cut at the first unbalanced `)`, which
+#     reads as a MISS. A link to a directory resolves to its README.md, as
+#     GitHub renders it; a directory with no tracked README.md is skipped.
+#   * Absolute URLs (`https://…#frag`, `mailto:`), including github.com blob
+#     links into this repo, are not resolved. Fragments on non-.md targets
+#     (`x.sh#L10`) are line anchors, not headings, and are skipped. An empty
+#     fragment (`#`) and `#top` scroll to the top in every browser, so they
+#     pass unless the target defines them.
 #   * Fragments compare exactly (after %-decoding). GitHub's page script may
 #     forgive a case mismatch; this script does not.
 #
@@ -79,27 +93,32 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
 command -v python3 >/dev/null 2>&1 || { echo "MISS: python3 not found — check UNVERIFIED"; exit 1; }
-files="$(git ls-files -- '*.md' 2>/dev/null)" || { echo "MISS: git ls-files failed — check UNVERIFIED"; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "MISS: not a git work tree — check UNVERIFIED"; exit 1; }
 
 # Guards are marked `# GUARD:<name>` so the controls can remove each one and
 # prove it is load-bearing. Keep each guard on ONE line with its marker.
 read -r -d '' PYSRC <<'PY'
-import os, re, sys
-from collections import Counter
+import html, os, re, sys
 from urllib.parse import unquote
 
 EXCLUDE = ("todos/", "memory/")
-files = [f for f in sys.stdin.read().splitlines() if f and not f.startswith(EXCLUDE)]  # GUARD:exclude
+raw = sys.stdin.buffer.read().decode("utf-8", "surrogateescape").split("\0")
+files = [f for f in raw if f and not f.startswith(EXCLUDE)]  # GUARD:exclude
 tracked = set(files)
 
-FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
-HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
-CODESPAN_RE = re.compile(r"(`+)(?:(?!\n[ \t]*\n).)+?\1", re.S)
-INLINE_LINK_RE = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
-REF_DEF_RE = re.compile(r"^ {0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)", re.M)
-HTML_ANCHOR_RE = re.compile(r"<a\s[^>]*\b(?:id|name)=[\"']([^\"']+)[\"']", re.I)
+# A backtick fence's info string may not contain a backtick (CommonMark), so a
+# line opening with ```x``` is a code span, not a fence.
+FENCE_RE = re.compile(r"^[ \t]*(`{3,}(?=[^`]*$)|~{3,})")  # GUARD:infostring
+HEADING_RE = re.compile(r"^(?: {0,3}> ?)*(?: {0,3}(?:[-*+]|\d+[.)]) +)?( {0,3})(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")  # GUARD:blockquote
+CODESPAN_RE = re.compile(r"(?<![\\`])(`+)(?!`)(?:(?!\n[ \t]*\n).)+?(?<!`)\1(?!`)", re.S)
+INLINE_LINK_RE = re.compile(r"\]\(\s*(?:<([^<>\n]+)>|((?:[^()\s<>]|\([^()\s]*\))+))(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?\s*\)")  # GUARD:linkre
+REF_DEF_RE = re.compile(r"^ {0,3}\[(?!\^)[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)", re.M)
+HREF_RE = re.compile(r"<a\s(?:[^>]*\s)?href=[\"']([^\"']+)[\"']", re.I)
+HTML_ANCHOR_RE = re.compile(r"<a\s(?:[^>]*\s)?(?:id|name)=[\"']([^\"']+)[\"']", re.I)  # GUARD:anchorattr
 COUNT_RE = re.compile(r"\(\s*\d+\s*\)")
 DIGIT_TOKEN_RE = re.compile(r"(?:^|-)\d+(?:-|$)")
+COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+SCHEME_RE = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 
 miss = 0
 warn = 0
@@ -126,13 +145,23 @@ def strip_fences(lines):
             if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and ln.strip() == m.group(1):
                 fence = None
             out.append("")
-    return out
+    return out, fence
 
 def rendered(text):
-    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
-    text = re.sub(r"<[^>]+>", "", text)
-    text = text.replace("`", "")
-    return re.sub(r"(?<!\w)_+|_+(?!\w)", "", text)
+    # re.split with two groups yields [prose, ticks, code, prose, ticks, code, …].
+    parts = re.split(r"(`+)(.+?)\1", text)
+    out = []
+    for i, p in enumerate(parts):
+        if i % 3 == 1:
+            continue
+        if i % 3 == 2:
+            out.append(p)  # GUARD:codekeep
+            continue
+        p = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", p)
+        p = re.sub(r"<[^>]+>", "", p)
+        p = html.unescape(p)  # GUARD:entity
+        out.append(re.sub(r"(?<!\w)_+|_+(?!\w)", "", p))
+    return "".join(out)
 
 def slug_base(text):
     s = rendered(text).strip().lower()
@@ -141,29 +170,39 @@ def slug_base(text):
 
 index = {}      # file -> set of valid fragments
 headings = {}   # file -> [(lineno, rendered text, slug)]
-bodies = {}     # file -> fence-stripped text
+bodies = {}     # file -> fence- and code-span-stripped text
 
 for f in files:
     try:
         with open(f, encoding="utf-8") as fh:
             lines = fh.read().split("\n")
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         say("MISS", f"{f}: unreadable ({e}) — check UNVERIFIED for this file")
         continue
-    lines = strip_fences(lines)  # GUARD:fence
-    seen, frags, hs = Counter(), set(), []
+    lines, open_fence = strip_fences(lines)  # GUARD:fence
+    # An HTML comment renders nothing, so a heading or <a id> inside one is no
+    # link target. Blank it but keep its newlines, so line numbers stay true.
+    lines = COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), "\n".join(lines)).split("\n")  # GUARD:comments
+    if open_fence is not None:  # GUARD:unterminated
+        say("MISS", f"{f}: a {open_fence} fence is never closed — everything after it went unscanned")
+    occ, frags, hs = {}, set(), []
     for i, ln in enumerate(lines, 1):
         m = HEADING_RE.match(ln)
         if not m:
             continue
-        base = slug_base(m.group(2))
+        base = slug_base(m.group(3))
         s = base
-        if seen[base]:
-            s = f"{base}-{seen[base]}"  # GUARD:dup
-        seen[base] += 1
+        if s in occ:  # GUARD:dup
+            while True:
+                occ[base] += 1
+                s = f"{base}-{occ[base]}"
+                if s not in occ:
+                    break
+        occ[s] = 0
         frags.add(s)
-        hs.append((i, rendered(m.group(2)).strip(), s))
+        hs.append((i, rendered(m.group(3)).strip(), s))
     body = "\n".join(lines)
+    body = CODESPAN_RE.sub("", body)  # GUARD:codespan
     for a in HTML_ANCHOR_RE.findall(body):
         frags.add(a)  # GUARD:htmlanchor
     index[f], headings[f], bodies[f] = frags, hs, body
@@ -181,26 +220,32 @@ for f, hs in headings.items():
 # Legs 2-3 — every anchor link.
 n_links = 0
 for f, body in bodies.items():
-    body = CODESPAN_RE.sub("", body)  # GUARD:codespan
-    targets = INLINE_LINK_RE.findall(body) + REF_DEF_RE.findall(body)
+    targets = [a or b for a, b in INLINE_LINK_RE.findall(body)]
+    targets += REF_DEF_RE.findall(body)  # GUARD:refdef
+    targets += HREF_RE.findall(body)  # GUARD:href
     for t in targets:
-        if "#" not in t or re.match(r"^[a-z][a-z0-9+.-]*:", t, re.I):
+        if "#" not in t:
             continue
+        if SCHEME_RE.match(t): continue  # GUARD:scheme
         path, frag = t.split("#", 1)
-        frag = unquote(frag)
+        frag = unquote(frag)  # GUARD:unquote
         if path:  # GUARD:xfile
-            if not path.endswith(".md"):
-                continue
+            path = unquote(path)  # GUARD:pathunquote
             if path.startswith("/"):
-                dest = path.lstrip("/")
+                dest = path.lstrip("/")  # GUARD:rooted
             else:
-                dest = os.path.normpath(os.path.join(os.path.dirname(f), path))
-            if dest.startswith(EXCLUDE):
-                continue
+                dest = os.path.normpath(os.path.join(os.path.dirname(f), path))  # GUARD:relative
+            if not dest.endswith(".md"):
+                # GitHub serves a directory link as its README.md.
+                dest = os.path.join(dest, "README.md")  # GUARD:dirreadme
+                if dest not in tracked: continue  # GUARD:nonmd
+            if dest.startswith(EXCLUDE): continue  # GUARD:exclinks
         else:
             dest = f
+        valid = index.get(dest, set())
+        if (not frag or frag == "top") and frag not in valid: continue  # GUARD:top
         n_links += 1
-        if frag not in index.get(dest, set()):  # GUARD:leg2
+        if frag not in valid:  # GUARD:leg2
             if dest in tracked:
                 say("MISS", f"{f}: link '{t}' — no heading in {dest} slugs to #{frag}")
             else:
@@ -209,9 +254,14 @@ for f, body in bodies.items():
         if DIGIT_TOKEN_RE.search(frag):  # GUARD:leg3
             say("WARN", f"{f}: link '{t}' resolves, but its anchor carries a number — confirm it is an ordinal or version, not a count or a duplicate-heading suffix")
 
-print(f"INFO scanned {len(index)} file(s); {n_headings} heading(s) indexed; {n_links} anchor link(s) resolved against them")
+print(f"INFO scanned {len(index)} file(s); {n_headings} heading(s) indexed; {n_links} anchor link(s) checked against them")
 print(f"-- {miss} MISS, {warn} WARN --")
 sys.exit(1 if miss else 0)
 PY
 
-printf '%s\n' "$files" | python3 -c "$PYSRC"
+# -z plus quotepath=false: a non-ASCII or quote-bearing name arrives verbatim,
+# not as a C-quoted string that open() cannot find.
+git -c core.quotepath=false ls-files -z -- '*.md' | python3 -c "$PYSRC"
+st=("${PIPESTATUS[@]}")
+[ "${st[0]}" = 0 ] || { echo "MISS: git ls-files failed (rc=${st[0]}) — check UNVERIFIED"; exit 1; }
+exit "${st[1]}"
