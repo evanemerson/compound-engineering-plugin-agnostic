@@ -435,6 +435,14 @@ write. An item consumed from a sink is closed in that sink or explicitly
 re-reported — never left half-consumed. Blocked/deferred items stay
 untouched in their sinks with the outcome noted in the report.
 
+**Every status flip also moves its counter**: `deferred → completed` moves
+one finding between those two counters of the file's `summary:` block, in the
+same edit (`cepa:file-todos` `## Frontmatter Summary`). Then run the
+**`cepa:file-todos` `## Self-check`** block on each `todos/` findings file the
+item touched, before the commit below. Exit 1: repair once as that section
+bounds it, and re-run. A second MISS, or `self-check UNAVAILABLE`, goes in the
+report verbatim and is never recorded as clean.
+
 **Write-back is committed, immediately:** the sink edits for each item
 land as one commit on `<trunk>` — `chore(sweep): close <finding-ref> —
 <branch/PR>` — BEFORE the per-item boundary re-check runs. The boundary

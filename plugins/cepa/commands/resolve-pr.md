@@ -45,7 +45,8 @@ Parse a `mode:headless` token from anywhere in the arguments and strip it.
   `deferred`, the memory/tasks.d/ shard, PR-body residual section) with the
   natural-voice reply posted and the thread left open. End with a
   structured summary: findings file path, verdict counts, commits
-  pushed, replies posted, suspect_comments count, deferred list.
+  pushed, replies posted, suspect_comments count, deferred list, and the
+  Step 7.5 `self_check:` result.
 
 **Fail-safe:** no blocking-question tool → behave headless.
 
@@ -127,7 +128,14 @@ the Step 8 loop. needs-human → `pending` (interactive) / `deferred`
 
 ## Step 7.5: Record
 
-Commit the findings file, its status updates, and any residual-shard
+First run the **`cepa:file-todos` `## Self-check`** block on the findings
+file — Step 7's status flips are its last writes, and the check must precede
+this commit, every time the Step 8 loop brings the run back here. Exit 1:
+repair once as that section bounds it, and re-run. A second MISS, or
+`self-check UNAVAILABLE`, is reported verbatim (headless: `self_check:` in the
+summary) and never recorded as a clean file.
+
+Then commit the findings file, its status updates, and any residual-shard
 entries (memory/tasks.d/) as a second commit — `chore: record PR feedback verdicts (#N)`
 — and push it. The run ends tree-clean; verdicts must not evaporate
 with the session.
