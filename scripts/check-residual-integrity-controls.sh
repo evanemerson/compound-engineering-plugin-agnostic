@@ -183,7 +183,7 @@ reg convn 'counter_convention: exempts the file'    0 0 'carries counter_convent
 # A zero tally on a file that HAS findings is a broken pattern, not a clean
 # file. Without this, every mutant that narrows the tally regex reports success.
 # 4 MISS, not 1: the plant renames `status:` to `state:` in all three findings,
-# so the required-field leg (check-findings-file.sh leg 2) also names each one
+# so the fields leg of check-findings-file.sh also names each one
 # — correctly, and with the `state` -> `status` alias hint.
 reg zero  'headings present, zero status rows matched' 4 0 'the tally pattern did not fire' '' \
   'kills: a narrowed status: tally — a zero count would otherwise read as clean'

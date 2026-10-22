@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # cepa findings-file check — read-only. Verifies that a findings file's PARSED
-# `summary:` block agrees with its own body (leg 1), and that every finding
-# carries the spec's required fields (leg 2). Never modifies anything.
+# `summary:` block agrees with its own body (leg 1, the counters), and that
+# every finding carries the spec's required fields (the fields leg). Never
+# modifies anything.
 #
 # THE ONE EXECUTABLE COPY of the `cepa:file-todos` counting rule. Every
 # consumer runs THIS file, never a restatement of it:
@@ -42,9 +43,9 @@
 # Results accumulate in the CFF_* globals below; the caller owns its own
 # counters and its own exit code. The main path runs only when executed.
 #
-# The rationale for every check below was written for, and measured on, the
-# cepa repo's own `todos/` corpus; it moved here with the code and was then
-# edited for this location.
+# The rationale for every leg-1 check below was written for, and measured on,
+# the cepa repo's own `todos/` corpus; it moved here with the code and was then
+# edited for this location. The fields leg was written here (punch-list L17).
 
 # ---------------------------------------------------------------------------
 # The states the spec's lifecycle defines. Declared ONCE and consumed by every
@@ -65,17 +66,17 @@ STATES='pending ready skipped applied deferred completed'
 # The finding fields the spec marks REQUIRED — the `yes` rows of SKILL.md's
 # `## Finding Fields` table. Unlike STATES above, a machine link DOES hold this
 # one to the spec: the cepa repo's scripts/check-findings-file-controls.sh case
-# `wire-required` parses that table and fails when the two sets differ. Edit
-# the spec table first; the control then names this line.
+# `wire-required` parses that table, fails when the two sets differ, and prints
+# both sets. It also fails on a Required cell that is neither `yes` nor `no`,
+# so a re-spelled row cannot drop out of both sides at once.
 REQUIRED_FIELDS='status severity agent category confidence action_class file title'
 
 # Names a writer used INSTEAD of a required field, as `alias:required`. Read
 # only to add a hint to a missing-field MISS — an alias beside its required
-# field is silence, never a finding: measured 2026-10-22, 43 `summary:` lines
-# sit inside findings that also carry `title:` in the cepa repo's todos/, and
-# an extra field harms no consumer. The first three are the dpc-pro plan-review
-# shape that filed punch-list L17; `state` is a spelling the repo checker's
-# controls already plant.
+# field is silence, never a finding: findings in the cepa repo's todos/ carry
+# `summary:` rows beside their `title:`, and an extra field harms no consumer.
+# The first three are the dpc-pro plan-review shape that filed punch-list L17;
+# `state` is a spelling the repo checker's controls already plant.
 FIELD_ALIASES='class:action_class anchor:file summary:title state:status'
 
 # ---------------------------------------------------------------------------
@@ -147,12 +148,18 @@ FIELD_POST='[[:space:]]*:(\*\*|__|\*|_|`)?[[:space:]]*`?'
 # (`- status: applied | severity: P3`) is counted as a row, so its value must be
 # countable too, or the row total and the per-state tally disagree.
 VAL_TAIL='(\*\*|__|\*|_|`)?[[:space:]]*($|(·|\|))'
-# Tail for a PRESENCE match (leg 2): the field must carry a value. Any run of
-# markers, then one character that is not one. A bare "one non-space
-# character" is not enough: the emphasis group can backtrack to a single `*`
-# of `**`, so `- **title:** ` would read the second `*` as its value. Nor may
-# the class simply exclude `_`: a real title opens `_curl's RETURN-only trap`.
-FIELD_VAL='[*_`[:space:]]*[^*_`[:space:]]'
+# Tail for a PRESENCE match (the fields leg): the field must carry a value.
+# Any run of markers, then one character that is neither a marker nor the
+# start of a positional separator. A bare "one non-space character" is not
+# enough: the emphasis group can backtrack to a single `*` of `**`, so
+# `- **title:** ` would read the second `*` as its value; and in
+# `title: · file: x` the empty title would read `·` (bytes C2 B7) as its value,
+# `file: | agent: x` the `|`. A separator is excluded only when a space or the
+# line end follows it, as one always does: a real title opens `` `|| recs=`` and
+# must count. Nor may the class simply exclude `_`: a real title opens
+# `_curl's RETURN-only trap`. `·` is matched byte-wise — C2 then B7 — so any
+# other character that starts with C2 (`§`, `©`) still counts.
+FIELD_VAL=$'[*_`[:space:]]*([^*_`[:space:]|\xc2]|\xc2[^\xb7]|(\||\xc2\xb7)[^[:space:]])'
 
 BATCH_RE="${FIELD_PRE}severity${FIELD_POST}P[123](/P[123])*[[:space:]]*\(batch\)"
 RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
@@ -198,11 +205,11 @@ _cff_numeric() {
 }
 
 # cff_check_file <file> — check one findings file; never exits, always returns 0.
-# Leg 1 (the counters) then leg 2 (required fields). Leg 2 runs whatever leg 1
+# Leg 1 (the counters) then the fields leg. The fields leg runs whatever leg 1
 # returned: leg 1 returns early on a `counter_convention:` file, and that field
-# exempts COUNTERS only — the spec says so — not the finding fields. Leg 2 adds
-# MISS lines and no accounting bucket, so cff_accounted still partitions files
-# by leg 1's outcome alone.
+# exempts COUNTERS only — the spec says so — not the finding fields. The fields
+# leg adds MISS lines and no accounting bucket, so cff_accounted still
+# partitions files by leg 1's outcome alone.
 cff_check_file() {
   _cff_counters "$1"
   _cff_fields "$1"
@@ -492,11 +499,13 @@ _cff_counters() {
   return 0
 }
 
-# --- leg 2: every finding carries the spec's required fields -----------------
+# --- the fields leg: every finding carries the spec's required fields -------
 # Punch-list L17. Leg 1 counts status/severity rows and never asked for the
 # rest, so two dpc-pro plan-review files that wrote `class`/`anchor`/`summary`
 # for `action_class`/`file`/`title` passed — and /cepa:triage decides
-# auto-apply by `action_class`.
+# auto-apply by `action_class`. (Not to be confused with the cepa repo
+# checker's own WARN-only "legs 2-4": to that checker, this whole file is its
+# leg 1, and a MISS here fails it.)
 #
 # THE FIELD BLOCK, not the section. A finding's fields are the lines after its
 # `### N` heading, leading blank lines skipped, up to the first blank line or
@@ -504,19 +513,26 @@ _cff_counters() {
 # bare-field branch lets a `**Fix:**` paragraph line `file: foo`, or a `File:`
 # line under a trailing `## Residual risks`, stand in for the missing field.
 # The spec's example puts every field before the blank line ahead of
-# `**Problem:**`; measured 2026-10-22, all 898 findings in the cepa repo's
-# todos/ keep their fields there.
+# `**Problem:**`; every finding in the cepa repo's todos/ passes this leg
+# (`bash scripts/check-residual-integrity.sh` there: 0 MISS).
+#
+# A field that IS in the finding but below its block — fields separated by
+# blank lines, or a prose line first — gets its own wording: move the row up.
+# Telling that writer to "add the field" would put a second status or severity
+# row in the finding, which leg 1 then counts as a second finding.
 #
 # Presence is the shared spelling rule — FIELD_PRE + name + FIELD_POST — plus
 # FIELD_VAL, so every spelling leg 1 counts (bold, backtick, indented,
-# positional after ` · ` or ` | `) counts here. No second pattern.
+# positional after ` · ` or ` | `) counts here. No second pattern. The
+# positional spelling carries leg 1's ambiguity: a title whose text contains
+# ` · file: x` reads as a `file:` row. No anchor separates the two.
 #
 # A finding's id in a message is captured from its heading as digits and `-`
 # only, never the heading's prose. Field names in a message come from the
 # declared lists above, never from the file.
 _cff_fields() {
   local f="$1" body blocks lines owners r a pat hits rc tagged report \
-        id missing hints _d
+        id missing moved hints _d
   local -x LC_ALL=C
   # Unreadable, or no body to extract: leg 1 already said so by name.
   [ -r "$f" ] || return 0
@@ -525,25 +541,31 @@ _cff_fields() {
   [ "$_d" -ge 2 ] || return 0
   body=$(_cff_body "$f")
 
-  # One row per finding (`H <n> <id>`) and per field-block line (`L <n> text`).
+  # One row per finding (`H <n> <id>`), per field-block line (`L <n> text`),
+  # and per other line of the finding's section (`S <n> text`).
   # `#(#|##)?` rather than an interval: mawk has none.
   blocks=$(printf '%s\n' "$body" | awk '
     /^#(#|##)?[[:space:]]/ {
-      inb = 0
+      inb = 0; insec = 0
       if (match($0, /^###[[:space:]]+[0-9]+([[:space:]]*-[[:space:]]*[0-9]+)?/)) {
         id = substr($0, 1, RLENGTH); sub(/^###[[:space:]]+/, "", id); gsub(/[[:space:]]/, "", id)
-        n++; inb = 1; seen = 0; print "H\t" n "\t" id
+        n++; inb = 1; insec = 1; seen = 0; print "H\t" n "\t" id
       }
       next
     }
     inb && /^[[:space:]]*$/ { if (seen) inb = 0; next }
-    inb { seen = 1; print "L\t" n "\t" $0 }')
-  printf '%s\n' "$blocks" | grep -q '^H' || return 0
+    inb { seen = 1; print "L\t" n "\t" $0; next }
+    insec { print "S\t" n "\t" $0 }')
+  # A here-string, never `printf | grep -q`: grep -q exits on the first match,
+  # printf then takes SIGPIPE once the rows outgrow the pipe buffer, and under
+  # a sourcing caller's `pipefail` the pipeline fails — which `|| return 0`
+  # read as "no findings", skipping every field in a large file.
+  grep -q '^H' <<<"$blocks" || return 0
 
-  # The block lines alone, and their finding numbers in the same order, so a
-  # `grep -n` line index maps back to the finding it came from.
-  lines=$(printf '%s\n' "$blocks" | awk -F'\t' '$1 == "L" { sub(/^L\t[^\t]*\t/, ""); print }')
-  owners=$(printf '%s\n' "$blocks" | awk -F'\t' '$1 == "L" { print $2 }')
+  # The section lines alone, and `<n> <L|S>` for each in the same order, so a
+  # `grep -n` line index maps back to its finding and to block-or-below.
+  lines=$(awk -F'\t' '$1 == "L" || $1 == "S" { sub(/^[LS]\t[^\t]*\t/, ""); print }' <<<"$blocks")
+  owners=$(awk -F'\t' '$1 == "L" || $1 == "S" { print $2 "\t" $1 }' <<<"$blocks")
 
   # `F <index> <field>` for a present required field, `A <index> <alias>` for
   # an alias row. A grep that errors is refused by name — exit 2 must never
@@ -568,33 +590,43 @@ _cff_fields() {
     [ -z "$hits" ] || tagged="${tagged}$(printf 'A\t%s\t'"$a"'\n' $hits)"$'\n'
   done
 
-  # Per finding: `<id>\t<missing fields>\t<hints>`, only for findings missing one.
-  report=$( { printf '%s\n' "$owners" | awk '{ print "O\t" NR "\t" $0 }'
-              printf '%s\n' "$blocks" | awk -F'\t' '$1 == "H"'
+  # Per finding missing a field in its block:
+  # `<id>\t<missing>\t<present below the block>\t<alias hints>`.
+  report=$( { awk '{ print "O\t" NR "\t" $0 }' <<<"$owners"
+              awk -F'\t' '$1 == "H"' <<<"$blocks"
               printf '%s' "$tagged"; } |
     awk -F'\t' -v req="$REQUIRED_FIELDS" '
-      $1 == "O" { own[$2] = $3; next }
+      $1 == "O" { own[$2] = $3; kind[$2] = $4; next }
       $1 == "H" { ids[$2] = $3; if ($2 > max) max = $2; next }
-      $1 == "F" { has[own[$2], $3] = 1; next }
-      $1 == "A" { split($3, p, ":"); alias[own[$2], p[2]] = p[1]; next }
+      $1 == "F" { if (kind[$2] == "L") has[own[$2], $3] = 1; else below[own[$2], $3] = 1; next }
+      $1 == "A" { if (kind[$2] == "L") { split($3, p, ":"); alias[own[$2], p[2]] = p[1] }; next }
       END {
         nreq = split(req, rq, " ")
         for (n = 1; n <= max; n++) {
-          miss = ""; hint = ""
+          miss = ""; mv = ""; hint = ""
           for (i = 1; i <= nreq; i++) {
             if ((n, rq[i]) in has) continue
+            if ((n, rq[i]) in below) { mv = mv (mv == "" ? "" : ", ") rq[i]; continue }
             miss = miss (miss == "" ? "" : ", ") rq[i]
             if ((n, rq[i]) in alias)
               hint = hint "; it has " alias[n, rq[i]] ": where the spec name is " rq[i] ":"
           }
-          if (miss != "") print ids[n] "\t" miss "\t" hint
+          if (miss != "" || mv != "") print ids[n] "\t" (miss == "" ? "-" : miss) "\t" (mv == "" ? "-" : mv) "\t" hint
         }
       }')
 
-  while IFS=$'\t' read -r id missing hints; do
+  # Every column is non-empty (`-` for none) except the trailing hints, so a
+  # tab-delimited read cannot collapse a field into its neighbour.
+  while IFS=$'\t' read -r id missing moved hints; do
     [ -n "$id" ] || continue
-    _cff_miss "residual: ${f} finding ### ${id} lacks required field(s) ${missing}${hints} — \`cepa:file-todos\` § Finding Fields requires them, and /cepa:triage decides auto-apply by action_class"
-    CFF_MISSES=$((CFF_MISSES + 1))
+    if [ "$missing" != - ]; then
+      _cff_miss "residual: ${f} finding ### ${id} lacks required field(s) ${missing}${hints} — \`cepa:file-todos\` § Finding Fields requires them, and /cepa:triage decides auto-apply by action_class"
+      CFF_MISSES=$((CFF_MISSES + 1))
+    fi
+    if [ "$moved" != - ]; then
+      _cff_miss "residual: ${f} finding ### ${id} has ${moved} below its field block (after a blank line) — move the row(s) up under the heading; do not add a second one"
+      CFF_MISSES=$((CFF_MISSES + 1))
+    fi
   done <<<"$report"
   return 0
 }

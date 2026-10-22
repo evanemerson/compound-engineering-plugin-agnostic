@@ -103,12 +103,14 @@ Each finding under `## Findings` uses this structure:
 | `resolved` | no | date + branch/PR | Only on `deferred → completed`: when and where the deferred item was fixed |
 | `counter_convention` | no | `legacy-total-shrink`, `persona-merged` | File-level: its counters follow a superseded convention and cannot be verified against its body. A checker skips on THIS field, never on a filename |
 
-Every `yes` row is enforced: the `## Self-check` script reports a MISS for a
-finding whose **field block** — the lines after its `### N` heading, up to the
-first blank line — lacks one, or carries it with no value. Write the fields
-there, before the blank line ahead of `**Problem:**`, as above. Use these
-names exactly: a stand-in such as `class`, `anchor` or `summary` does not
-count, and the MISS names the field it stands in for.
+Every `yes` row is enforced. The `## Self-check` script reports a MISS for a
+finding whose **field block** lacks one, or carries it with no value. The field
+block is the lines after the `### N` heading (leading blank lines skipped), up
+to the first blank line or the next heading; the script's fields-leg comment
+owns the exact rule. Write the fields there, before the blank line ahead of
+`**Problem:**`, as above. Use these names exactly. A stand-in name does not
+count; for `class`, `anchor`, `summary` and `state`, the MISS names the field
+it stands in for.
 
 When agents merge duplicate findings (same location, same reason), the merged
 finding's `action_class` becomes `corroborated` and its `confidence` is the
@@ -451,13 +453,15 @@ bash "$CEPA_ROOT/scripts/check-findings-file.sh" "${files[@]}"
 - A missing `summary:` block is written fresh from the body. A heading with no
   `status:` row gets the status **this run** assigned that finding.
 - A finding that lacks a required field (`## Finding Fields`) is not a
-  counter problem. When the MISS names a stand-in (`it has class: where the
-  spec name is action_class:`), rename that row to the spec name and keep its
-  value. You may do this in any finding of a file you touched, because no value
-  changes. When no stand-in is named, add the field only with the value **this
-  run** assigned that finding. Never invent a value for a finding an earlier
-  run wrote. That finding stays a MISS, and the second run of the block reports
-  it as a failed self-check.
+  counter problem. When the MISS says a field is **below its field block**,
+  move that row up under the heading. Never add a second one: a second
+  `status:` or `severity:` row reads as a second finding. When the MISS names a
+  stand-in (`it has class: where the spec name is action_class:`), rename that
+  row to the spec name and keep its value. You may move or rename in any
+  finding of a file you touched, because no value changes. Otherwise, add the
+  field only with the value **this run** assigned that finding. Never invent a
+  value for a finding an earlier run wrote. That finding stays a MISS, and the
+  second run of the block reports it as a failed self-check.
 - **Never delete a finding, and never change a finding's status, to make the
   check pass.** That is the forgery leg 1c exists to catch, and it hides work.
 - Edit only the files in `files`.

@@ -64,7 +64,7 @@
 # human or a CI log. Its MISS/WARN messages interpolate repo-tracked file paths
 # and line numbers (never file prose, deliberately), and at the time of writing
 # no workflow, command, skill, or agent reads ITS stdout. Its leg-1 lines come
-# from the sourced counting rule, whose standalone output the findings-file
+# from the sourced rule (counters and required fields), whose standalone output the findings-file
 # writers DO read — that relay point is the `cepa:file-todos` `## Self-check`
 # section, and it carries its own §7 clause. The moment anything reads THIS
 # script's stdout
@@ -170,7 +170,8 @@ SHARDS_DIR=${RESIDUAL_SHARDS_DIR:-memory/tasks.d}
 # while the spec was fixed four times beside it, and saw ZERO status rows on
 # 18 of 24 real bold-spelling files while exiting 0. That file's header owns
 # the sourced contract; its body owns every leg-1 rationale that used to be
-# here.
+# here, and its fields leg (each finding's required fields), whose MISS lines
+# land in this checker's leg 1 and fail it — not in the WARN-only legs 2-4.
 #
 # Located from THIS script's own path, never from the cwd or the installed
 # plugin: a repo checker that sourced whatever copy happened to be installed
@@ -191,7 +192,7 @@ if [ -r "$FINDINGS_CHECKER" ] && . "$FINDINGS_CHECKER" && declare -F cff_check_f
 else
   miss "residual: could not load the counting rule from ${FINDINGS_CHECKER} — leg 1 cannot run, and a leg that cannot run is not a pass"
   echo "-- 1 MISS, 0 WARN --"
-  echo "FAIL: a parsed counter disagrees with the body it summarizes, or a check could not run."
+  echo "FAIL: a parsed counter disagrees with the body it summarizes, a finding lacks a required field, or a check could not run."
   exit 1
 fi
 
@@ -313,7 +314,7 @@ fi
 # --- verdict ---------------------------------------------------------------
 echo "-- ${misses} MISS, ${warns} WARN --"
 if [ "$misses" -gt 0 ]; then
-  echo "FAIL: a parsed counter disagrees with the body it summarizes, or a check could not run."
+  echo "FAIL: a parsed counter disagrees with the body it summarizes, a finding lacks a required field, or a check could not run."
   exit 1
 fi
 if [ "$warns" -gt 0 ]; then
