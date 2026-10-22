@@ -86,6 +86,12 @@ if [ -n "${CEPA_RESIDUAL_CHECKER:-}" ] && [ -n "${CI:-}" ]; then
   printf 'FATAL: CEPA_RESIDUAL_CHECKER is set in CI — the suite would validate a checker nobody reviewed\n' >&2
   exit 2
 fi
+# The checker sources the shipped counting rule, and CEPA_FINDINGS_CHECKER
+# redirects that source to a mutated copy — the same hazard, one hop further.
+if [ -n "${CEPA_FINDINGS_CHECKER:-}" ] && [ -n "${CI:-}" ]; then
+  printf 'FATAL: CEPA_FINDINGS_CHECKER is set in CI — the checker would source a counting rule nobody reviewed\n' >&2
+  exit 2
+fi
 
 # ---------------------------------------------------------------------------
 # Case registry
