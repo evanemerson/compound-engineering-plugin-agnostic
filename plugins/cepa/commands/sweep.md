@@ -439,7 +439,8 @@ untouched in their sinks with the outcome noted in the report.
 one finding between those two counters of the file's `summary:` block, in the
 same edit (`cepa:file-todos` `## Frontmatter Summary`). Then run the
 **`cepa:file-todos` `## Self-check`** block on each `todos/` findings file the
-item touched, before the commit below. Exit 1: repair once as that section
+item touched, before the commit below, with `own` set to the findings the
+item changed (that section says how). Exit 1: repair once as that section
 bounds it, and re-run. A second MISS, or `self-check UNAVAILABLE`, goes in the
 report verbatim and is never recorded as clean.
 

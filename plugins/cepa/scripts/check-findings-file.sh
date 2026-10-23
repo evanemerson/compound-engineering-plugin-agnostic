@@ -28,7 +28,8 @@
 #                                     MISS, 2 usage. IDS is `all` (the
 #                                     default), `none`, or the `### N` ids of
 #                                     the findings this run wrote or changed
-#                                     (`3,7`, `4-6`) — the fields leg's MISS
+#                                     (`3,7`; `4-6` names a range heading
+#                                     `### 4-6`, never 4, 5 and 6) — its MISS
 #                                     covers those; any other finding's missing
 #                                     field is a WARN. See the fields leg.
 #   check-findings-file.sh --rows FILE
@@ -228,7 +229,7 @@ _cff_numeric() {
 # Leg 1 (the counters) then the fields leg. The fields leg runs whatever leg 1
 # returned: leg 1 returns early on a `counter_convention:` file, and that field
 # exempts COUNTERS only — the spec says so — not the finding fields. The fields
-# leg adds MISS lines and no accounting bucket, so cff_accounted still
+# leg adds MISS/WARN lines and no accounting bucket, so cff_accounted still
 # partitions files by leg 1's outcome alone.
 cff_check_file() {
   _cff_counters "$1"
@@ -552,13 +553,14 @@ _cff_counters() {
 # declared lists above, never from the file.
 #
 # THE OWN SET (punch-list L17's follow-up). A writer runs this check on every
-# file it changes, and triage and sweep change OLD files: one dpc-pro probe
-# found 41 of 232 files with findings an earlier run left incomplete, none
-# older than 2026-07-10. The writer may not invent those values, so a strict
+# file it changes, and triage and sweep change OLD files. A dpc-pro probe
+# found many with findings an earlier run left incomplete (relayed from
+# dpc-pro's coord@main, 2026-10-22: old check @3acefe4 vs new @6209447, per
+# file; not measured here — punch-list L17 carries the numbers). The writer may not invent those values, so a strict
 # self-check would fail on every run that touched one. So a finding outside
 # <own> gets a WARN — reported, not failing — and a finding inside it a MISS,
 # as before. Absent, <own> is `all`: the repo checker sources this file and
-# passes none, so the cleanup stays visible there as MISS lines. An own id
+# passes no own set, so the cleanup stays visible there as MISS lines. An own id
 # that names no heading in the file is a MISS of its own: the writer's list
 # is wrong, and a wrong list is how its own finding would slip to a WARN.
 #
@@ -597,7 +599,9 @@ _cff_fields() {
     }
     inb && /^[[:space:]]*$/ { if (seen) inb = 0; next }
     inb { seen = 1; print "L\t" n "\t" $0; next }
-    insec { print "S\t" n "\t" $0 }')
+    insec { print "S\t" n "\t" $0 }') || {
+    _cff_miss "residual: ${f} the fields-leg parse failed (awk exit $?) — no finding in this file was checked for its fields"
+    CFF_MISSES=$((CFF_MISSES + 1)); return 0; }
   # A here-string, never `printf | grep -q`: grep -q exits on the first match,
   # printf then takes SIGPIPE once the rows outgrow the pipe buffer, and under
   # a sourcing caller's `pipefail` the pipeline fails — which `|| return 0`
@@ -667,7 +671,11 @@ _cff_fields() {
           if (miss != "" || mv != "") print lvl "\t" ids[n] "\t" (miss == "" ? "-" : miss) "\t" (mv == "" ? "-" : mv) "\t" hint
         }
         for (i = 1; i <= nown; i++) if (!(ow[i] in seenid)) print "BADOWN\t" ow[i] "\t-\t-\t"
-      }')
+      }') || {
+    # An empty report reads as "every field present" — never let a failed
+    # awk produce one.
+    _cff_miss "residual: ${f} the required-field report failed (awk exit $?) — no finding in this file was checked for its fields"
+    CFF_MISSES=$((CFF_MISSES + 1)); return 0; }
 
   # Every column is non-empty (`-` for none) except the trailing hints, so a
   # tab-delimited read cannot collapse a field into its neighbour. A WARN
@@ -733,13 +741,13 @@ _cff_main() {
       [ -r "$2" ] || { printf 'not readable: %s\n' "$2" >&2; return 2; }
       _cff_rows "$2"
       return $? ;;
-    '') printf 'usage: %s FILE...   (a check over no file is not a pass)\n' "${0##*/}" >&2
+    '') printf 'usage: %s [--own IDS] FILE...   (a check over no file is not a pass)\n' "${0##*/}" >&2
         return 2 ;;
   esac
   local f own=all
   if [ "${1:-}" = --own ]; then
     [ $# -ge 3 ] || { printf 'usage: %s --own IDS FILE...\n' "${0##*/}" >&2; return 2; }
-    _cff_own_ok "$2" || { printf -- '--own takes all, none, or ### ids like 3,7 or 4-6\n' >&2; return 2; }
+    _cff_own_ok "$2" || { printf -- '--own takes all, none, or heading ids as digits: 3,7 (or 4-6 for a range heading ### 4-6)\n' >&2; return 2; }
     own="$2"; shift 2
   fi
   cff_reset
