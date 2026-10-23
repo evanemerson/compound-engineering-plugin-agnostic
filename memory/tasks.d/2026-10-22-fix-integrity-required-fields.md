@@ -14,3 +14,10 @@ Canonical findings: `todos/review-2026-10-22-172115.md` (findings 3, 5, 18, 21).
 - [ ] P2 — A title containing ` · file: x` stands in for a missing `file:` row: the positional spelling cannot tell a field from look-alike title text — `plugins/cepa/scripts/check-findings-file.sh` fields leg (finding 5). Inherent to the admitted positional spelling; narrowing it is a spelling decision.
 - [ ] P3 — STATES has no machine link to the spec; extend `wire-required` to read the `status` row's values — `scripts/check-findings-file-controls.sh` (finding 18).
 - [ ] P3 — The fields leg inherits residual finding 30 of `2026-10-22-fix-integrity-producer-self-check.md` (unclosed fence drops later findings; a three-tilde fence is not stripped): both legs read `_cff_body` — `plugins/cepa/scripts/check-findings-file.sh` (finding 21). Fix with that residual and a corpus diff.
+
+## Deferred from /cepa:review of the #92 follow-up (2026-10-22)
+
+Canonical findings: `todos/review-2026-10-22-191935.md` (findings 1, 18, 19). Finding 1 is the re-opened P2 above.
+
+- [ ] P3 — The own set is self-attested: `own=none`, or a list that leaves out a finding the run edited, turns its gaps into WARN at exit 0; BADOWN catches a wrong id, not an omitted one. Option: a `git diff`-based cross-check in the Self-check block — `plugins/cepa/skills/file-todos/SKILL.md` `## Self-check` (finding 18).
+- [ ] P3 — The per-file own plumbing (`_cff_main` passing `$own` to each file) has no kill of its own: its only kill, `own-multi`, is shared with the WARN-split mutant. Measured by the worker's mutant matrix (A5-firstonly vs M1-split) — `scripts/check-findings-file-controls.sh` (finding 19).
