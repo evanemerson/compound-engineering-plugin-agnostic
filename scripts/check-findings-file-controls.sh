@@ -170,6 +170,7 @@ reg title-bare      'saying a bare `### N` heading carries a title'
 reg title-tag       'reading a `[...]` tag as a title (the tag strip lost)'
 reg title-punct     'reading punctuation after a tag as a title (the letter-or-digit test lost)'
 reg block-own       'a Self-check block that drops --own "$own" — every old finding fails the writer'
+reg own-statusonly  'a status-only change on an old finding failing the self-check, or a second edited field passing it'
 reg wire-required   'REQUIRED_FIELDS drifting from the spec table yes rows'
 reg wire-cite       'a writer losing its Self-check citation'
 reg wire-order      'a writer citing the Self-check after its commit'
@@ -746,6 +747,20 @@ EOF
       expect 0 '^WARN .*finding ### 1 ' '^MISS ' || return 1
       OUT=$(BLOCK_OWN=1,2 run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
       expect 1 '^MISS .*finding ### 1 ' ;;
+    own-statusonly)
+      # The spec's own rule, through the block. The checker takes the
+      # writer's list; this proves the outcome for the list the rule gives.
+      # The run moves old finding 1 pending -> deferred and changes nothing
+      # else: not own (own=none) -> WARN, exit 0.
+      oldnew "$f"
+      awk '/^### /{n++} n==1 && /^- status: /{$0="- status: deferred"} {print}' "$f" > "$f.t" && mv "$f.t" "$f"
+      sed -i 's/^  pending: 2$/  pending: 1/; s/^  deferred: 0$/  deferred: 1/' "$f"
+      OUT=$(BLOCK_OWN=none run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
+      expect 0 '^WARN .*finding ### 1 lacks required field' '^MISS ' || return 1
+      # The same run also edits finding 1's `file:`: now own (own=1) -> MISS.
+      awk '/^### /{n++} n==1 && /^- file: /{$0="- file: y.py"} {print}' "$f" > "$f.t" && mv "$f.t" "$f"
+      OUT=$(BLOCK_OWN=1 run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
+      expect 1 '^MISS .*finding ### 1 lacks required field' '^WARN ' ;;
     wire-required)
       # The spec's `## Finding Fields` table, `yes` rows, against the checker.
       local spec_set code_set

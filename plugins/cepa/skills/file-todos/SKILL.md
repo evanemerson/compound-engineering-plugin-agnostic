@@ -422,21 +422,31 @@ recorded six files in one day that its own checker rejected — counters that
 did not sum to `total`, a `p2:` one short of the body, no `summary:` block, and
 headings with no `status:` rows — and every cleanup was undone by the next run.
 
-Set `files` to the path(s) this run wrote, and `own` to the findings this run
-wrote or changed, then run the block as one Bash call:
+Set `files` to the path(s) this run wrote, and `own` to the findings that are
+this run's own, then run the block as one Bash call.
+
+A finding is this run's **own** when the run created it, or edited any of its
+fields other than `status` (and `resolved`, which only goes with a status
+change). A status-only change does not make a finding own: triage and sweep
+move the status of findings an earlier run wrote, and may not invent the
+fields that run left out. The no-invention repairs below (move a row, rename a
+stand-in, copy a heading title) do not make a finding own either: they change
+no value.
 
 "This run" is this command invocation. A file that a sub-command dispatched
 within it created counts as created.
 
 - `own=all` — this run created the file. Every finding in it is the run's own.
 - `own=3,7` — this run edited a file an earlier run wrote. List the `### N` id
-  of each finding it added, or whose field value it set or changed — a status
-  transition counts. A finding the run removed (a triage skip) is not listed.
+  of each finding it added, or whose fields other than `status`/`resolved` it
+  set or changed. A finding whose status alone changed is not listed, nor is
+  one the run removed (a triage skip).
   Write ids as digits only, comma-separated, no `###` and no spaces. A range
   heading (`### 4-6`) is listed as `4-6`; it never stands for 4, 5 and 6. The
   writer knows this list because it made those edits; never derive it from the
   file.
-- `own=none` — this run changed no finding (it repaired counters only).
+- `own=none` — this run created no finding and edited no field but `status`
+  and `resolved` (it moved statuses, or repaired counters).
 
 A missing field in an own finding is a MISS. In any other finding it is a
 `WARN`: an earlier run wrote that finding, and this run may not invent its
@@ -497,8 +507,8 @@ findings an earlier run left incomplete. The repairs below that invent nothing
 - **Never delete a finding, and never change a finding's status, to make the
   check pass.** That is the forgery leg 1c exists to catch, and it hides work.
 - Edit only the files in `files`.
-- **Never shrink `own` to make the check pass.** A finding this run wrote or
-  changed stays in it. An own id that names no heading in the file is a MISS,
+- **Never shrink `own` to make the check pass.** A finding this run created, or
+  whose non-status field it edited, stays in it. An own id that names no heading in the file is a MISS,
   because a wrong list is how an incomplete finding would read as a WARN.
 
 A second exit 1 is a **failed self-check**. Commit nothing that claims the file

@@ -108,8 +108,8 @@ Per `cepa:file-todos` — cited, not restated here:
 **Then prove it: run the `cepa:file-todos` `## Self-check` block** on the
 findings file before every commit that stages it — Step 2a.5, each Step 4a
 fix commit, and the interactive mode's commits — and once more after the
-run's last transition, with `own` set to the findings this run transitioned
-(that section says how). Exit 1: repair once as that section bounds it (a
+run's last transition, with `own` set by that section's rule (a status-only
+transition is not own). Exit 1: repair once as that section bounds it (a
 triage repair never re-statuses a finding the user decided), and re-run. A second MISS, or `self-check UNAVAILABLE`, goes
 in the summary verbatim, never as a clean file.
 

@@ -27,7 +27,9 @@
 #                                     exit 0 clean (WARN lines allowed), 1 any
 #                                     MISS, 2 usage. IDS is `all` (the
 #                                     default), `none`, or the `### N` ids of
-#                                     the findings this run wrote or changed
+#                                     the run's own findings (it created
+#                                     them, or edited a field other than
+#                                     status/resolved — the spec's rule)
 #                                     (`3,7`; `4-6` names a range heading
 #                                     `### 4-6`, never 4, 5 and 6) — its MISS
 #                                     covers those; any other finding's missing
