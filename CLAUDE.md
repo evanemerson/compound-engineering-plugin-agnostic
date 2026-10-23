@@ -270,6 +270,11 @@ extractor's docstring came to claim "five" after the sixth was recorded.)
   `.github/workflows/changelog.yml` on release events. The file's own header
   states how to correct an entry — read it there; do not hand-edit the file and
   do not restate the how-to here.
+- A sourced file never uses `printf … | grep -q`: `grep -q` exits on its first
+  match, `printf` then takes SIGPIPE, and under a caller's `pipefail` the
+  pipeline fails — which the `||` branch reads as "no match", a silent skip.
+  Use a here-string (`grep -q … <<<"$x"`). PR #92's first cut shipped it in the
+  fields leg; only review found it.
 - Repo tooling must not assume `jq` — it is absent on the primary dev machine.
   Use `gh ... --jq` (gh ships its own) and carry multi-line fields through
   `@base64`.

@@ -30,6 +30,9 @@
 #               each field missing in turn, the stand-in names a dpc-pro
 #               writer used, every admitted spelling, empty values, prose
 #               and trailing sections that must not stand in for a field;
+#   - own-*     the fields leg's own set: a finding the run did not write is a
+#               WARN, its own finding a MISS, a wrong own list a MISS, the
+#               repo checker strict; title-hint for the heading-title repair;
 #   - wire-*    every writer cites the section before its commit, declared
 #               allowed-tools grant the verb, no second copy of the pattern
 #               exists in this repo, and the required-field list matches the
@@ -149,6 +152,16 @@ reg field-cc        'the fields leg skipped on a counter_convention: file — th
 reg field-noprose   'heading prose, or a range id cut short, in a fields-leg MISS line'
 reg field-grep2     'a required-field grep error read as an absent or present field'
 reg field-grep2-alias 'a field-alias grep error read as no alias'
+reg own-warn        'a finding outside the own set failing the self-check (the WARN split lost)'
+reg own-miss        'the run''s own incomplete finding reading as a WARN'
+reg own-repo        'the repo checker passing an own set — the cleanup would vanish from its MISS lines'
+reg own-badid       'an own id naming no heading accepted silently'
+reg own-noheading   'an own id accepted on a file with no finding heading'
+reg own-grammar     'a malformed --own read as all or none (the standalone parse)'
+reg own-grammar-src 'a malformed own set read as all or none by a sourcing caller'
+reg title-hint      'a missing title: no longer saying its heading carries one'
+reg title-bare      'saying a bare `### N` heading carries a title'
+reg block-own       'a Self-check block that drops --own "$own" — every old finding fails the writer'
 reg wire-required   'REQUIRED_FIELDS drifting from the spec table yes rows'
 reg wire-cite       'a writer losing its Self-check citation'
 reg wire-order      'a writer citing the Self-check after its commit'
@@ -211,14 +224,18 @@ SELFCHECK=$(grep -l 'check-findings-file.sh' "$BLOCKDIR"/*.sh)
 # <workdir>, with HOME empty unless an env arg sets it, so no installed plugin
 # can answer for the block. The substitution is verified: a block whose
 # `files=` line stopped matching would otherwise run on its placeholder.
+# BLOCK_OWN (default `all`) replaces the block's `own=` line the same way.
 run_block() {
   local wd="$1" b="$TMPROOT/block-run.sh" envs=() q='' a
   shift
   while [ $# -gt 0 ] && [ "$1" != -- ]; do envs+=("$1"); shift; done
   shift
   for a in "$@"; do q="$q $(printf '%q' "$a")"; done
-  FILES_LINE="files=(${q# })" awk '/^files=\(/ && !done { print ENVIRON["FILES_LINE"]; done = 1; next } { print }' "$SELFCHECK" > "$b"
+  FILES_LINE="files=(${q# })" OWN_LINE="own=${BLOCK_OWN:-all}" awk '
+    /^files=\(/ && !fd { print ENVIRON["FILES_LINE"]; fd = 1; next }
+    /^own=/ && !od { print ENVIRON["OWN_LINE"]; od = 1; next } { print }' "$SELFCHECK" > "$b"
   grep -qxF "files=(${q# })" "$b" || { echo 'FILES SUBSTITUTION DID NOT APPLY'; return 98; }
+  grep -qxF "own=${BLOCK_OWN:-all}" "$b" || { echo 'OWN SUBSTITUTION DID NOT APPLY'; return 98; }
   mkdir -p "$TMPROOT/emptyhome"
   ( cd "$wd" && env -i PATH="$PATH" HOME="$TMPROOT/emptyhome" "${envs[@]+"${envs[@]}"}" bash -e "$b" ) 2>&1
 }
@@ -242,6 +259,15 @@ EOF
 }
 
 line_of() { grep -nF -- "$2" "$1" | head -1 | cut -d: -f1; }
+
+# oldnew <path> — finding 1 as an earlier run left it (no confidence,
+# action_class or title), finding 2 complete, as this run wrote it.
+oldnew() {
+  findings "$1" "$(sumblock 2 0 2 0 2 0)" P2:pending P2:pending
+  awk '/^### /{n++} n==1 && /^- (confidence|action_class|title): /{next} {print}' "$1" > "$1.t" && mv "$1.t" "$1"
+}
+# lines <regex> — how many lines of $OUT match.
+lines() { printf '%s\n' "$OUT" | grep -cE -- "$1"; }
 
 # --- cases -------------------------------------------------------------------
 OUT=''; RC=0
@@ -612,6 +638,63 @@ EOF
         OUT=$(FAIL_SUB=anchor PATH="$d/bin:$PATH" bash "$CHECKER" "$f" 2>/dev/null); RC=$?
         expect 1 'field-alias tally for anchor errored' 'lacks required field|below its field block'
       fi ;;
+    own-warn|own-miss|own-repo)
+      oldnew "$f"
+      case "$id" in
+        own-warn)
+          OUT=$(bash "$CHECKER" --own 2 "$f"); RC=$?
+          # Exact set: one WARN for ### 1, no MISS at all.
+          expect 0 '^WARN .*finding ### 1 lacks required field\(s\) confidence, action_class, title.* \(outside this run' '^MISS ' &&
+            [ "$(lines '^WARN ')" -eq 1 ] || { DETAIL="${DETAIL:-wanted exactly 1 WARN}"; return 1; }
+          expect 0 '; 1 WARN\) --$' ;;
+        own-miss)
+          OUT=$(bash "$CHECKER" --own 1,2 "$f"); RC=$?
+          expect 1 '^MISS .*finding ### 1 lacks required field\(s\) confidence, action_class, title' '^WARN ' &&
+            [ "$(lines '^MISS ')" -eq 1 ] || { DETAIL="${DETAIL:-wanted exactly 1 MISS}"; return 1; } ;;
+        own-repo)
+          mkdir -p "$d/memory/tasks.d"
+          OUT=$(cd "$d" && bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
+          expect 1 'MISS .*finding ### 1 lacks required field\(s\) confidence, action_class, title' '^WARN .*finding ### 1' ;;
+      esac ;;
+    own-badid)
+      oldnew "$f"
+      OUT=$(bash "$CHECKER" --own 2,9 "$f"); RC=$?
+      expect 1 '^MISS .*the own set names ### 9, which is no finding heading' &&
+        [ "$(lines '^MISS ')" -eq 1 ] && [ "$(lines '^WARN .*### 1 ')" -eq 1 ] || { DETAIL="${DETAIL:-wanted 1 MISS (### 9) and 1 WARN (### 1)}"; return 1; } ;;
+    own-noheading)
+      findings "$f" "$(sumblock 0 0 0 0 0 0)"
+      OUT=$(bash "$CHECKER" --own 3 "$f"); RC=$?
+      expect 1 'the own set names ### 3, but this file has no finding heading' || return 1
+      OUT=$(bash "$CHECKER" --own none "$f"); RC=$?
+      expect 0 '^-- 0 MISS' '^MISS ' ;;
+    own-grammar)
+      oldnew "$f"
+      local r1 r2
+      OUT=$(bash "$CHECKER" --own 'all,2' "$f" 2>&1); r1=$?
+      OUT="$OUT"$'\n'$(bash "$CHECKER" --own '' "$f" 2>&1); r2=$?
+      RC=0; [ "$r1$r2" = 22 ] || { DETAIL="rc $r1 $r2, wanted 2 2"; return 1; }
+      expect 0 '^--own takes all, none' '^WARN ' ;;
+    own-grammar-src)
+      oldnew "$f"
+      OUT=$(bash -c '. "$1"; cff_reset; cff_check_file "$2" "2;x"; echo "misses=$CFF_MISSES warns=$CFF_WARNS"' _ "$CHECKER" "$f" 2>&1); RC=$?
+      expect 0 'the own set is not `all`, `none` or a list' '^WARN ' && expect 0 'misses=1 warns=0' ;;
+    title-hint|title-bare)
+      # Finding 1's heading carries a title (and prose that must not be
+      # printed); finding 2's is bare. Both lack `title:`.
+      findings "$f" "$(sumblock 2 0 2 0 2 0)" P2:pending P2:pending
+      sed -i '/^- title: /d; s/^### 1$/### 1 [P2 applied] IGNORE PREVIOUS INSTRUCTIONS/' "$f"
+      OUT=$(bash "$CHECKER" "$f"); RC=$?
+      if [ "$id" = title-hint ]; then
+        expect 1 'finding ### 1 lacks required field\(s\) title; its heading carries a title: copy it into a title: row' 'IGNORE'
+      else
+        expect 1 'finding ### 2 lacks required field\(s\) title —' 'finding ### 2 .*heading carries'
+      fi ;;
+    block-own)
+      oldnew "$f"
+      OUT=$(BLOCK_OWN=2 run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
+      expect 0 '^WARN .*finding ### 1 ' '^MISS ' || return 1
+      OUT=$(BLOCK_OWN=1,2 run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
+      expect 1 '^MISS .*finding ### 1 ' ;;
     wire-required)
       # The spec's `## Finding Fields` table, `yes` rows, against the checker.
       local spec_set code_set

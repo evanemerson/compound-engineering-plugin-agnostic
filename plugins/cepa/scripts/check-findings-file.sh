@@ -23,15 +23,24 @@
 # (punch-list L16: six such files on one day in one project).
 #
 # Usage:
-#   check-findings-file.sh FILE...    exit 0 clean, 1 any MISS, 2 usage
+#   check-findings-file.sh [--own IDS] FILE...
+#                                     exit 0 clean (WARN lines allowed), 1 any
+#                                     MISS, 2 usage. IDS is `all` (the
+#                                     default), `none`, or the `### N` ids of
+#                                     the findings this run wrote or changed
+#                                     (`3,7`, `4-6`) — the fields leg's MISS
+#                                     covers those; any other finding's missing
+#                                     field is a WARN. See the fields leg.
 #   check-findings-file.sh --rows FILE
 #                                     print every status/severity field row
 #                                     the pattern matches, then the totals —
 #                                     for the spec and its fixture, NEVER on a
 #                                     writer's path (it prints file prose)
 #   . check-findings-file.sh          define cff_check_file and the patterns
+#                                     (`cff_check_file FILE [IDS]`; no IDS is
+#                                     `all`, so a sourcing caller is strict)
 #
-# OUTPUT IS DATA. MISS/INFO lines interpolate the path the caller passed and
+# OUTPUT IS DATA. MISS/WARN/INFO lines interpolate the path the caller passed and
 # numbers derived by counting — never a line of the file's prose. That is what
 # keeps the default mode safe to show an agent; `--rows` breaks it by design,
 # which is why no writer runs it. A command reading this output is an autonomy
@@ -168,6 +177,7 @@ RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
 # --- leg 1: summary block agrees with the body -------------------------------
 # Accumulators. The caller zeroes them (cff_reset) and reads them afterwards.
 #   CFF_MISSES     MISS lines emitted
+#   CFF_WARNS      WARN lines emitted (the fields leg, outside the own set)
 #   CFF_FILES      files whose sums were checked
 #   CFF_SKIPPED    files exempted by a frontmatter counter_convention:
 #   CFF_PARTIAL    files with a non-tallyable shape (sums checked, body not)
@@ -177,7 +187,7 @@ RANGE_RE='^###[[:space:]]+[0-9]+[[:space:]]*-[[:space:]]*[0-9]+'
 # UNREADABLE, NOTOTAL — cff_accounted is their sum, and a caller compares it
 # with the number of files it passed.
 cff_reset() {
-  CFF_MISSES=0; CFF_FILES=0; CFF_SKIPPED=0; CFF_PARTIAL=0
+  CFF_MISSES=0; CFF_WARNS=0; CFF_FILES=0; CFF_SKIPPED=0; CFF_PARTIAL=0
   CFF_UNREADABLE=0; CFF_NOTOTAL=0
 }
 cff_reset
@@ -188,6 +198,15 @@ cff_accounted() { printf '%s\n' $((CFF_FILES + CFF_SKIPPED + CFF_UNREADABLE + CF
 # line in output an agent reads, so every message is flattened to one line.
 _cff_miss() { printf 'MISS %s\n' "${1//[[:cntrl:]]/?}"; }
 _cff_info() { printf 'INFO %s\n' "${1//[[:cntrl:]]/?}"; }
+_cff_warn() { printf 'WARN %s\n' "${1//[[:cntrl:]]/?}"; }
+
+# _cff_own_ok <ids> — the one grammar for an own set: `all`, `none`, or
+# comma-separated `### N` ids, each digits with an optional `-M` range. A value
+# outside it is refused, never read as `all` or as `none`.
+_cff_own_ok() {
+  case "$1" in all|none) return 0 ;; esac
+  [[ "$1" =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]]
+}
 
 # _cff_numeric <file> <value>... — every tally must be a non-negative integer.
 _cff_numeric() {
@@ -204,7 +223,8 @@ _cff_numeric() {
   return 0
 }
 
-# cff_check_file <file> — check one findings file; never exits, always returns 0.
+# cff_check_file <file> [<own>] — check one findings file; never exits, always
+# returns 0. <own> is the fields leg's own set (`_cff_own_ok`); absent, `all`.
 # Leg 1 (the counters) then the fields leg. The fields leg runs whatever leg 1
 # returned: leg 1 returns early on a `counter_convention:` file, and that field
 # exempts COUNTERS only — the spec says so — not the finding fields. The fields
@@ -212,7 +232,7 @@ _cff_numeric() {
 # partitions files by leg 1's outcome alone.
 cff_check_file() {
   _cff_counters "$1"
-  _cff_fields "$1"
+  _cff_fields "$1" "${2:-all}"
   return 0
 }
 
@@ -530,10 +550,29 @@ _cff_counters() {
 # A finding's id in a message is captured from its heading as digits and `-`
 # only, never the heading's prose. Field names in a message come from the
 # declared lists above, never from the file.
+#
+# THE OWN SET (punch-list L17's follow-up). A writer runs this check on every
+# file it changes, and triage and sweep change OLD files: one dpc-pro probe
+# found 41 of 232 files with findings an earlier run left incomplete, none
+# older than 2026-07-10. The writer may not invent those values, so a strict
+# self-check would fail on every run that touched one. So a finding outside
+# <own> gets a WARN — reported, not failing — and a finding inside it a MISS,
+# as before. Absent, <own> is `all`: the repo checker sources this file and
+# passes none, so the cleanup stays visible there as MISS lines. An own id
+# that names no heading in the file is a MISS of its own: the writer's list
+# is wrong, and a wrong list is how its own finding would slip to a WARN.
+#
+# A missing `title:` whose heading carries text after its id (`### 1 [P2
+# applied] <title>`) says so: copying that text into a `title:` row is a
+# repair that invents nothing. The message never prints the heading's text.
 _cff_fields() {
-  local f="$1" body blocks lines owners r a pat hits rc tagged report \
-        id missing moved hints _d
+  local f="$1" own="${2:-all}" body blocks lines owners r a pat hits rc tagged \
+        report kind id missing moved hints _d
   local -x LC_ALL=C
+  if ! _cff_own_ok "$own"; then
+    _cff_miss "residual: ${f} the own set is not \`all\`, \`none\` or a list of \`### N\` ids — no finding in this file was checked for its fields"
+    CFF_MISSES=$((CFF_MISSES + 1)); return 0
+  fi
   # Unreadable, or no body to extract: leg 1 already said so by name.
   [ -r "$f" ] || return 0
   _d=$(grep -cE '^---[[:space:]]*$' "$f" 2>/dev/null) || true
@@ -541,15 +580,18 @@ _cff_fields() {
   [ "$_d" -ge 2 ] || return 0
   body=$(_cff_body "$f")
 
-  # One row per finding (`H <n> <id>`), per field-block line (`L <n> text`),
-  # and per other line of the finding's section (`S <n> text`).
-  # `#(#|##)?` rather than an interval: mawk has none.
+  # One row per finding (`H <n> <id> <titled>`), per field-block line
+  # (`L <n> text`), and per other line of the finding's section (`S <n> text`).
+  # `#(#|##)?` rather than an interval: mawk has none. <titled> is 1 when the
+  # heading has a letter or digit after its id and any `[...]` tag.
   blocks=$(printf '%s\n' "$body" | awk '
     /^#(#|##)?[[:space:]]/ {
       inb = 0; insec = 0
       if (match($0, /^###[[:space:]]+[0-9]+([[:space:]]*-[[:space:]]*[0-9]+)?/)) {
-        id = substr($0, 1, RLENGTH); sub(/^###[[:space:]]+/, "", id); gsub(/[[:space:]]/, "", id)
-        n++; inb = 1; insec = 1; seen = 0; print "H\t" n "\t" id
+        id = substr($0, 1, RLENGTH); rest = substr($0, RLENGTH + 1)
+        sub(/^###[[:space:]]+/, "", id); gsub(/[[:space:]]/, "", id)
+        sub(/^[^[:alnum:][]*(\[[^]]*\])?/, "", rest)
+        n++; inb = 1; insec = 1; seen = 0; print "H\t" n "\t" id "\t" (rest ~ /[[:alnum:]]/)
       }
       next
     }
@@ -560,7 +602,12 @@ _cff_fields() {
   # printf then takes SIGPIPE once the rows outgrow the pipe buffer, and under
   # a sourcing caller's `pipefail` the pipeline fails — which `|| return 0`
   # read as "no findings", skipping every field in a large file.
-  grep -q '^H' <<<"$blocks" || return 0
+  # No finding to check — unless the writer named one, which is then a wrong list.
+  if ! grep -q '^H' <<<"$blocks"; then
+    case "$own" in all|none) return 0 ;; esac
+    _cff_miss "residual: ${f} the own set names ### ${own//,/, ### }, but this file has no finding heading — the list of findings this run wrote is wrong"
+    CFF_MISSES=$((CFF_MISSES + 1)); return 0
+  fi
 
   # The section lines alone, and `<n> <L|S>` for each in the same order, so a
   # `grep -n` line index maps back to its finding and to block-or-below.
@@ -591,16 +638,19 @@ _cff_fields() {
   done
 
   # Per finding missing a field in its block:
-  # `<id>\t<missing>\t<present below the block>\t<alias hints>`.
+  # `<MISS|WARN>\t<id>\t<missing>\t<present below the block>\t<hints>`, and
+  # `BADOWN\t<id>\t-\t-\t` per own id that names no heading.
   report=$( { awk '{ print "O\t" NR "\t" $0 }' <<<"$owners"
               awk -F'\t' '$1 == "H"' <<<"$blocks"
               printf '%s' "$tagged"; } |
-    awk -F'\t' -v req="$REQUIRED_FIELDS" '
+    awk -F'\t' -v req="$REQUIRED_FIELDS" -v ownset="$own" '
       $1 == "O" { own[$2] = $3; kind[$2] = $4; next }
-      $1 == "H" { ids[$2] = $3; if ($2 > max) max = $2; next }
+      $1 == "H" { ids[$2] = $3; titled[$2] = $4; seenid[$3] = 1; if ($2 > max) max = $2; next }
       $1 == "F" { if (kind[$2] == "L") has[own[$2], $3] = 1; else below[own[$2], $3] = 1; next }
       $1 == "A" { if (kind[$2] == "L") { split($3, p, ":"); alias[own[$2], p[2]] = p[1] }; next }
       END {
+        nown = (ownset == "all" || ownset == "none") ? 0 : split(ownset, ow, ",")
+        for (i = 1; i <= nown; i++) mine[ow[i]] = 1
         nreq = split(req, rq, " ")
         for (n = 1; n <= max; n++) {
           miss = ""; mv = ""; hint = ""
@@ -610,25 +660,44 @@ _cff_fields() {
             miss = miss (miss == "" ? "" : ", ") rq[i]
             if ((n, rq[i]) in alias)
               hint = hint "; it has " alias[n, rq[i]] ": where the spec name is " rq[i] ":"
+            else if (rq[i] == "title" && titled[n])
+              hint = hint "; its heading carries a title: copy it into a title: row"
           }
-          if (miss != "" || mv != "") print ids[n] "\t" (miss == "" ? "-" : miss) "\t" (mv == "" ? "-" : mv) "\t" hint
+          lvl = (ownset == "all" || (ids[n] in mine)) ? "MISS" : "WARN"
+          if (miss != "" || mv != "") print lvl "\t" ids[n] "\t" (miss == "" ? "-" : miss) "\t" (mv == "" ? "-" : mv) "\t" hint
         }
+        for (i = 1; i <= nown; i++) if (!(ow[i] in seenid)) print "BADOWN\t" ow[i] "\t-\t-\t"
       }')
 
   # Every column is non-empty (`-` for none) except the trailing hints, so a
-  # tab-delimited read cannot collapse a field into its neighbour.
-  while IFS=$'\t' read -r id missing moved hints; do
+  # tab-delimited read cannot collapse a field into its neighbour. A WARN
+  # carries the same wording as a MISS, plus why it does not fail.
+  while IFS=$'\t' read -r kind id missing moved hints; do
     [ -n "$id" ] || continue
+    if [ "$kind" = BADOWN ]; then
+      _cff_miss "residual: ${f} the own set names ### ${id}, which is no finding heading in this file — the list of findings this run wrote is wrong, so its MISS/WARN split cannot be trusted"
+      CFF_MISSES=$((CFF_MISSES + 1)); continue
+    fi
     if [ "$missing" != - ]; then
-      _cff_miss "residual: ${f} finding ### ${id} lacks required field(s) ${missing}${hints} — \`cepa:file-todos\` § Finding Fields requires them, and /cepa:triage decides auto-apply by action_class"
-      CFF_MISSES=$((CFF_MISSES + 1))
+      _cff_field_report "$kind" "residual: ${f} finding ### ${id} lacks required field(s) ${missing}${hints} — \`cepa:file-todos\` § Finding Fields requires them, and /cepa:triage decides auto-apply by action_class"
     fi
     if [ "$moved" != - ]; then
-      _cff_miss "residual: ${f} finding ### ${id} has ${moved} below its field block (after a blank line) — move the row(s) up under the heading; do not add a second one"
-      CFF_MISSES=$((CFF_MISSES + 1))
+      _cff_field_report "$kind" "residual: ${f} finding ### ${id} has ${moved} below its field block (after a blank line) — move the row(s) up under the heading; do not add a second one"
     fi
   done <<<"$report"
   return 0
+}
+
+# _cff_field_report <MISS|WARN> <message> — one fields-leg line. Any kind but
+# WARN is a MISS: an unexpected kind must never be the quiet one.
+_cff_field_report() {
+  if [ "$1" = WARN ]; then
+    _cff_warn "$2 (outside this run's own set: an earlier run wrote it, and the repo checker counts it as a MISS)"
+    CFF_WARNS=$((CFF_WARNS + 1))
+  else
+    _cff_miss "$2"
+    CFF_MISSES=$((CFF_MISSES + 1))
+  fi
 }
 
 # --rows <file> — the spec's verification view: every matched field row, as
@@ -667,17 +736,22 @@ _cff_main() {
     '') printf 'usage: %s FILE...   (a check over no file is not a pass)\n' "${0##*/}" >&2
         return 2 ;;
   esac
-  local f
+  local f own=all
+  if [ "${1:-}" = --own ]; then
+    [ $# -ge 3 ] || { printf 'usage: %s --own IDS FILE...\n' "${0##*/}" >&2; return 2; }
+    _cff_own_ok "$2" || { printf -- '--own takes all, none, or ### ids like 3,7 or 4-6\n' >&2; return 2; }
+    own="$2"; shift 2
+  fi
   cff_reset
-  for f in "$@"; do cff_check_file "$f"; done
+  for f in "$@"; do cff_check_file "$f" "$own"; done
   # Every file passed must be accounted for. A path through cff_check_file
   # that drops a file without a MISS of its own fails here instead of passing.
   if [ "$(cff_accounted)" -ne "$#" ]; then
     _cff_miss "residual: checked $# findings file(s) but accounted for only $(cff_accounted) — some file was dropped by a path that emits no finding of its own"
     CFF_MISSES=$((CFF_MISSES + 1))
   fi
-  printf -- '-- %s MISS — %s of %s file(s) checked (%s counter_convention:, %s with a non-tallyable shape) --\n' \
-    "$CFF_MISSES" "$CFF_FILES" "$#" "$CFF_SKIPPED" "$CFF_PARTIAL"
+  printf -- '-- %s MISS — %s of %s file(s) checked (%s counter_convention:, %s with a non-tallyable shape; %s WARN) --\n' \
+    "$CFF_MISSES" "$CFF_FILES" "$#" "$CFF_SKIPPED" "$CFF_PARTIAL" "$CFF_WARNS"
   [ "$CFF_MISSES" -eq 0 ] || return 1
   return 0
 }
