@@ -307,7 +307,8 @@ Repeat up to **3 rounds**:
    autonomy §5 (dedup against earlier rounds).
    Then run the **`cepa:file-todos` `## Self-check`** block on the findings
    file — this write-back is its last write in the round, and the check
-   precedes any commit that stages the file. Exit 1: repair once as that
+   precedes any commit that stages the file. Set `own` by that section's rule (a status-only change is not own).
+   Exit 1: repair once as that
    section bounds it, and re-run. A second MISS, or `self-check UNAVAILABLE`,
    goes in the final report verbatim and is never recorded as clean. (The
    `/cepa:review` path checks its own write; this step checks the run's.)

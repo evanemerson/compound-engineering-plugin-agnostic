@@ -182,7 +182,10 @@ reg convn 'counter_convention: exempts the file'    0 0 'carries counter_convent
 # --- the pattern-did-not-fire guards ---------------------------------------
 # A zero tally on a file that HAS findings is a broken pattern, not a clean
 # file. Without this, every mutant that narrows the tally regex reports success.
-reg zero  'headings present, zero status rows matched' 1 0 'the tally pattern did not fire' '' \
+# 4 MISS, not 1: the plant renames `status:` to `state:` in all three findings,
+# so the fields leg of check-findings-file.sh also names each one
+# — correctly, and with the `state` -> `status` alias hint.
+reg zero  'headings present, zero status rows matched' 4 0 'the tally pattern did not fire' '' \
   'kills: a narrowed status: tally — a zero count would otherwise read as clean'
 # Both field formats are live in this repo. A pattern anchored to one returns
 # zero rows on the other, SILENTLY.
@@ -412,18 +415,36 @@ summary:
 ### 1
 - severity: P1
 - status: applied
+- agent: fixture
+- category: Fixture
+- confidence: 75
+- action_class: mechanical
+- file: x.py
+- title: fixture finding
 
 Body text.
 
 ### 2
 - severity: P2
 - status: applied
+- agent: fixture
+- category: Fixture
+- confidence: 75
+- action_class: mechanical
+- file: x.py
+- title: fixture finding
 
 Body text.
 
 ### 3
 - severity: P3
 - status: applied
+- agent: fixture
+- category: Fixture
+- confidence: 75
+- action_class: mechanical
+- file: x.py
+- title: fixture finding
 
 Body text.
 EOF
@@ -466,7 +487,7 @@ plant() {  # plant <id> <dir>
            sed -i 's/^  applied: 3$/  applied: 2/; s/^  p3: 1$/  p3: 0/' "$f" ;;
     gapneg) # A fourth finding appended, counters left at 3 — body exceeds
             # total, which is the arm that names the cause.
-            printf '\n### 4\n- severity: P3\n- status: applied\n\nBody text.\n' >> "$f" ;;
+            printf '\n### 4\n- severity: P3\n- status: applied\n- agent: fixture\n- category: Fixture\n- confidence: 75\n- action_class: mechanical\n- file: x.py\n- title: fixture finding\n\nBody text.\n' >> "$f" ;;
     retain) # A RETAINED skip: still in the body, so there is no gap.
            sed -i 's/^### 3$/### 3/' "$f"
            sed -i '0,/^- status: applied$/!{0,/^- status: applied$/!s/^- status: applied$/- status: skipped/;}' "$f"
