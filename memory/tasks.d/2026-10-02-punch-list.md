@@ -495,7 +495,19 @@ L17. **The self-check does not require the spec's field names.**
 L18. **Revisit the write-back-gap decision — its second instance happened.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab6@integrity`, branch `feat/integrity/writeback-gap-check`)
+    **DECIDED 2026-10-27 by the operator: build (b), at FILE level.** Evidence
+    (coord@main): PR #17's body cites `todos/review-2026-07-12-115234.md` by
+    path and says "4 policy decisions resolved by you", but never gives finding
+    numbers — so a file-level match flags the #79 instance and a finding-level
+    match misses it. Probe:
+    `gh pr view 17 --json body --jq .body | grep -nE '115234|finding *#?[0-9]|P1'`.
+    Cost: file-level reports legitimately-open findings too (#2 there stays
+    deferred on purpose), so the check names them instead of asserting a gap;
+    `main` is unprotected, so red reports and does not block. Controls the
+    worker was briefed with: #17's body against `86332d8^` MUST flag; a body
+    citing a file with 0 deferred findings must not; replay over all merged PRs
+    before merge, probe beside every count. Repo tooling only, no manifest bump.
     Filed 2026-10-27. `memory/tasks.d/2026-09-25-main.md` (~lines 80-100)
     decided option (c) on 2026-09-25 — accept the gap where a decided or
     fixed finding keeps `status: deferred`, and reconcile by hand — and said
@@ -563,7 +575,13 @@ Report the before and after counts to cepa's coord@main.
 ````
 
 L20. **Decide whether to remove worktree `.claude/worktrees/agent-a457670e5009ffa76`.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-27 — removed by coord@main** on the operator's choice.
+    Re-measured just before: 0 status lines incl. ignored, HEAD `a7d7b55`, 2.8M;
+    branch `worktree-agent-a457670e5009ffa76` at `0849cea`, 0 commits not on any
+    remote (`git log --oneline <branch> --not --remotes | wc -l`). Ran
+    `git worktree remove` then `git branch -D`. Lost: only the superseded
+    `a7d7b55` draft described below.
     severity: P3
     owner: coord@main
     Filed 2026-10-27. Detached at `a7d7b55` ("fix(compound): mint the payload
