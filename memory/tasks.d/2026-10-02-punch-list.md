@@ -511,7 +511,19 @@ L18. **Revisit the write-back-gap decision — its second instance happened.**
     (c), then build if chosen.
 
 L19. **OPTIONAL: dpc-pro's 41-file findings cleanup.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-27 in dpc-pro** — its PR #283, merged into `dev` as
+    `b9290a21` at 20:30 UTC (verified here by `gh pr view 283 -R <owner>/dpc-pro`).
+    Reported by dpc-pro's coord@main (relayed; not re-measured here — that
+    would mean running in dpc-pro's checkout): mechanical only, 204 renames,
+    38 row moves, 294 heading titles copied into `title:`, 31 files.
+    `^MISS` on todos/review-*.md with the 1.34.0 checker: 805 -> 627.
+    Left (needs a value not in the file): category 167, file 160,
+    action_class 160, title 127, severity 90, confidence 84, agent 51.
+    Cross-check against the 2026-10-22 counts above: action_class 298-138=160
+    and file 187-27=160 match; row moves 38 match. Two small gaps, unexplained
+    and non-blocking: renames 204 vs 192 expected (138+27+27), and title 127 vs
+    116 expected (437-294-27). Nothing further is owed in this repo.
     severity: P3
     owner: dpc-pro (hand-off only; nothing is owed in this repo)
     Filed 2026-10-27. After #92 (v1.34.0) these files no longer block dpc-pro's
