@@ -224,7 +224,11 @@ L10. **Make cepa agree with the global session roles.**
     "return to trunk" row), `lfg.md:89`, and `task.md:553`.
 
 L11. **Fix the mutation sweep's CI bound (residual 2c-r7).**
-    status: in_progress
+    status: completed
+    **CLOSED 2026-10-27, PROVEN:** the first scheduled run after #89, run
+    40327510023 (2026-10-26), passed and classified 98 of 98; slowest shard
+    45 min of its 120-min limit (38%, under the 60% alarm). Issue #61 closed
+    with that evidence. The record below is kept as written.
     severity: P2
     owner: coord@main — code merged; waiting only on the proof below.
     **MERGED 2026-10-21** — PR #89 (`9a140d3`), v1.32.0, by `tab2@integrity`.
@@ -413,7 +417,25 @@ L16. **`/cepa:review` and `/cepa:plan-review` write findings files their own
     1.33.0 (new sessions load it).
 
 L17. **The self-check does not require the spec's field names.**
-    status: in_progress
+    status: completed
+    **CLOSED 2026-10-27** — PR #92 (`696ddbb`), v1.34.0, by `tab4@integrity`
+    then `tab5@integrity`. Every `### N` finding must carry the 8 required
+    fields. The writer's self-check takes `--own`: a finding the run CREATED,
+    or whose fields other than `status`/`resolved` it edited, MISSes when
+    incomplete; any other finding WARNs and the run does not fail. The
+    no-invention repairs (rename a stand-in, move a row up, copy a heading
+    title into `title:`) do not make a finding own — the worker's addition,
+    kept by coord@main, because otherwise a repair would expose a finding's
+    other gaps and punish the repair. The repo checker stays strict.
+    coord@main's first wording ("wrote or changed") was wrong: a status update
+    is a change, so triage on old files still failed; corrected on the branch.
+    Verified after merge from a scratch repo with the LOADED 1.34.0 copy: an
+    incomplete finding with `--own all` exits 1 (MISS); with `--own none`
+    exits 0 (WARN); with no `--own`, exits 1.
+    Finding 19 accepted as a NAMED exception for one pass-through path, not a
+    rule; finding 18 stays filed. dpc-pro's 41 files no longer block its
+    triage or sweep, but its whole-tree check still reports them.
+    The record below is kept as written.
     severity: P2
     owner: integrity (`tab4@integrity`). PR #92, head `6209447`, opened
     2026-10-22. **HELD by coord@main before merge**, on the worker's own
