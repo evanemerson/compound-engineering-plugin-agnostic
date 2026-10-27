@@ -1,0 +1,61 @@
+---
+name: writeback-gap
+
+# Reports a PR body that cites a todos/*.md findings file still holding
+# `status: deferred` findings — option (b) of the write-back-gap decision
+# (punch-list L18). What it reports, why a deferred finding is a WARN and never
+# a failure, what is a MISS, and its stated limits are defined in
+# scripts/check-writeback-gap.sh's own header — read them there rather than
+# inferring them from this comment.
+#
+# Two runs per PR: on the pull_request events, the PR's body against the PR's
+# merge tree, so the write-back can still land in the same PR; on the push to
+# main, the merged PR's body against the merged tree. `edited` is listed so a
+# body edit re-runs the check. Every WARN is also a `::warning` annotation, so
+# a green job still shows it on the PR and the commit.
+#
+# Security: no event data is interpolated into a run: block. The PR number and
+# the event name reach the step through `env:` only; the script validates the
+# number as digits and reads the body through `gh api --jq` into a file, never
+# into a shell string (CLAUDE.md, PR #88). The body is never printed.
+#
+# Action pinning, the bump recipe, and the JS-runtime eligibility constraint on
+# major versions are documented in .github/workflows/model-pins.yml. This
+# workflow CITES that file rather than restating it.
+
+# Deliberately NOT path-filtered: the body, not the diff, is the input.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: the controls' real_* cases read 86332d8^ and 86332d8.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Check first, controls second with `if: always()`, so neither hides the
+      # other — model-pins.yml records why.
+      - name: Check write-back gap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request) bash scripts/check-writeback-gap.sh --pr "$PR_NUMBER" --ref HEAD ;;
+            push) bash scripts/check-writeback-gap.sh --commit "$(git rev-parse HEAD)" ;;
+            *) echo "MISS writeback-gap: unexpected event — nothing was checked"; exit 1 ;;
+          esac
+      - name: Check write-back-gap checker controls
+        if: always()
+        run: bash scripts/check-writeback-gap-controls.sh

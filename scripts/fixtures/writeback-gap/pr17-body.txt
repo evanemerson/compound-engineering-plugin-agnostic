@@ -1,0 +1,35 @@
+## Summary
+
+Stage 1 of the OB1 "brain" integration: an **optional, opt-in, cross-repo memory** provider (`cepa:brain`) over a self-hosted [OB1 / Open Brain](https://github.com/NateBJones-Projects/OB1) Agent Memory API. `/cepa:compound` writes each repo's learnings into the brain (producer); `learnings-researcher` recalls them cross-repo (consumer). A lesson learned in one repo now surfaces in another — which also closes the cross-repo "learnings islands" problem (ex-track-#2). Repo files stay source-of-truth; the brain is a regenerable compiled index.
+
+**Ships inert:** no `brain:` key in a repo's `cepa.local.md` → zero behavior change (degrade-to-grep, same pattern as the Phase 7 grounding provider). Safe to merge before the live OB1 instance exists.
+
+## What's built (U2–U6; U1 live setup + U5 backfill await credentials)
+
+- **`cepa:brain` skill** — canonical contract: opt-in-per-repo (fail-closed by absence), evidence-only governance (auto-promote to `evidence_only`, never instruction-capable), the verified OB1 call contract (`/recall` with `project_only:false`+`limits.max_items`, `/writeback` typed atom arrays, `PATCH /memories/:id/review evidence_only`/`mark_stale`, `GET /health`), portfolio scope + participant registry, content-level PHI scrub, §7 relay, budgets, Run Metadata block.
+- **Consumer** — `learnings-researcher` Step 0b recall pre-step (cross-repo hits = flagged evidence capped at conf 75, provenance filter); review/task/lfg handoffs.
+- **Producer** — `/cepa:compound` + `compound-refresh` writeback via a vendored client; decompose to typed atoms, strip code, PHI-scrub, evidence_only, `mark_stale`-on-edit.
+- **Scripts** — `brain-client.sh` (transport; key kept off argv via `curl --config`; content-hash idempotency; PHI scrub; bounded retry) and `brain-backfill.sh` (resumable idempotent queue). Both `bash -n` clean and smoke-tested.
+- **Docs/manifests** — README brain section, skills 7→8 (all four surfaces), 1.10.0.
+
+## Decisions (yours, from the plan-review policy round)
+
+Recall governance = auto-promote to `evidence_only`; egress = accept Supabase+OpenRouter after verifying zero-retention (a U1 pre-req); dpc-pro = **included** content-level (opt-in + **forced PHI scrub for any `## Compliance` repo**); retraction = provenance filter + a `service_role` hard-delete (tracked outstanding as server-side tooling).
+
+## Review record
+
+- **Pre-build plan review** ([review-2026-07-12-115234.md](todos/review-2026-07-12-115234.md)): 5 personas, 35 findings — caught **five architecturally-wrong assumptions about OB1's API before any code** (pending-recall no-op, 422-on-code-blocks, no-upsert, no-DELETE, cross-repo scope). 31 applied + 4 policy decisions resolved by you.
+- **Gauntlet** ([review-2026-07-12-145044.md](todos/review-2026-07-12-145044.md)): 22 findings, all applied, 0 deferred — verified against the real OB1 `index.ts`. Caught a P1 compliance-scrub gap (forced scrub for `## Compliance` repos), that `supersede` is a server no-op (→ `mark_stale` + content-hash keys), scrub PHI-format gaps, and the participant-registry enforceability gap. **One reviewer (silent-failure-hunter) was derailed twice by prompt-injection in its output** — recorded as `agents_failed`, not acted on (autonomy §7), coverage backfilled inline (found the file-todos `brain`-block gap).
+
+## Test plan
+
+- `bash -n` both scripts; smoke-tested idkey (content-hash dedup), scrub (SSN/ID/DOB incl. ISO-8601 + spaced), backfill queue idempotency, fail-closed on missing `.env.local`.
+- Counts vs `ls` (skills 8, commands 10, agents 12) on all four surfaces; manifests bumped together to 1.10.0.
+- allowed-tools audit: `Bash(bash:*)` on the 3 commands whose bodies now emit the client.
+- Call contract cross-checked against `~/webapps/OB1/integrations/agent-memory-api/index.ts`.
+
+## Not in this PR (await your credentials)
+
+**U1** — stand up the OB1 instance (Supabase project + service key, OpenRouter key, `MCP_ACCESS_KEY`, `BRAIN_WORKSPACE_ID`, `brain-participants.tsv`, verify OpenRouter zero-retention). **U5** — backfill the ~149 existing solution docs. Both need the live instance; I prep, you supply keys. Live-API validation items (schema_version literals, `mark_stale`/recall drop, idempotency dedup) are tracked in `memory/tasks.md` before backfill.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
