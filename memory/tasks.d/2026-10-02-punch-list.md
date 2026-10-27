@@ -492,6 +492,83 @@ L17. **The self-check does not require the spec's field names.**
     dpc-pro hand-off diff) before it becomes a MISS — older files may lack
     fields legitimately (counter_convention, superseded formats).
 
+L18. **Revisit the write-back-gap decision — its second instance happened.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    Filed 2026-10-27. `memory/tasks.d/2026-09-25-main.md` (~lines 80-100)
+    decided option (c) on 2026-09-25 — accept the gap where a decided or
+    fixed finding keeps `status: deferred`, and reconcile by hand — and said
+    a second instance means revisit, preferring (b): a CI check that fails
+    when a merged PR body cites a finding still marked `deferred` (runs on
+    every push; `main` is unprotected, so it reports without blocking).
+    **The second instance:** PR #79 (`86332d8`). The four OB1 P1 findings
+    showed as open for ~10 weeks. All four had been decided on 2026-07-12;
+    three (#1, #3, #4) were therefore falsely open and were closed by #79.
+    The fourth (#2) correctly stayed `deferred`: its decision requires an
+    OpenRouter zero-retention verification that has no record.
+    So (c)'s frequency argument no longer holds. Decide (b) vs (a) vs keep
+    (c), then build if chosen.
+
+L19. **OPTIONAL: dpc-pro's 41-file findings cleanup.**
+    status: pending
+    severity: P3
+    owner: dpc-pro (hand-off only; nothing is owed in this repo)
+    Filed 2026-10-27. After #92 (v1.34.0) these files no longer block dpc-pro's
+    triage or sweep, but its whole-tree check still reports them. The
+    paste-ready prompt for dpc-pro's coordinator, verbatim as coord@main wrote
+    it on 2026-10-27 (not yet sent):
+
+````markdown
+From cepa's coord@main — an OPTIONAL cleanup item, now unblocked.
+
+cepa PR #92 merged as 696ddbb (v1.34.0). Every `### N` finding must now carry
+the 8 required fields (status, severity, agent, category, confidence,
+action_class, file, title). A writer's self-check scopes that to the
+findings its own run creates or edits, so your 41 older files no longer
+fail triage or sweep. The whole-tree check still reports them.
+
+Your read-only run on 2026-10-22 counted, across 41 of 232 files:
+  stand-ins: `class:` for `action_class:` 138, `anchor:` for `file:` 27,
+    `summary:` for `title:` 27 (the last two only in the two 2026-10-21 files)
+  a field below a blank line: 38 (two files)
+  missing: title 437, action_class 298, file 187, category 167,
+    severity 90, confidence 84, agent 51
+
+1. Mechanical, no value invented: rename the stand-ins, move rows up above
+   the blank line, and copy a title that sits in the heading
+   (`### 1 [P2 applied] <title>`) into a `title:` row.
+2. Everything else needs a value that is not in the file. Do NOT invent it.
+   Leave those findings as they are, or close them by a human decision.
+
+Check before and after, from the plugin copy (new sessions load 1.34.0):
+
+```bash
+bash ~/.claude/plugins/cache/cepa/cepa/1.34.0/scripts/check-findings-file.sh todos/review-*.md 2>&1 | grep -c '^MISS'
+```
+
+Report the before and after counts to cepa's coord@main.
+````
+
+L20. **Decide whether to remove worktree `.claude/worktrees/agent-a457670e5009ffa76`.**
+    status: pending
+    severity: P3
+    owner: coord@main
+    Filed 2026-10-27. Detached at `a7d7b55` ("fix(compound): mint the payload
+    path per run — close residual 2j", 2026-10-03), an early draft of #81's
+    2j fix; #81 merged as `17271ee`. Clean (0 status lines incl. ignored),
+    2.8M. `a7d7b55` is NOT on origin, so #88's cleanup rule and coord@main's
+    own rule both refuse an automatic removal. Measured 2026-10-22: the 11
+    lines of `compound.md` that `a7d7b55` added and #81 lacks are all
+    superseded on main — the plain `printf ... > "$PTR"` became
+    `( set -C; printf ... > "$PTR" )`, and the final `rm -f` list became a
+    `trap ... EXIT` with the same files; the shard lines it added are all in
+    #81. Its branch `worktree-agent-a457670e5009ffa76` (at `0849cea`) has 0
+    commits not on origin. Removing it loses only that superseded draft.
+    Earlier the session said this was "filed"; it had been mentioned in L14's
+    entry, and that line was lost when L14 was rewritten on close — this item
+    is its first durable record.
+
 ---
 
 ## How this list is used
