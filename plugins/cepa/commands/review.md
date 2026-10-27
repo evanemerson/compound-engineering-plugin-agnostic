@@ -581,9 +581,9 @@ counters, the Run Metadata fields — `agents_skipped`,
 whenever `cepa.local.md` configures a `grounding:` key: emit it on EVERY
 such run and every path (fresh, stale, degraded, unavailable) — for
 configured repos an absent block is a recording defect, never a
-not-configured signal — then `### N` findings with
-`status`, `severity`, `agent`, `category`, `confidence`, `action_class`,
-`file`, `lines`, `title`, and `**Problem:**`/`**Fix:**` bodies). Include the
+not-configured signal — then `### N` findings carrying every field
+`cepa:file-todos` `## Finding Fields` marks required, plus `lines`, and
+`**Problem:**`/`**Fix:**` bodies). Include the
 `## Deploy Verdict` body section when the verdict is NO-GO or GO WITH
 CONDITIONS. Do not invent a variant format: `/cepa:triage` and `/cepa:lfg`
 machine-parse these fields, and a divergent file silently produces "0

@@ -202,7 +202,7 @@ edit tracked files while it works.
 say "resolved" in its prose while the frontmatter field a consumer parses still
 says open. This checks that the parsed field agrees with the body, in both
 findings files and residual shards. Its findings-file half is the shipped
-counting rule, `plugins/cepa/scripts/check-findings-file.sh`, which every
+counting rule and required-field check, `plugins/cepa/scripts/check-findings-file.sh`, which every
 command that writes a findings file also runs on it before committing
 (`cepa:file-todos` `## Self-check`); `check-findings-file-controls.sh` pins that
 contract. Both are wired into CI per PR
