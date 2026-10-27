@@ -413,9 +413,39 @@ L16. **`/cepa:review` and `/cepa:plan-review` write findings files their own
     1.33.0 (new sessions load it).
 
 L17. **The self-check does not require the spec's field names.**
-    status: pending
+    status: in_progress
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab4@integrity`). PR #92, head `6209447`, opened
+    2026-10-22. **HELD by coord@main before merge**, on the worker's own
+    recommendation: findings files in dpc-pro written before 2026-07-10 lack
+    `confidence` and `action_class` (they became required that day), and a
+    writer may never invent a value for an older finding — so after merge,
+    every triage or sweep run touching one would report a failed self-check.
+    A read-only dpc-pro probe (old vs new check, per file) measures that first;
+    coord@main ran it here: 71 files, 1 change (`054748` ### 8, fixed on the
+    branch), matching the worker. Then one follow-up on the branch: the
+    old-file rule the measurement calls for, plus the worker's decision 2
+    (a CLAUDE.md line: a sourced file never uses `printf … | grep -q`; under
+    a caller's `pipefail`, SIGPIPE makes it a silent skip — shipped here and
+    found only by review), which coord@main accepted.
+    **dpc-pro measurement, 2026-10-22** (relayed; read-only probe, old check
+    @ `3acefe4` vs new @ `6209447`): files=232, changed=41, ~543 new MISS,
+    lost=0 (no regression). 21 files go 0 -> fail; 20 gain MISS lines.
+    By kind: missing `title` 437, `action_class` 298, `file` 187, `category`
+    167, `severity` 90, `confidence` 84, `agent` 51; stand-ins `class:` for
+    `action_class:` 138, `anchor:` for `file:` 27, `summary:` for `title:` 27
+    (the last two only in the two 2026-10-21 files); a field below a blank
+    line 38 (two files). **The worker's hypothesis was wrong:** NO file before
+    2026-07-10 lacks confidence and action_class; the 41 files date 07-15 to
+    10-21. Renames and moved rows (230 lines) are repairable without inventing
+    a value; titles are probably in the headings (shape seen in L13's probe:
+    `### 1 [P2 applied] <title>`), so moving them invents nothing, but that is
+    not proven for every file; the other missing fields cannot be repaired.
+    **Consequence if merged strict:** triage and sweep change old files, so
+    every run touching one of the 41 would fail its self-check in dpc-pro.
+    **Also:** dpc-pro's `ce647150` (L39, #262) says its two 2026-10-21 files
+    "pass cepa's checker" — true for the old check only; under #92 both fail
+    on the stand-ins.
     Filed 2026-10-22 from dpc-pro's coord@main (relayed): two plan-review
     findings files there use row fields `class`, `anchor` and `summary` instead
     of the spec's `action_class`, `file` and `title`, and both PASS
