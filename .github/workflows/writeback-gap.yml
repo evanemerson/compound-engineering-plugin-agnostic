@@ -15,8 +15,9 @@ name: writeback-gap
 # a green job still shows it on the PR and the commit.
 #
 # Security: no event data is interpolated into a run: block. The PR number and
-# the event name reach the step through `env:` only; the script validates the
-# number as digits and reads the body through `gh api --jq` into a file, never
+# the event name (and the push's `before` SHA) reach the step through `env:`
+# only; the step checks `before` as 40 hex, the script validates the number as
+# digits and every SHA as 40 hex and reads the body through `gh api --jq` into a file, never
 # into a shell string (CLAUDE.md, PR #88). The body is never printed.
 #
 # Action pinning, the bump recipe, and the JS-runtime eligibility constraint on
@@ -48,12 +49,27 @@ jobs:
       - name: Check write-back gap
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
         run: |
           case "$EVENT_NAME" in
             pull_request) bash scripts/check-writeback-gap.sh --pr "$PR_NUMBER" --ref HEAD ;;
-            push) bash scripts/check-writeback-gap.sh --commit "$(git rev-parse HEAD)" ;;
+            push)
+              # Every first-parent commit of the push: a fast-forward can carry
+              # several PR merges. No usable `before` (a new branch, or a
+              # force-push past it) falls back to HEAD, and says so.
+              shas=''
+              if [[ "$BEFORE" =~ ^[0-9a-f]{40}$ && ! "$BEFORE" =~ ^0+$ ]]; then
+                shas="$(git rev-list --first-parent "$BEFORE..HEAD")" || shas=''
+              fi
+              if [ -z "$shas" ]; then
+                echo "INFO writeback-gap: the push has no usable before SHA — checking HEAD only"
+                shas="$(git rev-parse HEAD)"
+              fi
+              # Unquoted on purpose: one 40-hex SHA per argument.
+              bash scripts/check-writeback-gap.sh --commit $shas ;;
             *) echo "MISS writeback-gap: unexpected event — nothing was checked"; exit 1 ;;
           esac
       - name: Check write-back-gap checker controls
