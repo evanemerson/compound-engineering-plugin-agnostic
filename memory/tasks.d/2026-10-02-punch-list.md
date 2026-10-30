@@ -493,7 +493,25 @@ L17. **The self-check does not require the spec's field names.**
     fields legitimately (counter_convention, superseded formats).
 
 L18. **Revisit the write-back-gap decision — its second instance happened.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-30** — PR #93 (`c8bb309`), merged by coord@integrity after
+    the three checks (update-branch head `cf94218`, 6/6 green), built by
+    `tab6@integrity`. `scripts/check-writeback-gap.sh` + controls, gated in
+    `writeback-gap.yml`: a PR body citing a `todos/*.md` file that holds
+    `status: deferred` findings WARNs (annotation, no fail); an unreadable
+    input (fetch failure, bad ref, unreadable file, unclosed fence) MISSes.
+    Sources `check-findings-file.sh` for the status pattern. Repo tooling only:
+    no version bump, no plugin hops.
+    Controls: #17's body flags `### 1-4` at `86332d8^` and `### 2` only at
+    `86332d8`. Replay (worker's, `bash scripts/check-writeback-gap.sh --replay`):
+    89 bodies, 51 citations, 0 MISS, 32 WARN, 22 PRs flag — mostly a PR citing
+    its own review file with by-design deferrals, so the signal is noisy.
+    Decisions accepted: (1) keep file-level WARNs as built, judge signal after
+    some weeks; marking "this PR's own review file" is the named refinement if
+    noise hides a real case. (2) P3s 15/16 (API retry, concurrency group) stay
+    filed in `todos/review-2026-10-27-190245.md`; 7 P3s deferred in total, also in
+    `memory/tasks.d/2026-10-27-feat-integrity-writeback-gap-check.md`.
+    Not done by the worker: `/cepa:plan-review` before build (plan is local).
     severity: P2
     owner: integrity (`tab6@integrity`, branch `feat/integrity/writeback-gap-check`)
     **DECIDED 2026-10-27 by the operator: build (b), at FILE level.** Evidence
