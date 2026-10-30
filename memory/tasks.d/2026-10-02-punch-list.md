@@ -737,9 +737,16 @@ L23. **Orca adapter: name each session `<repo> · <role>@<wt>`.**
 
 
 L24. **Orca adapter rule 7: how a turn ends under Orca.**
-    status: pending
+    status: completed
     severity: P2
     owner: roles (`tab8@roles`, dispatched via Orca 2026-10-30)
+    **CLOSED 2026-10-30** — PR #98 (`8ea0a3a`), v1.37.0, merged on the
+    operator's AskUserQuestion answer ("Merge now, follow up"). Pre-merge: CI
+    4/4 green on `518cd80`, turn-endings checker 59/59 + controls 40/40, orca
+    detection 76/76, model pins/anchor counts 0 MISS, 0 co-author trailers.
+    Plugin hops run; freshness rc=0. 7 P3s in
+    `memory/tasks.d/2026-10-30-feat-roles-orca-turn-endings.md`. Follow-ups:
+    L25 (review/resolve-pr citations), L26 (plan §10 probe + rollout).
     Filed 2026-10-30. Plan approved by the operator (AskUserQuestion, "Approve
     as written"): `docs/plans/2026-10-30-session-endings-under-orca.md` on PR
     #97 (branch `docs/main/session-endings`, plan only, not merged). Build:
@@ -751,6 +758,26 @@ L24. **Orca adapter rule 7: how a turn ends under Orca.**
     Operator also chose to LEAVE `.env`/`.env.local` in `.worktreeinclude` in
     artist360, dpc-insider-www, dpc-pro-www, farmtender-laravel (all env files
     gitignored, untracked, 0 commits ever — measured 2026-10-30).
+
+
+L25. **Cite §12b rule 7 in `review.md` and `resolve-pr.md`.**
+    status: pending
+    severity: P3
+    owner: roles (`tab9@roles`, dispatched via Orca 2026-10-30)
+    Residual finding 2 of PR #98: rule 7 does not reach these two commands'
+    interactive endings. Add the one-line citation and extend
+    `scripts/check-orca-turn-endings.sh` to cover them.
+
+L26. **Plan §10 probe test of rule 7, then rollout.**
+    status: pending
+    severity: P2
+    owner: coord@main
+    Throwaway Haiku sessions in `.claude/worktrees/integrity` on cepa 1.37.0,
+    one per kind (Nobody / The operator / Delivery to a stub), read from
+    `orca-ide worktree ps --agent-wait --json`; plus a question sent to an
+    IDLE coordinator (PR #98 residual finding 6 — does it stall?). Only after
+    it passes: the global CLAUDE.md edits and the farmtender-laravel /
+    contexthub hand-offs in plan §8.
 
 ---
 
