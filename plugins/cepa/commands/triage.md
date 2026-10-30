@@ -1,7 +1,7 @@
 ---
 description: Triage findings from /cepa:review. Default batch mode auto-applies safe verified fixes and presents the rest as one decision table; pass "interactive" for the classic one-at-a-time flow.
 argument-hint: "[interactive]"
-allowed-tools: Edit, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*)
+allowed-tools: Edit, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*)
 ---
 
 # Compound Triage
@@ -115,6 +115,8 @@ in the summary verbatim, never as a clean file.
 
 Finish with the summary: applied / fixed / deferred / skipped counts and the
 findings file path.
+
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
 
 ## Interactive Mode (`interactive` argument)
 

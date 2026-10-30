@@ -758,6 +758,8 @@ sinks, stripped-content count, git state changes, and the numbered
 `## Next steps` tail — the Handoff block instead in a worker session
 (`cepa:autonomy` §10d).
 
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
+
 **Include the readiness verdict as a body section** — the `Session change:`
 block resolved in Step 5, verbatim, on every run including `GO`. §6 admits
 command-specific body sections ("include each that applies"); this one
@@ -804,8 +806,10 @@ the operator actually pastes into a fresh session. Requirements:
   before any work.
 
 **Under Orca**, a worker's prompt follows `cepa:autonomy` §12b rule 1: it is
-sent, and still printed, under that rule's do-not-paste first line. That send
-is the only write this command makes outside its own artifacts.
+sent to its coordinator, and still printed, under that rule's do-not-paste
+first line, with rule 1's one-Handoff-block bullet applied. Any other
+session's prompt has no reachable target and is printed. That send is the
+only write this command makes outside its own artifacts.
 
 ### The branch preamble
 

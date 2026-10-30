@@ -1,7 +1,7 @@
 ---
 description: Document a solved problem with 5 parallel sub-agents. Creates solution docs with bidirectional plan linking.
 argument-hint: "[mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git worktree:*), Bash(git rev-list:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git symbolic-ref:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git check-ignore:*), Bash(git rev-parse:*), Bash(git hash-object:*), Bash(gh repo view:*), Bash(bash:*), Bash(python3:*), Bash(grep:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git worktree:*), Bash(git rev-list:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*)
 ---
 
 # Compound Documentation
@@ -720,3 +720,5 @@ Present to the user:
 - Commit outcome (headless): committed SHA + files, local-only (gitignored) list, or failed — reason
 - Prevention recommendations that might warrant CLAUDE.md updates
 - Say: "Solution documented. Consider running `/claude-md-management:revise-claude-md` if prevention rules should be added to CLAUDE.md."
+
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
