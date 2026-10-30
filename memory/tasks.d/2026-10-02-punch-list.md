@@ -778,6 +778,22 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
     IDLE coordinator (PR #98 residual finding 6 — does it stall?). Only after
     it passes: the global CLAUDE.md edits and the farmtender-laravel /
     contexthub hand-offs in plan §8.
+    **Probe run 2026-10-30 (17:07-17:10 CDT, cepa 1.37.0, Haiku 4.5,
+    terminal surface; states from `worktree ps --agent-wait`):**
+    - A (Nobody): PASS — `done`; first line `Needed from you: nothing`; no
+      options.
+    - B (The operator): PASS — `waiting`/`AskUserQuestion` → NEEDS YOU; first
+      line `Needed from you: choose a codename…`; 2 options, pick first as
+      "Heron (Recommended)"; no text options.
+    - C (Delivery to a coordinator): PARTIAL — the message reached the stub's
+      mailbox (`msg_4dc0f5a2675b`) and the ending listed `Sent: … (<id>)`, but
+      (1) its first line was `Needed from you: the coordinator's answer…`
+      (should be `nothing`: the decision is the coordinator's), and (2) it sent
+      `--type status`, not a question.
+    - Idle recipient (PR #98 finding 6): CONFIRMED STALL — the stub stayed
+      `done` with the message unread; nothing woke it. Run coordinators get an
+      Orca "You have 1 orchestration message" prompt; a plain session does not.
+    Rollout (plan §8 global/repo edits) waits on the operator's decisions.
 
 ---
 
