@@ -813,6 +813,10 @@ L27. **Rule 7 fixes from the L26 probe.**
     highlighted). Operator chose (AskUserQuestion) "Fix on #100 first":
     tab11 adds a state-guarded nudge (only a `done` target), the reply-path
     nudge, and a checked `orca-nudge.sh` with a narrow grant.
+    tab11 delivered (#100 head `2219332`, all gates green). Operator decisions
+    (AskUserQuestion, 2026-10-30): busy target = "Wait briefly, then tell me"
+    (re-check up to 2 min, then an operator line); half-typed draft = "Accept,
+    state it"; merge = "Fix busy-target, then merge" → `tab12@roles` on #100.
     1. First line names the operator: `Needed from you: nothing` means the
        operator, so a decision for a coordinator is `nothing` (probe C wrote
        "the coordinator's answer").
