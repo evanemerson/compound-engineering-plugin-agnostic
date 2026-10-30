@@ -364,7 +364,11 @@ L15. **Do read-only review agents write into the shared tree when they run code?
     /cepa:review, snapshot `git status --porcelain --ignored` before and after,
     list new `__pycache__`/`.pytest_cache`/`.coverage`/`*.pyc`, and report back
     to cepa's coord@main (`term_8e8ae1c2-08ac-4b2c-b06f-c41e0011ad3c`) or by
-    paste. Waiting on that report.
+    paste. **Acknowledged 16:47 UTC** by dpc-pro's coord@main: it runs no
+    reviews itself, so it forwarded the steps to `tab20@todos-verify`, whose
+    next /cepa:review (its L77 PR, branch `feat/todos-verify/org-billing-pause`)
+    runs in the linked worktree `.claude/worktrees/todos-verify` — the checkout
+    a reader would write into. tab20 reports directly; expected in hours.
     Filed 2026-10-21. A QUESTION, not a finding: nothing here has been measured.
     `cepa:autonomy` §11a (#88) gives a Reader agent no worktree and a
     `READ-ONLY:` brief that says "write files only under a `mktemp -d`
