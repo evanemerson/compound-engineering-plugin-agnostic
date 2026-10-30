@@ -1,0 +1,8 @@
+# Orca worktree config. This repo needs no setup: its tests are bash and
+# Python-stdlib scripts, CI installs nothing, and there is no Docker stack.
+defaultTabs:
+  - title: Agent
+    color: "#7c3aed"
+  - title: Git status
+    color: "#16a34a"
+    command: git status --short --branch
