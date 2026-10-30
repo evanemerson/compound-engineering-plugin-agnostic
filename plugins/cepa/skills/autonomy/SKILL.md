@@ -1477,9 +1477,11 @@ prints exactly one line, `ORCA: present cli=<cli> via=<how>` or
 
 ```bash
 cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=unknown
+cepa_orca_why=
 if [ -n "${ORCA_CLI_COMMAND:-}" ]; then
   cepa_orca_cli=$ORCA_CLI_COMMAND
-  cepa_orca_why=
+  cepa_orca_via=ORCA_CLI_COMMAND
+  cepa_orca_wait=3 cepa_orca_kill=0.5
   case "$cepa_orca_cli" in
     -*|*[!A-Za-z0-9._/-]*) cepa_orca_why="ORCA_CLI_COMMAND is not a plain command name" ;;
   esac
@@ -1493,11 +1495,6 @@ if [ -n "${ORCA_CLI_COMMAND:-}" ]; then
   if [ -z "$cepa_orca_why" ] && ! command -v "$cepa_orca_cli" >/dev/null 2>&1; then
     cepa_orca_why="ORCA_CLI_COMMAND=$cepa_orca_cli is not on PATH"
   fi
-  if [ -n "$cepa_orca_why" ]; then
-    echo "ORCA: absent ($cepa_orca_why)"
-  else
-    echo "ORCA: present cli=$cepa_orca_cli via=ORCA_CLI_COMMAND"
-  fi
 else
   if [ -n "${ORCA_DEV_REPO_ROOT:-}" ]; then
     cepa_orca_cli=orca-dev
@@ -1506,24 +1503,29 @@ else
   else
     cepa_orca_cli=orca
   fi
-  cepa_orca_tmp=
+  cepa_orca_via=status
+  cepa_orca_wait=10 cepa_orca_kill=2
   if ! command -v "$cepa_orca_cli" >/dev/null 2>&1; then
-    echo "ORCA: absent ($cepa_orca_cli not on PATH)"
-  elif ! command -v timeout >/dev/null 2>&1; then
-    echo "ORCA: absent (no timeout command to bound the status probe)"
-  elif ! command -v python3 >/dev/null 2>&1; then
-    echo "ORCA: absent (no python3 to parse the status probe)"
-  elif ! cepa_orca_tmp=$(mktemp 2>/dev/null); then
-    echo "ORCA: absent (mktemp failed)"
-  elif ! timeout -k 2 10 "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>/dev/null; then
-    echo "ORCA: absent ($cepa_orca_cli status failed or timed out)"
-  elif python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("ok") is True else 1)' "$cepa_orca_tmp" >/dev/null 2>&1; then
-    echo "ORCA: present cli=$cepa_orca_cli via=status"
-  else
-    echo "ORCA: absent ($cepa_orca_cli status did not return \"ok\": true)"
+    cepa_orca_why="$cepa_orca_cli not on PATH"
   fi
-  [ -z "$cepa_orca_tmp" ] || rm -f "$cepa_orca_tmp"
 fi
+cepa_orca_tmp=
+if [ -n "$cepa_orca_why" ]; then
+  echo "ORCA: absent ($cepa_orca_why)"
+elif ! command -v timeout >/dev/null 2>&1; then
+  echo "ORCA: absent (no timeout command to bound the status probe)"
+elif ! command -v python3 >/dev/null 2>&1; then
+  echo "ORCA: absent (no python3 to parse the status probe)"
+elif ! cepa_orca_tmp=$(mktemp 2>/dev/null); then
+  echo "ORCA: absent (mktemp failed)"
+elif ! timeout -k "$cepa_orca_kill" "$cepa_orca_wait" "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>/dev/null; then
+  echo "ORCA: absent ($cepa_orca_cli status failed or timed out)"
+elif python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("ok") is True else 1)' "$cepa_orca_tmp" >/dev/null 2>&1; then
+  echo "ORCA: present cli=$cepa_orca_cli via=$cepa_orca_via"
+else
+  echo "ORCA: absent ($cepa_orca_cli status did not return \"ok\": true)"
+fi
+[ -z "$cepa_orca_tmp" ] || rm -f "$cepa_orca_tmp"
 ```
 
 - **The CLI is resolved as Orca's own orchestration skill resolves it:**
@@ -1532,17 +1534,28 @@ fi
   **Never run bare `orca` on Linux**: outside Orca's terminals it normally
   resolves to the GNOME Orca screen reader and starts speech on the operator's
   machine. That holds for a value in `ORCA_CLI_COMMAND` too.
-- **A valid `ORCA_CLI_COMMAND` means present, with no `status` call.** Orca
-  set the variable. Valid means a plain command name or path, with no leading
-  `-`, whose basename is `orca-ide`, `orca-dev` or (off Linux) `orca`, and which
-  is on PATH. Any other value reads as absent: the value is later substituted
-  into commands, so it is never trusted as shell text.
-- **Every other answer is a probe,** bounded at 10 seconds plus a 2-second
-  kill. Its stdin is `/dev/null` and its stdout goes to a temp file, so a CLI
-  that waits for input, or leaves a child holding stdout open, cannot stall
-  the block. Only JSON whose top-level `"ok"` is the value `true` reads as
-  present. A failed probe never reads as present: absent is today's behavior,
-  so it is the safe answer, and the printed reason says what failed.
+- **A valid `ORCA_CLI_COMMAND` is probed too, at 3 seconds.** Orca sets the
+  variable in its terminals, but a shell started from one (tmux, nohup) keeps
+  it after Orca has closed. So a valid value runs the same `status` probe as
+  every other answer, bounded at 3 seconds plus a 0.5-second kill: `"ok":
+  true` reads present `via=ORCA_CLI_COMMAND`, and anything else reads absent
+  with the reason. Why 3 seconds: on 2026-10-30, inside a live Orca terminal
+  under WSL, `orca-ide status --json` took 0.46–0.49 s over 6 runs and
+  0.475–0.621 s over 8 more, and a 0.5-second bound read absent in 5 of 20
+  runs. Valid means a plain command name or path, with no leading `-`, whose
+  basename is `orca-ide`, `orca-dev` or (off Linux) `orca`, and which is on
+  PATH. Any other value reads as absent with no probe: the value is later
+  substituted into commands, so it is never trusted as shell text.
+- **Every other answer is probed** at 10 seconds plus a 2-second kill. On
+  both paths the probe's stdin is `/dev/null` and its stdout goes to a temp
+  file, so a CLI that waits for input, or leaves a child holding stdout open,
+  cannot stall the block. Only JSON whose top-level `"ok"` is the value `true`
+  reads as present. A failed probe never reads as present: absent is today's
+  behavior, so it is the safe answer, and the printed reason says what failed.
+- **The bounds are literals in the block,** never read from the environment,
+  so no variable a session happens to carry can lengthen or shorten them. The
+  checker pins the shipped values as text and runs its hang cases against its
+  own copy with shorter ones.
 - **No `ORCA:` line is absent.** A block that was denied, errored or printed
   nothing reads as `ORCA: absent (detection block did not run)`.
 - **Use the printed `cli=` value literally** in every later Orca command, the
@@ -1573,7 +1586,11 @@ limits.
    worker's `/cepa:handoff` prompt that its coordinator starts the next worker
    from — send the block with Orca's `orchestration send` to that coordinator.
    Then print one line, `Sent to coord@<wt> via Orca (<message id>)`, and the
-   path of the saved copy when the command keeps one.
+   path of the saved copy when the command keeps one. **Then print the block
+   as well,** so the operator can still read it. The printed block's first
+   line is exactly `Sent to coord@main via Orca — do not paste.` For a worktree
+   coordinator it names that coordinator: `Sent to coord@<wt> via Orca — do
+   not paste.` The line tells a reader the coordinator already has the block.
    - **The target** is the coordinator handle in the live Orca preamble, or a
      handle or Run the operator gave in this session. Never pick a terminal by
      its title: a title is not an address, and two tabs can carry the same
@@ -1589,7 +1606,8 @@ limits.
      `Orca send failed: <exit and error> — paste below`.
    - A block addressed to the operator, or to a fresh session of the same
      role, is printed as before. A §10f report-only run never sends.
-   - A worker that sends its hand-off ends its run right after the send.
+   - A worker that sends its hand-off ends its run right after the send and
+     the printed copy.
 2. **A coordinator dispatches workers with Orca.** It binds a Run, then
    starts each worker with `worker-start` (or `task-create` and then
    `worker-start` for a planned fan-out). Each worker's spec is the paste-ready

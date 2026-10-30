@@ -802,8 +802,9 @@ the operator actually pastes into a fresh session. Requirements:
   see below. It goes above the task description, because it must run
   before any work.
 
-**Under Orca**, a worker's prompt follows `cepa:autonomy` §12b rule 1. That
-send is the only write this command makes outside its own artifacts.
+**Under Orca**, a worker's prompt follows `cepa:autonomy` §12b rule 1: it is
+sent, and still printed, under that rule's do-not-paste first line. That send
+is the only write this command makes outside its own artifacts.
 
 ### The branch preamble
 
