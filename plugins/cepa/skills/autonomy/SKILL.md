@@ -1810,8 +1810,9 @@ limits.
      `Needed from you: <one line>`. It is the first line of the final reply,
      not of a printed block (rule 1) or of a `worker_done` body (rule 3).
      "You" is the operator, the human who reads this tab. A decision that
-     belongs to a coordinator or to another session is
+     belongs to a coordinator or to another session, once delivered, is
      `Needed from you: nothing`: it travels by delivery, not by this line.
+     One that could not be delivered is the operator's (Delivery, below).
    - **Then pick exactly one kind, by who must act now:**
      - **Nobody.** Write the body. A worker ends with its Handoff block.
        Others end with no tail: no numbered options, no `My read`, no
@@ -1830,9 +1831,10 @@ limits.
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.
        Any other session whose decision belongs to a coordinator (§10) sends
        it with `orchestration send --type question` to that coordinator's
-       handle, never `--type status`, then applies rule 1's nudge. Its own
-       first line is `Needed from you: nothing`. The coordinator then ends as
-       **The operator** if the decision is the operator's.
+       handle, never `--type status`, then applies rule 1's nudge. When the
+       send succeeded, its own first line is `Needed from you: nothing`. The
+       coordinator then ends as **The operator** if the decision is the
+       operator's.
    - **Delivery, in every kind.** Each step that another session must do is
      delivered to that session BEFORE the ending: `worker_done` to your own
      coordinator at a final report (rule 3; `/cepa:handoff` never sends it),

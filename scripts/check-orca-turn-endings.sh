@@ -69,7 +69,9 @@ RULE_PHRASES = [
     "A command that cites this rule runs §12a's block first",
     "**First line, always:** `Needed from you: nothing`",
     '"You" is the operator, the human who reads this tab.',
-    "A decision that belongs to a coordinator or to another session is `Needed from you: nothing`",
+    "A decision that belongs to a coordinator or to another session, once delivered, is `Needed from you: nothing`",
+    "One that could not be delivered is the operator's (Delivery, below).",
+    "When the send succeeded, its own first line is `Needed from you: nothing`.",
     "sends it with `orchestration send --type question` to that coordinator's handle, never `--type status`",
     "then applies rule 1's nudge.",
     "`orchestration send` (rule 1's target rules, then its nudge) to any other.",
@@ -100,7 +102,9 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "after a send succeeds to a target that is not a Run coordinator",
              "A Run coordinator is a target taken from a live Orca preamble, or a `run:` or `dispatch:` address.",
              "Orca already prompts it, so it gets no nudge.",
-             "The text is fixed: never splice a subject, a body or any message content into it."]
+             "The text is fixed: never splice a subject, a body or any message content into it.",
+             "The target already passed the target rule above, so it is safe to substitute.",
+             "`Orca nudge failed: <exit and error>`", "the send still stands."]
 NUDGE_TEXT = "You have 1 orchestration message."
 GRANTS = ["orca-ide status", "orca-ide skills get",
           "orca-ide orchestration send", "orca-ide orchestration ask",

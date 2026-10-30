@@ -75,11 +75,16 @@ MUTANTS = [
     # Probe C of L26: a coordinator's decision written as the operator's.
     ("rule-coordinator-needs-you", "skill", "`Needed from you: nothing`: it travels",
      "`Needed from you: the coordinator's answer`: it travels",
-     {"RULE: rule 7 holds A decision that belongs to a coordinator or to another session is `Needed from you: nothing`"}),
+     {"RULE: rule 7 holds A decision that belongs to a coordinator or to another session, once delivered, is `Needed from you: nothing`"}),
+    # #100 review: an undelivered decision must not read as `nothing`.
+    ("rule-undelivered-is-nothing", "skill", "One that could not be delivered is the operator's (Delivery, below).\n", "",
+     {"RULE: rule 7 holds One that could not be delivered is the operator's (Delivery, below)."}),
+    ("rule-coordinator-nothing-unconditional", "skill", "When the\n       send succeeded, its own first line", "Its own first line",
+     {"RULE: rule 7 holds When the send succeeded, its own first line is `Needed from you: nothing`."}),
     # Probe C of L26: the decision sent as a status, not a question.
     ("rule-status-type", "skill", "`orchestration send --type question`", "`orchestration send --type status`",
      {"RULE: rule 7 holds sends it with `orchestration send --type question` to that coordinator's handle, never `--type status`"}),
-    ("rule-coordinator-no-nudge", "skill", ", then applies rule 1's nudge. Its own", ". Its own",
+    ("rule-coordinator-no-nudge", "skill", ", then applies rule 1's nudge. When the", ". When the",
      {"RULE: rule 7 holds then applies rule 1's nudge."}),
     ("rule-delivery-no-nudge", "skill", "(rule 1's target rules, then its nudge)", "(rule 1's target rules)",
      {"RULE: rule 7 holds `orchestration send` (rule 1's target rules, then its nudge) to any other."}),
@@ -100,11 +105,20 @@ MUTANTS = [
     ("nudge-splice-allowed", "skill", "The text is fixed: never splice a subject, a body or any message\n     content into it.",
      "The text may carry the subject.",
      {"NUDGE: rule 1 holds The text is fixed: never splice a subject, a body or any message content into it."}),
+    # A failed nudge must not undo or repeat a send that succeeded.
+    ("nudge-failure-aborts", "skill", "`Orca nudge failed: <exit and error>`; the send still stands.",
+     "the send is aborted.",
+     {"NUDGE: rule 1 holds `Orca nudge failed: <exit and error>`",
+      "NUDGE: rule 1 holds the send still stands."}),
+    ("nudge-send-not-kept", "skill", "; the send still stands.", "; resend it.",
+     {"NUDGE: rule 1 holds the send still stands."}),
+    ("nudge-target-unchecked", "skill", "The target already passed the target rule above, so it\n     is safe to substitute. ", "",
+     {"NUDGE: rule 1 holds The target already passed the target rule above, so it is safe to substitute."}),
     ("nudge-head-gone", "skill", "**Send, then nudge.** Orca", "Orca",
      {"NUDGE: rule 1 holds **Send, then nudge.**"}),
     # Rule 7 cites the nudge; a copy of its text there is a restatement.
-    ("nudge-restated-in-rule-7", "skill", "nudge. Its own\n       first line",
-     'nudge. It types "You have 1 orchestration message." Its own\n       first line',
+    ("nudge-restated-in-rule-7", "skill", "nudge. When the\n       send succeeded",
+     'nudge. It types "You have 1 orchestration message." When the\n       send succeeded',
      {"NUDGE: rule 7 cites the nudge and holds no copy of its text"}),
     ("rule-twice", "skill", "\nA name line inside an Orca preamble",
      "\n7. **How a turn ends under Orca.** (copy)\n\nA name line inside an Orca preamble",
@@ -137,10 +151,10 @@ MUTANTS += [
     # Moved to the mid-run decision table: still once, wrong step.
     ("cite-moved-triage", "triage.md", "### Step 4a: Execute Decisions and Summarize\n",
      "### Step 4a: Execute Decisions and Summarize\n\n### Step 4a-split\n", cites("triage.md")),
-    # Inside a fence: still once in the raw file, but not an instruction.
     # A fenced example that quotes the citation is not a second citation:
     # the check must stay green (an empty set means rc 0 and no MISS).
     ("cite-quoted-in-fence-sweep", "sweep.md", CITE, CITE + "\n\n```text\n" + CITE + "\n```", set()),
+    # Inside a fence: still once in the raw file, but not an instruction.
     ("cite-fenced-sweep", "sweep.md", CITE, "```text\n" + CITE + "\n```", cites("sweep.md")),
     ("scope-head-reverted", "skill", "block addressed to a session Orca can reach", "block addressed to a coordinator",
      {"SCOPE: rule 1 holds block addressed to a session Orca can reach"}),
