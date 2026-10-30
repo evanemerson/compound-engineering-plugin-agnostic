@@ -622,9 +622,27 @@ L20. **Decide whether to remove worktree `.claude/worktrees/agent-a457670e5009ff
 
 L21. **Thin Orca adapter: when Orca is present, cepa routes hand-offs and
     dispatch through it.**
-    status: pending
+    status: completed
     severity: P2
-    owner: roles (`tab5@roles`, prompt written 2026-10-30, not yet started)
+    owner: roles (`tab5@roles`, then `tab6@roles`)
+    **CLOSED 2026-10-30** — PR #94 (`0ce16a6`), v1.35.0. Dispatched through
+    Orca itself (Run `run_bf28fea0ea31`), coord@main acting as coord@roles by
+    the operator's instruction; both workers released after accepted
+    settlements. `cepa:autonomy` §12 (§12a detection, §12b five rules, §12c
+    relay clause), cited by handoff/task/lfg; `scripts/check-orca-detection.sh`
+    (48/48) + controls (37/37, 89 s locally; 13m14s before the follow-up) in
+    `residual-integrity.yml`. Operator decisions applied in the follow-up:
+    (1) a hand-off is sent AND printed, first line
+    `Sent to coord@main via Orca — do not paste.`; (2) a valid
+    `ORCA_CLI_COMMAND` is probed, bounded 3 s + 0.5 s kill — 0.5 s was first
+    chosen, but the real CLI takes 0.46-0.62 s under WSL (worker: 5/20 false
+    absents; coord@main: 8 runs 0.475-0.621 s), so the operator raised it.
+    First head's CI was CANCELLED (run 41072902545, 10-min job timeout in the
+    controls step); fixed without raising the timeout — the tests swap only the
+    two bound lines, and a BOUNDS leg pins the shipped values. Pre-merge: 6/6 CI
+    green on `2def4e5`, model pins 0 MISS + 109/109 controls, fenced-block 0
+    MISS + 31/31, anchor counts 0 MISS. Plugin hops run; freshness rc=0 at
+    `0ce16a6`. Residual: L22.
     Filed 2026-10-30 from the operator's brief (kept verbatim in the worker
     prompt). Orca already spawns, makes worktrees and messages; cepa decides
     only when and how. Detection: `ORCA_CLI_COMMAND` set, or
@@ -648,6 +666,18 @@ L21. **Thin Orca adapter: when Orca is present, cepa routes hand-offs and
     content (autonomy §7 clause at the relay point); an Orca child worktree
     must still let the branch carry `/<wt>/` (global rule against tools that
     name the directory after a branch); manifests bump together.
+
+
+L22. **§12a reads Orca absent on stock macOS (no `timeout` command).**
+    status: deferred
+    severity: P3
+    owner: unassigned
+    Filed 2026-10-30 from PR #94's follow-up review (finding 3 of
+    `todos/review-2026-10-30-152000.md`). The probe needs `timeout`; stock macOS
+    has none, so a live Orca terminal there reads absent and behaves as before
+    (safe, but Orca routing is off). §12a states the limit. Fix candidates:
+    `gtimeout`, or bound the probe in python3. Operator chose to defer it: this
+    machine is WSL and no macOS session runs cepa today.
 
 ---
 
