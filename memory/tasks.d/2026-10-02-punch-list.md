@@ -356,8 +356,15 @@ L15. **Do read-only review agents write into the shared tree when they run code?
     status: pending
     severity: P3
     owner: unassigned
-    **REMINDER (operator asked 2026-10-30):** send dpc-pro the measurement
-    prompt after the morning's other work. coord@main writes it on request.
+    **SENT 2026-10-30 via Orca** (operator's choice) to dpc-pro's coord@main,
+    terminal `term_fed6b6e2-e810-4d40-ab6c-d07b9a0befd2` (the one live terminal
+    in dpc-pro's main-checkout workspace), message `msg_c6d6a90bcae4`, type
+    `handoff`. Orca warned the mailbox is terminal-only: not durable if that
+    terminal closes before it reads it. The request: around its NEXT ordinary
+    /cepa:review, snapshot `git status --porcelain --ignored` before and after,
+    list new `__pycache__`/`.pytest_cache`/`.coverage`/`*.pyc`, and report back
+    to cepa's coord@main (`term_8e8ae1c2-08ac-4b2c-b06f-c41e0011ad3c`) or by
+    paste. Waiting on that report.
     Filed 2026-10-21. A QUESTION, not a finding: nothing here has been measured.
     `cepa:autonomy` §11a (#88) gives a Reader agent no worktree and a
     `READ-ONLY:` brief that says "write files only under a `mktemp -d`
