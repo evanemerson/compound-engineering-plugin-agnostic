@@ -369,6 +369,20 @@ L15. **Do read-only review agents write into the shared tree when they run code?
     next /cepa:review (its L77 PR, branch `feat/todos-verify/org-billing-pause`)
     runs in the linked worktree `.claude/worktrees/todos-verify` — the checkout
     a reader would write into. tab20 reports directly; expected in hours.
+    **Second measurement, 2026-10-30, NEGATIVE BUT BLIND** (relayed from
+    tab20@todos-verify, message `msg_3513cdee2484`; not re-measured here —
+    that would mean running in dpc-pro): dpc-pro PR #291 at `69c36aa8`, cepa
+    1.35.0, window 17:32:33-17:40:45 UTC. `git status --porcelain --ignored`
+    before/after: no change; no new `__pycache__`/`.pytest_cache`/`.coverage`/
+    `*.pyc`; 0 agent worktrees left. It cannot answer L15, for two reasons
+    tab20 gave: (1) dpc-pro's CLAUDE.md requires `isolation: "worktree"` for
+    review agents, and project instructions outrank the plugin, so no reader
+    ran in the shared checkout; (2) every brief also said "do NOT run pytest,
+    docker or manage.py", and no agent ran code. **New fact:** dpc-pro's
+    pytest runs in a container that bind-mounts the stack's checkout, so a
+    reader in ANY worktree that runs `docker compose exec backend pytest`
+    writes caches into that mounted checkout — isolation alone would not stop
+    it. Decision pending: close as not observed, or build a deliberate probe.
     Filed 2026-10-21. A QUESTION, not a finding: nothing here has been measured.
     `cepa:autonomy` §11a (#88) gives a Reader agent no worktree and a
     `READ-ONLY:` brief that says "write files only under a `mktemp -d`
