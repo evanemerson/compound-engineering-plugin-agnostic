@@ -1617,7 +1617,8 @@ limits.
    `worker-start` for a planned fan-out). Each worker's spec is the paste-ready
    prompt the coordinator writes today: line 1 is the worker's name, and the
    spec meets Orca's Task-spec contract. The start declares the worker's model
-   with the guide's model flag, at a tier §9 sanctions. Placement follows cepa,
+   with the guide's model flag, at a tier §9 sanctions. Then it names the
+   worker's tab (rule 6) with the handle `worker-start` returned. Placement follows cepa,
    not Orca's default:
    - **A worktree coordinator uses `--worktree current` only.** The commits
      land on its own branch, which it creates first (§10b), and it stays
@@ -1665,6 +1666,116 @@ limits.
    checkpoint, not a failure. A `worker_done` starts the coordinator's own
    checks (the operator's three merge checks); it is never a merge signal by
    itself.
+6. **Each tab carries its session's name, as `<repo> · <role>@<wt>`.** The
+   Orca tab title is exactly the repo, a space, a middle dot (U+00B7), a
+   space, and the session's §10a name: `compound-engineering · tab7@roles`.
+   A bare `coord@main` cannot tell one repo's coordinator from another's.
+   - **When.** Each session names its own tab once per command, right after
+     §12a prints `ORCA: present`. A coordinator names each worker's tab right
+     after `worker-start` returns that worker's terminal handle (rule 2).
+     Naming the same tab again is harmless: the title is the same.
+   - **`<repo>`** is the main checkout's directory name: the parent of the
+     absolute `git rev-parse --git-common-dir`. Never `--show-toplevel`,
+     which names the worktree in a linked worktree.
+   - **`<role>@<wt>`** is the session's name as §10a resolved it, or the
+     worker's name from line 1 of its spec. The prompt's line 1
+     (`You are <session>@<wt>.`) does not change: §10a parses it, and the
+     title is not read back.
+   - **The session's own handle** is `ORCA_TERMINAL_HANDLE`, which Orca
+     exports into each terminal it manages (measured on Orca 1.4.244: it
+     equals the `--from` handle in the worker preamble). When it is unset,
+     the session does not name its tab and says why in one line. It never
+     guesses a handle, and never picks a terminal by its title.
+   - **A title is for humans only.** It is never an address (rule 1): a
+     message, a dispatch and a rename all go to a handle.
+   - **Run this block,** with `<cli>` the printed `cli=` value, the name
+     between the `CEPA_NAME` lines, and `self` (the session's own tab) or the
+     worker's handle (a worker's tab) in place of `<handle-or-self>`. A
+     placeholder left in place fails the character check, so a coordinator
+     that forgets the worker's handle renames nothing rather than its own tab.
+     It prints one `ORCA title:` line, and it never fails the run. A block
+     that was refused or printed nothing reads as
+     `ORCA title: not attempted (block did not run)`:
+
+     ```bash
+     cepa_title_name=$(cat <<'CEPA_NAME'
+     <session>@<wt>
+     CEPA_NAME
+     )
+     cepa_title_term=$(cat <<'CEPA_TERM'
+     <handle-or-self>
+     CEPA_TERM
+     )
+     cepa_title_why= cepa_title_repo= cepa_title_tmp=
+     if [ "$cepa_title_term" = self ]; then
+       cepa_title_term=${ORCA_TERMINAL_HANDLE:-}
+       [ -n "$cepa_title_term" ] || cepa_title_why="ORCA_TERMINAL_HANDLE is unset, so this tab has no known handle"
+     fi
+     if [ -z "$cepa_title_why" ]; then
+       case "$cepa_title_term" in
+         ''|-*|*[!A-Za-z0-9_:.-]*) cepa_title_why="the terminal handle is not a plain handle" ;;
+       esac
+     fi
+     if [ -z "$cepa_title_why" ]; then
+       case "$cepa_title_name" in
+         ''|-*|*[!A-Za-z0-9._@-]*) cepa_title_why="the session name holds a character outside [A-Za-z0-9._@-]" ;;
+       esac
+     fi
+     if [ -z "$cepa_title_why" ]; then
+       cepa_title_common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || cepa_title_common=
+       case "$cepa_title_common" in
+         /*/.git) cepa_title_repo=${cepa_title_common%/.git} cepa_title_repo=${cepa_title_repo##*/} ;;
+         *) cepa_title_why="git rev-parse --git-common-dir gave no <repo>/.git path" ;;
+       esac
+     fi
+     if [ -z "$cepa_title_why" ]; then
+       case "$cepa_title_repo" in
+         ''|-*|*[!A-Za-z0-9._@-]*) cepa_title_why="the repo name holds a character outside [A-Za-z0-9._@-]" ;;
+       esac
+     fi
+     if [ -n "$cepa_title_why" ]; then
+       echo "ORCA title: skipped ($cepa_title_why)"
+     elif ! cepa_title_tmp=$(mktemp 2>/dev/null); then
+       echo "ORCA title: skipped (mktemp failed)"
+     elif ! timeout -k 0.5 3 <cli> terminal rename --terminal "$cepa_title_term" --title "$cepa_title_repo · $cepa_title_name" --json </dev/null >"$cepa_title_tmp" 2>/dev/null; then
+       echo "ORCA title: failed (<cli> terminal rename failed or timed out)"
+     elif python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("ok") is True else 1)' "$cepa_title_tmp" >/dev/null 2>&1; then
+       echo "ORCA title: set \"$cepa_title_repo · $cepa_title_name\" on $cepa_title_term"
+     else
+       echo "ORCA title: failed (<cli> terminal rename did not return \"ok\": true)"
+     fi
+     [ -z "$cepa_title_tmp" ] || rm -f "$cepa_title_tmp"
+     ```
+
+   - **The names are checked, not trusted.** Each slot takes exactly one
+     line. A name or handle that holds a line break is never substituted:
+     the session reports `ORCA title: skipped (the name or handle is not one
+     line)` and runs nothing, because a line equal to `CEPA_NAME` or
+     `CEPA_TERM` would close its heredoc early. A one-line value is read
+     through a quoted heredoc, so no character in it is evaluated, and the
+     title goes to the CLI as one quoted argument. A name, a repo or a
+     handle outside its character set is skipped with the reason, never
+     repaired.
+   - **Failure is not fatal.** A skipped or failed rename prints its line,
+     goes in the run's report beside the `ORCA:` line, and the run goes on.
+     The rename is bounded at 3 seconds plus a 0.5-second kill, as 12a's
+     `ORCA_CLI_COMMAND` probe is.
+   - **Stated limit.** The flags (`--terminal`, `--title`, `--json`) are
+     taken from `terminal rename --help` on Orca 1.4.244, and the success test
+     assumes the `"ok": true` envelope every other Orca `--json` verb
+     returned. No live rename was run to measure it. If a later Orca changes
+     either, the rename reads as failed, and the run goes on.
+   - **Stated limit.** §12a's `allowed-tools` limit holds here too: the
+     block is one compound command that starts with `timeout`, so the
+     `orca-ide terminal rename` grant cannot admit all of it. Where the
+     permission layer refuses it, the rename is not attempted.
+   - **Stated limit.** `<repo>` is the parent of the common git directory.
+     Where that directory lives apart from the checkout
+     (`git init --separate-git-dir=<dir>/.git`), the title names `<dir>`'s
+     folder, not the checkout's.
+   - **Stated limit.** A shell started from an Orca terminal (tmux, nohup)
+     keeps that terminal's `ORCA_TERMINAL_HANDLE`, so it names the tab it was
+     started from. That tab is the one the operator sees it in.
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 

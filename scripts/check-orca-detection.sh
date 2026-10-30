@@ -38,7 +38,30 @@
 #              file when it runs; every Linux case asserts bare `orca` did not
 #              run, and every ORCA_CLI_COMMAND case asserts exactly which stubs
 #              ran (the named CLI when the value is valid, none when not).
-#   CITES    — section 12's prose names both do-not-paste first lines;
+#   TITLE-BLOCK — 12b rule 6 holds exactly one ```bash block (indented under
+#              its list item). A miss stops the run.
+#   TITLE-BOUNDS — that block bounds the rename with the literal
+#              `timeout -k 0.5 3 <cli> terminal rename `, exactly once. TITLE
+#              runs it with `timeout -k 0.1 0.3`, so rename-hangs waits about
+#              0.4 s. A miss stops the run.
+#   TITLE    — the block runs under `bash -e`, one process per case, as the
+#              agent runs it: `<cli>` becomes a stub orca-ide that writes each
+#              argv word on its own line and some noise to stderr, and the name
+#              and handle go between their heredoc lines (one case leaves the
+#              shipped `<handle-or-self>` line, as a coordinator that forgot
+#              the worker's handle would). stdin is a pipe held open, TMPDIR a
+#              per-case dir. The cwd is a real git repo built here, whose
+#              main checkout (`cepa-main`) and linked worktree (`cepa-main-wt`)
+#              have different names, so a block that derives `<repo>` from
+#              --show-toplevel goes red. Each case asserts the exact output
+#              line, rc 0 (a failed rename never fails the run), the exact argv
+#              (the title is ONE argument with the U+00B7 separator), that the
+#              stub ran exactly when the line is not `skipped`, an empty stderr
+#              (bar the SIGKILL notice on the hang case), an empty TMPDIR, and
+#              that no name was evaluated as shell. A fixture repo that cannot
+#              be built is a MISS that stops the run.
+#   CITES    — section 12's prose names both do-not-paste first lines and
+#              the title format `<repo> · <role>@<wt>`;
 #              /cepa:handoff, /cepa:task and /cepa:lfg each carry 12's citation
 #              sentence; task and lfg cite 12b rule 3 and handoff 12b rule 1;
 #              handoff.md (the one of the three that declares allowed-tools)
@@ -58,6 +81,9 @@
 #     prefix grant cannot.
 #   - an agent follows 12b. This tests detection and the citations, not the
 #     model that reads them.
+#   - the real `terminal rename` answers as the stub does. Its flags come
+#     from `--help` on Orca 1.4.244; no live rename was run (the worker brief
+#     that built TITLE forbade renaming a real tab).
 #   - non-Linux hosts are covered by more than stubbed `uname` cases. The
 #     `timeout` here is GNU coreutils; a host with none reads as absent.
 set -u
@@ -74,7 +100,9 @@ RULE_CITES = {"handoff.md": "§12b rule 1", "task.md": "§12b rule 3", "lfg.md":
 GRANTS = {"orca-ide status": "`status`",
           "orca-ide skills get": "`<cli> skills get orchestration`",
           "orca-ide orchestration send": "`orchestration send`",
-          "orca-ide orchestration ask": "Orca's `ask`"}
+          "orca-ide orchestration ask": "Orca's `ask`",
+          "orca-ide terminal rename": "`terminal rename --help`"}
+TITLE_FORMAT = "`<repo> · <role>@<wt>`"
 TOOLS = ["timeout", "python3", "mktemp", "rm", "sleep", "touch", "cat", "setsid"]
 DO_NOT_PASTE = ["`Sent to coord@main via Orca — do not paste.`",
                 "`Sent to coord@<wt> via Orca — do not paste.`"]
@@ -248,12 +276,167 @@ run_case("env-not-orca", "ORCA: absent (ORCA_CLI_COMMAND does not name an Orca C
 run_case("env-not-on-path", "ORCA: absent (ORCA_CLI_COMMAND=orca-dev is not on PATH)",
          env={"ORCA_CLI_COMMAND": "orca-dev"})
 
+# --- TITLE ---
+# 12b rule 6's block, run as the agent runs it: <cli> becomes a stub, the name
+# and handle go between their heredoc lines. The repo is a real git repo whose
+# main checkout and linked worktree have different names, so a block that
+# reads --show-toplevel names the worktree and goes red.
+m6 = re.search(r"^6\. \*\*Each tab carries.*?(?=^\S)", text, re.M | re.S)
+tblocks = re.findall(r"^( *)```bash\n(.*?)^\1```$", m6.group(0), re.M | re.S) if m6 else []
+if len(tblocks) != 1:
+    miss("TITLE-BLOCK: 12b rule 6 holds %d ```bash blocks, want exactly 1" % len(tblocks)); finish()
+ok("TITLE-BLOCK: 12b rule 6 holds one bash block")
+ind, tcode = tblocks[0]
+tcode = re.sub(r"^" + ind, "", tcode, flags=re.M)
+TITLE_BOUND = "timeout -k 0.5 3 <cli> terminal rename "
+if tcode.count(TITLE_BOUND) == 1:
+    ok("TITLE-BOUNDS: the rename is bounded by `timeout -k 0.5 3`")
+else:
+    miss("TITLE-BOUNDS: want exactly one %r in the block" % TITLE_BOUND); finish()
+tcode = tcode.replace(TITLE_BOUND, "timeout -k 0.1 0.3 <cli> terminal rename ")
+SLOT = r"(<<'CEPA_%s'\n)[^\n]*(\nCEPA_%s\n)"
+for ph in ("<session>@<wt>\nCEPA_NAME", "<cli>"):
+    if ph not in tcode:
+        miss("TITLE-BLOCK: placeholder %r is gone" % ph); finish()
+if len(re.findall(SLOT % ("TERM", "TERM"), tcode)) != 1:
+    miss("TITLE-BLOCK: no one-line CEPA_TERM heredoc"); finish()
+
+def git(*a):
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c",
+                    "init.defaultBranch=main"] + list(a), check=True, capture_output=True)
+GROOT = os.path.join(TMP, "git")
+REPOS = {}
+try:
+    for repo in ("cepa-main", "my repo", "-r"):
+        main_dir = os.path.join(GROOT, repo)
+        git("init", "-q", main_dir)
+        git("-C", main_dir, "commit", "-q", "--allow-empty", "-m", "x")
+        git("-C", main_dir, "worktree", "add", "-q", "--detach", os.path.join(GROOT, repo + "-wt"))
+        REPOS[repo] = main_dir
+    os.makedirs(os.path.join(GROOT, "nogit"))
+except (OSError, subprocess.CalledProcessError) as e:
+    miss("TITLE: cannot build the fixture repos: %r" % e); finish()
+# Records each argv word on its own line, so a split title shows. Every stub
+# also writes to stderr, which the block must keep out of its output.
+RENAME_OK = 'printf "%s\\n" "$@" >ARGV\necho \'{"id": "r", "ok": true, "result": {}}\''
+TERM_ENV = {"ORCA_TERMINAL_HANDLE": "term_self-1"}
+
+def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="self",
+              env=None, argv=None, max_took=4.0, fail_tools=(), killed=False):
+    name = "title-" + name
+    case = os.path.join(TMP, name)
+    sd, td, tmpd = (os.path.join(case, d) for d in ("stubs", "tools", "tmp"))
+    for d in (sd, td, tmpd):
+        os.makedirs(d)
+    for t in TOOLS + ["git", "printf"]:
+        if t in fail_tools:
+            stub(td, t, "exit 1"); continue
+        real = shutil.which(t)
+        if not real:
+            miss("%s: real tool %s missing on this host" % (name, t)); return
+        os.symlink(real, os.path.join(td, t))
+    argv_file = os.path.join(case, "argv")
+    stub(sd, "orca-ide", "touch %s/ran\necho stub-noise >&2\n%s" % (
+        case, stub_body.replace("ARGV", argv_file)))
+    # term=None leaves the shipped placeholder line as an agent that forgot it would.
+    body = tcode.replace("<session>@<wt>\nCEPA_NAME", sname + "\nCEPA_NAME").replace("<cli>", "orca-ide")
+    if term is not None:
+        body = re.sub(SLOT % ("TERM", "TERM"), lambda m: m.group(1) + term + m.group(2), body)
+    script = os.path.join(case, "title.sh")
+    open(script, "w").write(body)
+    e = {"PATH": sd + ":" + td, "HOME": case, "TMPDIR": tmpd, "GIT_CEILING_DIRECTORIES": GROOT}
+    e.update(env or {})
+    pwned = os.path.join(cwd, "pwned")
+    if os.path.exists(pwned):
+        os.remove(pwned)
+    rfd, wfd = os.pipe()  # held open: a CLI reading this stdin never sees EOF
+    t0 = time.time()
+    try:
+        r = subprocess.run(["/bin/bash", "-e", script], env=e, cwd=cwd, stdin=rfd,
+                           capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        miss("%s: still running after 15s" % name); return
+    finally:
+        os.close(rfd); os.close(wfd)
+    took = time.time() - t0
+    bad = []
+    if r.returncode != 0:
+        bad.append("rc=%d" % r.returncode)
+    if r.stdout.strip() != want:
+        bad.append("got %r, want %r" % (r.stdout.strip(), want))
+    # bash reports a child that `timeout -k` had to SIGKILL; nothing else may
+    # reach stderr.
+    if r.stderr and not (killed and re.fullmatch(r"\S+: line \d+: +\d+ Killed +timeout .*\n", r.stderr)):
+        bad.append("stderr %r" % r.stderr.strip()[:200])
+    if took > max_took:
+        bad.append("took %.1fs, bound %.0fs" % (took, max_took))
+    ran = os.path.exists(os.path.join(case, "ran"))
+    if want.startswith("ORCA title: skipped") and ran:
+        bad.append("the rename ran on a skipped case")
+    if not want.startswith("ORCA title: skipped") and not ran:
+        bad.append("the rename never ran")
+    if os.listdir(tmpd):
+        bad.append("left %s in TMPDIR" % os.listdir(tmpd))
+    if argv is not None:
+        got = open(argv_file).read().split("\n")[:-1] if os.path.exists(argv_file) else None
+        if got != argv:
+            bad.append("argv %r, want %r" % (got, argv))
+    if os.path.exists(pwned):
+        bad.append("a name was evaluated as shell")
+    if bad:
+        miss("%s: %s" % (name, "; ".join(bad)))
+    else:
+        ok("%s (%.1fs)" % (name, took))
+
+WT = REPOS["cepa-main"] + "-wt"
+TITLE = "cepa-main \u00b7 tab7@roles"
+def rename_argv(term, title=TITLE):
+    return ["terminal", "rename", "--terminal", term, "--title", title, "--json"]
+def skipped(why):
+    return "ORCA title: skipped (%s)" % why
+BAD_NAME = skipped("the session name holds a character outside [A-Za-z0-9._@-]")
+BAD_TERM = skipped("the terminal handle is not a plain handle")
+BAD_REPO = skipped("the repo name holds a character outside [A-Za-z0-9._@-]")
+FAILED = "ORCA title: failed (orca-ide terminal rename failed or timed out)"
+NOT_OK = 'ORCA title: failed (orca-ide terminal rename did not return "ok": true)'
+
+run_title("self-linked-worktree", 'ORCA title: set "%s" on term_self-1' % TITLE, WT,
+          env=TERM_ENV, argv=rename_argv("term_self-1"))
+run_title("self-main-checkout", 'ORCA title: set "cepa-main \u00b7 coord@main" on term_self-1',
+          REPOS["cepa-main"], sname="coord@main", env=TERM_ENV,
+          argv=rename_argv("term_self-1", "cepa-main \u00b7 coord@main"))
+run_title("worker-handle", 'ORCA title: set "%s" on term_w-2' % TITLE, WT, term="term_w-2",
+          env=TERM_ENV, argv=rename_argv("term_w-2"))
+run_title("stdin-reader", 'ORCA title: set "%s" on term_self-1' % TITLE, WT, env=TERM_ENV,
+          stub_body="cat >/dev/null\n" + RENAME_OK, max_took=1.2)
+run_title("self-no-handle", skipped("ORCA_TERMINAL_HANDLE is unset, so this tab has no known handle"), WT)
+run_title("self-dash-handle", BAD_TERM, WT, env={"ORCA_TERMINAL_HANDLE": "-x"})
+# A coordinator that leaves the placeholder renames nothing, not its own tab.
+run_title("placeholder-left", BAD_TERM, WT, sname="tab8@roles", term=None, env=TERM_ENV)
+run_title("worker-empty-handle", BAD_TERM, WT, term="", env=TERM_ENV)
+run_title("worker-inject-handle", BAD_TERM, WT, term="term_1;touch pwned")
+run_title("name-inject", BAD_NAME, WT, sname="tab7@roles;touch pwned", env=TERM_ENV)
+run_title("name-subst", BAD_NAME, WT, sname="tab7@$(touch pwned)", env=TERM_ENV)
+run_title("name-space", BAD_NAME, WT, sname="tab7 @roles", env=TERM_ENV)
+run_title("name-quote", BAD_NAME, WT, sname="tab7@ro'les", env=TERM_ENV)
+run_title("name-empty", BAD_NAME, WT, sname="", env=TERM_ENV)
+run_title("name-dash", BAD_NAME, WT, sname="-tab7@roles", env=TERM_ENV)
+run_title("repo-space", BAD_REPO, REPOS["my repo"] + "-wt", env=TERM_ENV)
+run_title("repo-dash", BAD_REPO, REPOS["-r"] + "-wt", env=TERM_ENV)
+run_title("not-a-repo", skipped("git rev-parse --git-common-dir gave no <repo>/.git path"),
+          os.path.join(GROOT, "nogit"), env=TERM_ENV)
+run_title("mktemp-fails", skipped("mktemp failed"), WT, env=TERM_ENV, fail_tools=("mktemp",))
+run_title("rename-fails", FAILED, WT, stub_body="exit 3", env=TERM_ENV)
+run_title("rename-not-ok", NOT_OK, WT, stub_body='echo \'{"ok": "true"}\'', env=TERM_ENV)
+run_title("rename-not-json", NOT_OK, WT, stub_body="echo not json", env=TERM_ENV)
+run_title("rename-hangs", FAILED, WT, stub_body=HANG, env=TERM_ENV, max_took=1.2, killed=True)
+
 # --- CITES ---
-sec12 = re.search(r"^## 12\..*?(?=^## |\Z)", text, re.M | re.S)
-prose = flat(re.sub(r"^```bash\n.*?^```$", "", sec12.group(0), flags=re.M | re.S)) if sec12 else ""
+sec12 =re.search(r"^## 12\..*?(?=^## |\Z)", text, re.M | re.S)
+prose = flat(re.sub(r"^( *)```bash\n.*?^\1```$", "", sec12.group(0), flags=re.M | re.S)) if sec12 else ""
 if not sec12:
     miss("CITES: no ## 12. section in %s" % HOME)
-for line in DO_NOT_PASTE:
+for line in DO_NOT_PASTE + [TITLE_FORMAT]:
     (ok if line in prose else miss)("CITES: section 12 prose names %s" % line)
 sites = {}
 for n in RULE_CITES:
