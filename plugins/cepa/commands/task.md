@@ -15,6 +15,9 @@ Orchestrate the complete compound engineering loop from idea to merged PR. Each 
 **Worktree coordinator:** before the first step, apply this command's row
 in `cepa:autonomy` §10f. It outranks every write step below.
 
+**Orca:** once the role resolves, apply `cepa:autonomy` §12 — §12a's
+detection first, then §12b and §12c only on `ORCA: present`.
+
 ## Phase 0: Autonomy Resolution
 
 Resolve the run's autonomy level per the **`cepa:autonomy` skill §1** (first
@@ -550,7 +553,8 @@ Save to the run's residual shard (`cepa:autonomy` §5 sink 1):
 Deliver the report as labeled sections closing with the `## Next steps`
 numbered tail, per the **`cepa:autonomy` skill §6** — same contract the
 lfg terminal report uses. In a worker session the tail is the Handoff block
-instead (`cepa:autonomy` §10d), and the shape below changes only there. The body carries What shipped / Findings /
+instead (`cepa:autonomy` §10d), and the shape below changes only there. Under Orca, also
+`cepa:autonomy` §12b rule 3. The body carries What shipped / Findings /
 Learnings / System updates / Git state; operational instructions
 ("merge the PR with `gh pr merge`") stay in the body and never consume a
 choice number. The tail is 1-indexed, each item a bold action + one-line

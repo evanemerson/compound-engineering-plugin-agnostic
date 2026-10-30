@@ -2,7 +2,7 @@
 description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*)
 ---
 
 # Session Handoff
@@ -36,6 +36,9 @@ tree is dirty, a checkpoint of work already in progress (Step 6).
 
 **Worktree coordinator:** before the first step, apply this command's row
 in `cepa:autonomy` §10f. It outranks every write step below.
+
+**Orca:** once the role resolves, apply `cepa:autonomy` §12 — §12a's
+detection first, then §12b and §12c only on `ORCA: present`.
 
 ## Modes
 
@@ -772,7 +775,8 @@ the operator actually pastes into a fresh session. Requirements:
 - **Self-contained.** It must carry every fact the next session needs. No
   "as discussed", no "the file we were editing", no reference to this
   conversation. A reader with only the block and the repo can resume.
-- **Line 1 is the session's name, when it has one** — `You are
+- **Line 1 is the session's name, when it has one** (after an Orca send,
+  line 2: the **Under Orca** rule below puts a do-not-paste line first) — `You are
   <session>@<wt>.`, the name resolved per `cepa:autonomy` §10a — so the next
   session keeps the role this one had. It keeps the same name: one worker
   per checkout, and this session is ending. An unnamed session emits no name
@@ -798,6 +802,10 @@ the operator actually pastes into a fresh session. Requirements:
 - **Opens with the branch preamble** when the disposition calls for one —
   see below. It goes above the task description, because it must run
   before any work.
+
+**Under Orca**, a worker's prompt follows `cepa:autonomy` §12b rule 1: it is
+sent, and still printed, under that rule's do-not-paste first line. That send
+is the only write this command makes outside its own artifacts.
 
 ### The branch preamble
 
