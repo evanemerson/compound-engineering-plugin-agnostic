@@ -761,7 +761,12 @@ L24. **Orca adapter rule 7: how a turn ends under Orca.**
 
 
 L25. **Cite §12b rule 7 in `review.md` and `resolve-pr.md`.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-30** — PR #99 (`fc741b7`), v1.37.1, on the operator's
+    AskUserQuestion answer. CI 4/4 green on `37f8e85`; turn-endings 65/65 +
+    controls 44/44; 0 co-author trailers; hops run, freshness rc=0. Its 4 P3s
+    (`todos/review-2026-10-30-181500.md`, left `pending`) go to L27: P3 1
+    applied there, P3 2-4 deferred.
     severity: P3
     owner: roles (`tab9@roles`, dispatched via Orca 2026-10-30)
     Residual finding 2 of PR #98: rule 7 does not reach these two commands'
@@ -801,7 +806,7 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
 L27. **Rule 7 fixes from the L26 probe.**
     status: pending
     severity: P2
-    owner: unassigned until L25 merges (same checker file); then a worker via Orca
+    owner: roles (`tab10@roles`, dispatched via Orca 2026-10-30)
     1. First line names the operator: `Needed from you: nothing` means the
        operator, so a decision for a coordinator is `nothing` (probe C wrote
        "the coordinator's answer").
