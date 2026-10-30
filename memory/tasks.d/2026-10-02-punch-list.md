@@ -793,7 +793,27 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
     - Idle recipient (PR #98 finding 6): CONFIRMED STALL — the stub stayed
       `done` with the message unread; nothing woke it. Run coordinators get an
       Orca "You have 1 orchestration message" prompt; a plain session does not.
-    Rollout (plan §8 global/repo edits) waits on the operator's decisions.
+    **Operator decisions (AskUserQuestion, 2026-10-30):** wake path = "Send,
+    then nudge"; rollout = "Fix, re-probe, then roll out" → L27, then re-probe
+    C + an idle recipient, then the plan §8 edits.
+
+
+L27. **Rule 7 fixes from the L26 probe.**
+    status: pending
+    severity: P2
+    owner: unassigned until L25 merges (same checker file); then a worker via Orca
+    1. First line names the operator: `Needed from you: nothing` means the
+       operator, so a decision for a coordinator is `nothing` (probe C wrote
+       "the coordinator's answer").
+    2. A coordinator decision is sent with the question message type, not
+       `status` (probe C sent `status`).
+    3. Wake path (operator: "Send, then nudge"): after `orchestration send` to a
+       session that is not a Run coordinator, the sender types one line into the
+       recipient's terminal with `terminal send --enter`: `You have 1
+       orchestration message. Run <cli> orchestration check --peek --json`.
+       Same shape Orca uses for Run coordinators. Grant the verb where a
+       command declares allowed-tools; cover it in the checker.
+    Then coord@main re-runs probe C and an idle-recipient probe (L26).
 
 ---
 
