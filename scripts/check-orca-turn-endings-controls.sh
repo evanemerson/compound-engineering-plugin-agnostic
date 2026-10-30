@@ -89,7 +89,9 @@ CITE_SITES = {"handoff.md": "## Step 7: Report and Emit the Prompt",
          "triage.md": "### Step 4a: Execute Decisions and Summarize",
          "plan-review.md": "## Step 6: Report", "compound.md": "## Step 5: Report",
          "compound-refresh.md": "## Phase 5: Report and Commit",
-         "setup.md": "## Step 3: Report", "sweep.md": "## Step 6: Report"}
+         "setup.md": "## Step 3: Report", "sweep.md": "## Step 6: Report",
+         "review.md": "## Step 6: Report (interactive mode)",
+         "resolve-pr.md": "## Step 9: Report"}
 def cites(n):
     return {"CITES: %s carries the rule 7 citation once, in %s" % (n, CITE_SITES[n])}
 for n in CITE_SITES:
@@ -116,6 +118,12 @@ MUTANTS += [
      {"GRANTS: plan-review.md grants Bash(orca-ide orchestration ask:*)"}),
     ("grant-gone-setup", "setup.md", ", Bash(orca-ide status:*)", "",
      {"GRANTS: setup.md grants Bash(orca-ide status:*)"}),
+    # Under a headless heading: still once, but a headless sub-step does not
+    # end a turn (rule 7), so it is the wrong step.
+    ("cite-moved-review", "review.md", "\n\n**Under Orca**, end the run per",
+     "\n\n## Headless return\n\n**Under Orca**, end the run per", cites("review.md")),
+    ("grant-gone-review", "review.md", ", Bash(orca-ide orchestration send:*)", "",
+     {"GRANTS: review.md grants Bash(orca-ide orchestration send:*)"}),
     ("grant-gone-handoff", "handoff.md", "Bash(orca-ide skills get:*), ", "",
      {"GRANTS: handoff.md grants Bash(orca-ide skills get:*)"}),
 ]

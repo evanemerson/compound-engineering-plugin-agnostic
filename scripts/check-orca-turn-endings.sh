@@ -53,8 +53,10 @@ SITES = {"handoff.md": "## Step 7: Report and Emit the Prompt",
          "compound.md": "## Step 5: Report",
          "compound-refresh.md": "## Phase 5: Report and Commit",
          "setup.md": "## Step 3: Report",
-         "sweep.md": "## Step 6: Report"}
-NO_ALLOWED_TOOLS = {"sweep.md"}
+         "sweep.md": "## Step 6: Report",
+         "review.md": "## Step 6: Report (interactive mode)",
+         "resolve-pr.md": "## Step 9: Report"}
+NO_ALLOWED_TOOLS = {"sweep.md", "resolve-pr.md"}
 CITE = "**Under Orca**, end the run per `cepa:autonomy` §12b rule 7."
 POINTER = "**Under Orca (§12a present), §12b rule 7 replaces this tail.**"
 RULE_HEAD = "7. **How a turn ends under Orca.**"
