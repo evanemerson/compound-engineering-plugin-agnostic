@@ -6,38 +6,40 @@
 # something nobody runs.
 #
 # Usage: check-orca-detection.sh [SKILL.md]
-#   The optional path replaces the shipped skill file. Only
-#   check-orca-detection-controls.sh passes one, to run this check against a
-#   mutant; the CITES leg still reads the shipped command files.
+#   The optional path replaces the shipped skill file, and CEPA_ORCA_SITES
+#   replaces the commands directory. Only check-orca-detection-controls.sh sets
+#   either, to run this check against a mutant.
 #
 # Legs, in order:
 #   BLOCK    — 12a holds exactly one ```bash block.
 #   FIXTURES — the block runs under `bash -e`, in a separate process per case,
 #              with PATH set to two directories this script builds: stub CLIs
-#              (orca-ide, orca-dev, orca, uname) and links to the few real
-#              tools the block needs (timeout, python3; sleep, touch and cat for the stubs). No real
-#              Orca CLI is reachable. Every case asserts the exact output line.
-#              A stub bare `orca` marks a file when it runs; every Linux case
-#              asserts that file is absent. A case that runs past 25 seconds
-#              is a MISS (the block bounds its probe at 10 + 2).
-#   CITES    — /cepa:handoff, /cepa:task and /cepa:lfg each cite 12a and 12b;
+#              (orca-ide, orca-dev, orca, uname) and links to the real tools
+#              the block and the stubs need (TOOLS below). No real Orca CLI is
+#              reachable. stdin is a pipe this script holds open, so a block
+#              that lets the CLI read stdin waits. Every case asserts the exact
+#              output line and an upper bound on its run time. A probe stub
+#              answers ok:true only to `status --json`. A stub bare `orca`
+#              marks a file when it runs; every Linux case asserts that file is
+#              absent, and every ORCA_CLI_COMMAND case asserts no stub ran.
+#   CITES    — /cepa:handoff, /cepa:task and /cepa:lfg each carry 12's citation
+#              sentence; task and lfg cite 12b rule 3 and handoff 12b rule 1;
 #              handoff.md (the one of the three that declares allowed-tools)
-#              grants each `orca-ide` verb in GRANTS, and 12 names each verb.
+#              grants each `orca-ide` verb in GRANTS, and 12's prose outside the
+#              block names each verb.
 #
-# The controls (check-orca-detection-controls.sh) mutate the block one
-# substitution at a time and require this script to go red on each.
+# The controls mutate the block, the skill file and the command files one
+# substitution at a time, and require the named case of this script to go red.
 #
 # STATED LIMITS — a green run does not mean:
 #   - the real Orca CLI answers as the stubs do. The stub output copies the
 #     shape `orca-ide status --json` returned on Orca 1.4.244 (2026-10-30);
 #     a later Orca can change it, and only a live run would show that.
-#   - the session's permission layer admits the block. The block is a compound
-#     command with a variable CLI name, so an allowed-tools prefix grant cannot
-#     match all of it; a denied probe reads as absent, which is today's
-#     behavior.
+#   - the session's permission layer admits the block. 12a states why a
+#     prefix grant cannot.
 #   - an agent follows 12b. This tests detection and the citations, not the
 #     model that reads them.
-#   - non-Linux hosts are covered by more than one stubbed `uname` case. The
+#   - non-Linux hosts are covered by more than stubbed `uname` cases. The
 #     `timeout` here is GNU coreutils; a host with none reads as absent.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
@@ -46,11 +48,16 @@ CEPA_ORCA_SKILL="${1:-plugins/cepa/skills/autonomy/SKILL.md}" python3 - <<'PY'
 import os, re, shutil, subprocess, sys, tempfile, time
 
 HOME = os.environ["CEPA_ORCA_SKILL"]
-SITES = ["plugins/cepa/commands/handoff.md", "plugins/cepa/commands/task.md",
-         "plugins/cepa/commands/lfg.md"]
-GRANTS = ["orca-ide status", "orca-ide skills get", "orca-ide orchestration send"]
-TOOLS = ["timeout", "python3", "sleep", "touch", "cat"]
-STATUS_OK = '{\n  "id": "local-status",\n  "ok": true,\n  "result": {"runtime": {"ok": true}}\n}'
+SITES_DIR = os.environ.get("CEPA_ORCA_SITES", "plugins/cepa/commands")
+CITE = ("apply `cepa:autonomy` §12 — §12a's detection first, then §12b and §12c "
+        "only on `ORCA: present`.")
+RULE_CITES = {"handoff.md": "§12b rule 1", "task.md": "§12b rule 3", "lfg.md": "§12b rule 3"}
+GRANTS = {"orca-ide status": "`status`",
+          "orca-ide skills get": "`<cli> skills get orchestration`",
+          "orca-ide orchestration send": "`orchestration send`",
+          "orca-ide orchestration ask": "Orca's `ask`"}
+TOOLS = ["timeout", "python3", "mktemp", "rm", "sleep", "touch", "cat", "setsid"]
+STATUS_OK = '{\n  "id": "local-status",\n  "ok": true,\n  "result": {"runtime": {"reachable": true}}\n}'
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-orca-")
 
@@ -65,6 +72,9 @@ def finish():
     print("-- %d/%d checks passed --" % (passed, passed + failed))
     sys.exit(1 if failed else 0)
 
+def flat(s):
+    return re.sub(r"\s+", " ", s)
+
 # --- BLOCK ---
 try:
     text = open(HOME).read()
@@ -72,11 +82,11 @@ except OSError as e:
     miss("cannot read %s: %s" % (HOME, e)); finish()
 m = re.search(r"^### 12a\..*?(?=^### |\Z)", text, re.M | re.S)
 if not m:
-    miss("no ### 12a. section in %s" % HOME); finish()
+    miss("BLOCK: no ### 12a. section in %s" % HOME); finish()
 blocks = re.findall(r"^```bash\n(.*?)^```$", m.group(0), re.M | re.S)
 if len(blocks) != 1:
-    miss("12a holds %d ```bash blocks, want exactly 1" % len(blocks)); finish()
-ok("12a holds one bash block")
+    miss("BLOCK: 12a holds %d ```bash blocks, want exactly 1" % len(blocks)); finish()
+ok("BLOCK: 12a holds one bash block")
 block = os.path.join(TMP, "block.sh")
 open(block, "w").write(blocks[0])
 
@@ -86,7 +96,12 @@ def stub(d, name, body):
     open(p, "w").write("#!/bin/sh\n" + body + "\n")
     os.chmod(p, 0o755)
 
-def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_s=25):
+def answer(json_text, after=""):
+    # ok:true only for the exact argv the block must use.
+    return ('if [ "$*" = "status --json" ]; then\ncat <<\'J\'\n%s\nJ\n%s\n'
+            'else echo "unexpected argv: $*"; fi' % (json_text, after))
+
+def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.0):
     case = os.path.join(TMP, name)
     sd, td = os.path.join(case, "stubs"), os.path.join(case, "tools")
     os.makedirs(sd); os.makedirs(td)
@@ -102,17 +117,21 @@ def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_s=25):
     stub(sd, "uname", "echo %s" % uname)
     # A bare `orca` that marks itself and answers ok:true, so a block that ran
     # it would also print "present cli=orca".
-    stub(sd, "orca", "touch %s/orca\ncat <<'J'\n%s\nJ" % (marks, STATUS_OK))
+    stub(sd, "orca", "touch %s/orca\n%s" % (marks, answer(STATUS_OK)))
     for cli, body in stubs:
         stub(sd, cli, "touch %s/%s\n%s" % (marks, cli, body))
     e = {"PATH": sd + ":" + td, "HOME": case}
-    e.update(env or {})
+    for k, v in (env or {}).items():
+        e[k] = v.replace("{STUBS}", sd)
+    rfd, wfd = os.pipe()  # held open: a CLI reading this stdin never sees EOF
     t0 = time.time()
     try:
-        r = subprocess.run(["/bin/bash", "-e", block], env=e, cwd=case,
-                           capture_output=True, text=True, timeout=max_s)
+        r = subprocess.run(["/bin/bash", "-e", block], env=e, cwd=case, stdin=rfd,
+                           capture_output=True, text=True, timeout=25)
     except subprocess.TimeoutExpired:
-        miss("%s: still running after %ds" % (name, max_s)); return
+        miss("%s: still running after 25s" % name); return
+    finally:
+        os.close(rfd); os.close(wfd)
     took = time.time() - t0
     out = r.stdout.strip()
     bad = []
@@ -120,63 +139,90 @@ def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_s=25):
         bad.append("rc=%d stderr=%r" % (r.returncode, r.stderr.strip()[:200]))
     if out != want:
         bad.append("got %r, want %r" % (out, want))
+    if took > max_took:
+        bad.append("took %.1fs, bound %.0fs" % (took, max_took))
     if uname == "Linux" and os.path.exists(os.path.join(marks, "orca")):
         bad.append("bare `orca` ran on Linux")
-    if env and "ORCA_CLI_COMMAND" in env and os.listdir(marks):
+    if env and env.get("ORCA_CLI_COMMAND") and os.listdir(marks):
         bad.append("probed %s although ORCA_CLI_COMMAND was set" % os.listdir(marks))
     if bad:
         miss("%s: %s" % (name, "; ".join(bad)))
     else:
         ok("%s (%.1fs)" % (name, took))
 
-def emit(s):
-    return "cat <<'J'\n%s\nJ" % s
-
+OK_STUB = [("orca-ide", answer(STATUS_OK))]
 ABSENT_BAD = 'ORCA: absent (orca-ide status did not return "ok": true)'
 ABSENT_FAIL = "ORCA: absent (orca-ide status failed or timed out)"
+NOT_PLAIN = "ORCA: absent (ORCA_CLI_COMMAND is not a plain command name)"
+
 run_case("unset-no-cli", "ORCA: absent (orca-ide not on PATH)")
-run_case("env-set-no-probe", "ORCA: present cli=orca-ide via=ORCA_CLI_COMMAND",
-         stubs=[("orca-ide", emit(STATUS_OK))], env={"ORCA_CLI_COMMAND": "orca-ide"})
-run_case("status-ok", "ORCA: present cli=orca-ide via=status",
-         stubs=[("orca-ide", emit(STATUS_OK))])
+run_case("status-ok", "ORCA: present cli=orca-ide via=status", stubs=OK_STUB)
 run_case("status-ok-false", ABSENT_BAD,
-         stubs=[("orca-ide", emit('{"ok": false, "result": {"ok": true}}'))])
-run_case("status-not-json", ABSENT_BAD,
-         stubs=[("orca-ide", emit('"ok": true\nnot json'))])
-run_case("status-ok-string", ABSENT_BAD,
-         stubs=[("orca-ide", emit('{"ok": "true"}'))])
-run_case("status-json-list", ABSENT_BAD,
-         stubs=[("orca-ide", emit('[{"ok": true}]'))])
+         stubs=[("orca-ide", answer('{"ok": false, "result": {"ok": true}}'))])
+run_case("status-not-json", ABSENT_BAD, stubs=[("orca-ide", answer('"ok": true\nnot json'))])
+run_case("status-ok-string", ABSENT_BAD, stubs=[("orca-ide", answer('{"ok": "true"}'))])
+run_case("status-json-list", ABSENT_BAD, stubs=[("orca-ide", answer('[{"ok": true}]'))])
 run_case("status-empty", ABSENT_BAD, stubs=[("orca-ide", "true")])
 run_case("status-nonzero-exit", ABSENT_FAIL,
-         stubs=[("orca-ide", emit(STATUS_OK) + "\nexit 3")])
+         stubs=[("orca-ide", answer(STATUS_OK, "exit 3"))])
 run_case("status-hangs-ignoring-TERM", ABSENT_FAIL,
-         stubs=[("orca-ide", "trap '' TERM\nsleep 60")])
+         stubs=[("orca-ide", "trap '' TERM\nsleep 60")], max_took=13)
+run_case("setsid-grandchild-holds-stdout", ABSENT_FAIL,
+         stubs=[("orca-ide", "trap '' TERM\nsetsid sleep 30 &\nsleep 60")], max_took=13)
+run_case("bg-child-holds-stdout", "ORCA: present cli=orca-ide via=status",
+         stubs=[("orca-ide", answer(STATUS_OK, "sleep 30 &"))])
+run_case("stdin-reader", "ORCA: present cli=orca-ide via=status",
+         stubs=[("orca-ide", "cat >/dev/null\n" + answer(STATUS_OK))])
 run_case("no-timeout-tool", "ORCA: absent (no timeout command to bound the status probe)",
-         stubs=[("orca-ide", emit(STATUS_OK))], drop=("timeout",))
-run_case("no-python3", ABSENT_BAD,
-         stubs=[("orca-ide", emit(STATUS_OK))], drop=("python3",))
+         stubs=OK_STUB, drop=("timeout",))
+run_case("no-python3", "ORCA: absent (no python3 to parse the status probe)",
+         stubs=OK_STUB, drop=("python3",))
 run_case("dev-checkout", "ORCA: present cli=orca-dev via=status",
-         stubs=[("orca-dev", emit(STATUS_OK)), ("orca-ide", "exit 9")],
+         stubs=[("orca-dev", answer(STATUS_OK)), ("orca-ide", "exit 9")],
          env={"ORCA_DEV_REPO_ROOT": "/x"})
 run_case("non-linux-uses-orca", "ORCA: present cli=orca via=status", uname="Darwin")
+# ORCA_CLI_COMMAND: valid means present with no probe; anything else is absent.
+run_case("env-set-no-probe", "ORCA: present cli=orca-ide via=ORCA_CLI_COMMAND",
+         stubs=OK_STUB, env={"ORCA_CLI_COMMAND": "orca-ide"})
+run_case("env-abs-path", "ORCA: present cli={STUBS}/orca-ide via=ORCA_CLI_COMMAND".replace(
+         "{STUBS}", os.path.join(TMP, "env-abs-path", "stubs")),
+         stubs=OK_STUB, env={"ORCA_CLI_COMMAND": "{STUBS}/orca-ide"})
+run_case("env-empty-probes", "ORCA: present cli=orca-ide via=status",
+         stubs=OK_STUB, env={"ORCA_CLI_COMMAND": ""})
+run_case("env-space", NOT_PLAIN, stubs=OK_STUB, env={"ORCA_CLI_COMMAND": "orca-ide x"})
+run_case("env-dash", NOT_PLAIN, stubs=OK_STUB, env={"ORCA_CLI_COMMAND": "-orca-ide"})
+run_case("env-inject", NOT_PLAIN, stubs=OK_STUB, env={"ORCA_CLI_COMMAND": "orca-ide;touch x"})
+run_case("env-bare-orca-linux", "ORCA: absent (ORCA_CLI_COMMAND names bare orca on Linux)",
+         env={"ORCA_CLI_COMMAND": "orca"})
+run_case("env-bare-orca-darwin", "ORCA: present cli=orca via=ORCA_CLI_COMMAND",
+         uname="Darwin", env={"ORCA_CLI_COMMAND": "orca"})
+run_case("env-not-orca", "ORCA: absent (ORCA_CLI_COMMAND does not name an Orca CLI)",
+         env={"ORCA_CLI_COMMAND": "cat"})
+run_case("env-not-on-path", "ORCA: absent (ORCA_CLI_COMMAND=orca-dev is not on PATH)",
+         env={"ORCA_CLI_COMMAND": "orca-dev"})
 
 # --- CITES ---
 sec12 = re.search(r"^## 12\..*?(?=^## |\Z)", text, re.M | re.S)
-for p in SITES:
+prose = flat(re.sub(r"^```bash\n.*?^```$", "", sec12.group(0), flags=re.M | re.S)) if sec12 else ""
+if not sec12:
+    miss("CITES: no ## 12. section in %s" % HOME)
+sites = {}
+for n in RULE_CITES:
+    p = os.path.join(SITES_DIR, n)
     try:
-        s = open(p).read()
+        sites[n] = open(p).read()
     except OSError as e:
-        miss("cannot read %s: %s" % (p, e)); continue
-    for ref in ("§12a", "§12b"):
-        (ok if ref in s else miss)("%s cites %s" % (p, ref))
-handoff = open(SITES[0]).read()
-fm = re.match(r"---\n(.*?)\n---\n", handoff, re.S)
-tools = re.search(r"^allowed-tools:(.*)$", fm.group(1), re.M).group(1) if fm else ""
-for g in GRANTS:
-    (ok if "Bash(%s:*)" % g in tools else miss)("handoff.md grants Bash(%s:*)" % g)
-    verb = g.split(" ", 1)[1]
-    (ok if sec12 and ("`%s`" % verb.split()[-1] in sec12.group(0) or verb in sec12.group(0))
-     else miss)("section 12 names the verb %r" % verb)
+        miss("CITES: cannot read %s: %s" % (p, e)); continue
+    s = flat(sites[n])
+    (ok if CITE in s else miss)("CITES: %s carries the §12 citation sentence" % n)
+    (ok if RULE_CITES[n] in s else miss)("CITES: %s cites %s" % (n, RULE_CITES[n]))
+fm = re.match(r"---\n(.*?)\n---\n", sites.get("handoff.md", ""), re.S)
+tl = re.search(r"^allowed-tools:(.*)$", fm.group(1), re.M) if fm else None
+if not tl:
+    miss("CITES: handoff.md has no allowed-tools line in its frontmatter")
+tools = tl.group(1) if tl else ""
+for g, named in GRANTS.items():
+    (ok if "Bash(%s:*)" % g in tools else miss)("CITES: handoff.md grants Bash(%s:*)" % g)
+    (ok if named in prose else miss)("CITES: section 12 prose names %s" % named)
 finish()
 PY

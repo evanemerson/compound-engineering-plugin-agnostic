@@ -2,7 +2,7 @@
 description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(timeout -k 2 10 orca-ide status:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*)
 ---
 
 # Session Handoff
@@ -37,11 +37,8 @@ tree is dirty, a checkpoint of work already in progress (Step 6).
 **Worktree coordinator:** before the first step, apply this command's row
 in `cepa:autonomy` §10f. It outranks every write step below.
 
-**Orca:** once the role resolves, run `cepa:autonomy` §12a's detection
-block and report its line. On `ORCA: present`, §12b's rules and §12c's relay
-clause bind this run — hand-offs to a coordinator go by Orca, a dispatched
-worker asks by Orca instead of a local question prompt, and its `worker_done`
-body carries the Handoff block. On `ORCA: absent`, skip §12.
+**Orca:** once the role resolves, apply `cepa:autonomy` §12 — §12a's
+detection first, then §12b and §12c only on `ORCA: present`.
 
 ## Modes
 
@@ -805,12 +802,8 @@ the operator actually pastes into a fresh session. Requirements:
   see below. It goes above the task description, because it must run
   before any work.
 
-**Under Orca** (`cepa:autonomy` §12b rule 1), a worker's prompt is for its
-coordinator, which starts the next worker from it. Send it to that coordinator
-with Orca instead of printing it for a paste, then print the one
-`Sent to coord@<wt> via Orca (<message id>)` line. The saved file and its path
-line do not change. With no Orca target, or a failed send, print the block as
-above and say why in one line. Any other session prints the block as above.
+**Under Orca**, a worker's prompt follows `cepa:autonomy` §12b rule 1. That
+send is the only write this command makes outside its own artifacts.
 
 ### The branch preamble
 

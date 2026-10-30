@@ -25,11 +25,8 @@ statement — autonomy §6 forbids ending any later turn on a promise to report.
 **Worktree coordinator:** before the first step, apply this command's row
 in `cepa:autonomy` §10f. It outranks every write step below.
 
-**Orca:** once the role resolves, run `cepa:autonomy` §12a's detection
-block and report its line. On `ORCA: present`, §12b's rules and §12c's relay
-clause bind this run — hand-offs to a coordinator go by Orca, a dispatched
-worker asks by Orca instead of a local question prompt, and its `worker_done`
-body carries the Handoff block. On `ORCA: absent`, skip §12.
+**Orca:** once the role resolves, apply `cepa:autonomy` §12 — §12a's
+detection first, then §12b and §12c only on `ORCA: present`.
 
 ## Step 0: Resolve the Arguments
 
@@ -406,8 +403,7 @@ updates and every blocked decision, always ending with a "**Stop here**"
 option and a one-line recommendation. Operational instructions
 ("merge with `gh pr merge`") stay in the body and never consume a choice
 number. In a worker session the tail is the Handoff block instead
-(autonomy §10d); a dispatched Orca worker also sends that block as its
-`worker_done` body (autonomy §12b rule 3). Then output:
+(autonomy §10d); under Orca, also autonomy §12b rule 3. Then output:
 
 `<promise>DONE</promise>`
 
