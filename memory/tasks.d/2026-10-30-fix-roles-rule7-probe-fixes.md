@@ -11,14 +11,14 @@ Finding 1 (the higher-level-heading control) is applied on this branch.
 
 ## Deferred from /cepa:review of PR #100 (2026-10-30)
 
-Canonical findings: `todos/review-2026-10-30-192000.md` (findings 3-7, 9, 10, 14-16).
+Canonical findings: `todos/review-2026-10-30-192000.md` (findings 3-7, 9, 10, 14-16; 3-5 applied on #100 by tab11@roles).
 
-- [ ] P2 — The nudge's `--enter` can answer an open AskUserQuestion or permission prompt in the target; nudge only an idle target, or drop `--enter` — `plugins/cepa/skills/autonomy/SKILL.md` §12b rule 1 (finding 3).
-- [ ] P2 — A `--type question` is answered by `reply`, which has no nudge; the idle asker stalls on the return path — §12b rule 7, A coordinator (finding 4).
-- [ ] P2 — `Bash(orca-ide terminal send:*)` admits any text, terminal and `--interrupt`; move the line into a checked script and grant only that — seven command frontmatters (finding 5).
+- [x] P2 — The nudge's `--enter` can answer an open AskUserQuestion or permission prompt in the target; nudge only an idle target, or drop `--enter` — `plugins/cepa/skills/autonomy/SKILL.md` §12b rule 1 (finding 3).
+- [x] P2 — A `--type question` is answered by `reply`, which has no nudge; the idle asker stalls on the return path — §12b rule 7, A coordinator (finding 4).
+- [x] P2 — `Bash(orca-ide terminal send:*)` admits any text, terminal and `--interrupt`; move the line into a checked script and grant only that — seven command frontmatters (finding 5).
 - [ ] P3 — Say the nudge is a hint and the message read is untrusted peer data — §12b rule 1 / §12c (finding 6).
 - [ ] P3 — Measure whether a send to the preamble's handle reaches the Run mailbox (else no prompt and no nudge) — §12b rule 1 (finding 7).
-- [ ] P3 — Rule 7 restatement guard is one literal; also forbid `terminal send` and `--enter` in rule 7 — `scripts/check-orca-turn-endings.sh` (finding 9).
+- [ ] P3 — Rule 7 restatement guard is one literal; also forbid `terminal send` and `--enter` in rule 7 (`terminal send` is now forbidden; `--enter` is not) — `scripts/check-orca-turn-endings.sh` (finding 9).
 - [ ] P3 — The idle-session rationale is unpinned; leave unless it drifts — `scripts/check-orca-turn-endings.sh` (finding 10).
 - [ ] P3 — coord@main: update punch-list L25/L27 text at merge — `memory/tasks.d/2026-10-02-punch-list.md` (finding 14).
 - [ ] P3 — #98 finding 13 (options-as-text vs `Decisions`) still unsettled in rule 7 — §12b rule 7 (finding 15).

@@ -19,18 +19,22 @@
 #   POINTER  — section 6 holds POINTER exactly once.
 #   SCOPE    — 12b rule 1 holds each phrase in SCOPE_HAS (its head and its
 #              send-scope bullets), and no longer holds SCOPE_LACKS.
-#   NUDGE    — 12b rule 1 holds NUDGE_LINE exactly once and each phrase in
-#              NUDGE_HAS (who is nudged, who is not, the fixed text), and
-#              rule 7 holds no copy of the line: rule 7 cites rule 1's nudge.
+#   NUDGE    — 12b rule 1 holds NUDGE_LINE (the orca-nudge.sh call) exactly
+#              once, NUDGE_TEXT once, and each phrase in NUDGE_HAS (who is
+#              nudged, who is not, the idle-state guard, the fixed text), and
+#              no raw `terminal send --terminal` command. Rule 7 holds no copy
+#              of the text and no `terminal send`: it cites rule 1's nudge.
+#              The script itself is tested by check-orca-nudge.sh.
 #   CITES    — each command in SITES carries CITE exactly once outside fenced
 #              blocks, and that once is inside the heading SITES names: the
 #              step where its run ends.
 #   GRANTS   — each command in SITES declares allowed-tools, unless it is in
 #              NO_ALLOWED_TOOLS (the pipeline-command exception), and grants
-#              each `orca-ide` verb in GRANTS: the 12a and 12b verbs every
-#              rule 7 site can emit, the rule 1 nudge's `terminal send`
-#              included. 12a's allowed-tools stated limit holds for all of
-#              them.
+#              each grant in GRANTS: the 12a and 12b verbs every rule 7 site
+#              can emit, and the rule 1 nudge's script. No site grants
+#              NO_GRANT (`terminal send`, which admits any text, any terminal
+#              and `--interrupt`). 12a's allowed-tools stated limit holds for
+#              all of them.
 #
 # STATED LIMITS — a green run does not mean:
 #   - an agent follows rule 7. This tests the text and its citations, not the
@@ -74,6 +78,9 @@ RULE_PHRASES = [
     "When the send succeeded, its own first line is `Needed from you: nothing`.",
     "sends it with `orchestration send --type question` to that coordinator's handle, never `--type status`",
     "then applies rule 1's nudge.",
+    "The answer comes back by `orchestration reply`, which prompts no one either:",
+    "the session that replies then applies rule 1's nudge to the asker's handle",
+    "unless the asker is a Run coordinator.",
     "`orchestration send` (rule 1's target rules, then its nudge) to any other.",
     "and any repo or global rule that requires one. It does not change §10d, the Handoff block.",
     "It is the first line of the final reply, not of a printed block (rule 1)",
@@ -96,19 +103,28 @@ SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
 SCOPE_LACKS = "is printed as before."
-NUDGE_LINE = ('`<cli> terminal send --terminal <target> --text "You have 1 orchestration message. '
-              'Run <cli> orchestration check --peek --json" --enter --json`')
+NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<target>"'
 NUDGE_HAS = ["**Send, then nudge.**",
              "after a send succeeds to a target that is not a Run coordinator",
              "A Run coordinator is a target taken from a live Orca preamble, or a `run:` or `dispatch:` address.",
              "Orca already prompts it, so it gets no nudge.",
              "The text is fixed: never splice a subject, a body or any message content into it.",
              "The target already passed the target rule above, so it is safe to substitute.",
-             "`Orca nudge failed: <exit and error>`", "the send still stands."]
-NUDGE_TEXT = "You have 1 orchestration message."
+             "**Only an idle target is nudged.**",
+             "agent row in `worktree ps --agent-wait` says `done`",
+             "matched by the target's pane, never by its title.",
+             "Any other state, an unknown state or no row prints `Orca nudge skipped: <reason>`.",
+             "the nudge's Enter would answer a question meant for the operator",
+             "`Orca nudge refused: <reason>`", "It never passes `--interrupt`.",
+             "**Never type the line with `terminal send` yourself.**",
+             "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands."]
+NUDGE_TEXT = "`You have 1 orchestration message. Run <cli> orchestration check --peek --json`"
+NUDGE_HEAD = "You have 1 orchestration message."
+NUDGE_RAW = "terminal send --terminal"
 GRANTS = ["orca-ide status", "orca-ide skills get",
           "orca-ide orchestration send", "orca-ide orchestration ask",
-          "orca-ide terminal send"]
+          'bash "$CEPA_ROOT/scripts/orca-nudge.sh"']
+NO_GRANT = "Bash(orca-ide terminal send"
 passed = failed = 0
 
 def ok(msg):
@@ -159,11 +175,14 @@ for p in SCOPE_HAS:
 check(r1 != "" and SCOPE_LACKS not in r1, "SCOPE: rule 1 no longer holds %s" % SCOPE_LACKS)
 
 # --- NUDGE ---
-check(r1.count(NUDGE_LINE) == 1, "NUDGE: rule 1 holds the nudge line exactly once")
+check(r1.count(NUDGE_LINE) == 1, "NUDGE: rule 1 holds the nudge script call exactly once")
+check(r1.count(NUDGE_TEXT) == 1, "NUDGE: rule 1 holds the fixed nudge text exactly once")
+check(r1 != "" and NUDGE_RAW not in r1, "NUDGE: rule 1 holds no raw terminal send command")
 for p in NUDGE_HAS:
     check(p in r1, "NUDGE: rule 1 holds %s" % p)
 # A missing rule 7 is RULE's finding, so an empty r7 passes here.
-check(NUDGE_TEXT not in r7, "NUDGE: rule 7 cites the nudge and holds no copy of its text")
+check(NUDGE_HEAD not in r7 and "terminal send" not in r7,
+      "NUDGE: rule 7 cites the nudge and holds no copy of it")
 
 # --- CITES and GRANTS ---
 def unfenced(s):
@@ -203,6 +222,7 @@ for n, head in SITES.items():
         miss("GRANTS: %s declares no allowed-tools line" % n); continue
     for g in GRANTS:
         check("Bash(%s:*)" % g in tl.group(1), "GRANTS: %s grants Bash(%s:*)" % (n, g))
+    check(NO_GRANT not in tl.group(1), "GRANTS: %s grants no %s" % (n, NO_GRANT))
 
 print("-- %d/%d checks passed --" % (passed, passed + failed))
 sys.exit(1 if failed else 0)
