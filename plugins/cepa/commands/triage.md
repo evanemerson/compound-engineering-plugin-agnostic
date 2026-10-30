@@ -1,7 +1,7 @@
 ---
 description: Triage findings from /cepa:review. Default batch mode auto-applies safe verified fixes and presents the rest as one decision table; pass "interactive" for the classic one-at-a-time flow.
 argument-hint: "[interactive]"
-allowed-tools: Edit, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*)
+allowed-tools: Edit, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*)
 ---
 
 # Compound Triage
@@ -81,6 +81,8 @@ Reply with: "fix 3, 7", "fix all", "defer all", or "skip 7" (combinable).
 
 Show code context on request, not preemptively. P1s in this table lead and
 are called out — they should be resolved before merging.
+
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
 
 ### Step 4a: Execute Decisions and Summarize
 
