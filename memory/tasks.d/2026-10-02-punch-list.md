@@ -353,7 +353,14 @@ L14. **Stop `/cepa:review` (and other dispatching commands) leaving `agent-*`
     quoted heredoc and check it inside the block."
 
 L15. **Do read-only review agents write into the shared tree when they run code?**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-30 as NOT OBSERVED** (operator's decision). Two
+    measurements, both negative and both blind (below): cepa's tests are shell,
+    and dpc-pro isolates its readers and forbids them to run tests. The risk
+    stays possible only in a repo that does neither. Recorded for a future
+    reader: dpc-pro's pytest runs in a container that bind-mounts the stack's
+    checkout, so isolation alone does not stop a reader's cache writes there.
+    Reopen if a repo with in-place readers and Python tests shows the shape.
     severity: P3
     owner: unassigned
     **SENT 2026-10-30 via Orca** (operator's choice) to dpc-pro's coord@main,
@@ -706,9 +713,18 @@ L22. **§12a reads Orca absent on stock macOS (no `timeout` command).**
 
 
 L23. **Orca adapter: name each session `<repo> · <role>@<wt>`.**
-    status: pending
+    status: completed
     severity: P3
     owner: roles (`tab7@roles`, dispatched via Orca 2026-10-30)
+    **CLOSED 2026-10-30** — PR #96 (`e7eacfe`), v1.36.0. §12b rule 6: a
+    session titles its own tab via `ORCA_TERMINAL_HANDLE` (verified equal to
+    coord@main's real handle), a coordinator titles each worker's tab after
+    `worker-start`; a lost handle renames nothing (fail-closed). Pre-merge: CI
+    green on `46f4d1c`, orca checks 76/76 + controls 67/67, model pins and
+    anchor counts 0 MISS, fenced-block 0 MISS. Two branch commits carried a
+    forbidden `Co-Authored-By` trailer; squashed with an empty body, so `main`
+    has none (0 lines in `e7eacfe`). Plugin hops run; freshness rc=0. 4 P3s
+    deferred in `memory/tasks.d/2026-10-30-feat-roles-orca-session-titles.md`.
     Filed 2026-10-30 from the operator's instruction: "Name each session
     <repo> · <role>@<wt>." Scope set by coord@main: the Orca tab title only
     (`orca-ide terminal rename --terminal <handle> --title <text>`), set when
