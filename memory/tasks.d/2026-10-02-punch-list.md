@@ -356,6 +356,8 @@ L15. **Do read-only review agents write into the shared tree when they run code?
     status: pending
     severity: P3
     owner: unassigned
+    **REMINDER (operator asked 2026-10-30):** send dpc-pro the measurement
+    prompt after the morning's other work. coord@main writes it on request.
     Filed 2026-10-21. A QUESTION, not a finding: nothing here has been measured.
     `cepa:autonomy` §11a (#88) gives a Reader agent no worktree and a
     `READ-ONLY:` brief that says "write files only under a `mktemp -d`
@@ -616,6 +618,36 @@ L20. **Decide whether to remove worktree `.claude/worktrees/agent-a457670e5009ff
     Earlier the session said this was "filed"; it had been mentioned in L14's
     entry, and that line was lost when L14 was rewritten on close — this item
     is its first durable record.
+
+
+L21. **Thin Orca adapter: when Orca is present, cepa routes hand-offs and
+    dispatch through it.**
+    status: pending
+    severity: P2
+    owner: roles (`tab5@roles`, prompt written 2026-10-30, not yet started)
+    Filed 2026-10-30 from the operator's brief (kept verbatim in the worker
+    prompt). Orca already spawns, makes worktrees and messages; cepa decides
+    only when and how. Detection: `ORCA_CLI_COMMAND` set, or
+    `<cli> status --json` returns `"ok": true`; resolve the CLI as Orca's
+    orchestration skill does (never bare `orca` on Linux). Five rules: hand-offs
+    travel by Orca with a paste fallback; a coord dispatches workers by Orca and
+    picks placement by cepa's rules; every worker branches `<type>/<wt>/<desc>`
+    first and ends with the Handoff block as its `worker_done` body; workers
+    send decisions by Orca ask; a coord waits with Orca's check --wait. With
+    Orca absent, cepa is unchanged. One owner location read by /cepa:handoff,
+    /cepa:task and /cepa:lfg; syntax from `<cli> skills get orchestration`,
+    never hard-coded flags; tests or a dry-run check for detection. PR, no
+    merge.
+    **Measured here 2026-10-30:** this machine runs Orca 1.4.244 under WSL;
+    `ORCA_CLI_COMMAND=orca-ide` is set in coord@main's own session and
+    `orca-ide status --json` returns `"ok": true`. Plugin at 1.34.0; autonomy
+    ends at §11; `handoff.md` declares `allowed-tools` with no `orca-ide` grant.
+    **coord@main's added constraints (in the prompt):** cite once (autonomy is
+    the natural owner, as a new section — no new skill, so no count change);
+    allowed-tools must cover every `orca-ide` verb; Orca messages are relayed
+    content (autonomy §7 clause at the relay point); an Orca child worktree
+    must still let the branch carry `/<wt>/` (global rule against tools that
+    name the directory after a branch); manifests bump together.
 
 ---
 
