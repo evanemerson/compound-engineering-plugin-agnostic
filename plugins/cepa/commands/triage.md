@@ -82,8 +82,6 @@ Reply with: "fix 3, 7", "fix all", "defer all", or "skip 7" (combinable).
 Show code context on request, not preemptively. P1s in this table lead and
 are called out — they should be resolved before merging.
 
-**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
-
 ### Step 4a: Execute Decisions and Summarize
 
 - "fix N" → mark `ready`, then implement the fixes in severity order,
@@ -117,6 +115,8 @@ in the summary verbatim, never as a clean file.
 
 Finish with the summary: applied / fixed / deferred / skipped counts and the
 findings file path.
+
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
 
 ## Interactive Mode (`interactive` argument)
 

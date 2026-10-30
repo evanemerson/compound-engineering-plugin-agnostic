@@ -4,6 +4,9 @@
 # It must turn the check red with EXACTLY the MISS lines named beside it: a
 # mutant that also trips another leg proves nothing about the leg meant to
 # catch it, and an exact set shows each leg kills a mutant no other leg kills.
+# A mutant with an empty set must stay green: it plants a form the check must
+# not flag. One exception: rule-head-gone loses rule 7's whole text, so it asserts only
+# that every MISS is a RULE line and one is the head count.
 # The unmutated copies must run with no MISS line, or every red below proves
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped text changed shape and these mutants need re-reading.
@@ -46,6 +49,27 @@ MUTANTS = [
      {"RULE: rule 7 holds Writing a step in the transcript is not delivery."}),
     ("rule-no-sent-line", "skill", "`Sent: <to> — <subject> (<message id>)`", "`Sent: <to>`",
      {"RULE: rule 7 holds `Sent: <to> — <subject> (<message id>)`"}),
+    ("rule-first-line", "skill", "`Needed from you: nothing` or", "`Needed: nothing` or",
+     {"RULE: rule 7 holds **First line, always:** `Needed from you: nothing`"}),
+    ("rule-nobody-tail", "skill", "Others end with no tail: no numbered options, no `My read`, no\n       `Stop here`.",
+     "Others end with a `## Next steps` tail.",
+     {"RULE: rule 7 holds Others end with no tail: no numbered options, no `My read`, no `Stop here`."}),
+    ("rule-no-precedence", "skill", " and any repo or global rule that\n   requires one.", ".",
+     {"RULE: rule 7 holds and any repo or global rule that requires one. It does not change §10d, the Handoff block."}),
+    ("rule-headless-tool-only", "skill", "In a headless run (the `mode:headless` token, or no\n       AskUserQuestion tool)",
+     "With no AskUserQuestion tool (headless)",
+     {"RULE: rule 7 holds In a headless run (the `mode:headless` token, or no AskUserQuestion tool), file the decision per §5"}),
+    ("rule-handoff-sends-done", "skill", "(rule 3; `/cepa:handoff` never sends it)", "(rule 3)",
+     {"RULE: rule 7 holds `/cepa:handoff` never sends it"}),
+    ("rule-record-asks", "skill", "A `## Record` section may list", "A Record section may list",
+     {"RULE: rule 7 holds A `## Record` section"}),
+    ("rule-one-handoff-gone", "skill", "   - **One Handoff block per message** (rule 1).\n", "",
+     {"RULE: rule 7 holds **One Handoff block per message** (rule 1)."}),
+    # The phrase moves into a rule 8 after rule 7: rule 7's bound must stop at rule 8.
+    ("rule-phrase-in-rule-8", "skill",
+     "   - **One Handoff block per message** (rule 1).\n",
+     "8. **Other.**\n   - **One Handoff block per message** (rule 1).\n",
+     {"RULE: rule 7 holds **One Handoff block per message** (rule 1)."}),
     ("rule-twice", "skill", "\nA name line inside an Orca preamble",
      "\n7. **How a turn ends under Orca.** (copy)\n\nA name line inside an Orca preamble",
      {"RULE: 12b holds 7. **How a turn ends under Orca.** exactly once"}),
@@ -61,12 +85,31 @@ MUTANTS = [
     ("scope-double-handoff", "skill", "says\n     `(Handoff block above)` in its place.", "repeats it.",
      {"SCOPE: rule 1 holds says `(Handoff block above)` in its place."}),
 ]
-for n in ["handoff.md", "triage.md", "plan-review.md", "compound.md", "compound-refresh.md", "setup.md", "sweep.md"]:
-    MUTANTS.append(("cite-gone-" + n[:-3], n, CITE, "", {"CITES: %s carries the rule 7 citation once" % n}))
+CITE_SITES = {"handoff.md": "## Step 7: Report and Emit the Prompt",
+         "triage.md": "### Step 4a: Execute Decisions and Summarize",
+         "plan-review.md": "## Step 6: Report", "compound.md": "## Step 5: Report",
+         "compound-refresh.md": "## Phase 5: Report and Commit",
+         "setup.md": "## Step 3: Report", "sweep.md": "## Step 6: Report"}
+def cites(n):
+    return {"CITES: %s carries the rule 7 citation once, in %s" % (n, CITE_SITES[n])}
+for n in CITE_SITES:
+    MUTANTS.append(("cite-gone-" + n[:-3], n, CITE, "", cites(n)))
 MUTANTS += [
-    ("cite-twice-triage", "triage.md", CITE, CITE + "\n\n" + CITE, {"CITES: triage.md carries the rule 7 citation once"}),
+    ("cite-twice-triage", "triage.md", CITE, CITE + "\n\n" + CITE, cites("triage.md")),
+    # Moved to the mid-run decision table: still once, wrong step.
+    ("cite-moved-triage", "triage.md", "### Step 4a: Execute Decisions and Summarize\n",
+     "### Step 4a: Execute Decisions and Summarize\n\n### Step 4a-split\n", cites("triage.md")),
+    # Inside a fence: still once in the raw file, but not an instruction.
+    # A fenced example that quotes the citation is not a second citation:
+    # the check must stay green (an empty set means rc 0 and no MISS).
+    ("cite-quoted-in-fence-sweep", "sweep.md", CITE, CITE + "\n\n```text\n" + CITE + "\n```", set()),
+    ("cite-fenced-sweep", "sweep.md", CITE, "```text\n" + CITE + "\n```", cites("sweep.md")),
+    ("scope-head-reverted", "skill", "block addressed to a session Orca can reach", "block addressed to a coordinator",
+     {"SCOPE: rule 1 holds block addressed to a session Orca can reach"}),
+    ("alltools-gone-compound", "compound.md", "\nallowed-tools:", "\nallowed_tools_removed:",
+     {"GRANTS: compound.md declares no allowed-tools line"}),
     ("cite-wrong-rule-setup", "setup.md", CITE, CITE.replace("rule 7", "rule 6"),
-     {"CITES: setup.md carries the rule 7 citation once"}),
+     cites("setup.md")),
     ("grant-gone-compound", "compound.md", ", Bash(orca-ide orchestration send:*)", "",
      {"GRANTS: compound.md grants Bash(orca-ide orchestration send:*)"}),
     ("grant-gone-plan-review", "plan-review.md", ", Bash(orca-ide orchestration ask:*)", "",
@@ -114,10 +157,13 @@ for name, f, old, new, want in MUTANTS:
     if want is None:
         good = rc == 1 and any(m.startswith("RULE: 12b holds") for m in got) \
             and all(m.startswith("RULE:") for m in got)
+    elif not want:
+        good = rc == 0 and not got
     else:
         good = rc == 1 and got == want
     if good:
-        ok("%s goes red on %s" % (name, "RULE only" if want is None else sorted(want)[0]))
+        ok("%s %s" % (name, "goes red on RULE only" if want is None else
+                      "stays green" if not want else "goes red on " + sorted(want)[0]))
     else:
         miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
 

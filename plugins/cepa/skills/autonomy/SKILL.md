@@ -1468,8 +1468,9 @@ routes its hand-offs and its worker dispatch through Orca. cepa still decides
 **when** and **how**: the roles (§10), the branch form (§10b) and the Handoff
 block (§10d) do not change. When Orca is absent, nothing in this section
 applies and every command behaves exactly as it did before 1.35.0.
-`/cepa:handoff`, `/cepa:task` and `/cepa:lfg` cite this section. Other commands
-cite only §12b rule 7, for how their run ends. None restates either.
+`/cepa:handoff`, `/cepa:task` and `/cepa:lfg` cite this section. Some other
+commands cite only §12b rule 7, for how their run ends, and none restates it.
+A command that cites neither never runs §12a, so rule 7 does not reach it.
 
 ### 12a. Detecting Orca
 
@@ -1588,15 +1589,17 @@ limits.
 ### 12b. The rules when Orca is present
 
 1. **Hand-offs travel by Orca, not by paste.** When a session would print a
-   block addressed to a coordinator — `for coord@main`, `for coord@<wt>`, or a
-   worker's `/cepa:handoff` prompt that its coordinator starts the next worker
-   from — send the block with Orca's `orchestration send` to that coordinator.
-   Then print one line, `Sent to coord@<wt> via Orca (<message id>)`, and the
+   block addressed to a session Orca can reach — `for coord@main`, `for
+   coord@<wt>`, a worker's `/cepa:handoff` prompt that its coordinator starts
+   the next worker from (sent to that coordinator), or a handle the operator
+   gave — send the block with Orca's `orchestration send` to that session.
+   Then print one line, `Sent to <session> via Orca (<message id>)`, and the
    path of the saved copy when the command keeps one. **Then print the block
    as well,** so the operator can still read it. The printed block's first
    line is exactly `Sent to coord@main via Orca — do not paste.` For a worktree
    coordinator it names that coordinator: `Sent to coord@<wt> via Orca — do
-   not paste.` Any other target is named the same way. The line tells a reader the coordinator already has the block.
+   not paste.` Any other target is named the same way. The line tells a
+   reader the target already has the block.
    - **The target** is the coordinator handle in the live Orca preamble, or a
      handle or Run the operator gave in this session. Never pick a terminal by
      its title: a title is not an address, and two tabs can carry the same
@@ -1790,7 +1793,8 @@ limits.
    `mode:headless` sub-step that returns to its caller does not end a turn:
    its caller's ending governs.
    - **First line, always:** `Needed from you: nothing` or
-     `Needed from you: <one line>`.
+     `Needed from you: <one line>`. It is the first line of the final reply,
+     not of a printed block (rule 1) or of a `worker_done` body (rule 3).
    - **Then pick exactly one kind, by who must act now:**
      - **Nobody.** Write the body. A worker ends with its Handoff block.
        Others end with no tail: no numbered options, no `My read`, no
@@ -1801,8 +1805,9 @@ limits.
        call AskUserQuestion: one question, at most 3 options, your pick first
        with "(Recommended)" in its label. Do not also write the options as
        text. Under `full` autonomy, ask only at the end of a finished run,
-       never mid-run. With no AskUserQuestion tool (headless), file the
-       decision per §5 and end as **Nobody**, naming the residual.
+       never mid-run. In a headless run (the `mode:headless` token, or no
+       AskUserQuestion tool), file the decision per §5 and end as **Nobody**,
+       naming the residual. A completion token goes before the call.
      - **A coordinator.** A dispatched worker (a live preamble with Task and
        Dispatch IDs) never calls AskUserQuestion. It sends the decision with
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.
@@ -1812,14 +1817,16 @@ limits.
        is the operator's.
    - **Delivery, in every kind.** Each step that another session must do is
      delivered to that session BEFORE the ending: `worker_done` to your own
-     coordinator (rule 3), `orchestration send` (rule 1's target rules) to
-     any other. List each delivery in the body as
-     `Sent: <to> — <subject> (<message id>)`. Writing a step in the
+     coordinator at a final report (rule 3; `/cepa:handoff` never sends it),
+     `orchestration send` (rule 1's target rules) to any other. List each
+     delivery in the body as `Sent: <to> — <subject> (<message id>)`; a rule
+     1 send's `Sent to <session> via Orca (<message id>)` line is that
+     line. Writing a step in the
      transcript is not delivery. A step with no reachable target becomes an
      **operator** decision ("deliver this to <session>"), with the
      paste-ready block.
    - **Record (optional, any kind).** A `## Record` section may list what
-     happened or what comes later. It holds no question, no numbers to pick,
+     happened or what comes later. It goes before a Handoff block. It holds no question, no numbers to pick,
      and no `My read`.
    - **One Handoff block per message** (rule 1).
 

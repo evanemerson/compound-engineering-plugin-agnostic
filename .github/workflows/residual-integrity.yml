@@ -116,10 +116,10 @@ jobs:
         if: always()
         run: bash scripts/check-orca-detection-controls.sh
       # How a turn ends under Orca (autonomy section 12b rule 7) is cited once
-      # and restated nowhere, so the check fails when section 6 or a citing
-      # command loses its citation; the controls mutate each leg. Text checks
-      # only, a few seconds. Headers own the legs and limits. Static commands,
-      # no workflow-context interpolation.
+      # and restated nowhere. The check guards the rule and every citation of
+      # it; the controls mutate it. Text checks only, a few seconds. Headers
+      # own the legs and limits. Static commands, no workflow-context
+      # interpolation.
       - name: Check Orca turn endings
         if: always()
         run: bash scripts/check-orca-turn-endings.sh
