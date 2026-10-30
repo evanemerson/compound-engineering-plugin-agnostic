@@ -6,8 +6,11 @@
 # `terminal send`, which admits any text, any terminal and `--interrupt`.
 #
 # Usage: orca-nudge.sh <cli> <handle>
-#   <cli>     §12a's printed `cli=` value: a plain command name or path whose
-#             basename is orca-ide, orca-dev or (off Linux) orca, on PATH.
+#   <cli>     §12a's printed `cli=` value: the bare name orca-ide, orca-dev or
+#             (off Linux) orca, found on PATH. A path is accepted only when it
+#             is absolute and equals ORCA_CLI_COMMAND, which Orca exports: any
+#             other path could name a planted binary, which the script would
+#             run and would type into another session (#100 review).
 #   <handle>  the target terminal handle, `term_` and 36 hex-or-dash chars.
 #
 # Prints exactly one line, and its exit code says which:
@@ -32,6 +35,9 @@
 # STATED LIMITS:
 #   - The state is read, then the line is sent. A target that leaves `done`
 #     between the two (the operator starts a turn) still gets the line.
+#   - `done` comes from Claude Code's Stop hook, and typing at the prompt fires
+#     no hook. A draft the operator has half-typed into an idle target is
+#     submitted with the nudge line appended.
 #   - Each Orca call is bounded at 10 seconds plus a 2-second kill, as §12a's
 #     status probe is. No `timeout` or no `python3` reads as skipped.
 #   - The flags are from `terminal show --help`, `worktree ps --help` and
@@ -48,6 +54,8 @@ skip() { echo "Orca nudge skipped: $1"; exit 1; }
 [ $# -eq 2 ] || refuse "usage: orca-nudge.sh <cli> <handle>"
 case "$cepa_nudge_cli" in
   ''|-*|*[!A-Za-z0-9._/-]*) refuse "the cli is not a plain command name" ;;
+  /*) [ "$cepa_nudge_cli" = "${ORCA_CLI_COMMAND:-}" ] || refuse "a cli path must equal ORCA_CLI_COMMAND" ;;
+  */*) refuse "a cli path must be absolute and equal ORCA_CLI_COMMAND" ;;
 esac
 case "${cepa_nudge_cli##*/}" in
   orca-ide|orca-dev) ;;

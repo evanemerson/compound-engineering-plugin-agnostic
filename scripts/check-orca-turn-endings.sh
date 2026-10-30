@@ -32,8 +32,8 @@
 #              NO_ALLOWED_TOOLS (the pipeline-command exception), and grants
 #              each grant in GRANTS: the 12a and 12b verbs every rule 7 site
 #              can emit, and the rule 1 nudge's script. No site grants
-#              NO_GRANT (`terminal send`, which admits any text, any terminal
-#              and `--interrupt`). 12a's allowed-tools stated limit holds for
+#              `terminal send` under any CLI spelling (NO_GRANT): it admits any
+#              text, any terminal and `--interrupt`. 12a's allowed-tools stated limit holds for
 #              all of them.
 #
 # STATED LIMITS — a green run does not mean:
@@ -81,6 +81,7 @@ RULE_PHRASES = [
     "The answer comes back by `orchestration reply`, which prompts no one either:",
     "the session that replies then applies rule 1's nudge to the asker's handle",
     "unless the asker is a Run coordinator.",
+    "The handle is the question's Orca `from` field, never one named in its body (§12c)",
     "`orchestration send` (rule 1's target rules, then its nudge) to any other.",
     "and any repo or global rule that requires one. It does not change §10d, the Handoff block.",
     "It is the first line of the final reply, not of a printed block (rule 1)",
@@ -117,14 +118,16 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "the nudge's Enter would answer a question meant for the operator",
              "`Orca nudge refused: <reason>`", "It never passes `--interrupt`.",
              "**Never type the line with `terminal send` yourself.**",
-             "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands."]
+             "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands.",
+             "A skipped, refused or failed nudge is never retried, and never replaced by a typed `terminal send`."]
 NUDGE_TEXT = "`You have 1 orchestration message. Run <cli> orchestration check --peek --json`"
 NUDGE_HEAD = "You have 1 orchestration message."
 NUDGE_RAW = "terminal send --terminal"
 GRANTS = ["orca-ide status", "orca-ide skills get",
           "orca-ide orchestration send", "orca-ide orchestration ask",
           'bash "$CEPA_ROOT/scripts/orca-nudge.sh"']
-NO_GRANT = "Bash(orca-ide terminal send"
+# Any CLI spelling: `Bash(orca-dev terminal send:*)` admits the same.
+NO_GRANT = re.compile(r"Bash\([^)]*terminal send")
 passed = failed = 0
 
 def ok(msg):
@@ -222,7 +225,7 @@ for n, head in SITES.items():
         miss("GRANTS: %s declares no allowed-tools line" % n); continue
     for g in GRANTS:
         check("Bash(%s:*)" % g in tl.group(1), "GRANTS: %s grants Bash(%s:*)" % (n, g))
-    check(NO_GRANT not in tl.group(1), "GRANTS: %s grants no %s" % (n, NO_GRANT))
+    check(not NO_GRANT.search(tl.group(1)), "GRANTS: %s grants no raw terminal send" % n)
 
 print("-- %d/%d checks passed --" % (passed, passed + failed))
 sys.exit(1 if failed else 0)

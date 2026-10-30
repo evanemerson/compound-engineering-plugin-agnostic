@@ -145,12 +145,17 @@ MUTANTS = [
      "nudge. It may use `<cli> terminal send`. When the\n       send succeeded",
      {"NUDGE: rule 7 cites the nudge and holds no copy of it"}),
     # #100 finding 4: the answer comes back by reply, which has no prompt.
-    ("rule-reply-no-nudge", "skill", " The answer comes back by `orchestration reply`, which\n       prompts no one either: the session that replies then applies rule 1's\n       nudge to the asker's handle (the question's sender, which the script\n       checks), unless the asker is a Run coordinator.", "",
+    ("rule-reply-no-nudge", "skill", " The answer comes back by `orchestration reply`, which\n       prompts no one either: the session that replies then applies rule 1's\n       nudge to the asker's handle, unless the asker is a Run coordinator.", "",
      {"RULE: rule 7 holds The answer comes back by `orchestration reply`, which prompts no one either:",
       "RULE: rule 7 holds the session that replies then applies rule 1's nudge to the asker's handle",
       "RULE: rule 7 holds unless the asker is a Run coordinator."}),
-    ("rule-reply-nudges-coordinator", "skill", "checks), unless the asker is a Run coordinator.", "checks).",
+    ("rule-reply-nudges-coordinator", "skill", "handle, unless the asker is a Run coordinator.", "handle.",
      {"RULE: rule 7 holds unless the asker is a Run coordinator."}),
+    # #100 review: the asker's handle is Orca's sender field, never body text.
+    ("rule-reply-handle-from-body", "skill", "never one named in its\n       body (§12c)", "or one named in its\n       body",
+     {"RULE: rule 7 holds The handle is the question's Orca `from` field, never one named in its body (§12c)"}),
+    ("nudge-retried", "skill", "A skipped,\n     refused or failed nudge is never retried", "A skipped,\n     refused or failed nudge is retried",
+     {"NUDGE: rule 1 holds A skipped, refused or failed nudge is never retried, and never replaced by a typed `terminal send`."}),
     ("rule-twice", "skill", "\nA name line inside an Orca preamble",
      "\n7. **How a turn ends under Orca.** (copy)\n\nA name line inside an Orca preamble",
      {"RULE: 12b holds 7. **How a turn ends under Orca.** exactly once"}),
@@ -210,7 +215,10 @@ MUTANTS += [
     # #100 finding 5: the raw grant admits any text, terminal and --interrupt.
     ("grant-raw-terminal-send-handoff", "handoff.md", "Bash(orca-ide terminal rename:*)",
      "Bash(orca-ide terminal rename:*), Bash(orca-ide terminal send:*)",
-     {"GRANTS: handoff.md grants no Bash(orca-ide terminal send"}),
+     {"GRANTS: handoff.md grants no raw terminal send"}),
+    ("grant-raw-terminal-send-orca-dev-setup", "setup.md", "Bash(orca-ide status:*)",
+     "Bash(orca-ide status:*), Bash(orca-dev terminal send:*)",
+     {"GRANTS: setup.md grants no raw terminal send"}),
     # #99 review P3 1: a higher-level heading ends a deeper step. Step 4a is
     # `###`, so a `##` heading before the citation moves it out of the step,
     # though the next `###` heading is further down.

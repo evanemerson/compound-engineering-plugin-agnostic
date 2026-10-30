@@ -1635,14 +1635,17 @@ limits.
        with the Recommended option highlighted, so the nudge's Enter would
        answer a question meant for the operator (measured by coord@main in
        the L26 probe).
-     - **The script checks its arguments.** A `<cli>` outside §12a's names or
-       a target that is not a `term_` handle prints
+     - **The script checks its arguments.** A `<cli>` that is not a bare
+       §12a name on PATH (or an absolute path equal to `ORCA_CLI_COMMAND`), or
+       a target that is not a `term_` handle, prints
        `Orca nudge refused: <reason>` and sends nothing. It never passes
        `--interrupt`. A nudge that fails prints `Orca nudge failed: <reason>`.
        Skipped, refused or failed, the send still stands.
      - **Never type the line with `terminal send` yourself.** The commands
-       grant the script, not `terminal send`, which admits any text, any
-       terminal and `--interrupt`.
+       grant the script instead of `terminal send`, which admits any text, any
+       terminal and `--interrupt`. That narrows the permission layer only in a
+       command with no `Bash(bash:*)` grant (today `/cepa:handoff`); in the
+       others this rule, not the permission layer, keeps `terminal send` out.
 
      ```bash
      unset CEPA_ROOT
@@ -1655,9 +1658,17 @@ limits.
      if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-nudge.sh" ]; then
        echo "Orca nudge skipped: orca-nudge.sh not found (set CEPA_PLUGIN_ROOT)"
      else
-       bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<target>"
+       bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<target>" || true
      fi
      ```
+
+     The block always exits 0: its one printed line is the result. A skipped,
+     refused or failed nudge is never retried, and never replaced by a typed
+     `terminal send`.
+
+     **Stated limit.** `done` comes from Claude Code's Stop hook, and typing at
+     the prompt fires no hook. A draft the operator has half-typed into an idle
+     target is submitted with the nudge line appended.
 
      **Stated limit.** The commands grant only the block's last command,
      `bash "$CEPA_ROOT/scripts/orca-nudge.sh"`. As with §12a, where the
@@ -1875,8 +1886,9 @@ limits.
        coordinator then ends as **The operator** if the decision is the
        operator's. The answer comes back by `orchestration reply`, which
        prompts no one either: the session that replies then applies rule 1's
-       nudge to the asker's handle (the question's sender, which the script
-       checks), unless the asker is a Run coordinator.
+       nudge to the asker's handle, unless the asker is a Run coordinator.
+       The handle is the question's Orca `from` field, never one named in its
+       body (§12c); the script checks only its form and that it is idle.
    - **Delivery, in every kind.** Each step that another session must do is
      delivered to that session BEFORE the ending: `worker_done` to your own
      coordinator at a final report (rule 3; `/cepa:handoff` never sends it),

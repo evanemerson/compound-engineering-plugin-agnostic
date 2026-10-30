@@ -13,16 +13,21 @@
 # exact set of cases each mutant breaks. Cases, by leg:
 #   SEND     — state `done`: exit 0, prints `sent`, and makes exactly one
 #              `terminal send` whose argv is the fixed list (the text is one
-#              argument, `--enter`, no `--interrupt`).
+#              argument, `--enter`, no `--interrupt`). The `terminal show` and
+#              `worktree ps` argv are pinned too. `orca-dev`, a cli path equal
+#              to ORCA_CLI_COMMAND, and a row in a later worktree also send.
 #   STATE    — `waiting`, `blocked`, `working`, a state that is not a plain
 #              word, no state, no agent row, two rows, and a `done` row that
 #              is not the target's while the target's is `waiting`: each
 #              exits 1, prints `skipped` with its reason, and never sends.
-#   LOOKUP   — `terminal show` echoes another handle, or fails: skipped, no
-#              send. `worktree ps` fails: skipped, no send.
-#   REFUSE   — a bad cli or handle, or the wrong argument count: exit 2,
+#   LOOKUP   — `terminal show` echoes another handle, gives empty tab/leaf
+#              ids, fails, or is not ok; `worktree ps` fails or is not ok:
+#              each is skipped, no send.
+#   REFUSE   — a bad cli (a path that is not ORCA_CLI_COMMAND included, or a
+#              name not on PATH) or handle, or the wrong argument count: exit 2,
 #              prints `refused`, and the stub is never called.
-#   FAIL     — `terminal send` exits non-zero, or returns no `"ok": true`:
+#   FAIL     — `terminal send` exits non-zero, or returns `"ok"` that is not
+#              the value true:
 #              exit 3, prints `failed`.
 #
 # STATED LIMITS — a green run does not mean:
@@ -68,8 +73,9 @@ for alias in ("orca", "orca-dev"):
 def show(handle=H, tab="tab-1", leaf="leaf-1"):
     return json.dumps({"ok": True, "result": {"terminal": {"handle": handle, "tabId": tab, "leafId": leaf}}})
 
-def ps(*rows):
-    return json.dumps({"ok": True, "result": {"worktrees": [{"agents": list(rows)}]}})
+def ps(*rows, later=()):
+    wts = [{"agents": list(rows)}] + ([{"agents": list(later)}] if later else [])
+    return json.dumps({"ok": True, "result": {"worktrees": wts}})
 
 def row(state, key=KEY, **kw):
     r = {"paneKey": key, "displayName": "target", **kw}
@@ -86,7 +92,7 @@ def miss(msg):
     global failed; failed += 1; print("MISS", msg)
 
 def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
-        send='{"ok": true}', send_rc=0):
+        send='{"ok": true}', send_rc=0, env_extra=None, path=None):
     log = os.path.join(TMP, "log")
     open(log, "w").close()
     env = dict(os.environ, PATH=BIN + os.pathsep + os.environ.get("PATH", ""),
@@ -95,6 +101,9 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
                STUB_SHOW_RC=str(show_rc), STUB_PS_RC=str(ps_rc),
                STUB_SEND=send, STUB_SEND_RC=str(send_rc))
     env.pop("ORCA_CLI_COMMAND", None)
+    env.update(env_extra or {})
+    if path is not None:
+        env["PATH"] = path
     r = subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True, text=True, timeout=60)
     calls = [json.loads(l) for l in open(log) if l.strip()]
     return r.returncode, r.stdout.strip().splitlines(), calls
@@ -123,6 +132,21 @@ check = rc == 0 and out == ["Orca nudge sent to " + H] and s == [SEND_ARGV]
                          "SEND done: rc=%s out=%r sends=%r" % (rc, out, s))
 check = all("--interrupt" not in c for c in calls)
 (ok if check else miss)("SEND never --interrupt" if check else "SEND never --interrupt: %r" % calls)
+look = [c for c in calls if c[:2] != ["terminal", "send"]]
+check = look == [["terminal", "show", "--terminal", H, "--json"], ["worktree", "ps", "--agent-wait", "--json"]]
+(ok if check else miss)("SEND lookup argv" if check else "SEND lookup argv: %r" % look)
+
+def sends_text(name, args, text, **kw):
+    rc, out, calls = run(args, **kw)
+    s = sends(calls)
+    good = rc == 0 and out == ["Orca nudge sent to " + H] and len(s) == 1 and s[0][5] == text
+    (ok if good else miss)(name if good else "%s: rc=%s out=%r sends=%r" % (name, rc, out, s))
+
+sends_text("SEND orca-dev", ["orca-dev", H], TEXT.replace("orca-ide", "orca-dev"))
+sends_text("SEND cli path is ORCA_CLI_COMMAND", [STUB, H], TEXT.replace("orca-ide", STUB),
+           env_extra={"ORCA_CLI_COMMAND": STUB})
+sends_text("SEND row in second worktree", ["orca-ide", H], TEXT,
+           ps_json=ps(row("working", key="tab-7:leaf-7"), later=[row("done")]))
 
 # --- STATE ---
 SK = "Orca nudge skipped: "
@@ -142,6 +166,11 @@ expect("STATE other row done", ["orca-ide", H], 1, SK + "the target is waiting",
 # --- LOOKUP ---
 expect("LOOKUP show names another handle", ["orca-ide", H], 1,
        SK + "terminal show did not describe this handle", show_json=show(handle=OTHER))
+expect("LOOKUP show empty ids", ["orca-ide", H], 1,
+       SK + "terminal show did not describe this handle", show_json=show(tab="", leaf=""),
+       ps_json=ps(row("done", key=":")))
+expect("LOOKUP show not ok", ["orca-ide", H], 1, SK + 'an Orca call did not return "ok": true',
+       show_json=json.dumps({"ok": False, "result": {"terminal": {"handle": H, "tabId": "tab-1", "leafId": "leaf-1"}}}))
 expect("LOOKUP show fails", ["orca-ide", H], 1, SK + "terminal show failed or timed out", show_rc=1)
 expect("LOOKUP ps fails", ["orca-ide", H], 1, SK + "worktree ps failed or timed out", ps_rc=1)
 expect("LOOKUP ps not ok", ["orca-ide", H], 1, SK + 'an Orca call did not return "ok": true',
@@ -154,6 +183,8 @@ for name, args, why in [
         ("REFUSE cli flag", ["-orca-ide", H], "the cli is not a plain command name"),
         ("REFUSE cli shell text", ["orca-ide;id", H], "the cli is not a plain command name"),
         ("REFUSE cli not orca", ["bash", H], "the cli does not name an Orca CLI"),
+        ("REFUSE cli path not ORCA_CLI_COMMAND", [STUB, H], "a cli path must equal ORCA_CLI_COMMAND"),
+        ("REFUSE cli relative path", ["bin/orca-ide", H], "a cli path must be absolute and equal ORCA_CLI_COMMAND"),
         ("REFUSE handle run address", ["orca-ide", "run:abc"], "the handle is not a terminal handle"),
         ("REFUSE handle upper", ["orca-ide", H.upper().replace("TERM_", "term_")], "the handle is not a terminal handle"),
         ("REFUSE handle flag", ["orca-ide", "--interrupt"], "the handle is not a terminal handle"),
@@ -163,12 +194,17 @@ for name, args, why in [
     if os.uname().sysname != "Linux" and name == "REFUSE cli bare orca":
         continue
     expect(name, args, 2, RF + why, called=False)
+# PATH without the stub bin: the name is valid but resolves to nothing.
+expect("REFUSE cli not on PATH", ["orca-dev", H], 2, RF + "orca-dev is not on PATH", called=False,
+       path="/usr/bin:/bin")
 
 # --- FAIL ---
 expect("FAIL send exits", ["orca-ide", H], 3, "Orca nudge failed: terminal send exited non-zero or timed out",
        send_rc=1)
 expect("FAIL send not ok", ["orca-ide", H], 3, 'Orca nudge failed: terminal send did not return "ok": true',
        send='{"ok": false}')
+expect("FAIL send ok truthy", ["orca-ide", H], 3, 'Orca nudge failed: terminal send did not return "ok": true',
+       send='{"ok": "yes"}')
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("-- %d/%d checks passed --" % (passed, passed + failed))
