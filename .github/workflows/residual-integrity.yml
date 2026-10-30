@@ -106,8 +106,8 @@ jobs:
       # Orca detection (autonomy section 12a) decides whether a run routes its
       # hand-offs through Orca. The check runs the shipped block against stub
       # CLIs and the controls mutate it; their headers own the legs and limits.
-      # The controls are the slowest step here (about a minute); the check's
-      # BOUNDS leg is what keeps them inside this job's timeout. Static
+      # The controls are the slowest step here (about two minutes); the
+      # check's BOUNDS and TITLE-BOUNDS legs keep them inside this job's timeout. Static
       # commands, no workflow-context interpolation.
       - name: Check Orca detection
         if: always()

@@ -14,7 +14,8 @@
 #
 # Mutants run four at a time, each against its own copies. Each run of the
 # check takes a few seconds because its hang cases use the shorter test bound
-# (see BOUNDS in the check's header); the whole set takes about a minute. On
+# (see BOUNDS and TITLE-BOUNDS in the check's header); the whole set took
+# about two minutes locally on 2026-10-30. On
 # 2026-10-30 the hang cases waited out the shipped 12 s per mutant, and the
 # controls overran the residual-integrity job's 10-minute bound (run
 # 41072902545).
@@ -62,7 +63,8 @@ MUTANTS = [
     ("no-json-flag", "skill", "status --json </dev/null", "status </dev/null", "status-ok"),
     ("exit-ignored", "skill", '>"$cepa_orca_tmp" 2>/dev/null; then', '>"$cepa_orca_tmp" 2>/dev/null; [ ! -s "$cepa_orca_tmp" ]; then',
      "status-nonzero-exit"),
-    ("truthy-ok", "skill", '.get("ok") is True else', '.get("ok") else', "status-ok-string"),
+    ("truthy-ok", "skill", '.get("ok") is True else 1)\' "$cepa_orca_tmp"', '.get("ok") else 1)\' "$cepa_orca_tmp"',
+     "status-ok-string"),
     ("no-timeout-check", "skill", "elif ! command -v timeout >/dev/null 2>&1; then", "elif false; then",
      "no-timeout-tool"),
     ("no-python-check", "skill", "elif ! command -v python3 >/dev/null 2>&1; then", "elif false; then",
@@ -97,6 +99,50 @@ MUTANTS = [
      'orca-ide status </dev/null >/dev/null 2>&1 || true\nif [ -n "$cepa_orca_why" ]; then\n  echo "ORCA: absent ($cepa_orca_why)"',
      "env-inject"),
     ("prose-drops-ask", "skill", "with Orca's\n   `ask`**", "with Orca's\n   ask**", "section 12 prose names Orca's `ask`"),
+    # 12b rule 6: the tab-title block.
+    ("title-second-block", "skill", "     [ -z \"$cepa_title_tmp\" ] || rm -f \"$cepa_title_tmp\"\n     ```\n",
+     "     [ -z \"$cepa_title_tmp\" ] || rm -f \"$cepa_title_tmp\"\n     ```\n\n     ```bash\n     true\n     ```\n",
+     "TITLE-BLOCK"),
+    ("title-longer-bound", "skill", "timeout -k 0.5 3 <cli> terminal rename", "timeout -k 0.5 30 <cli> terminal rename",
+     "TITLE-BOUNDS"),
+    ("title-unbounded", "skill", "elif ! timeout -k 0.5 3 <cli> terminal rename", "elif ! <cli> terminal rename",
+     "TITLE-BOUNDS"),
+    # Keeps the bounded call and adds an unbounded one, so only the hang case sees it.
+    ("title-second-unbounded-call", "skill", '--json </dev/null >"$cepa_title_tmp" 2>/dev/null; then',
+     '--json </dev/null >"$cepa_title_tmp" 2>/dev/null && <cli> terminal rename </dev/null >/dev/null; then',
+     "title-rename-hangs"),
+    ("title-show-toplevel", "skill", "git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)",
+     "git rev-parse --path-format=absolute --show-toplevel 2>/dev/null)/.git", "title-self-linked-worktree"),
+    ("title-no-git-suffix-check", "skill", "         *) cepa_title_why=\"git rev-parse --git-common-dir gave no",
+     "         *) cepa_title_repo=x; [ -n \"\" ] && cepa_title_why=\"git rev-parse --git-common-dir gave no",
+     "title-not-a-repo"),
+    ("title-split-arg", "skill", '--title "$cepa_title_repo · $cepa_title_name"',
+     '--title $cepa_title_repo · $cepa_title_name', "title-self-linked-worktree"),
+    ("title-ascii-dot", "skill", '--title "$cepa_title_repo · $cepa_title_name"',
+     '--title "$cepa_title_repo - $cepa_title_name"', "title-self-linked-worktree"),
+    ("title-self-ignored", "skill", '  if [ "$cepa_title_term" = self ]; then', "  if false; then",
+     "title-self-linked-worktree"),
+    ("title-no-handle-msg", "skill", '[ -n "$cepa_title_term" ] || cepa_title_why=', 'true || cepa_title_why=',
+     "title-self-no-handle"),
+    ("title-no-handle-charset", "skill", "''|-*|*[!A-Za-z0-9_:.-]*) cepa_title_why=", "''|-*) cepa_title_why=",
+     "title-worker-inject-handle"),
+    ("title-dash-handle", "skill", "''|-*|*[!A-Za-z0-9_:.-]*) cepa_title_why=", "''|*[!A-Za-z0-9_:.-]*) cepa_title_why=",
+     "title-self-dash-handle"),
+    ("title-no-name-charset", "skill",
+     'case "$cepa_title_name" in\n         \'\'|-*|*[!A-Za-z0-9._@-]*) cepa_title_why=',
+     'case "$cepa_title_name" in\n         \'\'|-*) cepa_title_why=', "title-name-inject"),
+    ("title-no-repo-charset", "skill",
+     'case "$cepa_title_repo" in\n         \'\'|-*|*[!A-Za-z0-9._@-]*) cepa_title_why=',
+     'case "$cepa_title_repo" in\n         \'\'|-*) cepa_title_why=', "title-repo-space"),
+    ("title-name-unquoted-heredoc", "skill", "cat <<'CEPA_NAME'", "cat <<CEPA_NAME", "title-name-subst"),
+    ("title-fatal-failure", "skill", '  echo "ORCA title: failed (<cli> terminal rename failed or timed out)"',
+     '  echo "ORCA title: failed (<cli> terminal rename failed or timed out)"; exit 1', "title-rename-fails"),
+    ("title-exit-only", "skill", "\"$cepa_title_tmp\" >/dev/null 2>&1; then\n       echo \"ORCA title: set",
+     "\"$cepa_title_tmp\" >/dev/null 2>&1 || true; then\n       echo \"ORCA title: set", "title-rename-not-ok"),
+    ("prose-drops-title-format", "skill", "as `<repo> · <role>@<wt>`.**", "as repo and name.**",
+     "section 12 prose names `<repo> · <role>@<wt>`"),
+    ("handoff-no-rename-grant", "handoff.md", ", Bash(orca-ide terminal rename:*)", "",
+     "handoff.md grants Bash(orca-ide terminal rename:*)"),
     ("task-no-cite", "task.md", "apply `cepa:autonomy` §12 —", "apply the adapter —",
      "task.md carries the §12 citation sentence"),
     ("lfg-no-rule3", "lfg.md", "autonomy §12b rule 3", "autonomy rule 3", "lfg.md cites §12b rule 3"),
