@@ -806,7 +806,13 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
 L27. **Rule 7 fixes from the L26 probe.**
     status: pending
     severity: P2
-    owner: roles (`tab10@roles`, dispatched via Orca 2026-10-30)
+    owner: roles (`tab10@roles`, then `tab11@roles`, via Orca 2026-10-30)
+    PR #100 (head `f82e2d8`, v1.37.2) passed every pre-merge check, but review
+    finding 3 showed the nudge's Enter can answer an open AskUserQuestion in
+    the recipient (L26 probe B's screen: "Enter to select", Recommended
+    highlighted). Operator chose (AskUserQuestion) "Fix on #100 first":
+    tab11 adds a state-guarded nudge (only a `done` target), the reply-path
+    nudge, and a checked `orca-nudge.sh` with a narrow grant.
     1. First line names the operator: `Needed from you: nothing` means the
        operator, so a decision for a coordinator is `nothing` (probe C wrote
        "the coordinator's answer").
