@@ -16,9 +16,13 @@
 #              `cepa_orca_wait=3 cepa_orca_kill=0.5` (ORCA_CLI_COMMAND path)
 #              then `cepa_orca_wait=10 cepa_orca_kill=2` (every other path),
 #              as literal text. FIXTURES then runs a copy of the block whose
-#              lines say `cepa_orca_wait=0.5 cepa_orca_kill=0.2` and
-#              `cepa_orca_wait=1 cepa_orca_kill=0.3`, so the hang cases wait
-#              about 0.7 s and 1.3 s, not 3.5 s and 12 s. The shorter bounds
+#              lines say `cepa_orca_wait=0.3 cepa_orca_kill=0.1` and
+#              `cepa_orca_wait=2 cepa_orca_kill=0.3`, so the hang cases wait
+#              about 0.4 s and 2.3 s, not 3.5 s and 12 s. The two test bounds
+#              are far apart, and env-stale-hangs must finish under 1.2 s, so
+#              a block that gives the ORCA_CLI_COMMAND path the other path's
+#              bound goes red even when both lines still read as shipped.
+#              A BOUNDS miss stops the run, as a BLOCK miss does. The shorter bounds
 #              live only in this script's private copy: no environment variable
 #              sets it, so no session can shorten or lengthen the shipped
 #              probe by accident. BOUNDS pins the shipped values; FIXTURES
@@ -34,7 +38,7 @@
 #              file when it runs; every Linux case asserts bare `orca` did not
 #              run, and every ORCA_CLI_COMMAND case asserts exactly which stubs
 #              ran (the named CLI when the value is valid, none when not).
-#   CITES    — 12b rule 1 names both do-not-paste first lines;
+#   CITES    — section 12's prose names both do-not-paste first lines;
 #              /cepa:handoff, /cepa:task and /cepa:lfg each carry 12's citation
 #              sentence; task and lfg cite 12b rule 3 and handoff 12b rule 1;
 #              handoff.md (the one of the three that declares allowed-tools)
@@ -75,7 +79,7 @@ TOOLS = ["timeout", "python3", "mktemp", "rm", "sleep", "touch", "cat", "setsid"
 DO_NOT_PASTE = ["`Sent to coord@main via Orca — do not paste.`",
                 "`Sent to coord@<wt> via Orca — do not paste.`"]
 SHIPPED_BOUNDS = [("3", "0.5"), ("10", "2")]
-TEST_BOUNDS = [("0.5", "0.2"), ("1", "0.3")]
+TEST_BOUNDS = [("0.3", "0.1"), ("2", "0.3")]
 STATUS_OK = '{\n  "id": "local-status",\n  "ok": true,\n  "result": {"runtime": {"reachable": true}}\n}'
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-orca-")
@@ -114,11 +118,10 @@ got = [(b.group(2), b.group(3)) for b in bounds]
 if got == SHIPPED_BOUNDS:
     ok("BOUNDS: probe bounds are %s" % got)
 else:
-    miss("BOUNDS: probe bounds are %s, want %s" % (got, SHIPPED_BOUNDS))
-if len(bounds) == 2:
-    for b, (w, k) in reversed(list(zip(bounds, TEST_BOUNDS))):
-        code = code[:b.start()] + "%scepa_orca_wait=%s cepa_orca_kill=%s" % (
-            b.group(1), w, k) + code[b.end():]
+    miss("BOUNDS: probe bounds are %s, want %s" % (got, SHIPPED_BOUNDS)); finish()
+for b, (w, k) in reversed(list(zip(bounds, TEST_BOUNDS))):
+    code = code[:b.start()] + "%scepa_orca_wait=%s cepa_orca_kill=%s" % (
+        b.group(1), w, k) + code[b.end():]
 block = os.path.join(TMP, "block.sh")
 open(block, "w").write(code)
 
@@ -223,9 +226,11 @@ run_case("env-set-probes-ok", "ORCA: present cli=orca-ide via=ORCA_CLI_COMMAND",
 run_case("env-stale-fails", ABSENT_FAIL, stubs=[("orca-ide", answer(STATUS_OK, "exit 3"))],
          env=ENV_IDE, ran=["orca-ide"])
 run_case("env-stale-hangs", ABSENT_FAIL, stubs=[("orca-ide", HANG)], env=ENV_IDE,
-         ran=["orca-ide"], max_took=2.0)
+         ran=["orca-ide"], max_took=1.2)
 run_case("env-stale-not-ok", ABSENT_BAD, stubs=[("orca-ide", answer('{"ok": false}'))],
          env=ENV_IDE, ran=["orca-ide"])
+run_case("env-no-timeout-tool", "ORCA: absent (no timeout command to bound the status probe)",
+         stubs=OK_STUB, env=ENV_IDE, drop=("timeout",))
 run_case("env-abs-path", "ORCA: present cli={STUBS}/orca-ide via=ORCA_CLI_COMMAND".replace(
          "{STUBS}", os.path.join(TMP, "env-abs-path", "stubs")),
          stubs=OK_STUB, env={"ORCA_CLI_COMMAND": "{STUBS}/orca-ide"}, ran=["orca-ide"])

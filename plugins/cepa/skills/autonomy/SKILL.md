@@ -1573,6 +1573,10 @@ fi
   name, so a prefix grant cannot admit all of it. On another CLI name, or
   where the permission layer refuses the block, the run reads as absent and
   behaves as before.
+- **Stated limit.** Every path needs a `timeout` command, the
+  `ORCA_CLI_COMMAND` path included. Stock macOS has none (GNU coreutils
+  installs it as `gtimeout`), so there a live Orca terminal reads
+  `ORCA: absent (no timeout command to bound the status probe)`.
 
 `scripts/check-orca-detection.sh` runs this block against stub CLIs, and
 `scripts/check-orca-detection-controls.sh` mutates it; both run in

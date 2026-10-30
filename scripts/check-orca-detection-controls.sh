@@ -47,6 +47,12 @@ MUTANTS = [
      "  cepa_orca_wait=${CEPA_ORCA_WAIT:-10} cepa_orca_kill=2\n", "BOUNDS"),
     ("env-longer-wait", "skill", "  cepa_orca_wait=3 cepa_orca_kill=0.5\n", "  cepa_orca_wait=5 cepa_orca_kill=0.5\n",
      "BOUNDS"),
+    ("bounds-hoisted", "skill",
+     '  cepa_orca_wait=10 cepa_orca_kill=2\n  if ! command -v "$cepa_orca_cli" >/dev/null 2>&1; then\n'
+     '    cepa_orca_why="$cepa_orca_cli not on PATH"\n  fi\nfi\n',
+     '  if ! command -v "$cepa_orca_cli" >/dev/null 2>&1; then\n'
+     '    cepa_orca_why="$cepa_orca_cli not on PATH"\n  fi\nfi\ncepa_orca_wait=10 cepa_orca_kill=2\n',
+     "env-stale-hangs"),
     ("env-no-kill", "skill", "  cepa_orca_wait=3 cepa_orca_kill=0.5\n  case", "  cepa_orca_wait=3 cepa_orca_kill=0\n  case",
      "BOUNDS"),
     ("pipe-probe", "skill", PROBE,
@@ -85,6 +91,11 @@ MUTANTS = [
      "BLOCK"),
     ("prose-drops-do-not-paste", "skill", "`Sent to coord@main via Orca — do not paste.`",
      "`Sent to coord@main via Orca.`", "section 12 prose names `Sent to coord@main via Orca — do not paste.`"),
+    ("prose-drops-do-not-paste-wt", "skill", "`Sent to coord@<wt> via Orca — do\n   not paste.`",
+     "`Sent to coord@<wt> via Orca.`", "section 12 prose names `Sent to coord@<wt> via Orca — do not paste.`"),
+    ("invalid-env-probes", "skill", 'if [ -n "$cepa_orca_why" ]; then\n  echo "ORCA: absent ($cepa_orca_why)"',
+     'orca-ide status </dev/null >/dev/null 2>&1 || true\nif [ -n "$cepa_orca_why" ]; then\n  echo "ORCA: absent ($cepa_orca_why)"',
+     "env-inject"),
     ("prose-drops-ask", "skill", "with Orca's\n   `ask`**", "with Orca's\n   ask**", "section 12 prose names Orca's `ask`"),
     ("task-no-cite", "task.md", "apply `cepa:autonomy` §12 —", "apply the adapter —",
      "task.md carries the §12 citation sentence"),
@@ -126,6 +137,12 @@ def control(mutant):
     # Returns (passed, message). Each mutant has its own copies, and the check
     # makes its own temp dir, so mutants run side by side.
     name, target, old, new, killer = mutant
+    try:
+        return mutate(name, target, old, new, killer)
+    except Exception as e:  # a crashed control is a MISS, never a lost line
+        return False, "%s: control crashed: %r" % (name, e)
+
+def mutate(name, target, old, new, killer):
     skill, sites = copy_tree(name)
     path = skill if target == "skill" else os.path.join(sites, target)
     text = open(path).read()
@@ -136,17 +153,19 @@ def control(mutant):
     rc, misses = run(skill, sites)
     if rc is None:
         return False, "%s: check still running after 600s" % name
-    hit = [m for m in misses if m.startswith(killer) or m.startswith("CITES: " + killer)]
+    hit = [m for m in misses if m.startswith(killer + ":") or m == "CITES: " + killer]
     if rc != 0 and hit:
         return True, "%s killed by %s" % (name, killer)
     return False, "%s: not killed by %s (rc=%s, MISS lines: %r)" % (name, killer, rc, misses[:2])
 
-# Four at a time: the check's slowest case waits about 1.3 s, and its time
+# Four at a time: the check's slowest case waits about 2.3 s, and its time
 # bounds leave room for a loaded runner.
-with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-    for good, msg in pool.map(control, MUTANTS):
-        (ok if good else miss)(msg)
-shutil.rmtree(TMP, ignore_errors=True)
+try:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        for good, msg in pool.map(control, MUTANTS):
+            (ok if good else miss)(msg)
+finally:
+    shutil.rmtree(TMP, ignore_errors=True)
 print("-- %d/%d controls passed, %d failed --" % (passed, passed + failed, failed))
 sys.exit(1 if failed else 0)
 PY

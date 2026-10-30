@@ -775,7 +775,8 @@ the operator actually pastes into a fresh session. Requirements:
 - **Self-contained.** It must carry every fact the next session needs. No
   "as discussed", no "the file we were editing", no reference to this
   conversation. A reader with only the block and the repo can resume.
-- **Line 1 is the session's name, when it has one** — `You are
+- **Line 1 is the session's name, when it has one** (after an Orca send,
+  line 2: the **Under Orca** rule below puts a do-not-paste line first) — `You are
   <session>@<wt>.`, the name resolved per `cepa:autonomy` §10a — so the next
   session keeps the role this one had. It keeps the same name: one worker
   per checkout, and this session is ending. An unnamed session emits no name
