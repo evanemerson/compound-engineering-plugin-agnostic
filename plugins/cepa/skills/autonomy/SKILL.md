@@ -1689,9 +1689,13 @@ limits.
    - **A title is for humans only.** It is never an address (rule 1): a
      message, a dispatch and a rename all go to a handle.
    - **Run this block,** with `<cli>` the printed `cli=` value, the name
-     between the `CEPA_NAME` lines, and `self` between the `CEPA_TERM` lines
-     for the session's own tab — or the worker's handle for a worker's tab.
-     It prints one `ORCA title:` line, and it never fails the run:
+     between the `CEPA_NAME` lines, and `self` (the session's own tab) or the
+     worker's handle (a worker's tab) in place of `<handle-or-self>`. A
+     placeholder left in place fails the character check, so a coordinator
+     that forgets the worker's handle renames nothing rather than its own tab.
+     It prints one `ORCA title:` line, and it never fails the run. A block
+     that was refused or printed nothing reads as
+     `ORCA title: not attempted (block did not run)`:
 
      ```bash
      cepa_title_name=$(cat <<'CEPA_NAME'
@@ -1699,7 +1703,7 @@ limits.
      CEPA_NAME
      )
      cepa_title_term=$(cat <<'CEPA_TERM'
-     self
+     <handle-or-self>
      CEPA_TERM
      )
      cepa_title_why= cepa_title_repo= cepa_title_tmp=
@@ -1743,10 +1747,15 @@ limits.
      [ -z "$cepa_title_tmp" ] || rm -f "$cepa_title_tmp"
      ```
 
-   - **The names are checked, not trusted.** They are read through quoted
-     heredocs, so no character in them is evaluated, and the title goes to
-     the CLI as one quoted argument. A name, a repo or a handle outside its
-     character set is skipped with the reason, never repaired.
+   - **The names are checked, not trusted.** Each slot takes exactly one
+     line. A name or handle that holds a line break is never substituted:
+     the session reports `ORCA title: skipped (the name or handle is not one
+     line)` and runs nothing, because a line equal to `CEPA_NAME` or
+     `CEPA_TERM` would close its heredoc early. A one-line value is read
+     through a quoted heredoc, so no character in it is evaluated, and the
+     title goes to the CLI as one quoted argument. A name, a repo or a
+     handle outside its character set is skipped with the reason, never
+     repaired.
    - **Failure is not fatal.** A skipped or failed rename prints its line,
      goes in the run's report beside the `ORCA:` line, and the run goes on.
      The rename is bounded at 3 seconds plus a 0.5-second kill, as 12a's
@@ -1756,6 +1765,14 @@ limits.
      assumes the `"ok": true` envelope every other Orca `--json` verb
      returned. No live rename was run to measure it. If a later Orca changes
      either, the rename reads as failed, and the run goes on.
+   - **Stated limit.** §12a's `allowed-tools` limit holds here too: the
+     block is one compound command that starts with `timeout`, so the
+     `orca-ide terminal rename` grant cannot admit all of it. Where the
+     permission layer refuses it, the rename is not attempted.
+   - **Stated limit.** `<repo>` is the parent of the common git directory.
+     Where that directory lives apart from the checkout
+     (`git init --separate-git-dir=<dir>/.git`), the title names `<dir>`'s
+     folder, not the checkout's.
    - **Stated limit.** A shell started from an Orca terminal (tmux, nohup)
      keeps that terminal's `ORCA_TERMINAL_HANDLE`, so it names the tab it was
      started from. That tab is the one the operator sees it in.
