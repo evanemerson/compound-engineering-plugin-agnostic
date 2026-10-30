@@ -735,6 +735,23 @@ L23. **Orca adapter: name each session `<repo> · <role>@<wt>`.**
     the operator's global CLAUDE.md defines it and §10a parses it. A title is
     for humans only; §12b's never-address-by-title rule stands.
 
+
+L24. **Orca adapter rule 7: how a turn ends under Orca.**
+    status: pending
+    severity: P2
+    owner: roles (`tab8@roles`, dispatched via Orca 2026-10-30)
+    Filed 2026-10-30. Plan approved by the operator (AskUserQuestion, "Approve
+    as written"): `docs/plans/2026-10-30-session-endings-under-orca.md` on PR
+    #97 (branch `docs/main/session-endings`, plan only, not merged). Build:
+    cepa `autonomy` §12b rule 7 + the §6 pointer + rule 1 send-scope change +
+    one-line citations in handoff/triage/plan-review/compound/compound-refresh/
+    setup/sweep + a citation checker; plugin 1.37.0. NOT in this item: the
+    global CLAUDE.md edits and the farmtender-laravel/contexthub edits (plan
+    §8) — they follow only after the plan §10 probe test passes here.
+    Operator also chose to LEAVE `.env`/`.env.local` in `.worktreeinclude` in
+    artist360, dpc-insider-www, dpc-pro-www, farmtender-laravel (all env files
+    gitignored, untracked, 0 commits ever — measured 2026-10-30).
+
 ---
 
 ## How this list is used
