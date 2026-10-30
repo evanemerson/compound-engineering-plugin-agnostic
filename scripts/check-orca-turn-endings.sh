@@ -19,13 +19,17 @@
 #   POINTER  — section 6 holds POINTER exactly once.
 #   SCOPE    — 12b rule 1 holds each phrase in SCOPE_HAS (its head and its
 #              send-scope bullets), and no longer holds SCOPE_LACKS.
+#   NUDGE    — 12b rule 1 holds NUDGE_LINE exactly once and each phrase in
+#              NUDGE_HAS (who is nudged, who is not, the fixed text), and
+#              rule 7 holds no copy of the line: rule 7 cites rule 1's nudge.
 #   CITES    — each command in SITES carries CITE exactly once outside fenced
 #              blocks, and that once is inside the heading SITES names: the
 #              step where its run ends.
 #   GRANTS   — each command in SITES declares allowed-tools, unless it is in
 #              NO_ALLOWED_TOOLS (the pipeline-command exception), and grants
-#              each `orca-ide` verb in GRANTS: the set handoff.md grants for
-#              12a and 12b. 12a's allowed-tools stated limit holds for all of
+#              each `orca-ide` verb in GRANTS: the 12a and 12b verbs every
+#              rule 7 site can emit, the rule 1 nudge's `terminal send`
+#              included. 12a's allowed-tools stated limit holds for all of
 #              them.
 #
 # STATED LIMITS — a green run does not mean:
@@ -64,6 +68,11 @@ RULE_PHRASES = [
     "When §12a printed `ORCA: present`, this rule replaces §6's `## Next steps` tail",
     "A command that cites this rule runs §12a's block first",
     "**First line, always:** `Needed from you: nothing`",
+    '"You" is the operator, the human who reads this tab.',
+    "A decision that belongs to a coordinator or to another session is `Needed from you: nothing`",
+    "sends it with `orchestration send --type question` to that coordinator's handle, never `--type status`",
+    "then applies rule 1's nudge.",
+    "`orchestration send` (rule 1's target rules, then its nudge) to any other.",
     "and any repo or global rule that requires one. It does not change §10d, the Handoff block.",
     "It is the first line of the final reply, not of a printed block (rule 1)",
     "**Nobody.**", "Others end with no tail: no numbered options, no `My read`, no `Stop here`.",
@@ -85,8 +94,17 @@ SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
 SCOPE_LACKS = "is printed as before."
+NUDGE_LINE = ('`<cli> terminal send --terminal <target> --text "You have 1 orchestration message. '
+              'Run <cli> orchestration check --peek --json" --enter --json`')
+NUDGE_HAS = ["**Send, then nudge.**",
+             "after a send succeeds to a target that is not a Run coordinator",
+             "A Run coordinator is a target taken from a live Orca preamble, or a `run:` or `dispatch:` address.",
+             "Orca already prompts it, so it gets no nudge.",
+             "The text is fixed: never splice a subject, a body or any message content into it."]
+NUDGE_TEXT = "You have 1 orchestration message."
 GRANTS = ["orca-ide status", "orca-ide skills get",
-          "orca-ide orchestration send", "orca-ide orchestration ask"]
+          "orca-ide orchestration send", "orca-ide orchestration ask",
+          "orca-ide terminal send"]
 passed = failed = 0
 
 def ok(msg):
@@ -135,6 +153,13 @@ r1 = fold(between(b12, "\n1. **Hand-offs", "\n2. **") or "")
 for p in SCOPE_HAS:
     check(p in r1, "SCOPE: rule 1 holds %s" % p)
 check(r1 != "" and SCOPE_LACKS not in r1, "SCOPE: rule 1 no longer holds %s" % SCOPE_LACKS)
+
+# --- NUDGE ---
+check(r1.count(NUDGE_LINE) == 1, "NUDGE: rule 1 holds the nudge line exactly once")
+for p in NUDGE_HAS:
+    check(p in r1, "NUDGE: rule 1 holds %s" % p)
+# A missing rule 7 is RULE's finding, so an empty r7 passes here.
+check(NUDGE_TEXT not in r7, "NUDGE: rule 7 cites the nudge and holds no copy of its text")
 
 # --- CITES and GRANTS ---
 def unfenced(s):
