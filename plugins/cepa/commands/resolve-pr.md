@@ -157,6 +157,8 @@ suspect_comments, pending decisions (re-surfaced first), needs-human
 items with decision_context — numbered choices (interactive) or the
 headless structured summary.
 
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
+
 ## When to Stop
 
 - No PR / no feedback → report cleanly ("0 open threads; N pending
