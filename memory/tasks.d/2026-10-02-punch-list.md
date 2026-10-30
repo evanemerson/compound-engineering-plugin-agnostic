@@ -690,6 +690,21 @@ L22. **§12a reads Orca absent on stock macOS (no `timeout` command).**
     `gtimeout`, or bound the probe in python3. Operator chose to defer it: this
     machine is WSL and no macOS session runs cepa today.
 
+
+L23. **Orca adapter: name each session `<repo> · <role>@<wt>`.**
+    status: pending
+    severity: P3
+    owner: roles (`tab7@roles`, dispatched via Orca 2026-10-30)
+    Filed 2026-10-30 from the operator's instruction: "Name each session
+    <repo> · <role>@<wt>." Scope set by coord@main: the Orca tab title only
+    (`orca-ide terminal rename --terminal <handle> --title <text>`), set when
+    §12a reads Orca present — by each session for its own tab, and by a
+    coordinator for each worker it starts. Today a title is just
+    `coord@main` (dpc-pro's coordinator tab), which cannot tell repos apart.
+    The prompt's line-1 identity (`You are <session>@<wt>.`) does NOT change:
+    the operator's global CLAUDE.md defines it and §10a parses it. A title is
+    for humans only; §12b's never-address-by-title rule stands.
+
 ---
 
 ## How this list is used
