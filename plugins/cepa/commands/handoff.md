@@ -787,7 +787,9 @@ the operator actually pastes into a fresh session. Requirements:
 - **The line after the name line keeps a `Report to:` line** when this
   session's own prompt had one (`cepa:autonomy` §12b rule 2), so the next
   worker reports to the same coordinator. Never write one this session was
-  not given.
+  not given. Like the name line, it lives only in the block, not in the
+  saved file. A coordinator that starts the next worker from this prompt
+  rewrites the line to its own handle (rule 2).
 - **Absolute repo path and exact starting SHA** in the first lines after it.
 - **Same content as the saved file**, not a summary of it — with one
   exception: the name line above lives only in the block. The saved file is

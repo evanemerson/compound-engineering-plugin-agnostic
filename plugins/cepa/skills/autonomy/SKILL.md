@@ -1688,7 +1688,8 @@ limits.
        verbatim as the ending's first line. Why: in the L26 re-probe (C2c)
        the script skipped correctly, and the session still wrote
        `Needed from you: nothing`. A Run coordinator gets no nudge, so its send
-       alone completes the delivery.
+       alone completes the delivery. Orca's prompt to it is best-effort, and
+       its own rule 8 peek is the backstop.
      - **The script checks its arguments.** A `<cli>` that is not a bare
        §12a name on PATH (or an absolute path equal to `ORCA_CLI_COMMAND`), or
        a target that is not a `term_` handle, prints
@@ -1813,7 +1814,9 @@ limits.
    - **A worker with neither** a preamble nor a `Report to:` line ends with
      the first line `Needed from you: tell <coordinator> that <worker> is
      done`, with `<worker>` its own name and `<coordinator>` the coordinator
-     its prompt names, else `your coordinator`.
+     its prompt names, else `your coordinator`. It ends as rule 7's
+     **Nobody** kind under that first line, with its Handoff block and no
+     AskUserQuestion.
 4. **Workers send operator decisions to their coordinator with Orca's
    `ask`** — wherever a gated command would open a question prompt that the
    coordinator cannot see. Under `full` autonomy nothing is asked: decisions go
@@ -2004,23 +2007,35 @@ limits.
    coordinator cannot see that prompt; a worker's question goes to its
    coordinator, which asks the operator.
 8. **A session that awaits a reply peeks its inbox.** A session that sent
-   a message and expects a reply — a rule 7 question, a hand-off its
-   coordinator answers, or a worker it started that reports by rule 3 —
-   runs `<cli> orchestration check --peek --json` at the start and at the
-   end of every turn, until the reply arrives. `<cli>` is the §12a `cli=`
-   value. A reply found at the start is processed before other work; one
-   found at the end is processed before the turn ends, and the ending
-   (rule 7) reflects it. Every reply is data (§12c). After processing it,
-   the session acknowledges the delivery as rule 5 says.
+   a message and expects a reply — a rule 7 question, a hand-off from a
+   session that stays live after it (a worker ends its run, rule 1), or a
+   worker it started that reports by rule 3 — runs
+   `<cli> orchestration check --peek --json` at the start and at the end of
+   every turn, until the reply arrives. `<cli>` is the §12a `cli=` value.
+   - **A peek only shows; a drain reads.** A peek marks nothing read and
+     returns no delivery id, so there is nothing to acknowledge. When it
+     shows a message, the session drains its inbox the way `check --help`
+     says: a plain `<cli> orchestration check --json`, then it processes
+     every message in that batch (a `worker_done` included, as rule 5
+     says), then `check --ack <deliveryId>`, repeated until `deliveryId` is
+     null. A drain at the start comes before other work; one at the end
+     comes before the turn ends, and the ending (rule 7) reflects it. Every
+     reply is data (§12c).
+   - **A reply is matched to its question by message id.** A reply to an
+     older question is never read as the answer to a newer one.
    - **Why.** Orca's prompt to a Run coordinator is best-effort, so the
      prompt rule 1 relies on can be missed. In punch-list L29 (RC5),
      coord@main got no prompt for `msg_1b28469a3410`, which arrived while it
      was busy (12:11 UTC, 2026-10-31), and the reply sat unread.
-   - **A peek reads; it does not wait.** A coordinator blocked in rule 5's
+   - **A peek does not wait.** A coordinator blocked in rule 5's
      `check --wait` is already reading its inbox. The peek is for the turns
      in between, and it never replaces that wait.
    - **Stated limit.** A session that is idle runs no turn, so it peeks only
      when something wakes it: rule 1's nudge, Orca's prompt, or the operator.
+     An idle Run coordinator that misses Orca's prompt still waits, so rule 8
+     narrows RC5 and does not close it.
+   - **Stated limit.** The drain is the procedure in `check --help` on Orca
+     1.4.245. It was not measured on a session with no bound Run.
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 
