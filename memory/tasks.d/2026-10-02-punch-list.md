@@ -1034,6 +1034,41 @@ L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
       youtube, dpc-pro-www (their sessions were told to remove it).
     No env file is or ever was in git in any of these (L24 measurement).
 
+
+L33. **A send that stores nothing is reported "sent", and the nudge still fires.**
+    status: pending
+    severity: P1
+    owner: unassigned (proposed: roles, as tab16@roles)
+    Source: artist360 tab24@merch-builder-v2 (L66), message
+    `msg_6d1566506a61`, 2026-10-31 17:33Z, relaying the operator's request:
+    "put it in the scripts orca nudge SH file in cepa ... have CEPA do deep
+    research on all repos and work so it can get to the root of the problem
+    and plan the best solution so that messages are never missed."
+    Relayed claims (UNVERIFIED here; the worker's own report): 4 sends to a
+    legacy `term_` handle (run_unbound) — 2 stored, 2 (`--type question`,
+    `--type worker_done`) left no inbox row. The worker counted them sent by
+    grepping `"id"`, which matches the response envelope id, not
+    `result.message.id` (`msg_…`). `orca-nudge.sh` printed `Orca nudge sent`
+    after the empty send, so the coordinator woke to nothing new and told the
+    operator no Handoff block had arrived. This is RC6 of L29's class: a
+    worker reports back, but the report is never stored.
+    1. `orca-nudge.sh` (or a sibling `orca-send.sh` it requires): run the
+       send, require `result.message.id` = `msg_…`, re-read the recipient's
+       inbox for that id, and print `Orca send failed: no message stored`
+       with NO nudge when either check fails. Gate it in
+       `check-orca-nudge.sh` + controls.
+    2. Root cause: why did those two sends store nothing? Hypotheses from the
+       relay: `worker_done`/`question` refused for a run_unbound legacy
+       recipient; a WSL `UtilAcceptVsock` error swallowed by a pipe; a
+       rejection in `result.warnings`/`ok` never read. Evidence: the
+       artist360 memory note `feedback_orca_send_verify_message_id.md`
+       (~/.claude/projects, read-only), L26/L29, `orchestration inbox` rows
+       (`delivered_at` null on every row the worker saw). Other repos are
+       read-only: research through Orca's API and ~/.claude, never their
+       checkouts.
+    3. §12b rule 1's "a send counts only when it prints a message id" names
+       the field: `result.message.id`.
+
 ---
 
 ## How this list is used
