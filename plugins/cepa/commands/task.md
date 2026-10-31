@@ -554,7 +554,7 @@ Deliver the report as labeled sections closing with the `## Next steps`
 numbered tail, per the **`cepa:autonomy` skill §6** — same contract the
 lfg terminal report uses. In a worker session the tail is the Handoff block
 instead (`cepa:autonomy` §10d), and the shape below changes only there. Under Orca, also
-`cepa:autonomy` §12b rule 3. The body carries What shipped / Findings /
+`cepa:autonomy` §12b rule 3, and rule 8 while it awaits a reply. The body carries What shipped / Findings /
 Learnings / System updates / Git state; operational instructions
 ("merge the PR with `gh pr merge`") stay in the body and never consume a
 choice number. The tail is 1-indexed, each item a bold action + one-line

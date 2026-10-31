@@ -1,7 +1,7 @@
 ---
 description: Refresh docs/solutions against the current codebase — update drifted learnings, consolidate overlap, prune dead docs, reconcile CONCEPTS.md
 argument-hint: "[scope hint — directory, filename, module, or keyword] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*), Bash(git for-each-ref:*), Bash(git worktree:*), Bash(git rev-list:*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git branch:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git push:*), Bash(git rm:*), Bash(gh pr create:*), Bash(bash:*), Bash(git for-each-ref:*), Bash(git worktree:*), Bash(git rev-list:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)
 ---
 
 # Compound Refresh
@@ -470,6 +470,8 @@ Aggregate the vocabulary signals collected in Phase 1 and reconcile against
    skip.
 
 ## Phase 5: Report and Commit
+
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
 
 **The full report is the deliverable — print it in full, never a one-liner:**
 

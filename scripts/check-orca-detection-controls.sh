@@ -33,7 +33,7 @@ HOME = "plugins/cepa/skills/autonomy/SKILL.md"
 SITES = "plugins/cepa/commands"
 CHECK = "scripts/check-orca-detection.sh"
 TO = 'timeout -k "$cepa_orca_kill" "$cepa_orca_wait" '
-PROBE = 'elif ! ' + TO + '"$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>/dev/null; then'
+PROBE = '  ' + TO + '"$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>"$cepa_orca_err" && return 0'
 # (name, file, old, new, killer) — file is "skill" or a command file name.
 MUTANTS = [
     ("linux-bare", "skill", "    cepa_orca_cli=orca-ide\n", "    cepa_orca_cli=orca\n", "unset-no-cli"),
@@ -57,11 +57,11 @@ MUTANTS = [
     ("env-no-kill", "skill", "  cepa_orca_wait=3 cepa_orca_kill=0.5\n  case", "  cepa_orca_wait=3 cepa_orca_kill=0\n  case",
      "BOUNDS"),
     ("pipe-probe", "skill", PROBE,
-     'elif ! ' + TO + '"$cepa_orca_cli" status --json </dev/null 2>/dev/null | cat >"$cepa_orca_tmp"; then',
+     '  ' + TO + '"$cepa_orca_cli" status --json </dev/null 2>"$cepa_orca_err" | cat >"$cepa_orca_tmp" && return 0',
      "bg-child-holds-stdout"),
     ("no-stdin-redirect", "skill", "status --json </dev/null >", "status --json >", "stdin-reader"),
     ("no-json-flag", "skill", "status --json </dev/null", "status </dev/null", "status-ok"),
-    ("exit-ignored", "skill", '>"$cepa_orca_tmp" 2>/dev/null; then', '>"$cepa_orca_tmp" 2>/dev/null; [ ! -s "$cepa_orca_tmp" ]; then',
+    ("exit-ignored", "skill", '>"$cepa_orca_tmp" 2>"$cepa_orca_err" && return 0', '>"$cepa_orca_tmp" 2>"$cepa_orca_err"; [ -s "$cepa_orca_tmp" ] && return 0',
      "status-nonzero-exit"),
     ("truthy-ok", "skill", '.get("ok") is True else 1)\' "$cepa_orca_tmp"', '.get("ok") else 1)\' "$cepa_orca_tmp"',
      "status-ok-string"),
@@ -89,6 +89,29 @@ MUTANTS = [
     ("env-no-path-check", "skill", 'if [ -z "$cepa_orca_why" ] && ! command -v "$cepa_orca_cli"',
      'if false && ! command -v "$cepa_orca_cli"', "env-not-on-path"),
     ("env-basename-only", "skill", '    case "${cepa_orca_cli##*/}" in', '    case "$cepa_orca_cli" in', "env-abs-path"),
+    # RETRY (L28): once, only on the WSL interop error, inside the bounds.
+    ("retry-none", "skill", "! cepa_orca_probe && ! { cepa_orca_vsock && cepa_orca_probe; }",
+     "! cepa_orca_probe", "retry-vsock-once"),
+    ("retry-any-error", "skill",
+     '  [[ $cepa_orca_e == *UtilAcceptVsock* && $cepa_orca_e == *"accept4 failed 110"* ]]\n', "  true\n",
+     "retry-other-error"),
+    ("retry-vsock-text-only", "skill", ' && $cepa_orca_e == *"accept4 failed 110"*', "",
+     "retry-vsock-text-only"),
+    ("retry-accept-text-only", "skill", "$cepa_orca_e == *UtilAcceptVsock* && ", "", "retry-accept-text-only"),
+    ("retry-twice", "skill", "{ cepa_orca_vsock && cepa_orca_probe; }",
+     "{ cepa_orca_vsock && cepa_orca_probe; } && ! { cepa_orca_vsock && cepa_orca_probe; }",
+     "retry-vsock-twice"),
+    ("retry-unbounded", "skill", "{ cepa_orca_vsock && cepa_orca_probe; }",
+     '{ cepa_orca_vsock && "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>/dev/null; }',
+     "env-retry-vsock-then-hangs"),
+    ("retry-after-timeout", "skill", '  [ "$cepa_orca_rc" != 124 ] && [ "$cepa_orca_rc" != 137 ] || return 1\n', "",
+     "env-retry-not-after-timeout"),
+    ("retry-nul-warning", "skill", '{ cepa_orca_e=$(<"$cepa_orca_err"); } 2>/dev/null', 'cepa_orca_e=$(<"$cepa_orca_err")',
+     "retry-nul-in-stderr"),
+    ("mktemp-err-unchecked", "skill", ' || ! cepa_orca_err=$(mktemp 2>/dev/null); then', '; then cepa_orca_err=$(mktemp 2>/dev/null) || true\nelif false; then',
+     "mktemp-err-file-fails"),
+    ("mktemp-msg", "skill", 'echo "ORCA: absent (mktemp failed)"', 'echo "ORCA: absent (x)"', "mktemp-fails"),
+    ("err-file-not-removed", "skill", '[ -z "$cepa_orca_err" ] || rm -f "$cepa_orca_err"\n', "", "status-ok"),
     ("second-block", "skill", "`ORCA: absent (<what failed>)`:\n", "`ORCA: absent (<what failed>)`:\n\n```bash\ntrue\n```\n",
      "BLOCK"),
     ("prose-drops-do-not-paste", "skill", "`Sent to coord@main via Orca — do not paste.`",

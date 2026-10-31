@@ -469,6 +469,8 @@ awaiting the human (each "awaiting human" item and proposed rule as a
 choice; the human answers it later, not synchronously), ending with a
 "**Stop here**" option. Then `<promise>DONE</promise>`.
 
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
+
 **In headless mode the report is also WRITTEN to
 `todos/sweep-YYYY-MM-DD-HHMMSS.md`** and committed with the final
 write-back — a cron report nobody reads is a no_sink violation in

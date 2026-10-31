@@ -2,7 +2,7 @@
 description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide terminal rename:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(orca-ide terminal rename:*)
 ---
 
 # Session Handoff
@@ -758,6 +758,8 @@ sinks, stripped-content count, git state changes, and the numbered
 `## Next steps` tail — the Handoff block instead in a worker session
 (`cepa:autonomy` §10d).
 
+**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.
+
 **Include the readiness verdict as a body section** — the `Session change:`
 block resolved in Step 5, verbatim, on every run including `GO`. §6 admits
 command-specific body sections ("include each that applies"); this one
@@ -782,6 +784,12 @@ the operator actually pastes into a fresh session. Requirements:
   per checkout, and this session is ending. An unnamed session emits no name
   line; the next session resolves its role from the checkout, as this one
   did. Never invent a name.
+- **The line after the name line keeps a `Report to:` line** when this
+  session's own prompt had one (`cepa:autonomy` §12b rule 2), so the next
+  worker reports to the same coordinator. Never write one this session was
+  not given. Like the name line, it lives only in the block, not in the
+  saved file. A coordinator that starts the next worker from this prompt
+  rewrites the line to its own handle (rule 2).
 - **Absolute repo path and exact starting SHA** in the first lines after it.
 - **Same content as the saved file**, not a summary of it — with one
   exception: the name line above lives only in the block. The saved file is
@@ -804,8 +812,11 @@ the operator actually pastes into a fresh session. Requirements:
   before any work.
 
 **Under Orca**, a worker's prompt follows `cepa:autonomy` §12b rule 1: it is
-sent, and still printed, under that rule's do-not-paste first line. That send
-is the only write this command makes outside its own artifacts.
+sent to its coordinator (rule 1's target rule, which includes a `Report to:`
+line), and still printed, under that rule's do-not-paste
+first line, with rule 1's one-Handoff-block bullet applied. Any other
+session's prompt has no reachable target and is printed. That send is the
+only write this command makes outside its own artifacts.
 
 ### The branch preamble
 

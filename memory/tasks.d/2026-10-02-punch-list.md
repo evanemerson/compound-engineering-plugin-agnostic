@@ -735,6 +735,300 @@ L23. **Orca adapter: name each session `<repo> · <role>@<wt>`.**
     the operator's global CLAUDE.md defines it and §10a parses it. A title is
     for humans only; §12b's never-address-by-title rule stands.
 
+
+L24. **Orca adapter rule 7: how a turn ends under Orca.**
+    status: completed
+    severity: P2
+    owner: roles (`tab8@roles`, dispatched via Orca 2026-10-30)
+    **CLOSED 2026-10-30** — PR #98 (`8ea0a3a`), v1.37.0, merged on the
+    operator's AskUserQuestion answer ("Merge now, follow up"). Pre-merge: CI
+    4/4 green on `518cd80`, turn-endings checker 59/59 + controls 40/40, orca
+    detection 76/76, model pins/anchor counts 0 MISS, 0 co-author trailers.
+    Plugin hops run; freshness rc=0. 7 P3s in
+    `memory/tasks.d/2026-10-30-feat-roles-orca-turn-endings.md`. Follow-ups:
+    L25 (review/resolve-pr citations), L26 (plan §10 probe + rollout).
+    Filed 2026-10-30. Plan approved by the operator (AskUserQuestion, "Approve
+    as written"): `docs/plans/2026-10-30-session-endings-under-orca.md` on PR
+    #97 (branch `docs/main/session-endings`, plan only, not merged). Build:
+    cepa `autonomy` §12b rule 7 + the §6 pointer + rule 1 send-scope change +
+    one-line citations in handoff/triage/plan-review/compound/compound-refresh/
+    setup/sweep + a citation checker; plugin 1.37.0. NOT in this item: the
+    global CLAUDE.md edits and the farmtender-laravel/contexthub edits (plan
+    §8) — they follow only after the plan §10 probe test passes here.
+    Operator first chose (2026-10-30) to leave `.env`/`.env.local` in
+    `.worktreeinclude` in artist360, dpc-insider-www, dpc-pro-www,
+    farmtender-laravel (all env files gitignored, untracked, 0 commits ever).
+    **SUPERSEDED 2026-10-31 by the operator: no `.worktreeinclude` anywhere,
+    and never an env or secret file in one — see L32.**
+
+
+L25. **Cite §12b rule 7 in `review.md` and `resolve-pr.md`.**
+    status: completed
+    **CLOSED 2026-10-30** — PR #99 (`fc741b7`), v1.37.1, on the operator's
+    AskUserQuestion answer. CI 4/4 green on `37f8e85`; turn-endings 65/65 +
+    controls 44/44; 0 co-author trailers; hops run, freshness rc=0. Its 4 P3s
+    (`todos/review-2026-10-30-181500.md`, left `pending`) go to L27: P3 1
+    applied there, P3 2-4 deferred.
+    severity: P3
+    owner: roles (`tab9@roles`, dispatched via Orca 2026-10-30)
+    Residual finding 2 of PR #98: rule 7 does not reach these two commands'
+    interactive endings. Add the one-line citation and extend
+    `scripts/check-orca-turn-endings.sh` to cover them.
+
+L26. **Plan §10 probe test of rule 7, then rollout.**
+    status: completed
+    CLOSED 2026-10-31: the operator merged contexthub PR #98 (verified
+    `gh pr view 98 -R evanemerson/contexthub` → MERGED 14:37:10Z,
+    `8e4fe74`). Both hand-offs (farmtender-laravel #80, contexthub #98) landed.
+    severity: P2
+    owner: coord@main
+    Throwaway Haiku sessions in `.claude/worktrees/integrity` on cepa 1.37.0,
+    one per kind (Nobody / The operator / Delivery to a stub), read from
+    `orca-ide worktree ps --agent-wait --json`; plus a question sent to an
+    IDLE coordinator (PR #98 residual finding 6 — does it stall?). Only after
+    it passes: the global CLAUDE.md edits and the farmtender-laravel /
+    contexthub hand-offs in plan §8.
+    **ROLLOUT 2026-10-31** (operator: "Apply and send"): global
+    `~/.claude/CLAUDE.md` edited with the reviewed 5-part diff (byte-identical
+    to the draft; backup `~/.claude/CLAUDE.md.bak-2026-10-31-rule7`). Hand-offs
+    sent via Orca to each repo's main-checkout terminal: farmtender-laravel
+    `msg_e9542ddacda0` (nudge skipped once on a `worktree ps` timeout, then
+    sent), contexthub `msg_9f46605f4776` (nudged). Waiting on their PR numbers.
+    farmtender-laravel: DONE — PR #80 merged as `79a4311` (verified via
+    `gh api repos/Halyard-Digital/farmtender-laravel/pulls/80`); its reply
+    `msg_1b28469a3410` (12:11 UTC) sat unread in coord@main's inbox (see L29,
+    RC5). contexthub: replied `msg_71145c7f2edc` (12:19 UTC) — PR #98
+    (evanemerson/contexthub, branch `chore/main/claude-md-rule7`, head
+    `8bd2204`, OPEN, MERGEABLE; diff verified: line 947 exactly as sent). Its
+    merge was blocked by the auto-mode permission check, so the OPERATOR
+    merges it. L26 closes when #98 merges.
+    **Probe run 2026-10-30 (17:07-17:10 CDT, cepa 1.37.0, Haiku 4.5,
+    terminal surface; states from `worktree ps --agent-wait`):**
+    - A (Nobody): PASS — `done`; first line `Needed from you: nothing`; no
+      options.
+    - B (The operator): PASS — `waiting`/`AskUserQuestion` → NEEDS YOU; first
+      line `Needed from you: choose a codename…`; 2 options, pick first as
+      "Heron (Recommended)"; no text options.
+    - C (Delivery to a coordinator): PARTIAL — the message reached the stub's
+      mailbox (`msg_4dc0f5a2675b`) and the ending listed `Sent: … (<id>)`, but
+      (1) its first line was `Needed from you: the coordinator's answer…`
+      (should be `nothing`: the decision is the coordinator's), and (2) it sent
+      `--type status`, not a question.
+    - Idle recipient (PR #98 finding 6): CONFIRMED STALL — the stub stayed
+      `done` with the message unread; nothing woke it. Run coordinators get an
+      Orca "You have 1 orchestration message" prompt; a plain session does not.
+    **Operator decisions (AskUserQuestion, 2026-10-30):** wake path = "Send,
+    then nudge"; rollout = "Fix, re-probe, then roll out" → L27, then re-probe
+    C + an idle recipient, then the plan §8 edits.
+    **Re-probe 2026-10-31 00:26-00:37 UTC (cepa 1.37.2, Haiku, terminal):**
+    - C1 → idle stub: PASS — first line `nothing`, `--type question` sent,
+      guarded nudge fired, and the idle stub WOKE and quoted the subject.
+    - C2c → stub with an open AskUserQuestion: script PASS (`Orca nudge
+      skipped: the target is waiting`; the question stayed unanswered), but
+      the session wrote `Needed from you: nothing` instead of the operator
+      line rule 1 requires after a skipped nudge (model miss).
+    - Busy-target path: not exercised live (the busy runs hit the WSL error
+      below); covered by stub tests only.
+    - **New finding:** concurrent `orca-ide` calls from several WSL sessions
+      fail intermittently with `<3>WSL … UtilAcceptVsock:273: accept4 failed
+      110` (WSL→Windows interop timeout). It made §12a read absent (C2, C3b)
+      and a send fail (C2b). cepa fell back safely each time (paste block, no
+      nudge), but the `Needed from you` line was not first in those endings.
+    Proposed follow-up: the nudge script prints the exact first line on a
+    skip, and orca-ide calls retry once on the vsock error.
+
+
+L27. **Rule 7 fixes from the L26 probe.**
+    status: completed
+    **CLOSED 2026-10-30** — PR #100 (`d9fd9b5`), v1.37.2, merged on the
+    operator's "Fix busy-target, then merge" (tab10 → tab11 → tab12). Final
+    gates: CI 4/4 green on `bbe4b32`; turn-endings 124/124 + 89/89; nudge
+    44/44 + 48/48; orca detection 76/76; 0 co-author trailers. Hops run,
+    freshness rc=0.
+    severity: P2
+    owner: roles (`tab10@roles`, then `tab11@roles`, via Orca 2026-10-30)
+    PR #100 (head `f82e2d8`, v1.37.2) passed every pre-merge check, but review
+    finding 3 showed the nudge's Enter can answer an open AskUserQuestion in
+    the recipient (L26 probe B's screen: "Enter to select", Recommended
+    highlighted). Operator chose (AskUserQuestion) "Fix on #100 first":
+    tab11 adds a state-guarded nudge (only a `done` target), the reply-path
+    nudge, and a checked `orca-nudge.sh` with a narrow grant.
+    tab11 delivered (#100 head `2219332`, all gates green). Operator decisions
+    (AskUserQuestion, 2026-10-30): busy target = "Wait briefly, then tell me"
+    (re-check up to 2 min, then an operator line); half-typed draft = "Accept,
+    state it"; merge = "Fix busy-target, then merge" → `tab12@roles` on #100.
+    1. First line names the operator: `Needed from you: nothing` means the
+       operator, so a decision for a coordinator is `nothing` (probe C wrote
+       "the coordinator's answer").
+    2. A coordinator decision is sent with the question message type, not
+       `status` (probe C sent `status`).
+    3. Wake path (operator: "Send, then nudge"): after `orchestration send` to a
+       session that is not a Run coordinator, the sender types one line into the
+       recipient's terminal with `terminal send --enter`: `You have 1
+       orchestration message. Run <cli> orchestration check --peek --json`.
+       Same shape Orca uses for Run coordinators. Grant the verb where a
+       command declares allowed-tools; cover it in the checker.
+    Then coord@main re-runs probe C and an idle-recipient probe (L26).
+
+
+L28. **Rule 7 hardening from the L26 re-probe.**
+    status: completed
+    **CLOSED 2026-10-31** — PR #101 (`f8644f9`), v1.37.3, merged on the
+    operator's explicit AskUserQuestion approval (the auto-mode classifier
+    blocked a merge read from "Small fix, then roll out"). CI 4/4 green on
+    `5986a70`; detection 87/87 + 78/78, turn-endings 127/127 + 92/92, nudge
+    63/63 + 62/62. residual-integrity job 7m05s of a 10 min bound. Hops run,
+    freshness rc=0. Orca is now 1.4.245; re-measured: an open AskUserQuestion
+    still reads `waiting` (NEEDS YOU). 7 deferred findings in
+    `memory/tasks.d/2026-10-31-fix-roles-rule7-hardening.md` (incl. the
+    handle-not-name ending line and a possible duplicate after a send retry).
+    severity: P2
+    owner: roles (`tab13@roles`, dispatched via Orca 2026-10-31)
+    Operator chose (AskUserQuestion) "Small fix, then roll out". (1)
+    `orca-nudge.sh` prints the exact ending first line on a skip
+    (`Needed from you: tell <session> to check its Orca inbox`) so the
+    session copies it (C2c wrote `nothing`). (2) An `orca-ide` call retries
+    once on the WSL interop error `UtilAcceptVsock … accept4 failed 110`
+    (seen in §12a and `orchestration send` under concurrency). Then:
+    operator approves the global CLAUDE.md diff; hand-offs to
+    farmtender-laravel and contexthub (plan §8).
+
+
+L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-31).**
+    status: pending
+    severity: P1
+    owner: coord@main (diagnosis); fix items below
+    Operator report with 8 screenshots: artist360 coord@main sent
+    coord@merch-builder-v2 L65; it started tab23; tab23 finished (PR #830,
+    Handoff `done`) but never reported back, so coord@merch-builder-v2 and
+    coord@main both stalled until the operator relayed it by hand. Same shape
+    for tab17 (PR #828 → coord@feat-u3b-supply-missing-hexes: "paste it here
+    or tell me it is done") and tab1@feat-streaming-tier-fee-columns (PR #835
+    → its coord: "Tell me when tab1 ends"). Measured 2026-10-31 07:30 CDT via
+    `orca-ide worktree ps --agent-wait` (read-only; nothing run in artist360).
+    Root causes, each with its evidence and whether the current fix covers it:
+    - RC1 (NOT covered). A worker started outside an Orca Run (`agent launch`
+      or a pasted prompt) has no channel back: no Dispatch → no `worker_done`,
+      and no coordinator handle → rule 7's delivery has no target. The worker
+      prompts (tab23, tab17, tab1) say "End with the Handoff block… stop", with
+      no send step. The global CLAUDE.md recommended `agent launch` for new
+      workers until 2026-10-31. Fix → L30.
+    - RC2 (covered for new senders, 1.37.2+). An idle recipient is never told
+      a message arrived (L26). Guarded nudge, verified C1.
+    - RC3 (covered for new sessions). Decisions written as text land in DONE
+      (coord@merch-builder-v2 D1/D3, helm, dpc-insider-www, artist360-docs…).
+      Rule 7 + the global CLAUDE.md edit.
+    - RC4 (operational). Long-lived sessions keep the rules they started with:
+      most coordinators are 7-22 h old (cepa ≤1.36, pre-Orca global rules), so
+      none of RC2/RC3's fixes reach them until restarted. farmtender's
+      coordinator replied without a nudge for this reason.
+    - RC5 (NOT covered). Orca's own prompt to a Run coordinator is
+      best-effort: coord@main got no prompt for `msg_1b28469a3410`, which
+      arrived while it was busy (12:11 UTC). Fix → L30: a session that awaits
+      replies peeks its inbox at the start and end of every turn.
+    Relayed for the operator 2026-10-31 (AskUserQuestion "Send both via
+    Orca"): coord@feat-u3b `msg_b01c84b854c5` (tab17 / PR #828, OPEN,
+    MERGEABLE, cf2a7909, CI 2/2) and coord@feat-streaming `msg_24495d0d4d5a`
+    (tab1 / PR #835, OPEN, MERGEABLE, 11765e1e, CI 2/2); both nudged.
+    Result: coord@feat-u3b merged #828 (`e6974d33`, verified MERGED
+    12:40:33Z) and reported `merged #828` to cepa's coord@main
+    (`msg_b80d9f1e0555`), not to artist360's coord@main, because cepa sent
+    the relay. Forwarded to artist360 coord@main (`term_e83d28c6…`) as
+    `msg_a53a0e4dab21`, nudged; told coord@feat-streaming to report #835 to
+    artist360 coord@main (`msg_29702fe9ea54`). Lesson: a relay must name the
+    coordinator the result goes to.
+    Also seen: tab23's input box holds an unsent draft ("1 and 3") — exactly
+    the half-typed-draft risk accepted in L28; a nudge there would submit it.
+
+L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
+    status: pending
+    Items 1-2 DONE 2026-10-31 — PR #102 (`5b71315`), v1.38.0, merged on the
+    operator's AskUserQuestion approval: worker-start default, `Report to:`
+    line 2 for any other worker (the Handoff block is sent, never only
+    printed), rule 8 inbox peek. Gates: turn-endings 177/177 + 141/141,
+    detection 87/87, nudge 63/63, CI green; hops run, freshness rc=0. Global
+    `~/.claude/CLAUDE.md` updated with #102's PR-body text, word for word
+    (backup `~/.claude/CLAUDE.md.bak-2026-10-31-l30`). 5 P3s in
+    `memory/tasks.d/2026-10-31-fix-roles-worker-report-channel.md`.
+    Item 3 OPEN, owner: the OPERATOR (said 2026-10-31 "i will do this"). The
+    operator restarts long-lived coordinators so they load
+    cepa 1.38.0 and the new global rules. Measured 2026-10-31 via
+    `orca-ide worktree ps --agent-wait` (pane keys): artist360 coord@main
+    `c633d177` (after the #828 deploy), coord@merch-builder-v2 `cbaf5131`
+    (after #830 merges), coord@feat-streaming `69b69991` (close after
+    `merged #835`); contexthub coord@main `5c0a0d22` (after #98 merges);
+    farmtender-laravel coord@main `285e566c` (now, or close);
+    dpc-insider-www coord@main `297bb8ba` (next use); compound-engineering
+    coord@main (this one, started on cepa 1.34.0) at its session end. Close:
+    dpc-pro old coord `01982ec7` (a new coord@main `33f48d50` runs). How: in
+    the tab, `/cepa:handoff` (operator-only) → end the session → new Claude
+    tab in the same worktree with the emitted prompt.
+    severity: P1
+    owner: roles (`tab14@roles`, dispatched via Orca 2026-10-31 on the
+    operator's AskUserQuestion "Yes, dispatch a worker"; cepa 1.38.0)
+    1. A coordinator dispatches workers with `worker-start` on a Run (rule 2)
+       by default, so `worker_done` and `ask` reach it. When it must use
+       `agent launch` or a pasted prompt, line 2 of the worker prompt is
+       `Report to: <coordinator's ORCA_TERMINAL_HANDLE>`; rule 7 treats that
+       as an operator-given target, so the worker sends its Handoff block
+       there and nudges.
+    2. A session that has sent a message expecting a reply peeks its inbox
+       (`check --peek`) at the start and end of every turn until the reply
+       arrives, because Orca's prompt is best-effort.
+    3. Restart long-lived coordinators after the current merges (RC4).
+
+
+L31. **`residual-integrity` CI job is close to its 10-minute bound.**
+    status: pending
+    severity: P2
+    owner: roles (`tab15@roles`, dispatched 2026-10-31 via Orca `worker-start`
+    on Run `run_bf28fea0ea31`, task `task_f63bbbbc6b01`, dispatch
+    `ctx_813384df2daa`; operator's AskUserQuestion "L31 via tab15@roles")
+    Measured 2026-10-31: the last 5 runs on `main` took 7m42s-8m58s
+    (`gh run list --branch main --workflow residual-integrity.yml`); PR #102's
+    run took 8m59s. Today's Orca checkers (detection, turn-endings, nudge and
+    their controls) added most of it. Split the job (precedent: L11 split the
+    mutation sweep into shards) before the next leg tips it over; a cancelled
+    job reads as a red check on every PR.
+
+
+L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
+    status: completed
+    CLOSED 2026-10-31. artist360 replied `msg_372b25c87bca` (Run
+    `run_bf28fea0ea31`): PR #840 MERGED (`709d5b5`) into `dev`. Verified via
+    `gh api repos/evanemerson/artist-360/contents/.worktreeinclude?ref=dev`
+    → 404. Still present on artist360 `main` (its default branch) until that
+    repo's normal `dev`→`main` ship; nothing more is owed from cepa.
+    severity: P2
+    owner: coord@main (this repo); each repo's coord@main (hand-offs)
+    Operator: "i do not want to use .worktreeinclude and do not want to
+    include .env/.env.local in .worktreeinclude." Rule added to the global
+    `~/.claude/CLAUDE.md` (Orca section, "Never use `.worktreeinclude`";
+    backup `~/.claude/CLAUDE.md.bak-2026-10-31-worktreeinclude`).
+    Measured 2026-10-31 (main checkouts, `cat <repo>/.worktreeinclude`):
+    - compound-engineering: `cepa.local.md` → DONE, PR #103 merged
+      (`7cc5027`, CI 4/4 green).
+    Hand-offs sent 2026-10-31 via Orca (operator: "Send all five"), each with
+    `Report to: term_8e8ae1c2…` (cepa coord@main) — waiting on replies:
+    - farmtender-laravel PR #79 — DONE on the branch: `.worktreeinclude`
+      removed (`dd48f88`); verified 0 such files in the PR, none on the
+      default branch. #79 stays OPEN for the operator's merge (its original
+      instruction was do-not-merge). Reply `msg_32a05902e22e`.
+    - artist360 (`.env`, `.env.local`; after its deploy work) —
+      `msg_e48462d6c133`, NOT nudged: `worktree ps` hit the WSL vsock error
+      twice → operator tells it to check its inbox.
+    - dpc-insider-www — DONE: PR #458 merged (`4cf4cf6`), file deleted;
+      verified absent on the default branch. Reply `msg_fa62fad215be`.
+    - artist360-docs — DONE: PR #5 merged (`4510c05`), file deleted;
+      verified absent. Reply `msg_47b9e080e72d`.
+    - kcprimetime — DONE on the branch: PR #30 (head `995468b`) no longer
+      adds it; it was never on the default branch (verified 404). #30 stays
+      OPEN for the operator's merge. Reply `msg_814ed9df7473`.
+    Remaining: none (artist360 closed above).
+    - Already gone from main checkouts: ci-ops-self-hosted, hillberry-app,
+      youtube, dpc-pro-www (their sessions were told to remove it).
+    No env file is or ever was in git in any of these (L24 measurement).
+
 ---
 
 ## How this list is used
