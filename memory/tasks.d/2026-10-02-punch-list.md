@@ -1092,7 +1092,7 @@ L33. **A send that stores nothing is reported "sent", and the nudge still fires.
 L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisible.**
     status: pending
     severity: P1
-    owner: unassigned
+    owner: unassigned (waits for L35's audit table)
     Operator, 2026-10-31: "when [orca-send.sh] prints Orca send failed: no
     message stored what reads that? how do i know a session is hung? i need
     to know to check it so i can fix it."
@@ -1112,7 +1112,9 @@ L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisibl
 L35. **Root-cause hardening: can this class of silent loss happen anywhere else?**
     status: pending
     severity: P1
-    owner: unassigned
+    owner: roles (`tab17@roles`, dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "L35 + L36 now": Run `run_bf28fea0ea31`,
+      task `task_a696894b9fb4`, dispatch `ctx_b1afb520c506`, claude-opus-5-5)
     Operator, 2026-10-31: "is there anything else we need to research or do
     to ensure the root cause doesn't cause this again or cause another type
     of error like this?"
@@ -1128,9 +1130,28 @@ L35. **Root-cause hardening: can this class of silent loss happen anywhere else?
     residuals.
 
 L36. **Triage L33's open residuals and recommend fixes.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — tab1@integrity ran `/cepa:triage` (batch): all 7
+    deferred findings are `action_class: judgment`, so none auto-applied; no
+    PR (branch created with 0 commits, deleted; worktree parked at f97f6f0 —
+    verified). Operator accepted every recommendation (AskUserQuestion
+    "Accept all"):
+    - #19, #20, #21, #24 → folded into L35; sent to tab17@roles as
+      `msg_67bd4cb9c080` (via `orca-send.sh`, stored in dispatch
+      `ctx_b1afb520c506`'s mailbox).
+    - #22 (send-branch gate cases) → after L35 merges, on the final
+      `orca-send.sh`. Owner: whoever closes L35 dispatches it.
+    - #18 (byte cap vs WSL escaping) → won't fix: it fails loudly (exit 5,
+      `Orca send failed`), no silent loss.
+    - #23 (raw `orchestration send` grant) → won't fix until L35's checked
+      `worker_done` wrapper exists; reopen then.
+    #18 and #23 stay `status: deferred` in `todos/review-2026-10-31-184500.md`
+    with this entry as the decision record (a human-triage `skipped` would
+    remove them from the file; the evidence is worth keeping).
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab1@integrity`, dispatched via Orca 2026-10-31 on the
+      same answer: task `task_cae146baf33d`, dispatch `ctx_6e30ef942095`;
+      P3s only, the 2 P2s go to L35)
     Operator, 2026-10-31: "we need to run a /cepa:triage on the work still
     open. make recommendations on what to fix."
     Scope: `todos/review-2026-10-31-184500.md` (7 findings `status:
@@ -1139,6 +1160,37 @@ L36. **Triage L33's open residuals and recommend fixes.**
     Run `/cepa:triage`, apply safe verified fixes, and report a
     recommendation for each remaining item. Overlaps L35 on the 2 P2s:
     whichever runs first owns them.
+
+L37. **Session names: rule 6 does not stick, and the naming scheme itself is in question.**
+    status: pending
+    severity: P1
+    owner: integrity (`tab2@integrity`, task `task_6c1cc3b554b2`, dispatch
+      `ctx_356b8089190f`; dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "file and dispatch")
+    Measured 2026-10-31 by coord@main: `orca-ide terminal rename --terminal
+    $ORCA_TERMINAL_HANDLE --title "compound-engineering · coord@main"`
+    returned `"ok": true`, but `terminal show` still reported the title
+    Claude Code set itself ("Coord@main L31 punch-list handoff").
+    `worker-start --display-name "tab16@roles L33 send verify"` did not show
+    either: `terminal list` showed "Orca send loss audit L35"-style Claude
+    titles. Coordinators (this one included) also skipped rule 6's rename.
+    Operator, 2026-10-31: "research the best names for these. with orca,
+    maybe claude code's own name is better so i can see what's going on. i
+    don't have to do the old copy/paste orchestration with orca, so this is
+    an adjustment."
+    1. Measure which name each Orca surface shows (tab strip, Agent
+       Dashboard card, `terminal list` title, worktree sidebar) and which
+       setting drives each (`terminal rename`, `worker-start
+       --display-name`, Claude Code's own session title / `/rename`, OSC
+       title escapes).
+    2. Recommend a scheme. The operator must be able to tell at a glance:
+       repo, worktree, role (coordinator or worker), and what it is doing.
+       Weigh: Claude's own topic title; `<repo> · <role>@<wt>`; a mix (e.g.
+       role@wt in one surface, topic in another); and whether `tabN`
+       numbering still earns its keep now that prompts are not pasted.
+    3. Implement the chosen scheme in rule 6 (and the global
+       `~/.claude/CLAUDE.md` naming text, as a proposed diff in the PR body —
+       the operator's file), with a gate if one fits.
 
 ---
 
