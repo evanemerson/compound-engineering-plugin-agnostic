@@ -987,7 +987,12 @@ L31. **`residual-integrity` CI job is close to its 10-minute bound.**
 
 
 L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31. artist360 replied `msg_372b25c87bca` (Run
+    `run_bf28fea0ea31`): PR #840 MERGED (`709d5b5`) into `dev`. Verified via
+    `gh api repos/evanemerson/artist-360/contents/.worktreeinclude?ref=dev`
+    → 404. Still present on artist360 `main` (its default branch) until that
+    repo's normal `dev`→`main` ship; nothing more is owed from cepa.
     severity: P2
     owner: coord@main (this repo); each repo's coord@main (hand-offs)
     Operator: "i do not want to use .worktreeinclude and do not want to
@@ -1013,7 +1018,7 @@ L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
     - kcprimetime — DONE on the branch: PR #30 (head `995468b`) no longer
       adds it; it was never on the default branch (verified 404). #30 stays
       OPEN for the operator's merge. Reply `msg_814ed9df7473`.
-    Remaining: artist360 only.
+    Remaining: none (artist360 closed above).
     - Already gone from main checkouts: ci-ops-self-hosted, hillberry-app,
       youtube, dpc-pro-www (their sessions were told to remove it).
     No env file is or ever was in git in any of these (L24 measurement).
