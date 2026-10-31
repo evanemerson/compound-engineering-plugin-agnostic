@@ -1164,7 +1164,8 @@ L36. **Triage L33's open residuals and recommend fixes.**
 L37. **Session names: rule 6 does not stick, and the naming scheme itself is in question.**
     status: pending
     severity: P1
-    owner: integrity (`tab2@integrity`, dispatched via Orca 2026-10-31 on the
+    owner: integrity (`tab2@integrity`, task `task_6c1cc3b554b2`, dispatch
+      `ctx_356b8089190f`; dispatched via Orca 2026-10-31 on the
       operator's AskUserQuestion "file and dispatch")
     Measured 2026-10-31 by coord@main: `orca-ide terminal rename --terminal
     $ORCA_TERMINAL_HANDLE --title "compound-engineering · coord@main"`
