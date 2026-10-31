@@ -977,7 +977,9 @@ L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
 L31. **`residual-integrity` CI job is close to its 10-minute bound.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: roles (`tab15@roles`, dispatched 2026-10-31 via Orca `worker-start`
+    on Run `run_bf28fea0ea31`, task `task_f63bbbbc6b01`, dispatch
+    `ctx_813384df2daa`; operator's AskUserQuestion "L31 via tab15@roles")
     Measured 2026-10-31: the last 5 runs on `main` took 7m42s-8m58s
     (`gh run list --branch main --workflow residual-integrity.yml`); PR #102's
     run took 8m59s. Today's Orca checkers (detection, turn-endings, nudge and
