@@ -918,13 +918,18 @@ L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-3
       best-effort: coord@main got no prompt for `msg_1b28469a3410`, which
       arrived while it was busy (12:11 UTC). Fix → L30: a session that awaits
       replies peeks its inbox at the start and end of every turn.
+    Relayed for the operator 2026-10-31 (AskUserQuestion "Send both via
+    Orca"): coord@feat-u3b `msg_b01c84b854c5` (tab17 / PR #828, OPEN,
+    MERGEABLE, cf2a7909, CI 2/2) and coord@feat-streaming `msg_24495d0d4d5a`
+    (tab1 / PR #835, OPEN, MERGEABLE, 11765e1e, CI 2/2); both nudged.
     Also seen: tab23's input box holds an unsent draft ("1 and 3") — exactly
     the half-typed-draft risk accepted in L28; a nudge there would submit it.
 
 L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
     status: pending
     severity: P1
-    owner: unassigned (proposal; needs the operator's go)
+    owner: roles (`tab14@roles`, dispatched via Orca 2026-10-31 on the
+    operator's AskUserQuestion "Yes, dispatch a worker"; cepa 1.38.0)
     1. A coordinator dispatches workers with `worker-start` on a Run (rule 2)
        by default, so `worker_done` and `ask` reach it. When it must use
        `agent launch` or a pasted prompt, line 2 of the worker prompt is
