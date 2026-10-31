@@ -946,7 +946,17 @@ L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
     (backup `~/.claude/CLAUDE.md.bak-2026-10-31-l30`). 5 P3s in
     `memory/tasks.d/2026-10-31-fix-roles-worker-report-channel.md`.
     Item 3 OPEN: the operator restarts long-lived coordinators so they load
-    cepa 1.38.0 and the new global rules.
+    cepa 1.38.0 and the new global rules. Measured 2026-10-31 via
+    `orca-ide worktree ps --agent-wait` (pane keys): artist360 coord@main
+    `c633d177` (after the #828 deploy), coord@merch-builder-v2 `cbaf5131`
+    (after #830 merges), coord@feat-streaming `69b69991` (close after
+    `merged #835`); contexthub coord@main `5c0a0d22` (after #98 merges);
+    farmtender-laravel coord@main `285e566c` (now, or close);
+    dpc-insider-www coord@main `297bb8ba` (next use); compound-engineering
+    coord@main (this one, started on cepa 1.34.0) at its session end. Close:
+    dpc-pro old coord `01982ec7` (a new coord@main `33f48d50` runs). How: in
+    the tab, `/cepa:handoff` (operator-only) → end the session → new Claude
+    tab in the same worktree with the emitted prompt.
     severity: P1
     owner: roles (`tab14@roles`, dispatched via Orca 2026-10-31 on the
     operator's AskUserQuestion "Yes, dispatch a worker"; cepa 1.38.0)
