@@ -78,6 +78,11 @@
 #              handoff.md (the one of the three that declares allowed-tools)
 #              grants each `orca-ide` verb in GRANTS, and 12's prose outside the
 #              block names each verb.
+#   TITLE-SURFACES — 12b rule 6 says both SURFACE_PINS (never set Claude
+#              Code's own name; never check a rename with `terminal show`), and
+#              no line of the skill file outside rule 6, nor of any command
+#              file, matches SET_NAME (`/rename`, or `claude … --name`/`-n`).
+#              Limit: it reads only those files, and only those two spellings.
 #
 # The controls mutate the block, the skill file and the command files one
 # substitution at a time, and require the named case of this script to go red.
@@ -93,8 +98,9 @@
 #   - an agent follows 12b. This tests detection and the citations, not the
 #     model that reads them.
 #   - the real `terminal rename` answers as the stub does. Its flags come
-#     from `--help` on Orca 1.4.244; no live rename was run (the worker brief
-#     that built TITLE forbade renaming a real tab).
+#     from `--help` on Orca 1.4.244. One live rename on probe tabs (Orca
+#     1.4.245, punch-list L37) returned `"ok": true` and changed the tab
+#     strip; no CI run can repeat that.
 #   - non-Linux hosts are covered by more than stubbed `uname` cases. The
 #     `timeout` here is GNU coreutils; a host with none reads as absent.
 set -u
@@ -114,6 +120,9 @@ GRANTS = {"orca-ide status": "`status`",
           "orca-ide orchestration ask": "Orca's `ask`",
           "orca-ide terminal rename": "`terminal rename --help`"}
 TITLE_FORMAT = "`<repo> · <role>@<wt>`"
+SURFACE_PINS = ["**Never set Claude Code's own name.**",
+                "**Never check a rename with `terminal show` or `terminal list`.**"]
+SET_NAME = re.compile(r"(?<![\w./-])/rename\b|\bclaude\b[^\n]*?\s(?:-n|--name)(?=[\s=`]|$)", re.I)
 TOOLS = ["timeout", "python3", "mktemp", "rm", "sleep", "touch", "cat", "setsid"]
 DO_NOT_PASTE = ["`Sent to coord@main via Orca — do not paste.`",
                 "`Sent to coord@<wt> via Orca — do not paste.`"]
@@ -524,5 +533,28 @@ tools = tl.group(1) if tl else ""
 for g, named in GRANTS.items():
     (ok if "Bash(%s:*)" % g in tools else miss)("CITES: handoff.md grants Bash(%s:*)" % g)
     (ok if named in prose else miss)("CITES: section 12 prose names %s" % named)
+
+# --- TITLE-SURFACES ---
+# Rule 6 forbids setting Claude Code's own name (it would replace the
+# activity topic on the Agent Dashboard card) and checking a rename through
+# `terminal show`. Rule 6 must say both, and no other text in the skill file or
+# a command file may tell a session to run `/rename` or `claude --name`/`-n`.
+rule6 = re.search(r"^6\. \*\*Each tab carries.*?(?=^7\. \*\*)", text, re.M | re.S)
+if not rule6:
+    miss("TITLE-SURFACES: no rule 6 item in section 12b")
+r6 = flat(rule6.group(0)) if rule6 else ""
+for pin in SURFACE_PINS:
+    (ok if pin in r6 else miss)("TITLE-SURFACES: rule 6 says %s" % pin)
+outside = {HOME: text.replace(rule6.group(0), "") if rule6 else text}
+for n in sorted(os.listdir(SITES_DIR)):
+    if n.endswith(".md"):
+        outside[os.path.join(SITES_DIR, n)] = open(os.path.join(SITES_DIR, n)).read()
+for p, body in outside.items():
+    for i, line in enumerate(body.splitlines(), 1):
+        if SET_NAME.search(line):
+            miss("TITLE-SURFACES: %s line %d sets Claude Code's own name: %s" % (p, i, line.strip()[:100]))
+            break
+    else:
+        ok("TITLE-SURFACES: %s never sets Claude Code's own name" % p)
 finish()
 PY
