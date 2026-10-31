@@ -120,7 +120,7 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "When the row says `working`, the script re-reads it for up to 2 minutes, a bound fixed in the script.",
              "It nudges if the row turns `done`.",
              "Still `working` at the bound, or `waiting`, `blocked`, an unknown state or no row from the start (no wait on those), it exits 1 and prints `Orca nudge skipped: <reason>`",
-             "Run the block with a tool timeout of at least 3 minutes.",
+             "Run the block with a tool timeout of at least 4 minutes.",
              "**Only a sent nudge completes the delivery.**",
              "ends its run right after the send, its nudge (above) and the printed copy.",
              "the message stays unread and the delivery is not done.",
@@ -132,7 +132,13 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "`Orca nudge refused: <reason>`", "It never passes `--interrupt`.",
              "**Never type the line with `terminal send` yourself.**",
              "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands: the message stays in the target's inbox, and only a sent nudge completes the delivery.",
-             "A skipped, refused or failed nudge is never retried, and never replaced by a typed `terminal send`."]
+             "A skipped, refused or failed nudge is never retried by the session, and never replaced by a typed `terminal send`.",
+             # L28: the script prints the ending's first line; the session copies it.
+             "Copy the text after `Ending first line: ` verbatim as the ending's first line",
+             # L28: one retry of a send, only on the WSL interop error.
+             "retry that send once, with the same command, before reporting `Orca send failed`",
+             # L28: the paste block never comes before the first line.
+             "the printed block comes AFTER the ending's `Needed from you: …` first line"]
 NUDGE_TEXT = "`You have 1 orchestration message. Run <cli> orchestration check --peek --json`"
 NUDGE_HEAD = "You have 1 orchestration message."
 NUDGE_RAW = "terminal send --terminal"

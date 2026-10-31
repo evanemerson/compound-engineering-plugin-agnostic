@@ -1,0 +1,10 @@
+# Residuals — fix/roles/rule7-hardening (PR #101, L28)
+
+## 2026-10-31 — /cepa:review deferred findings (todos/review-2026-10-31-120000.md)
+- P2 — orchestration send retry can deliver a hand-off twice (nonce + dedup) — plugins/cepa/skills/autonomy/SKILL.md §12b rule 1 (finding 8)
+- P3 — Ending line names a terminal handle, not a session name — plugins/cepa/scripts/orca-nudge.sh cepa_nudge_ending (finding 9)
+- P2 — a script killed by a tool timeout prints no Ending line; block could print it — SKILL.md §12b rule 1 nudge block (finding 10)
+- P3 — failed-retry reason does not say a retry ran — orca-nudge.sh cepa_nudge_orca (finding 11)
+- P3 — interrupted §12a leaks temp files; nudge EXIT trap unpinned — SKILL.md §12a (finding 12)
+- P3 — echoed body could match the send-retry texts — SKILL.md §12b rule 1 (finding 13)
+- P3 — mid-wait worktree ps vsock not exercised — scripts/check-orca-nudge.sh RETRY (finding 14)
