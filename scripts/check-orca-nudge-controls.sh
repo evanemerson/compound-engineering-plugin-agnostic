@@ -8,7 +8,8 @@
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped script changed shape and these mutants need re-reading.
 #
-# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF) has at least one
+# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF,
+# ALERT, HEALTH, HEALTHREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel.
 #
@@ -168,7 +169,7 @@ SEND_MUTANTS = [
     ('send-ok-truthy', 'if d.get("ok") is not True:', 'if not d.get("ok"):',
      {'STORE ok truthy'}),
     ('send-ok-unchecked', 'if d.get("ok") is not True:', 'if False:',
-     {'REPLY ok false', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok truthy', 'WDONE ok false'}),
+     {'ALERT failed send writes one file', 'ALERT worker_done failure names its dispatch', 'REPLY ok false', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok truthy', 'WDONE ok false'}),
     ('send-rc-unchecked', '    if rc != 0:\n', '    if False:\n',
      {'STORE ok reply with a non-zero exit'}),
     ('send-no-reread', '  1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;', '  1) ;;',
@@ -181,8 +182,8 @@ SEND_MUTANTS = [
      {'STORE id in the inbox for another recipient'}),
     ('send-inbox-fail-ignored', '|| fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"', '|| true',
      {'STORE inbox fails'}),
-    ('send-fail-continues', 'no message stored — $1"; cepa_send_ending; exit 5; }', 'no message stored — $1"; cepa_send_ending; }',
-     {'REPLY ok false', 'STORE JSON list', 'STORE bad message id', 'STORE empty stdout', 'STORE envelope id without result.message', 'STORE envelope uuid as message id', 'STORE id in the inbox for another recipient', 'STORE id missing from the inbox', 'STORE inbox fails', 'STORE inbox not JSON', 'STORE inbox not ok', 'STORE inbox wrong shape', 'STORE not JSON', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok reply with a non-zero exit', 'STORE ok truthy', 'STORE send timeout not retried', 'STORE send vsock twice', 'STORE warning-only result', 'WDONE empty stdout', 'WDONE ok false'}),
+    ('send-fail-continues', 'cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }', 'cepa_send_alert send_failed "$1"; cepa_send_ending; }',
+     {'ALERT failed send writes one file', 'ALERT relative directory is not used', 'ALERT unmakeable directory is reported', 'ALERT worker_done failure names its dispatch', 'REPLY ok false', 'STORE JSON list', 'STORE bad message id', 'STORE empty stdout', 'STORE envelope id without result.message', 'STORE envelope uuid as message id', 'STORE id in the inbox for another recipient', 'STORE id missing from the inbox', 'STORE inbox fails', 'STORE inbox not JSON', 'STORE inbox not ok', 'STORE inbox wrong shape', 'STORE not JSON', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok reply with a non-zero exit', 'STORE ok truthy', 'STORE send timeout not retried', 'STORE send vsock twice', 'STORE warning-only result', 'WDONE empty stdout', 'WDONE ok false'}),
     ('send-no-size-cap', '-le 28000 ]', '-le 99999999 ]',
      {'SENDREF cap counts bytes', 'SENDREF over the size cap'}),
     ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
@@ -212,7 +213,7 @@ SEND_MUTANTS = [
     ('reply-handle-unvalidated', 'if not re.fullmatch(r"term_[0-9a-f-]{36}", me):', 'if False:',
      {'REPLY handle not a term_ handle is ignored'}),
     ('unproven-says-nothing-stored', 'unproven "${cepa_send_got#UNPROVEN }"', 'fail "${cepa_send_got#UNPROVEN }"',
-     {'STORE bad recipient', 'REPLY not threaded on the question', 'REPLY names no recipient', 'WDONE no lifecycle', 'WDONE wrong action', 'WDONE other dispatch', 'WDONE other task'}),
+     {'ALERT unproven send writes one file', 'STORE bad recipient', 'REPLY not threaded on the question', 'REPLY names no recipient', 'WDONE no lifecycle', 'WDONE wrong action', 'WDONE other dispatch', 'WDONE other task'}),
     # worker_done mode (punch-list L35)
     ('wd-target-loose', '    [[ $cepa_send_target =~ ^dispatch:ctx_[0-9a-f]{6,32}$ ]] || refuse', '    true || refuse',
      {'WDREF target not a dispatch'}),
@@ -242,6 +243,61 @@ SEND_MUTANTS = [
      {'SENDREF target newline'}),
     ('send-empty-body-ok', '[ -n "${cepa_send_body//[[:space:]]/}" ] || refuse "the body is empty"\n', '',
      {'REPLYREF empty body', 'SENDREF empty body'}),
+    # ALERT (punch-list L34): exit 4 and 5 each write one checked alert file.
+    ('alert-not-on-fail', 'cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }', 'cepa_send_ending; exit 5; }',
+     {'ALERT failed send writes one file', 'ALERT relative directory is not used', 'ALERT unmakeable directory is reported', 'ALERT worker_done failure names its dispatch'}),
+    ('alert-not-on-refuse', 'cepa_send_alert send_refused "$1"; cepa_send_ending; exit 4; }', 'cepa_send_ending; exit 4; }',
+     {'ALERT refused send writes one file', 'ALERT unchecked values are replaced'}),
+    ('alert-not-on-unproven', 'cepa_send_alert send_unproven "$1"; cepa_send_ending; exit 5; }', 'cepa_send_ending; exit 5; }',
+     {'ALERT unproven send writes one file'}),
+    ('alert-sender-unchecked', '[[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown', 'true || me=unknown',
+     {'ALERT unchecked values are replaced'}),
+    ('alert-target-unchecked', ']] || tgt=invalid', ']] || true',
+     {'ALERT unchecked values are replaced'}),
+    ('alert-relative-dir', '[[ $dir == /* ]] || { echo "Orca alert not recorded: the alert directory is not an absolute path"; return 0; }\n', '',
+     {'ALERT relative directory is not used'}),
+    ('alert-mkdir-unchecked', 'mkdir -p "$dir" 2>/dev/null || { echo', 'mkdir -p "$dir" 2>/dev/null; true || { echo',
+     {'ALERT unmakeable directory is reported'}),
+]
+# orca-health.sh mutants (punch-list L34). Each runs only the health half,
+# with the shipped nudge and send scripts as arguments 1 and 2.
+HEALTH_MUTANTS = [
+    ('health-stale-bound', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 30', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 31, 180, 10, 30', {'HEALTH new stale period alerts again', 'HEALTH stale with no heartbeat counts from the dispatch', 'HEALTH stale at 30 minutes'}),
+    ('health-long-bound', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 30', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 181, 10, 30', {'HEALTH long at 180 minutes'}),
+    ('health-question-bound', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 30', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 11, 30', {'HEALTH question that threads on itself is unanswered', 'HEALTH worker question at 10 minutes', "HEALTH asker's own follow-up is not an answer"}),
+    ('health-await-bound', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 30', 'HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 31', {'HEALTH awaited reply at 30 minutes'}),
+    ('health-input-ignored', 'if "input" not in cats and mins(last)', 'if mins(last)', {'HEALTH pending ask is not stale'}),
+    ('health-exited-ignored', 'if verdict == "exited":', 'if False:', {'HEALTH exited worker'}),
+    ('health-wait-ignored', '        if wait:\n', '        if False:\n', {'HEALTH waiting worker, no stale beside it'}),
+    ('health-repo-unfiltered', 'mine = repo == "unknown" or f["repo"] in (repo, "unknown")', 'mine = True', {'HEALTH alert file of another repo is not'}),
+    ('health-worktree-unfiltered', '        mine = f["worktree"] == wt\n', '        mine = True\n', {'HEALTH alert file of another worktree is not'}),
+    ('health-unknown-repo-filtered', 'if mine and not main and repo != "unknown":', 'if mine and not main:', {'HEALTH unknown repo shows every file'}),
+    ('health-shape-unchecked', 'shaped = lines[:1] == ["cepa-orca-alert 1"] and all(', 'shaped = True or all(', {'HEALTH alert file with a bad field', 'HEALTH alert file in an unknown shape'}),
+    ('health-reason-unchecked', 'why = f["reason"] if any(r.fullmatch(f["reason"]) for r in REASONS) else "an unrecognised reason"', 'why = f["reason"]', {'HEALTH unknown reason is not shown'}),
+    ('health-reason-list-short', '    r"no request id could be made", ', '    ', {'HEALTH every orca-send.sh reason is shown'}),
+    ('health-follow-up-answers', ' and x.get("from_handle") != sender.get(t):', ':', {"HEALTH asker's own follow-up is not an answer"}),
+    ('health-acks-ignored', 'acked = set(listdir(acked_dir, "ack-dir"))', 'acked = set()', {'HEALTH acked unreadable is unknown, never ok', 'HEALTH unreadable alert directory', 'HEALTH acked key is not reported', 'HEALTH acked file is not reported'}),
+    ('health-acks-shared', 'cepa_h_acked="$cepa_h_dir/acked/$cepa_h_wt"', 'cepa_h_acked="$cepa_h_dir/acked"', {'HEALTH ack marks keys for this worktree only', 'HEALTH acked unreadable is unknown, never ok', "HEALTH another worktree's ack does not hide it", 'HEALTH acked key is not reported'}),
+    ('health-ack-missing-file-ok', '[[ $k == send-failed:* ]] && [ ! -f', '[[ $k == none ]] && [ ! -f', {'HEALTH ack of a missing alert file fails'}),
+    ('health-ack-key-loose', 'send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\\.alert|', 'send-failed:[A-Za-z0-9_.-]{1,40}|', {'HEALTHREF ack temp file name'}),
+    ('health-hidden-is-ok', 'if hidden and not seen:', 'if False:', {'HEALTH acked unreadable is unknown, never ok'}),
+    ('health-run-notok-empty', 'r = d["result"]["run"] if d.get("ok") is True else sys.exit(1)', 'r = d["result"]["run"] if d.get("ok") is True else None', {'HEALTH run-current not ok'}),
+    ('health-run-id-unchecked', 'if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):\n    sys.exit(1)\n', '', {'HEALTH run-current bad run id'}),
+    ('health-workers-shape-loose', 'rows = d["result"]["workers"] if d.get("ok") is True else sys.exit(1)', 'rows = d["result"].get("workers", []) if d.get("ok") is True else sys.exit(1)', {'HEALTH worker-list with no workers field'}),
+    ('health-cap-ignored', 'if len(ids) > 20 or (', 'if False and (', {'HEALTH more than 20 live workers', 'HEALTH worker-list with more pages'}),
+    ('health-page-ignored', ' or (isinstance(page, dict) and page.get("hasMore") is not False and "hasMore" in page)', '', {'HEALTH worker-list with more pages'}),
+    ('health-settled-read', '        if p["outcome"] != "in_progress":\n', '        if False:\n', {'HEALTH settled in worker-show is skipped'}),
+    ('health-id-unchecked', 'if did != n[:-5] or not', 'if not', {'HEALTH worker-show names another dispatch'}),
+    ('health-show-date-unchecked', ' or start is None:', ':', {'HEALTH worker-show with a bad date'}),
+    ('health-hb-undated-ok', '        if hb is None and disp.get("lastHeartbeatAt") is not None:\n', '        if False:\n', {'HEALTH worker-show with a heartbeat time it cannot date'}),
+    ('health-crash-exits-1', '    os._exit(3)', '    os._exit(1)', {'HEALTH a reader crash is an alert'}),
+    ('health-alert-dir-silent', '    except OSError:\n        unreadable(what,', '    except OSError:\n        return []\n        unreadable(what,', {'HEALTH unreadable alert directory'}),
+    ('health-run-fail-silent', 'if os.path.exists(os.path.join(tmp, "run.fail")):\n    unreadable("run-current")\n', '', {'HEALTH run-current with no run field', 'HEALTH run-current not ok', 'HEALTH run-current bad run id', 'HEALTH run-current fails'}),
+    ('health-inbox-fail-silent', 'if not isinstance(rows, list):\n    unreadable("inbox")\n', 'if not isinstance(rows, list):\n    pass\n', {'HEALTH a timed-out call stops the rest', 'HEALTH inbox fails', 'HEALTH inbox with no messages field'}),
+    ('health-no-wedge-stop', 'then cepa_h_wedged=1; return 1; fi', 'then return 1; fi', {'HEALTH no call after a timeout', 'HEALTH a timed-out call stops the rest'}),
+    ('health-no-vsock-retry', '  for try in 1 2; do\n    t=$(date', '  for try in 1; do\n    t=$(date', {'HEALTH worker-list vsock once', 'HEALTH vsock retry runs worker-list twice'}),
+    ('health-dir-relative', '[[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"\n', '', {'HEALTHREF relative alert directory'}),
+    ('health-cli-any', '  orca-ide|orca-dev) ;;', '  orca-ide|orca-dev|bash) ;;', {'HEALTHREF cli not orca'}),
 ]
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-ctl-")
@@ -265,20 +321,21 @@ def run(script, legs="all"):
 src = open(SCRIPT, encoding="utf-8").read()
 clean = os.path.join(TMP, "clean.sh")
 open(clean, "w", encoding="utf-8").write(src)
-with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-    (rc, misses, whole), (nrc, nmiss, nudge), (src_, smiss, send) = pool.map(
-        lambda legs: check([clean], legs), ("all", "nudge", "send"))
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+    (rc, misses, whole), (nrc, nmiss, nudge), (src_, smiss, send), (hrc, hmiss, hlth) = pool.map(
+        lambda legs: check([clean], legs), ("all", "nudge", "send", "health"))
 if rc == 0 and not misses:
     ok("unmutated copy runs with no MISS")
 else:
     miss("unmutated copy: rc=%s, MISS %r" % (rc, sorted(misses)[:3]))
-# The halves split the whole run: each case runs in exactly one half.
-if nrc == src_ == 0 and not nmiss | smiss and nudge and send and not nudge & send \
-        and nudge | send == whole:
-    ok("the nudge half (%d) and send half (%d) partition the %d cases" % (len(nudge), len(send), len(whole)))
+# The parts split the whole run: each case runs in exactly one part.
+if nrc == src_ == hrc == 0 and not nmiss | smiss | hmiss and nudge and send and hlth \
+        and not nudge & send and not nudge & hlth and not send & hlth and nudge | send | hlth == whole:
+    ok("the nudge (%d), send (%d) and health (%d) parts partition the %d cases"
+       % (len(nudge), len(send), len(hlth), len(whole)))
 else:
-    miss("halves: rc %s/%s, %d+%d cases, %d shared, %d not in either"
-         % (nrc, src_, len(nudge), len(send), len(nudge & send), len(whole - nudge - send)))
+    miss("parts: rc %s/%s/%s, %d+%d+%d cases, %d not in any"
+         % (nrc, src_, hrc, len(nudge), len(send), len(hlth), len(whole - nudge - send - hlth)))
 
 def run_mutant(m):
     name, old, new, want = m
@@ -317,6 +374,27 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
 for (name, old, new, want), rc, got in results:
     if rc is None:
         miss("%s: anchor found %d times, want 1" % (name, send_src.count(old))); continue
+    if rc == 1 and got == want:
+        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
+    else:
+        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
+
+HEALTH = "plugins/cepa/scripts/orca-health.sh"
+health_src = open(HEALTH, encoding="utf-8").read()
+
+def run_health_mutant(m):
+    name, old, new, want = m
+    if health_src.count(old) != 1:
+        return m, None, None
+    path = os.path.join(TMP, "health-" + name + ".sh")
+    open(path, "w", encoding="utf-8").write(health_src.replace(old, new))
+    return (m,) + check([SCRIPT, SEND, path], "health")[:2]
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    results = list(pool.map(run_health_mutant, HEALTH_MUTANTS))
+for (name, old, new, want), rc, got in results:
+    if rc is None:
+        miss("%s: anchor found %d times, want 1" % (name, health_src.count(old))); continue
     if rc == 1 and got == want:
         ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
     else:

@@ -171,9 +171,10 @@ jobs:
         run: bash scripts/check-orca-turn-endings-controls.sh
 
   orca-nudge:
-    # Orca nudge. About three minutes (2m47s on PR #106), almost all of it
-    # the controls. Each mutant runs only the half of the check that can
-    # see it; before that split this job hit its 10-minute bound.
+    # Orca nudge, send and health. Almost all of the time is the controls:
+    # 2m47s on PR #106; PR #109 added the health part (its controls took
+    # 3m10s locally on 4 cores). Each mutant runs only the part of the check
+    # that can see it; before that split this job hit its 10-minute bound.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -181,7 +182,8 @@ jobs:
       # The autonomy section 12b rule 1 send runs only through
       # plugins/cepa/scripts/orca-send.sh, which counts a send only by its
       # stored result.message.id, then runs orca-nudge.sh, which nudges an
-      # idle (`done`) target only. The check runs both against a
+      # idle (`done`) target only; orca-health.sh is the section 12b rule 8
+      # health check. The check runs all three against a
       # stub CLI and never reaches a real terminal; the controls mutate it.
       # Headers own the cases and limits. Static commands, no workflow-context
       # interpolation.
