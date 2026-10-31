@@ -1092,7 +1092,9 @@ L33. **A send that stores nothing is reported "sent", and the nudge still fires.
 L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisible.**
     status: pending
     severity: P1
-    owner: unassigned (L35 merged; its PR #106 body holds the audit's L34 input)
+    owner: roles (`tab19@roles`, dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "L34 + L39 now": task `task_11bd7e7a46fd`,
+      dispatch `ctx_05945c512f52`)
     Operator, 2026-10-31: "when [orca-send.sh] prints Orca send failed: no
     message stored what reads that? how do i know a session is hung? i need
     to know to check it so i can fix it."
@@ -1235,7 +1237,7 @@ L37. **Session names: rule 6 does not stick, and the naming scheme itself is in 
 L38. **Send block: move its 4 arguments onto stdin, and name the session in the ending line.**
     status: pending
     severity: P3
-    owner: unassigned (L37 and L35 merged; free to start)
+    owner: unassigned (start after L34 merges: both change `orca-send.sh`)
     L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), split
     out of L35 by tab17@roles because they change the interface of the send
     block every session runs; operator chose "new item" (AskUserQuestion
@@ -1250,7 +1252,8 @@ L38. **Send block: move its 4 arguments onto stdin, and name the session in the 
 L39. **`check-anchor-counts-controls.sh:222` uses `printf | grep -q` (SIGPIPE flake).**
     status: pending
     severity: P3
-    owner: unassigned
+    owner: integrity (`tab3@integrity`, same answer: task
+      `task_a5b0bdadb920`, dispatch `ctx_ed2467ee38dd`)
     Seen once on PR #106 commit 272e330 (anchor-counts job failed with a
     broken pipe at line 222; passed on 65088f5 and 0644bc4; #106 did not
     touch the file). The repo's CLAUDE.md names this class: under
