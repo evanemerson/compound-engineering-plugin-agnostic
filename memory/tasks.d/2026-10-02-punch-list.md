@@ -1089,6 +1089,57 @@ L33. **A send that stores nothing is reported "sent", and the nudge still fires.
     3. §12b rule 1's "a send counts only when it prints a message id" names
        the field: `result.message.id`.
 
+L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisible.**
+    status: pending
+    severity: P1
+    owner: unassigned
+    Operator, 2026-10-31: "when [orca-send.sh] prints Orca send failed: no
+    message stored what reads that? how do i know a session is hung? i need
+    to know to check it so i can fix it."
+    Today exit 5 lands only in the sending agent's own Bash output. If that
+    agent then ends its turn (or misreads it), nothing tells the operator or
+    the recipient. Same gap for a worker that stops sending heartbeats or a
+    coordinator awaiting a reply that never comes.
+    1. Decide the alert surface: Orca escalation to the Run coordinator, an
+       Orca notification / NEEDS YOU entry, a durable failure log the
+       coordinator's per-turn peek reads, or several.
+    2. Define "hung": missed heartbeats past N minutes, a dispatch with no
+       `worker_done` after its timeout, an awaited reply older than N.
+       Measure what Orca already exposes (`worktree ps --agent-wait`,
+       dispatch state, heartbeat rows) before building anything.
+    3. Make `orca-send.sh` exit 5 trigger that surface, and gate it.
+
+L35. **Root-cause hardening: can this class of silent loss happen anywhere else?**
+    status: pending
+    severity: P1
+    owner: unassigned
+    Operator, 2026-10-31: "is there anything else we need to research or do
+    to ensure the root cause doesn't cause this again or cause another type
+    of error like this?"
+    L33 found two loss modes: an Orca refusal that still carries a top-level
+    `"id"`, and a ~32 KB WSL command line that fails with empty stdout. Audit
+    every place cepa (and the global CLAUDE.md) reads an `orca-ide` result:
+    dispatch (`worker-start`), `reply`, `ask`, `worker_done`, `check --ack`,
+    `terminal close`, `agent launch`. For each: what proves success, what a
+    refusal looks like, and whether a probe-style empty stdout reads as
+    success. Includes L33's 2 P2 residuals (`orchestration reply` and
+    dispatched `worker_done` not mechanized) and the unproven D6 `question`
+    loss. Output: a table of every path with its proof, plus fixes or filed
+    residuals.
+
+L36. **Triage L33's open residuals and recommend fixes.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    Operator, 2026-10-31: "we need to run a /cepa:triage on the work still
+    open. make recommendations on what to fix."
+    Scope: `todos/review-2026-10-31-184500.md` (7 findings `status:
+    deferred`, #18-#24, measured `grep -c 'status: deferred'` → 7) and the
+    sections of `memory/tasks.d/2026-10-31-fix-roles-orca-send-verify.md`.
+    Run `/cepa:triage`, apply safe verified fixes, and report a
+    recommendation for each remaining item. Overlaps L35 on the 2 P2s:
+    whichever runs first owns them.
+
 ---
 
 ## How this list is used
