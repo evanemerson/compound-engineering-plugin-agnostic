@@ -1,7 +1,7 @@
 ---
 description: Review a plan document with a persona panel before build — findings to todos/, eligible fixes applied to the plan, judgment items made durable
 argument-hint: "[plan path] [mode:headless]"
-allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git rev-parse:*), Bash(git worktree:*), Bash(git rev-list:*), Bash(bash:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)
+allowed-tools: Write, Edit, Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git check-ignore:*), Bash(git hash-object:*), Bash(gh issue view:*), Bash(git branch:*), Bash(git for-each-ref:*), Bash(git rev-parse:*), Bash(git worktree:*), Bash(git rev-list:*), Bash(bash:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)
 ---
 
 # Plan Review

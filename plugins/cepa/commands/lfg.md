@@ -403,7 +403,7 @@ updates and every blocked decision, always ending with a "**Stop here**"
 option and a one-line recommendation. Operational instructions
 ("merge with `gh pr merge`") stay in the body and never consume a choice
 number. In a worker session the tail is the Handoff block instead
-(autonomy §10d); under Orca, also autonomy §12b rule 3. Then output:
+(autonomy §10d); under Orca, also autonomy §12b rule 3, and rule 8 while it awaits a reply. Then output:
 
 `<promise>DONE</promise>`
 
