@@ -853,7 +853,16 @@ L27. **Rule 7 fixes from the L26 probe.**
 
 
 L28. **Rule 7 hardening from the L26 re-probe.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-31** — PR #101 (`f8644f9`), v1.37.3, merged on the
+    operator's explicit AskUserQuestion approval (the auto-mode classifier
+    blocked a merge read from "Small fix, then roll out"). CI 4/4 green on
+    `5986a70`; detection 87/87 + 78/78, turn-endings 127/127 + 92/92, nudge
+    63/63 + 62/62. residual-integrity job 7m05s of a 10 min bound. Hops run,
+    freshness rc=0. Orca is now 1.4.245; re-measured: an open AskUserQuestion
+    still reads `waiting` (NEEDS YOU). 7 deferred findings in
+    `memory/tasks.d/2026-10-31-fix-roles-rule7-hardening.md` (incl. the
+    handle-not-name ending line and a possible duplicate after a send retry).
     severity: P2
     owner: roles (`tab13@roles`, dispatched via Orca 2026-10-31)
     Operator chose (AskUserQuestion) "Small fix, then roll out". (1)
