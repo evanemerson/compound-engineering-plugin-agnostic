@@ -1128,6 +1128,13 @@ L35. **Root-cause hardening: can this class of silent loss happen anywhere else?
     dispatched `worker_done` not mechanized) and the unproven D6 `question`
     loss. Output: a table of every path with its proof, plus fixes or filed
     residuals.
+    2026-10-31 progress: tab17@roles opened PR #106 (v1.40.0, head
+    945247f, Handoff `done`); operator approved "Merge + L38 + CLAUDE.md".
+    After `gh pr update-branch 106` (head 40036f1) the `orca-nudge` job hit
+    its 10-minute bound inside `check-orca-nudge-controls.sh` (run
+    41234402058; suite 154/154 passed first). Follow-up dispatched to
+    `tab18@roles` on the same branch: task `task_5626f99fa50c`, dispatch
+    `ctx_6e87ff5d779c`. #106 merges when CI is green on tab18's head.
 
 L36. **Triage L33's open residuals and recommend fixes.**
     status: completed
