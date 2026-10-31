@@ -1092,7 +1092,7 @@ L33. **A send that stores nothing is reported "sent", and the nudge still fires.
 L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisible.**
     status: pending
     severity: P1
-    owner: unassigned (waits for L35's audit table)
+    owner: unassigned (L35 merged; its PR #106 body holds the audit's L34 input)
     Operator, 2026-10-31: "when [orca-send.sh] prints Orca send failed: no
     message stored what reads that? how do i know a session is hung? i need
     to know to check it so i can fix it."
@@ -1110,7 +1110,24 @@ L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisibl
     3. Make `orca-send.sh` exit 5 trigger that surface, and gate it.
 
 L35. **Root-cause hardening: can this class of silent loss happen anywhere else?**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — PR #106 merged `c51064f` (v1.41.0). tab18@roles
+    (same branch) fixed the CI timeout: 99 mutants each ran all 154 cases
+    and the stub started python3 per call; now each mutant runs only the
+    half that can see it (a new control proves the halves partition the
+    cases) and the stub is bash — controls 5m28s → 1m33s, job >10m → 2m38s.
+    Merged `main` (#107) and re-bumped both manifests to 1.41.0. Head check
+    0644bc4 = Handoff `Head:`, branch contained main, CI 9/9 green; `roles`
+    parked at c51064f, branch deleted, tabs closed (absent from
+    `terminal list`); hops run 1.40.0 → 1.41.0, freshness rc=0. Global
+    `~/.claude/CLAUDE.md`: worker Handoff sends through `orca-send.sh …
+    worker_done` / `orca-send.sh`, plus "a closed terminal is proven by its
+    absence from `terminal list`" (backup
+    `~/.claude/CLAUDE.md.bak-2026-10-31-l35`). Residuals (#19/#21 → L38, a
+    worker-start proof P2, 10 review P3s) in
+    `memory/tasks.d/2026-10-31-fix-roles-orca-loss-audit.md`. L34 input is
+    in #106's PR body. Seen once: `check-anchor-counts-controls.sh:222`
+    `printf | grep -q` broken pipe (SIGPIPE flake class) → L39.
     severity: P1
     owner: roles (`tab17@roles`, dispatched via Orca 2026-10-31 on the
       operator's AskUserQuestion "L35 + L36 now": Run `run_bf28fea0ea31`,
@@ -1218,8 +1235,7 @@ L37. **Session names: rule 6 does not stick, and the naming scheme itself is in 
 L38. **Send block: move its 4 arguments onto stdin, and name the session in the ending line.**
     status: pending
     severity: P3
-    owner: unassigned (start after L37 merges: both edit
-      `plugins/cepa/skills/autonomy/SKILL.md` §12b)
+    owner: unassigned (L37 and L35 merged; free to start)
     L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), split
     out of L35 by tab17@roles because they change the interface of the send
     block every session runs; operator chose "new item" (AskUserQuestion
@@ -1230,6 +1246,17 @@ L38. **Send block: move its 4 arguments onto stdin, and name the session in the 
     - #21: `orca-send.sh`'s ending line names a terminal handle, not a
       session. Add an optional session-name argument.
     Then #22 (send-branch gate cases, L36) on the final interface.
+
+L39. **`check-anchor-counts-controls.sh:222` uses `printf | grep -q` (SIGPIPE flake).**
+    status: pending
+    severity: P3
+    owner: unassigned
+    Seen once on PR #106 commit 272e330 (anchor-counts job failed with a
+    broken pipe at line 222; passed on 65088f5 and 0644bc4; #106 did not
+    touch the file). The repo's CLAUDE.md names this class: under
+    `pipefail`, `grep -q` exits on its first match and `printf` takes
+    SIGPIPE. Fix: a here-string (`grep -q … <<<"$x"`), then sweep `scripts/`
+    for other `printf … | grep -q` sites (state the probe command).
 
 ---
 
