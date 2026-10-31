@@ -213,13 +213,13 @@ run_case() {  # $1 checker file, $2 spec line; echoes "" on match, else a reason
   d="$WORK/cases/$name"
   cp "$chk" "$d/scripts/check-anchor-counts.sh" || { echo "cp failed"; return; }
   out="$(bash "$d/scripts/check-anchor-counts.sh" 2>&1)"; rc=$?
-  if printf '%s\n' "$out" | grep -q '^Traceback'; then echo "TRACEBACK"; return; fi
+  if grep -q '^Traceback' <<<"$out"; then echo "TRACEBACK"; return; fi
   m="$(printf '%s\n' "$out" | grep -c '^MISS:')"
   w="$(printf '%s\n' "$out" | grep -c '^WARN:')"
   if [ "$rc" != "$want_rc" ]; then echo "rc=$rc want $want_rc"; return; fi
   if [ "$m" != "$want_miss" ]; then echo "MISS=$m want $want_miss"; return; fi
   if [ "$want_warn" != "-" ] && [ "$w" != "$want_warn" ]; then echo "WARN=$w want $want_warn"; return; fi
-  if [ "$want_text" != "-" ] && ! printf '%s\n' "$out" | grep -qF -- "$want_text"; then echo "missing text: $want_text"; return; fi
+  if [ "$want_text" != "-" ] && ! grep -qF -- "$want_text" <<<"$out"; then echo "missing text: $want_text"; return; fi
   echo ""
 }
 
@@ -232,7 +232,7 @@ done
 
 echo "== real tree"
 out="$(bash "$CHECKER" 2>&1)"; rc=$?
-if [ "$rc" = 0 ] && printf '%s\n' "$out" | grep -q '^-- 0 MISS'; then
+if [ "$rc" = 0 ] && grep -q '^-- 0 MISS' <<<"$out"; then
   pass=$((pass + 1)); echo "PASS real — $(printf '%s\n' "$out" | tail -1)"
 else
   fail=$((fail + 1)); echo "FAIL real — rc=$rc"; printf '%s\n' "$out" | grep '^MISS' | head -5

@@ -399,7 +399,7 @@ for f in "$CMD_DIR"/*.md; do
               # in a comment is documentation, not a guard.
               code_only="$(grep -vE '^[ \t]*#' "$blk_body" 2>/dev/null || true)"
               # An unguarded use is `$N` or `${N}` NOT followed by `:-`/`:+`.
-              if printf '%s\n' "$code_only" | grep -qE "\\\$$n([^A-Za-z0-9_]|$)|\\\$\{$n\}" 2>/dev/null; then
+              if grep -qE "\\\$$n([^A-Za-z0-9_]|$)|\\\$\{$n\}" <<<"$code_only" 2>/dev/null; then
                 say_miss "$f block $blk: \$$n is allowlisted as \`env\` but THIS block uses it without a \${$n:-} / \${$n:+} default. Under \`set -u\` that aborts the block, so the allowlist's claim that an empty value is the designed case does not hold here. A guarded use in another block does not help — each block is its own process."
               fi
             fi

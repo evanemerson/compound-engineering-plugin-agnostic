@@ -404,7 +404,7 @@ reg mut_env_launder 1 "leg 2b scoped per FILE instead of per BLOCK. One guarded 
 # text" — one level further in.
 out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"
 n_miss="$(printf '%s\n' "$out" | grep -cE '^MISS' || true)"
-if [ "$n_miss" -eq 1 ] && printf '%s\n' "$out" | grep -q 'block 0: \$MY_OPERATOR_VAR'; then
+if [ "$n_miss" -eq 1 ] && grep -q 'block 0: \$MY_OPERATOR_VAR' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s exactly block 0 flagged\n' mut_env_scope_exact
 else
   fail=$((fail + 1))
@@ -656,7 +656,7 @@ s = re.sub(r"^ALLOW=\(.*?^\)$", "ALLOW=()", s, flags=re.S | re.M)
 p.write_text(s)
 PY
 out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'WARN:.*```sh fence'; then
+if [ "$rc" -eq 0 ] && grep -q 'WARN:.*```sh fence' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s rc=0 + WARN\n' mut_sh_label
 else
   fail=$((fail + 1))
@@ -683,7 +683,7 @@ s = re.sub(r"^ALLOW=\(.*?^\)$",
 p.write_text(s)
 PY
 out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'UNLABELED'; then
+if [ "$rc" -eq 0 ] && grep -q 'UNLABELED' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s rc=0 + UNLABELED WARN\n' mut_unlabeled_shell
 else
   fail=$((fail + 1))
@@ -707,7 +707,7 @@ s = re.sub(r"^ALLOW=\(.*?^\)$",
 p.write_text(s)
 PY
 out="$(bash "$d/scripts/check-fenced-block-state.sh" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qE 'case-sensitive|UNLABELED'; then
+if [ "$rc" -eq 0 ] && grep -qE 'case-sensitive|UNLABELED' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s rc=0 + WARN\n' mut_capital_bash
 else
   fail=$((fail + 1))
@@ -735,7 +735,7 @@ out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
 # Anchored to the `assigned:` line: an unanchored `assigned:` also matches
 # inside `used-not-assigned:`, so a prose word appearing only as a USE would
 # read as a phantom assignment. Same defect as mut_comment_assign's first cut.
-if printf '%s\n' "$out" | grep -qE '^  assigned: .*(\brather\b|\bretyping\b|\bpointer\b)'; then
+if grep -qE '^  assigned: .*(\brather\b|\bretyping\b|\bpointer\b)' <<<"$out"; then
   fail=$((fail + 1))
   printf 'FAIL %-18s prose words parsed as assigned\n' mut_prose_read
   printf '     kills: READ_RE anchored with a bare \\bread\\b. An over-reported `assigned` name silently suppresses a real 2g candidate — a wrong all-clear in the exact class this gate exists to find.\n'
@@ -755,7 +755,7 @@ printf 'a\nb\n' | while read -r item; do echo "$item"; done
 ```
 MD
 out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
-if printf '%s\n' "$out" | grep -q 'used-not-assigned: .*item'; then
+if grep -q 'used-not-assigned: .*item' <<<"$out"; then
   fail=$((fail + 1))
   printf 'FAIL %-18s `while read -r item` not seen as an assignment\n' mut_read_loop
   printf '     kills: a command-position list omitting while/until. Measured: `id` in compound.md returned as a candidate until they were added.\n'
@@ -780,7 +780,7 @@ out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
 # unanchored, `used-not-assigned: LATE_INDENTED` satisfies the test, so the
 # case would pass precisely when re.M was broken and the name was NOT seen as
 # assigned. That is this suite's subject matter one level down.
-if printf '%s\n' "$out" | grep -qE '^  assigned: .*\bLATE_INDENTED\b'; then
+if grep -qE '^  assigned: .*\bLATE_INDENTED\b' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s re.M intact\n' mut_no_reM
 else
   fail=$((fail + 1))
@@ -805,7 +805,7 @@ echo "${CEPA_ROOT:-}"
 ```
 MD
 out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
-if printf '%s\n' "$out" | grep -q 'sources a script'; then
+if grep -q 'sources a script' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s && . "$R" detected\n' mut_source_anchor
 else
   fail=$((fail + 1))
@@ -828,7 +828,7 @@ echo hi
 ```
 MD
 out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
-if printf '%s\n' "$out" | grep -q 'used-not-assigned: (none)'; then
+if grep -q 'used-not-assigned: (none)' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s comment-only use ignored\n' mut_comment_use
 else
   fail=$((fail + 1))
@@ -870,7 +870,7 @@ out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
 # assignment it was built to detect on a tree that never had one. Measured
 # 2026-10-03 — the probe-shape defect this repo's own rule names, inside the
 # control for a probe-shape defect.
-if printf '%s\n' "$out" | grep -qE '^  assigned: .*\bWIDGET\b'; then
+if grep -qE '^  assigned: .*\bWIDGET\b' <<<"$out"; then
   fail=$((fail + 1))
   printf 'FAIL %-18s commented-out assignment counted as an assignment\n' mut_comment_assign
   printf '     kills: an ASSIGN_RE that admits `#NAME=`. A phantom assignment SUPPRESSES every real candidate of that name — the wrong-all-clear direction, strictly worse than a false positive.\n'
@@ -907,8 +907,8 @@ MD
 out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
 # Anchored, per mut_comment_assign's precedent: an unanchored `assigned: P`
 # also matches inside `used-not-assigned: P` and would invert this case.
-if printf '%s\n' "$out" | grep -qE '^  assigned: .*\bP\b.*$' &&
-   printf '%s\n' "$out" | sed -n '/^block 1:/,$p' | grep -qE '^  assigned: .*\bP\b'; then
+if grep -qE '^  assigned: .*\bP\b.*$' <<<"$out" &&
+   grep -qE '^  assigned: .*\bP\b' < <(sed -n '/^block 1:/,$p' <<<"$out"); then
   fail=$((fail + 1))
   printf 'FAIL %-18s heredoc text counted as an assignment\n' mut_heredoc_assign
   printf '     kills: an ASSIGN_RE scan over the raw body with no heredoc masking. A phantom assignment suppresses every real candidate of that name — the wrong-all-clear direction, and a PHI-leak path on compound.md.\n'
@@ -930,7 +930,7 @@ EOF
 ```
 MD
 out="$(python3 "$EXTRACT" "$probe" --report 2>&1)"
-if printf '%s\n' "$out" | grep -q 'used-not-assigned: .*WIDGET'; then
+if grep -q 'used-not-assigned: .*WIDGET' <<<"$out"; then
   pass=$((pass + 1)); printf 'ok   %-18s heredoc use still counted\n' mut_heredoc_use
 else
   fail=$((fail + 1))
@@ -1006,12 +1006,12 @@ else
   out="$(env PATH="$nobc" bash "$CHECKER" 2>&1)"; rc=$?
   # Two independent assertions: no shell-level arithmetic error leaked, and the
   # cross-check line carries a real number rather than a blank.
-  if printf '%s\n' "$out" | grep -qE 'bc: command not found|integer expression expected'; then
+  if grep -qE 'bc: command not found|integer expression expected' <<<"$out"; then
     fail=$((fail + 1))
     printf 'FAIL %-18s leg 4 still needs an external calculator\n' mut_no_bc
     printf '     kills: `paste|bc` in leg 4. Without bc the count goes EMPTY (set -u cannot see it), the `[` error is swallowed as an if-condition, and the cross-check silently stops existing at rc=0.\n'
     printf '%s\n' "$out" | sed 's/^/       | /'
-  elif ! printf '%s\n' "$out" | grep -qE 'cross-check: [0-9]+ via direct grep of the reports, [0-9]+ via fence count'; then
+  elif ! grep -qE 'cross-check: [0-9]+ via direct grep of the reports, [0-9]+ via fence count' <<<"$out"; then
     fail=$((fail + 1))
     printf 'FAIL %-18s cross-check line is missing a numeric count\n' mut_no_bc
     printf '     kills: a leg-4 probe that prints a blank where its count belongs — the visible evidence of its own failure, with nothing acting on it.\n'

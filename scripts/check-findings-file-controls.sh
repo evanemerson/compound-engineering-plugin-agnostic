@@ -283,8 +283,8 @@ OUT=''; RC=0
 expect() {  # expect <rc> <regex> [forbid-regex]
   local want_rc="$1" re="$2" forbid="${3:-}"
   [ "$RC" -eq "$want_rc" ] || { DETAIL="rc $RC, wanted $want_rc"; return 1; }
-  [ -z "$re" ] || printf '%s\n' "$OUT" | grep -qE -- "$re" || { DETAIL="no line matching /$re/"; return 1; }
-  [ -z "$forbid" ] || ! printf '%s\n' "$OUT" | grep -qE -- "$forbid" || { DETAIL="a line matched forbidden /$forbid/"; return 1; }
+  [ -z "$re" ] || grep -qE -- "$re" <<<"$OUT" || { DETAIL="no line matching /$re/"; return 1; }
+  [ -z "$forbid" ] || ! grep -qE -- "$forbid" <<<"$OUT" || { DETAIL="a line matched forbidden /$forbid/"; return 1; }
   return 0
 }
 
