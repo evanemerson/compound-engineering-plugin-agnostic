@@ -1111,6 +1111,15 @@ L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisibl
        dispatch state, heartbeat rows) before building anything.
     3. Make `orca-send.sh` exit 5 trigger that surface, and gate it.
 
+    2026-10-31 progress: tab19@roles opened PR #109 (v1.42.0, head dacbfe8,
+    CI green): `orca-send.sh` exit 4/5 writes an alert file; new
+    `orca-health.sh`, run by a coordinator beside each rule 8 peek, raises
+    `ORCA alert:` lines (failed sends; exited/waiting workers; stale = no
+    heartbeat 30 min; long = 180 min; unanswered questions; unreadable Orca
+    state). Measured: Orca's liveness never reads heartbeats. Operator chose
+    "Merge + CLAUDE.md + L40". After #108 merged, #109 conflicted on the
+    manifest version lines only; follow-up `tab20@roles` (task
+    `task_4fb2f25f9e3e`) resolves it.
 L35. **Root-cause hardening: can this class of silent loss happen anywhere else?**
     status: completed
     CLOSED 2026-10-31 — PR #106 merged `c51064f` (v1.41.0). tab18@roles
@@ -1250,7 +1259,15 @@ L38. **Send block: move its 4 arguments onto stdin, and name the session in the 
     Then #22 (send-branch gate cases, L36) on the final interface.
 
 L39. **`check-anchor-counts-controls.sh:222` uses `printf | grep -q` (SIGPIPE flake).**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — PR #108 merged `8d71f58` (v1.41.1) on the operator's
+    AskUserQuestion "Merge when green": head 787e6b1 = Handoff `Head:`,
+    update-branch → c736524, CI green; `integrity` parked, branch deleted,
+    tab closed. 47 `printf … | grep -q|-m` sites → here-strings in 11 files
+    (probe and per-line safety in the PR body; repro under pipefail with
+    300 KB input: pipe 50/50 false negatives, here-string 0/50). 3 P3s left
+    filed in `memory/tasks.d/2026-10-31-fix-integrity-sigpipe-grep.md`
+    (operator accepted the worker's "leave as filed").
     severity: P3
     owner: integrity (`tab3@integrity`, same answer: task
       `task_a5b0bdadb920`, dispatch `ctx_ed2467ee38dd`)
@@ -1260,6 +1277,18 @@ L39. **`check-anchor-counts-controls.sh:222` uses `printf | grep -q` (SIGPIPE fl
     `pipefail`, `grep -q` exits on its first match and `printf` takes
     SIGPIPE. Fix: a here-string (`grep -q … <<<"$x"`), then sweep `scripts/`
     for other `printf … | grep -q` sites (state the probe command).
+
+L40. **Run the health check while every coordinator is idle (Orca automation).**
+    status: pending
+    severity: P2
+    owner: unassigned (after L34 merges)
+    From L34 (PR #109, residual P2; operator chose to file it, 2026-10-31).
+    `orca-health.sh` runs only when a coordinator takes a turn (beside its
+    rule 8 peek). When every coordinator is idle, a failed send or a hung
+    worker raises nothing. Proposal: an Orca automation runs the check on a
+    schedule and raises the alert where the operator sees it. Needs a
+    `--precheck` measurement first, and the operator's approval before any
+    automation is created.
 
 ---
 
