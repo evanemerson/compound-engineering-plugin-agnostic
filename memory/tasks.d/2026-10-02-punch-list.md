@@ -783,6 +783,12 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
     IDLE coordinator (PR #98 residual finding 6 — does it stall?). Only after
     it passes: the global CLAUDE.md edits and the farmtender-laravel /
     contexthub hand-offs in plan §8.
+    **ROLLOUT 2026-10-31** (operator: "Apply and send"): global
+    `~/.claude/CLAUDE.md` edited with the reviewed 5-part diff (byte-identical
+    to the draft; backup `~/.claude/CLAUDE.md.bak-2026-10-31-rule7`). Hand-offs
+    sent via Orca to each repo's main-checkout terminal: farmtender-laravel
+    `msg_e9542ddacda0` (nudge skipped once on a `worktree ps` timeout, then
+    sent), contexthub `msg_9f46605f4776` (nudged). Waiting on their PR numbers.
     **Probe run 2026-10-30 (17:07-17:10 CDT, cepa 1.37.0, Haiku 4.5,
     terminal surface; states from `worktree ps --agent-wait`):**
     - A (Nobody): PASS — `done`; first line `Needed from you: nothing`; no
