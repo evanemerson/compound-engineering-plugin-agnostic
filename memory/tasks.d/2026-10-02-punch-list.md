@@ -776,7 +776,10 @@ L25. **Cite §12b rule 7 in `review.md` and `resolve-pr.md`.**
     `scripts/check-orca-turn-endings.sh` to cover them.
 
 L26. **Plan §10 probe test of rule 7, then rollout.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31: the operator merged contexthub PR #98 (verified
+    `gh pr view 98 -R evanemerson/contexthub` → MERGED 14:37:10Z,
+    `8e4fe74`). Both hand-offs (farmtender-laravel #80, contexthub #98) landed.
     severity: P2
     owner: coord@main
     Throwaway Haiku sessions in `.claude/worktrees/integrity` on cepa 1.37.0,
@@ -947,7 +950,8 @@ L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
     `~/.claude/CLAUDE.md` updated with #102's PR-body text, word for word
     (backup `~/.claude/CLAUDE.md.bak-2026-10-31-l30`). 5 P3s in
     `memory/tasks.d/2026-10-31-fix-roles-worker-report-channel.md`.
-    Item 3 OPEN: the operator restarts long-lived coordinators so they load
+    Item 3 OPEN, owner: the OPERATOR (said 2026-10-31 "i will do this"). The
+    operator restarts long-lived coordinators so they load
     cepa 1.38.0 and the new global rules. Measured 2026-10-31 via
     `orca-ide worktree ps --agent-wait` (pane keys): artist360 coord@main
     `c633d177` (after the #828 deploy), coord@merch-builder-v2 `cbaf5131`
