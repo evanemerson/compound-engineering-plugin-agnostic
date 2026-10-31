@@ -1,7 +1,7 @@
 ---
 description: "Health-check and bootstrap a project's cepa setup: validate cepa.local.md, create missing scaffold dirs, check CI and plugin-version drift, and install a stack-matched CI template. Default is a read-only report; pass 'fix' to apply."
 argument-hint: "[fix] [mode:headless]"
-allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git check-ignore:*), Bash(git ls-files:*), Bash(git add:*), Bash(git commit:*), Bash(git rev-parse:*), Bash(ls:*), Bash(find:*), Bash(mkdir:*), Bash(cp:*), Write, Edit, Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*)
+allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git check-ignore:*), Bash(git ls-files:*), Bash(git add:*), Bash(git commit:*), Bash(git rev-parse:*), Bash(ls:*), Bash(find:*), Bash(mkdir:*), Bash(cp:*), Write, Edit, Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)
 ---
 
 # cepa:setup — Project Health Check & Bootstrap

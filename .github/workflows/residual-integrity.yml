@@ -126,6 +126,17 @@ jobs:
       - name: Check Orca turn endings controls
         if: always()
         run: bash scripts/check-orca-turn-endings-controls.sh
+      # The rule 1 nudge runs only through plugins/cepa/scripts/orca-nudge.sh,
+      # which nudges an idle (`done`) target only. The check runs it against a
+      # stub CLI and never reaches a real terminal; the controls mutate it.
+      # Headers own the cases and limits. Static commands, no workflow-context
+      # interpolation.
+      - name: Check Orca nudge
+        if: always()
+        run: bash scripts/check-orca-nudge.sh
+      - name: Check Orca nudge controls
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh
       # Residual 2g: a fenced-block instruction file must never carry state
       # across a block boundary in a shell variable. SIX instances shipped on
       # the brain-writeback surface alone, and instances 5 and 6 were each

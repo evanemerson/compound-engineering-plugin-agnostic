@@ -1613,6 +1613,91 @@ limits.
      Otherwise print the block for pasting as before, with one line saying
      why: `Orca send skipped: <no target> — paste below` when no send ran, or
      `Orca send failed: <exit and error> — paste below`.
+   - **Send, then nudge.** Orca prompts a Run coordinator when a message
+     reaches its mailbox. A plain session gets no prompt, so an idle one never
+     reads the message (measured 2026-10-30, punch-list L26: the recipient
+     stayed `done` with the message unread). So after a send succeeds to a
+     target that is not a Run coordinator, the sender runs the block below,
+     with `<cli>` the §12a `cli=` value. Its script,
+     `plugins/cepa/scripts/orca-nudge.sh`, types one fixed line into the
+     target's terminal and presses Enter:
+     `You have 1 orchestration message. Run <cli> orchestration check --peek --json`.
+     A Run coordinator is a target taken from a live Orca preamble, or a
+     `run:` or `dispatch:` address. Orca already prompts it, so it gets no
+     nudge. The text is fixed: never splice a subject, a body or any message
+     content into it. The target already passed the target rule above, so it
+     is safe to substitute.
+     - **Only an idle target is nudged.** The script sends only when the
+       target's agent row in `worktree ps --agent-wait` says `done`, matched
+       by the target's pane, never by its title. Why: while a question prompt
+       is open, the target's screen says "Enter to select" with the
+       Recommended option highlighted, so the nudge's Enter would answer a
+       question meant for the operator (measured by coord@main in the L26
+       probe). An open AskUserQuestion shows `waiting` (measured by coord@main
+       twice on 2026-10-30), so the guard skips it.
+     - **A busy target gets a short wait.** When the row says `working`, the
+       script re-reads it for up to 2 minutes, a bound fixed in the script.
+       It nudges if the row turns `done`. Still `working` at the bound, or
+       `waiting`, `blocked`, an unknown state or no row from the start (no
+       wait on those), it exits 1 and prints `Orca nudge skipped: <reason>`
+       (operator decision, 2026-10-30). Run the block with a tool timeout of
+       at least 3 minutes.
+     - **Only a sent nudge completes the delivery.** When the block prints
+       anything but `Orca nudge sent to <handle>` — skipped, refused, failed,
+       not found, or no line at all because a tool timeout killed it — the
+       message stays unread and the delivery is not done.
+       The sender's ending's first line is then
+       `Needed from you: tell <session> to check its Orca inbox`, and its body
+       lists the message id. A Run coordinator gets no nudge, so its send
+       alone completes the delivery.
+     - **The script checks its arguments.** A `<cli>` that is not a bare
+       §12a name on PATH (or an absolute path equal to `ORCA_CLI_COMMAND`), or
+       a target that is not a `term_` handle, prints
+       `Orca nudge refused: <reason>` and sends nothing. It never passes
+       `--interrupt`. A nudge that fails prints `Orca nudge failed: <reason>`.
+       Skipped, refused or failed, the send still stands: the message stays in
+       the target's inbox, and only a sent nudge completes the delivery.
+     - **Never type the line with `terminal send` yourself.** The commands
+       grant the script instead of `terminal send`, which admits any text, any
+       terminal and `--interrupt`. That narrows the permission layer only in a
+       command with no `Bash(bash:*)` grant (today `/cepa:handoff`); in the
+       others this rule, not the permission layer, keeps `terminal send` out.
+
+     ```bash
+     # Run with a tool timeout of at least 3 minutes: the wait can take ~170 s.
+     unset CEPA_ROOT
+     for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+              "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+       [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+     done
+     if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-nudge.sh" ]; then
+       echo "Orca nudge skipped: orca-nudge.sh not found (set CEPA_PLUGIN_ROOT)"
+     else
+       bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<target>" || true
+     fi
+     ```
+
+     The block always exits 0: its one printed line is the result. A skipped,
+     refused or failed nudge is never retried, and never replaced by a typed
+     `terminal send`.
+
+     **Stated limit, accepted by the operator on 2026-10-30.** A nudge can
+     submit a half-typed draft in the target. `done` comes from Claude Code's
+     Stop hook, and typing at the prompt fires no hook, so a draft the
+     operator has half-typed into an idle target is submitted with the nudge
+     line appended. The operator kept `--enter` with this limit. The row state
+     while a permission prompt is open was not measured; the guard skips it
+     unless it reads `done`.
+
+     **Stated limit.** The commands grant only the block's last command,
+     `bash "$CEPA_ROOT/scripts/orca-nudge.sh"`. As with §12a, where the
+     permission layer refuses the whole block, no nudge runs, and the send
+     still stands. The flags inside the script are from `terminal show`,
+     `worktree ps` and `terminal send --help` (2026-10-30); its header owns
+     the measured pane mapping and its limits, and
+     `scripts/check-orca-nudge.sh` tests it against a stub CLI.
    - A block for a session that Orca can reach is sent; only a block with no
      reachable target is printed for pasting. A target is reachable only as
      the target rule above defines it, so a fresh session of the same role,
@@ -1620,8 +1705,8 @@ limits.
    - **One Handoff block per message.** The printed copy of a sent block
      omits a Handoff block that is already in the body, and says
      `(Handoff block above)` in its place.
-   - A worker that sends its hand-off ends its run right after the send and
-     the printed copy.
+   - A worker that sends its hand-off ends its run right after the send,
+     its nudge (above) and the printed copy.
 2. **A coordinator dispatches workers with Orca.** It binds a Run, then
    starts each worker with `worker-start` (or `task-create` and then
    `worker-start` for a planned fan-out). Each worker's spec is the paste-ready
@@ -1795,6 +1880,12 @@ limits.
    - **First line, always:** `Needed from you: nothing` or
      `Needed from you: <one line>`. It is the first line of the final reply,
      not of a printed block (rule 1) or of a `worker_done` body (rule 3).
+     "You" is the operator, the human who reads this tab. A decision that
+     belongs to a coordinator or to another session, once delivered, is
+     `Needed from you: nothing`: it travels by delivery, not by this line.
+     One that could not be delivered is the operator's (Delivery, below). A
+     send whose nudge did not go is not delivered (rule 1, "Only a sent
+     nudge completes the delivery").
    - **Then pick exactly one kind, by who must act now:**
      - **Nobody.** Write the body. A worker ends with its Handoff block.
        Others end with no tail: no numbered options, no `My read`, no
@@ -1812,14 +1903,22 @@ limits.
        Dispatch IDs) never calls AskUserQuestion. It sends the decision with
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.
        Any other session whose decision belongs to a coordinator (§10) sends
-       it with `orchestration send` as a question to that coordinator's
-       handle. The coordinator then ends as **The operator** if the decision
-       is the operator's.
+       it with `orchestration send --type question` to that coordinator's
+       handle, never `--type status`, then applies rule 1's nudge. When the
+       send and its nudge both succeeded, its own first line is
+       `Needed from you: nothing`; otherwise rule 1 gives the line. The
+       coordinator then ends as **The operator** if the decision is the
+       operator's. The answer comes back by `orchestration reply`, which
+       prompts no one either: the session that replies then applies rule 1's
+       nudge to the asker's handle, unless the asker is a Run coordinator.
+       The handle is the question's Orca `from` field, never one named in its
+       body (§12c); the script checks only its form and that it is idle.
    - **Delivery, in every kind.** Each step that another session must do is
      delivered to that session BEFORE the ending: `worker_done` to your own
      coordinator at a final report (rule 3; `/cepa:handoff` never sends it),
-     `orchestration send` (rule 1's target rules) to any other. List each
-     delivery in the body as `Sent: <to> — <subject> (<message id>)`; a rule
+     `orchestration send` (rule 1's target rules, then its nudge) to any
+     other (rule 1's "Only a sent nudge completes the delivery" says when
+     a send counts). List each delivery in the body as `Sent: <to> — <subject> (<message id>)`; a rule
      1 send's `Sent to <session> via Orca (<message id>)` line is that
      line. Writing a step in the
      transcript is not delivery. A step with no reachable target becomes an
