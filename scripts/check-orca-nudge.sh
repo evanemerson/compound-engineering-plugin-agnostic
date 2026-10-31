@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Check for plugins/cepa/scripts/orca-nudge.sh, the one checked form of
-# `cepa:autonomy` §12b rule 1's nudge. It runs the script against a stub
+# `cepa:autonomy` §12b rule 1's nudge, and for orca-send.sh beside it, the one
+# checked form of rule 1's send (the STORE and SENDREF legs). It runs the script against a stub
 # `orca-ide` on PATH and never reaches a real terminal: the stub answers
 # `terminal show`, `worktree ps` and `terminal send` from env vars and logs
 # every call it gets. Stub `sleep` and `date` on the same PATH give the script
 # a fake clock, so the 120-second wait costs no real time. The script reads no
 # env var for its clock or its bound; only the PATH is changed.
 #
-# Usage: check-orca-nudge.sh [orca-nudge.sh]
-#   The optional path replaces the shipped script. Only
-#   check-orca-nudge-controls.sh sets it, to run this check against a mutant.
+# Usage: check-orca-nudge.sh [orca-nudge.sh [orca-send.sh]]
+#   The optional paths replace the shipped scripts. Only
+#   check-orca-nudge-controls.sh sets them, to run this check against a mutant.
+#   orca-send.sh runs the orca-nudge.sh in its own directory, so a mutant send
+#   script needs a copy of the shipped nudge beside it.
 #
 # Every MISS line starts with its case name, so the controls can assert the
 # exact set of cases each mutant breaks. Cases, by leg:
@@ -54,6 +57,26 @@
 #              nudge is sent. The error twice: the call runs twice and the
 #              run skips (show) or fails (send). Another error, or only one
 #              of the two texts (either one): the call runs once, with no retry.
+#   STORE    — orca-send.sh (punch-list L33). A send counts only with
+#              `"ok": true`, a `result.message.id` shaped `msg_…`, exit 0, and
+#              that id in a re-read inbox row for the reported recipient. The
+#              send and inbox argv are pinned, the subject and body reach Orca
+#              as single arguments byte for byte, and the nudge runs only after
+#              a confirmed store. Each of these prints `Orca send failed: no
+#              message stored`, exits 5 and never nudges: an envelope `"id"`
+#              with no `result.message`, `"ok": false` (its error code shown
+#              only when it is a plain word), empty stdout (the WSL failure),
+#              a warning-only result, a non-zero exit with an ok reply, a bad
+#              message id, an id missing from the inbox or stored for another
+#              recipient, and an inbox that cannot be read. A warning beside a
+#              stored message still counts. A send stored for a `run:` mailbox
+#              is not nudged. A failed nudge passes its own lines and exit
+#              code through. The vsock retry runs once, never after a timeout.
+#   SENDREF  — orca-send.sh's argument checks: a bad cli, target, type
+#              (worker_done and heartbeat included), mode, subject or body
+#              (empty, starting with `--`, over 28,000 bytes): exit 4, prints
+#              `Orca send refused`, and the stub is never called. Its ending
+#              line names the target only when the target passed its check.
 #
 # STATED LIMITS — a green run does not mean:
 #   - Orca's real output has this shape. The stub replays the shape measured on
@@ -64,10 +87,12 @@
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
-CEPA_NUDGE_SCRIPT="${1:-plugins/cepa/scripts/orca-nudge.sh}" python3 - <<'PY'
+CEPA_NUDGE_SCRIPT="${1:-plugins/cepa/scripts/orca-nudge.sh}" \
+CEPA_SEND_SCRIPT="${2:-plugins/cepa/scripts/orca-send.sh}" python3 - <<'PY'
 import json, os, shutil, subprocess, sys, tempfile
 
 SCRIPT = os.path.abspath(os.environ["CEPA_NUDGE_SCRIPT"])
+SEND_SCRIPT = os.path.abspath(os.environ["CEPA_SEND_SCRIPT"])
 H = "term_5c81eb74-a55a-4a1e-b450-81e09827d825"
 OTHER = "term_00000000-0000-0000-0000-000000000000"
 KEY = "tab-1:leaf-1"
@@ -112,6 +137,8 @@ v = os.environ["STUB_PS"]
 seq = json.loads(v) if v.startswith("[") else [v]
 sys.stdout.write(seq[min(n, len(seq)) - 1])' ;;
   "terminal send") printf '%s' "$STUB_SEND"; exit "$STUB_SEND_RC" ;;
+  "orchestration send") printf '%s' "${STUB_OSEND-}"; exit "${STUB_OSEND_RC:-0}" ;;
+  "orchestration inbox") printf '%s' "${STUB_INBOX-}"; exit "${STUB_INBOX_RC:-0}" ;;
   *) exit 64 ;;
 esac
 ''')
@@ -159,7 +186,7 @@ def miss(msg):
     global failed; failed += 1; print("MISS", msg)
 
 def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
-        send='{"ok": true}', send_rc=0, env_extra=None, path=None):
+        send='{"ok": true}', send_rc=0, env_extra=None, path=None, script=None, stdin=""):
     log, clock, slog = (os.path.join(TMP, f) for f in ("log", "clock", "sleeps"))
     open(log, "w").close()
     open(slog, "w").close()
@@ -174,7 +201,8 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
     if path is not None:
         env["PATH"] = path
     try:
-        r = subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(["bash", script or SCRIPT] + args, env=env, capture_output=True, text=True,
+                           timeout=30, input=stdin)
         rc, out = r.returncode, r.stdout.strip().splitlines()
         STDERR[0] = r.stderr
     except subprocess.TimeoutExpired:
@@ -389,6 +417,162 @@ retry("RETRY half the text", "terminal show", 1, "<3>WSL ERROR: UtilAcceptVsock:
 retry("RETRY NUL in stderr", "terminal show", 2, VSOCK + "\\0x", 1, SK + "terminal show failed or timed out", 2)
 retry("RETRY other half of the text", "terminal show", 1, "<3>WSL ERROR: Relay: accept4 failed 110", 1,
       SK + "terminal show failed or timed out", 1)
+
+# --- STORE (orca-send.sh, punch-list L33) ---
+MID = "msg_5c81eb74a55a"
+SUBJ = "tab9@wt: L1 done"
+BODY = 'line 1\n"quoted" $HOME `x` \\ end\n\n- last'
+STDIN = SUBJ + "\n" + BODY + "\n"
+OSEND_ARGV = ["orchestration", "send", "--to", H, "--type", "question", "--subject", SUBJ,
+              "--body", BODY, "--json"]
+INBOX_ARGV = ["orchestration", "inbox", "--limit", "200", "--json"]
+WARN = [{"code": "legacy_terminal_recipient", "recipient": H}]
+
+def osend(mid=MID, to=H, ok=True, warnings=True, message=True, **extra):
+    r = {}
+    if message:
+        r["message"] = {"id": mid, "to_handle": to, "subject": SUBJ}
+    if warnings:
+        r["warnings"] = WARN
+    return json.dumps(dict({"id": "9232524a-511a-4305-ba28-37e1d28617d5", "ok": ok, "result": r}, **extra))
+
+def inbox(*rows, ok=True):
+    rows = rows or ({"id": MID, "to_handle": H},)
+    return json.dumps({"id": "b9da5171", "ok": ok, "result": {
+        "messages": [{"id": "msg_000000000001", "to_handle": OTHER}] + list(rows), "count": len(rows) + 1}})
+
+STORED = "Orca send stored: %s for %s" % (MID, H)
+NOSTORE = "Orca send failed: no message stored — "
+PASTE = END + "Needed from you: paste the block below into %s" % H
+PASTE_ANY = END + "Needed from you: paste the block below into the target session"
+
+def store(name, rc, want, mode="nudge", typ="question", target=H, osend_json=None, osend_rc=0,
+          inbox_json=None, inbox_rc=0, stdin=STDIN, argv=None, called=True, env_extra=None, **kw):
+    env = {"STUB_OSEND": osend_json if osend_json is not None else osend(), "STUB_OSEND_RC": str(osend_rc),
+           "STUB_INBOX": inbox_json if inbox_json is not None else inbox(), "STUB_INBOX_RC": str(inbox_rc)}
+    env.update(env_extra or {})
+    args = argv if argv is not None else ["orca-ide", target, typ, mode]
+    got_rc, out, calls = run(args, script=SEND_SCRIPT, stdin=stdin, env_extra=env, **kw)
+    why = []
+    if got_rc != rc:
+        why.append("rc=%s want %s" % (got_rc, rc))
+    if out != want:
+        why.append("output %r want %r" % (out, want))
+    # A send that stored nothing never nudges.
+    if rc in (4, 5) and sends(calls):
+        why.append("nudged %r" % sends(calls))
+    if not called and calls:
+        why.append("called the cli %r" % [[a[:60] for a in c] for c in calls])
+    (miss if why else ok)("%s: %s" % (name, "; ".join(why)[:2000]) if why else name)
+    return calls
+
+calls = store("STORE stored then nudged", 0, [STORED, "Orca nudge sent to " + H])
+os_calls = [c for c in calls if c[:2] == ["orchestration", "send"]]
+in_calls = [c for c in calls if c[:2] == ["orchestration", "inbox"]]
+# Send, then re-read, then the nudge's own calls: never the nudge first.
+order = [c[:2] for c in calls]
+check = os_calls == [OSEND_ARGV] and in_calls == [INBOX_ARGV] and sends(calls) == [SEND_ARGV] \
+    and order[:2] == [["orchestration", "send"], ["orchestration", "inbox"]]
+(ok if check else miss)("STORE argv and order" if check else "STORE argv and order: %r" % calls)
+calls = store("STORE no-nudge stores only", 0, [STORED], mode="no-nudge")
+check = sends(calls) == [] and [c[:2] for c in calls] == [["orchestration", "send"], ["orchestration", "inbox"]]
+(ok if check else miss)("STORE no-nudge makes no nudge call" if check else
+                         "STORE no-nudge makes no nudge call: %r" % calls)
+store("STORE warning beside a message counts", 0, [STORED], mode="no-nudge", osend_json=osend(warnings=True))
+store("STORE run address target", 0, ["Orca send stored: %s for run:run_abc" % MID], mode="no-nudge",
+      target="run:run_abc", osend_json=osend(to="run:run_abc"),
+      inbox_json=inbox({"id": MID, "to_handle": "run:run_abc"}))
+store("STORE rerouted to a Run mailbox", 0,
+      ["Orca send stored: %s for run:run_abc" % MID,
+       "Orca nudge not needed: Orca stored it in run:run_abc, a Run mailbox it prompts"],
+      osend_json=osend(to="run:run_abc"), inbox_json=inbox({"id": MID, "to_handle": "run:run_abc"}))
+store("STORE stored for another handle", 1,
+      ["Orca send stored: %s for %s" % (MID, OTHER), SK + "Orca stored it for %s, not the target" % OTHER,
+       END_H], osend_json=osend(to=OTHER), inbox_json=inbox({"id": MID, "to_handle": OTHER}))
+store("STORE nudge skip passes through", 1, [STORED, SK + "the target is waiting", END_H],
+      ps_json=ps(row("waiting")))
+store("STORE nudge fail passes through", 3,
+      [STORED, "Orca nudge failed: terminal send exited non-zero or timed out", END_H], send_rc=1)
+store("STORE envelope id without result.message", 5,
+      [NOSTORE + "the reply has no result.message.id", PASTE], osend_json=osend(message=False, warnings=False))
+store("STORE warning-only result", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
+      osend_json=osend(message=False))
+store("STORE ok false", 5, [NOSTORE + 'Orca did not return "ok": true (missing_task_id)', PASTE],
+      osend_rc=1, osend_json=json.dumps({"id": "local", "ok": False,
+                                         "error": {"code": "missing_task_id", "message": "worker_done requires taskId."}}))
+store("STORE ok false code not a word", 5, [NOSTORE + 'Orca did not return "ok": true', PASTE],
+      osend_rc=1, osend_json=json.dumps({"id": "local", "ok": False, "error": {"code": "x; rm -rf"}}))
+store("STORE ok truthy", 5, [NOSTORE + 'Orca did not return "ok": true', PASTE], osend_json=osend(ok="yes"))
+store("STORE empty stdout", 5, [NOSTORE + "the send exited 1 and printed nothing", PASTE],
+      osend_json="", osend_rc=1)
+store("STORE not JSON", 5, [NOSTORE + "the send exited 0 and printed no JSON", PASTE], osend_json="sent msg_1")
+store("STORE JSON list", 5, [NOSTORE + "the send printed JSON of an unexpected shape", PASTE],
+      osend_json="[]")
+store("STORE ok reply with a non-zero exit", 5, [NOSTORE + "the send exited 2", PASTE], osend_rc=2)
+store("STORE bad message id", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
+      osend_json=osend(mid="msg_X; rm"))
+store("STORE envelope uuid as message id", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
+      osend_json=osend(mid="9232524a-511a-4305-ba28-37e1d28617d5"))
+store("STORE bad recipient", 5, [NOSTORE + "the reply names no valid recipient", PASTE],
+      osend_json=osend(to="term_x; rm"))
+store("STORE id missing from the inbox", 5, [NOSTORE + "%s is not in the inbox for %s" % (MID, H), PASTE],
+      inbox_json=inbox({"id": "msg_999999999999", "to_handle": H}))
+store("STORE id in the inbox for another recipient", 5,
+      [NOSTORE + "%s is not in the inbox for %s" % (MID, H), PASTE],
+      inbox_json=inbox({"id": MID, "to_handle": OTHER}))
+store("STORE inbox not ok", 5, [NOSTORE + "%s is not in the inbox for %s" % (MID, H), PASTE],
+      inbox_json=inbox(ok=False))
+store("STORE inbox fails", 5, [NOSTORE + "the inbox could not be re-read, so %s is unconfirmed" % MID, PASTE],
+      inbox_rc=1)
+
+def store_retry(name, verb, times, rc, want, n_calls, err_rc=1, **kw):
+    calls = store(name, rc, want, mode="no-nudge", env_extra={
+        "STUB_ERR_VERB": verb, "STUB_ERR_TIMES": str(times), "STUB_ERR": VSOCK, "STUB_ERR_RC": str(err_rc)}, **kw)
+    n = len([c for c in calls if c[:2] == verb.split()])
+    (ok if n == n_calls else miss)("%s: %s calls" % (name, verb) if n == n_calls else
+                                   "%s: %d %s calls want %d" % (name, n, verb, n_calls))
+
+store_retry("STORE send vsock once", "orchestration send", 1, 0, [STORED], 2)
+store_retry("STORE send vsock twice", "orchestration send", 2, 5,
+            [NOSTORE + "the send exited 1 and printed nothing", PASTE], 2)
+store_retry("STORE send timeout not retried", "orchestration send", 1, 5,
+            [NOSTORE + "the send exited 124 and printed nothing", PASTE], 1, err_rc=124)
+store_retry("STORE inbox vsock once", "orchestration inbox", 1, 0, [STORED], 2)
+
+# --- SENDREF ---
+SR = "Orca send refused: "
+for name, args, stdin, why, end in [
+        ("SENDREF arg count", ["orca-ide", H, "status"], STDIN,
+         "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>", PASTE),
+        ("SENDREF cli not orca", ["bash", H, "status", "nudge"], STDIN, "the cli does not name an Orca CLI", PASTE),
+        ("SENDREF cli shell text", ["orca-ide;id", H, "status", "nudge"], STDIN,
+         "the cli is not a plain command name", PASTE),
+        ("SENDREF target title", ["orca-ide", "coord@main", "status", "no-nudge"], STDIN,
+         "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
+        ("SENDREF target flag", ["orca-ide", "--interrupt", "status", "no-nudge"], STDIN,
+         "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
+        ("SENDREF target newline", ["orca-ide", H + "\n" + H, "status", "nudge"], STDIN,
+         "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
+        ("SENDREF type worker_done", ["orca-ide", H, "worker_done", "nudge"], STDIN,
+         "the type is not status, question, handoff, escalation or merge_ready", PASTE),
+        ("SENDREF type heartbeat", ["orca-ide", H, "heartbeat", "nudge"], STDIN,
+         "the type is not status, question, handoff, escalation or merge_ready", PASTE),
+        ("SENDREF nudge a run address", ["orca-ide", "run:run_abc", "status", "nudge"], STDIN,
+         "only a term_ handle is nudged", END + "Needed from you: paste the block below into run:run_abc"),
+        ("SENDREF bad mode", ["orca-ide", H, "status", "yes"], STDIN,
+         "the fourth argument is not nudge or no-nudge", PASTE),
+        ("SENDREF no stdin", ["orca-ide", H, "status", "nudge"], "", "stdin has no subject line", PASTE),
+        ("SENDREF empty subject", ["orca-ide", H, "status", "nudge"], "  \nbody\n", "the subject is empty", PASTE),
+        ("SENDREF empty body", ["orca-ide", H, "status", "nudge"], SUBJ + "\n \n", "the body is empty", PASTE),
+        ("SENDREF subject starts --", ["orca-ide", H, "status", "nudge"], "--json\nbody\n",
+         "the subject starts with --, which Orca reads as a flag", PASTE),
+        ("SENDREF body starts --", ["orca-ide", H, "status", "nudge"], SUBJ + "\n--json\n",
+         "the body starts with --, which Orca reads as a flag", PASTE),
+        ("SENDREF over the size cap", ["orca-ide", H, "status", "nudge"], "s\n" + "x" * 28000 + "\n",
+         "subject and body are 28001 bytes; the limit is 28000 (WSL command-line limit)", PASTE)]:
+    store(name, 4, [SR + why, end], argv=args, stdin=stdin, called=False)
+# At the cap exactly: sent.
+store("STORE at the size cap", 0, [STORED], mode="no-nudge", stdin="s\n" + "x" * 27999 + "\n")
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("-- %d/%d checks passed --" % (passed, passed + failed))

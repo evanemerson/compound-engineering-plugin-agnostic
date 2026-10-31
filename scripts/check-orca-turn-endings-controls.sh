@@ -94,7 +94,7 @@ MUTANTS = [
      {"RULE: rule 7 holds then applies rule 1's nudge."}),
     ("rule-delivery-no-nudge", "skill", "(rule 1's target rules, then its nudge)", "(rule 1's target rules)",
      {"RULE: rule 7 holds `orchestration send` (rule 1's target rules, then its nudge) to any other (rule 1's \"Only a sent nudge completes the delivery\" says when a send counts)."}),
-    ("nudge-call-gone", "skill", 'orca-nudge.sh" "<cli>" "<target>"', 'orca-nudge.sh" "<target>"',
+    ("nudge-call-gone", "skill", 'orca-send.sh" "<cli>" "<target>"', 'orca-send.sh" "<target>"',
      {"NUDGE: rule 1 holds the nudge script call exactly once"}),
     # The fixed text must never carry message content.
     ("nudge-content-spliced", "skill", "`You have 1 orchestration message. Run",
@@ -119,7 +119,7 @@ MUTANTS = [
     # L28: the printed ending line, the send retry, the first-line order.
     ("nudge-ending-not-copied", "skill", "Copy the text after `Ending first line: `\n       verbatim", "Read the text after `Ending first line: `",
      {"NUDGE: rule 1 holds Copy the text after `Ending first line: ` verbatim as the ending's first line"}),
-    ("send-no-vsock-retry", "skill", "retry that send once, with\n", "report it, with\n",
+    ("send-no-vsock-retry", "skill", "retry that send once, with the same", "report it, with the same",
      {"NUDGE: rule 1 holds retry that send once, with the same command, before reporting `Orca send failed`"}),
     ("fallback-block-first", "skill", "block comes AFTER the ending's", "block comes BEFORE the ending's",
      {"NUDGE: rule 1 holds the printed block comes AFTER the ending's `Needed from you: …` first line"}),
@@ -144,8 +144,16 @@ MUTANTS = [
      {"NUDGE: rule 1 holds It never passes `--interrupt`."}),
     ("nudge-raw-allowed", "skill", "**Never type the line with `terminal send` yourself.**", "**Or type it yourself.**",
      {"NUDGE: rule 1 holds **Never type the line with `terminal send` yourself.**"}),
-    ("nudge-every-target", "skill", "So after a send succeeds to a\n     target that is not a Run coordinator, the sender",
-     "So after a send succeeds, the sender",
+    # L33: a send counts only by its stored message id, re-read from the inbox.
+    ("send-counted-by-envelope", "skill", "shaped\n     `msg_…`, AND a re-read of the inbox found that id.",
+     "shaped\n     `msg_…`.",
+     {"NUDGE: rule 1 holds only when Orca returned `\"ok\": true` with a `result.message.id` shaped `msg_…`, AND a re-read of the inbox found that id."}),
+    # L33: a worker with no Dispatch never reports with worker_done.
+    ("report-worker-done-type", "skill", "Its `<type>` is `handoff`, never `worker_done`:",
+     "Its `<type>` is `worker_done`:",
+     {"REPORT: rule 3 holds Its `<type>` is `handoff`, never `worker_done`: Orca refuses a `worker_done` from a sender with no Dispatch"}),
+    ("nudge-every-target", "skill", "only after a send succeeds to a target that is not a Run coordinator:",
+     "only after a send succeeds:",
      {"NUDGE: rule 1 holds after a send succeeds to a target that is not a Run coordinator"}),
     ("nudge-run-coord-undefined", "skill", "live Orca preamble, or a\n     `run:` or `dispatch:` address.",
      "live Orca preamble.",
