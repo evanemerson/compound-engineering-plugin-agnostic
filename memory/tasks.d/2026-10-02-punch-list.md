@@ -1092,7 +1092,7 @@ L33. **A send that stores nothing is reported "sent", and the nudge still fires.
 L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisible.**
     status: pending
     severity: P1
-    owner: unassigned
+    owner: unassigned (waits for L35's audit table)
     Operator, 2026-10-31: "when [orca-send.sh] prints Orca send failed: no
     message stored what reads that? how do i know a session is hung? i need
     to know to check it so i can fix it."
@@ -1112,7 +1112,9 @@ L34. **Nobody but the sender sees `Orca send failed`; a hung session is invisibl
 L35. **Root-cause hardening: can this class of silent loss happen anywhere else?**
     status: pending
     severity: P1
-    owner: unassigned
+    owner: roles (`tab17@roles`, dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "L35 + L36 now": Run `run_bf28fea0ea31`,
+      task `task_a696894b9fb4`, dispatch `ctx_b1afb520c506`, claude-opus-5-5)
     Operator, 2026-10-31: "is there anything else we need to research or do
     to ensure the root cause doesn't cause this again or cause another type
     of error like this?"
@@ -1130,7 +1132,9 @@ L35. **Root-cause hardening: can this class of silent loss happen anywhere else?
 L36. **Triage L33's open residuals and recommend fixes.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab1@integrity`, dispatched via Orca 2026-10-31 on the
+      same answer: task `task_cae146baf33d`, dispatch `ctx_6e30ef942095`;
+      P3s only, the 2 P2s go to L35)
     Operator, 2026-10-31: "we need to run a /cepa:triage on the work still
     open. make recommendations on what to fix."
     Scope: `todos/review-2026-10-31-184500.md` (7 findings `status:
