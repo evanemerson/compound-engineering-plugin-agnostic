@@ -15,7 +15,7 @@
 # Mutants run four at a time, each against its own copies. Each run of the
 # check takes a few seconds because its hang cases use the shorter test bound
 # (see BOUNDS and TITLE-BOUNDS in the check's header); the whole set took
-# about two minutes locally on 2026-10-30. On
+# about 3.5 minutes locally on 2026-10-31. On
 # 2026-10-30 the hang cases waited out the shipped 12 s per mutant, and the
 # controls overran the residual-integrity job's 10-minute bound (run
 # 41072902545).
@@ -187,13 +187,23 @@ MUTANTS = [
      'case "$cepa_title_repo" in\n         \'\'|*[!A-Za-z0-9._@-]*) cepa_title_why=', "title-repo-dash"),
     ("title-placeholder-is-self", "skill", "     <handle-or-self>\n     CEPA_TERM", "     self\n     CEPA_TERM",
      "title-placeholder-left"),
-    ("prose-drops-title-format", "skill", "as `<repo> · <role>@<wt>`.**", "as repo and name.**",
+    ("prose-drops-title-format", "skill", "as `<repo> · <role>@<wt>`; the", "as repo and name; the",
      "section 12 prose names `<repo> · <role>@<wt>`"),
     ("handoff-no-rename-grant", "handoff.md", ", Bash(orca-ide terminal rename:*)", "",
      "handoff.md grants Bash(orca-ide terminal rename:*)"),
     ("task-no-cite", "task.md", "apply `cepa:autonomy` §12 —", "apply the adapter —",
      "task.md carries the §12 citation sentence"),
     ("lfg-no-rule3", "lfg.md", "autonomy §12b rule 3", "autonomy rule 3", "lfg.md cites §12b rule 3"),
+    ("rule6-no-set-name-ban", "skill", "**Never set Claude Code's own name.**", "**Name it freely.**",
+     "TITLE-SURFACES"),
+    ("rule6-no-show-ban", "skill", "**Never check a rename with `terminal show` or `terminal list`.**",
+     "**Check a rename with `terminal show`.**", "TITLE-SURFACES"),
+    ("rule6-no-coord-first-turn", "skill", "A coordinator also names its own tab on its",
+     "A coordinator may name its own tab on its", "TITLE-SURFACES"),
+    ("skill-runs-rename", "skill", "Then it names the\n   worker's tab (rule 6)",
+     "Then it runs `/rename <role>@<wt>` in the\n   worker's tab (rule 6)", "TITLE-SURFACES"),
+    ("task-launches-named", "task.md", "apply `cepa:autonomy` §12 —",
+     "start the worker with `claude --name tab3@wt`, then apply `cepa:autonomy` §12 —", "TITLE-SURFACES"),
     ("handoff-no-rule1", "handoff.md", "§12b rule 1", "§12b", "handoff.md cites §12b rule 1"),
     ("handoff-no-ask-grant", "handoff.md", ", Bash(orca-ide orchestration ask:*)", "",
      "handoff.md grants Bash(orca-ide orchestration ask:*)"),
