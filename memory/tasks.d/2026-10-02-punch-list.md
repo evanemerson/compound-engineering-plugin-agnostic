@@ -999,14 +999,21 @@ L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
       (`7cc5027`, CI 4/4 green).
     Hand-offs sent 2026-10-31 via Orca (operator: "Send all five"), each with
     `Report to: term_8e8ae1c2…` (cepa coord@main) — waiting on replies:
-    - farmtender-laravel PR #79 (adds `.worktreeinclude` listing `.env`; drop
-      it before merge, or close) — `msg_8aa242b8e3b6`, nudged.
+    - farmtender-laravel PR #79 — DONE on the branch: `.worktreeinclude`
+      removed (`dd48f88`); verified 0 such files in the PR, none on the
+      default branch. #79 stays OPEN for the operator's merge (its original
+      instruction was do-not-merge). Reply `msg_32a05902e22e`.
     - artist360 (`.env`, `.env.local`; after its deploy work) —
       `msg_e48462d6c133`, NOT nudged: `worktree ps` hit the WSL vsock error
       twice → operator tells it to check its inbox.
-    - dpc-insider-www (`.env`) — `msg_c9f4600af1e4`, nudged.
-    - artist360-docs (comments only) — `msg_995c25131277`, nudged.
-    - kcprimetime (comments only) — `msg_70f99f3ee73c`, nudged.
+    - dpc-insider-www — DONE: PR #458 merged (`4cf4cf6`), file deleted;
+      verified absent on the default branch. Reply `msg_fa62fad215be`.
+    - artist360-docs — DONE: PR #5 merged (`4510c05`), file deleted;
+      verified absent. Reply `msg_47b9e080e72d`.
+    - kcprimetime — DONE on the branch: PR #30 (head `995468b`) no longer
+      adds it; it was never on the default branch (verified 404). #30 stays
+      OPEN for the operator's merge. Reply `msg_814ed9df7473`.
+    Remaining: artist360 only.
     - Already gone from main checkouts: ci-ops-self-hosted, hillberry-app,
       youtube, dpc-pro-www (their sessions were told to remove it).
     No env file is or ever was in git in any of these (L24 measurement).
