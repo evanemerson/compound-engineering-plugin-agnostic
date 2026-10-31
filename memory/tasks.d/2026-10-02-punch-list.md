@@ -925,6 +925,13 @@ L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-3
     Orca"): coord@feat-u3b `msg_b01c84b854c5` (tab17 / PR #828, OPEN,
     MERGEABLE, cf2a7909, CI 2/2) and coord@feat-streaming `msg_24495d0d4d5a`
     (tab1 / PR #835, OPEN, MERGEABLE, 11765e1e, CI 2/2); both nudged.
+    Result: coord@feat-u3b merged #828 (`e6974d33`, verified MERGED
+    12:40:33Z) and reported `merged #828` to cepa's coord@main
+    (`msg_b80d9f1e0555`), not to artist360's coord@main, because cepa sent
+    the relay. Forwarded to artist360 coord@main (`term_e83d28c6…`) as
+    `msg_a53a0e4dab21`, nudged; told coord@feat-streaming to report #835 to
+    artist360 coord@main (`msg_29702fe9ea54`). Lesson: a relay must name the
+    coordinator the result goes to.
     Also seen: tab23's input box holds an unsent draft ("1 and 3") — exactly
     the half-typed-draft risk accepted in L28; a nudge there would submit it.
 
@@ -943,6 +950,18 @@ L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
        (`check --peek`) at the start and end of every turn until the reply
        arrives, because Orca's prompt is best-effort.
     3. Restart long-lived coordinators after the current merges (RC4).
+
+
+L31. **`residual-integrity` CI job is close to its 10-minute bound.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    Measured 2026-10-31: the last 5 runs on `main` took 7m42s-8m58s
+    (`gh run list --branch main --workflow residual-integrity.yml`); PR #102's
+    run took 8m59s. Today's Orca checkers (detection, turn-endings, nudge and
+    their controls) added most of it. Split the job (precedent: L11 split the
+    mutation sweep into shards) before the next leg tips it over; a cancelled
+    job reads as a red check on every PR.
 
 ---
 
