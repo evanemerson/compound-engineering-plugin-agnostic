@@ -52,8 +52,13 @@
 #     on 2026-10-30 and kept `--enter` (#100 finding 3).
 #   - The row state while a permission prompt is open was not measured. The
 #     guard skips it unless it reads `done`.
-#   - The wait can overrun its bound by one `worktree ps` call (at most 12
-#     seconds), so a run takes at most about 150 seconds in all.
+#   - The clock starts after the first `worktree ps`, and the wait can
+#     overrun its bound by one more call, so with every call at its 12-second
+#     bound a run takes at most about 170 seconds in all. That is
+#     longer than a default 2-minute tool timeout: a caller that kills the
+#     run gets no line, and §12b rule 1 counts that as not delivered.
+#   - The bound is wall-clock: a clock stepped back mid-wait lengthens it by
+#     that step.
 #   - Each Orca call is bounded at 10 seconds plus a 2-second kill, as §12a's
 #     status probe is. No `timeout` or no `python3` reads as skipped.
 #   - The flags are from `terminal show --help`, `worktree ps --help` and
@@ -100,30 +105,37 @@ timeout -k 2 10 "$cepa_nudge_cli" worktree ps --agent-wait --json \
 cepa_nudge_state=$(python3 -I - "$cepa_nudge_term" "$cepa_nudge_tmp/show.json" "$cepa_nudge_tmp/ps.json" <<'PY' 2>/dev/null
 import json, re, sys
 term, show_p, ps_p = sys.argv[1:4]
+
+def reason():
+    try:
+        show, ps = json.load(open(show_p)), json.load(open(ps_p))
+    except (OSError, ValueError):
+        return "the Orca output is not JSON"
+    if show.get("ok") is not True or ps.get("ok") is not True:
+        return 'an Orca call did not return "ok": true'
+    t = (show.get("result") or {}).get("terminal") or {}
+    tab, leaf = t.get("tabId"), t.get("leafId")
+    if t.get("handle") != term or not isinstance(tab, str) or not isinstance(leaf, str) or not tab or not leaf:
+        return "terminal show did not describe this handle"
+    key = tab + ":" + leaf
+    rows = [a for w in ((ps.get("result") or {}).get("worktrees") or [])
+            for a in (w.get("agents") or []) if a.get("paneKey") == key]
+    if not rows:
+        return "the target has no agent row"
+    if len(rows) > 1:
+        return "the target matches %d agent rows" % len(rows)
+    state = rows[0].get("state")
+    if state == "done":
+        return "done"
+    elif isinstance(state, str) and re.fullmatch(r"[a-z_-]{1,20}", state):
+        return "the target is " + state
+    return "the target state is unknown"
+
+# JSON of the wrong shape (a list, null, a non-object row) raises here.
 try:
-    show, ps = json.load(open(show_p)), json.load(open(ps_p))
-except (OSError, ValueError):
-    print("the Orca output is not JSON"); sys.exit()
-if show.get("ok") is not True or ps.get("ok") is not True:
-    print('an Orca call did not return "ok": true'); sys.exit()
-t = (show.get("result") or {}).get("terminal") or {}
-tab, leaf = t.get("tabId"), t.get("leafId")
-if t.get("handle") != term or not isinstance(tab, str) or not isinstance(leaf, str) or not tab or not leaf:
-    print("terminal show did not describe this handle"); sys.exit()
-key = tab + ":" + leaf
-rows = [a for w in ((ps.get("result") or {}).get("worktrees") or [])
-        for a in (w.get("agents") or []) if a.get("paneKey") == key]
-if not rows:
-    print("the target has no agent row"); sys.exit()
-if len(rows) > 1:
-    print("the target matches %d agent rows" % len(rows)); sys.exit()
-state = rows[0].get("state")
-if state == "done":
-    print("done")
-elif isinstance(state, str) and re.fullmatch(r"[a-z_-]{1,20}", state):
-    print("the target is " + state)
-else:
-    print("the target state is unknown")
+    print(reason())
+except Exception:
+    print("the Orca output has an unexpected shape")
 PY
 ) || cepa_nudge_state=
 [ -n "$cepa_nudge_state" ] || skip "the Orca output could not be read"
@@ -144,7 +156,8 @@ if [ "$cepa_nudge_state" = "the target is working" ]; then
     cepa_nudge_now
     cepa_nudge_left=$((cepa_nudge_end - cepa_nudge_t))
     [ "$cepa_nudge_left" -gt 0 ] || skip "the target is still working after $cepa_nudge_wait seconds"
-    sleep "$((cepa_nudge_left < cepa_nudge_poll ? cepa_nudge_left : cepa_nudge_poll))"
+    sleep "$((cepa_nudge_left < cepa_nudge_poll ? cepa_nudge_left : cepa_nudge_poll))" \
+      || skip "sleep failed in the wait"
     cepa_nudge_read
   done
 fi

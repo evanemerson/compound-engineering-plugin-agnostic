@@ -35,3 +35,11 @@ Canonical findings: `todos/review-2026-10-30-181219.md` (findings 5, 13-16; 2 an
 - [ ] P3 — Nudge text lives in three places with no cross-check — `scripts/check-orca-turn-endings.sh` (finding 14).
 - [ ] P3 — Re-read state just before the send to narrow the TOCTOU window — `plugins/cepa/scripts/orca-nudge.sh` (finding 15).
 - [ ] P3 — Short handle, empty cli and missing `result` cases untested — `scripts/check-orca-nudge.sh` (finding 16).
+
+## Deferred from /cepa:review of PR #100 commit 996a0d5 (2026-10-30)
+
+Canonical findings: `todos/review-2026-10-30-191547.md` (findings 2, 11, 12).
+
+- [ ] P3 — The 3-minute tool timeout for the nudge block lives only in §12b rule 1; carry it beside each command's nudge step, or self-bound the block — `plugins/cepa/commands/` (finding 2).
+- [ ] P3 — The wall-clock wait grows when the clock steps back mid-wait; add an iteration cap of wait/poll with a case and a control — `plugins/cepa/scripts/orca-nudge.sh` (finding 11).
+- [ ] P3 — `mktemp` failing and `timeout`/`python3` absent stay untested; fold into finding 13 of review-2026-10-30-181219 — `scripts/check-orca-nudge.sh` (finding 12).

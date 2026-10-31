@@ -1643,8 +1643,9 @@ limits.
        (operator decision, 2026-10-30). Run the block with a tool timeout of
        at least 3 minutes.
      - **Only a sent nudge completes the delivery.** When the block prints
-       anything but `Orca nudge sent to <handle>` — skipped, refused, failed
-       or not found — the message stays unread and the delivery is not done.
+       anything but `Orca nudge sent to <handle>` — skipped, refused, failed,
+       not found, or no line at all because a tool timeout killed it — the
+       message stays unread and the delivery is not done.
        The sender's ending's first line is then
        `Needed from you: tell <session> to check its Orca inbox`, and its body
        lists the message id. A Run coordinator gets no nudge, so its send
@@ -1654,7 +1655,8 @@ limits.
        a target that is not a `term_` handle, prints
        `Orca nudge refused: <reason>` and sends nothing. It never passes
        `--interrupt`. A nudge that fails prints `Orca nudge failed: <reason>`.
-       Skipped, refused or failed, the send still stands.
+       Skipped, refused or failed, the send still stands: the message stays in
+       the target's inbox, and only a sent nudge completes the delivery.
      - **Never type the line with `terminal send` yourself.** The commands
        grant the script instead of `terminal send`, which admits any text, any
        terminal and `--interrupt`. That narrows the permission layer only in a
@@ -1662,6 +1664,7 @@ limits.
        others this rule, not the permission layer, keeps `terminal send` out.
 
      ```bash
+     # Run with a tool timeout of at least 3 minutes: the wait can take ~170 s.
      unset CEPA_ROOT
      for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
               "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
@@ -1702,8 +1705,8 @@ limits.
    - **One Handoff block per message.** The printed copy of a sent block
      omits a Handoff block that is already in the body, and says
      `(Handoff block above)` in its place.
-   - A worker that sends its hand-off ends its run right after the send and
-     the printed copy.
+   - A worker that sends its hand-off ends its run right after the send,
+     its nudge (above) and the printed copy.
 2. **A coordinator dispatches workers with Orca.** It binds a Run, then
    starts each worker with `worker-start` (or `task-create` and then
    `worker-start` for a planned fan-out). Each worker's spec is the paste-ready

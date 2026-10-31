@@ -122,6 +122,7 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "Still `working` at the bound, or `waiting`, `blocked`, an unknown state or no row from the start (no wait on those), it exits 1 and prints `Orca nudge skipped: <reason>`",
              "Run the block with a tool timeout of at least 3 minutes.",
              "**Only a sent nudge completes the delivery.**",
+             "ends its run right after the send, its nudge (above) and the printed copy.",
              "the message stays unread and the delivery is not done.",
              "`Needed from you: tell <session> to check its Orca inbox`, and its body lists the message id.",
              "A Run coordinator gets no nudge, so its send alone completes the delivery.",
@@ -130,7 +131,7 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "the nudge's Enter would answer a question meant for the operator",
              "`Orca nudge refused: <reason>`", "It never passes `--interrupt`.",
              "**Never type the line with `terminal send` yourself.**",
-             "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands.",
+             "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands: the message stays in the target's inbox, and only a sent nudge completes the delivery.",
              "A skipped, refused or failed nudge is never retried, and never replaced by a typed `terminal send`."]
 NUDGE_TEXT = "`You have 1 orchestration message. Run <cli> orchestration check --peek --json`"
 NUDGE_HEAD = "You have 1 orchestration message."

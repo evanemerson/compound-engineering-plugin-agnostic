@@ -25,10 +25,14 @@
 #   WAIT     — `working`: the script re-reads the row every 10 seconds for at
 #              most 120. Turning `done` sends; turning `waiting` skips at once
 #              with that reason; still `working` at the bound exits 1 with
-#              "still working after 120 seconds" having slept exactly 120. An
-#              env var named like the bound does not change it.
+#              "still working after 120 seconds" having slept exactly 120, the
+#              last sleep clamped when the clock is off the poll grid. An env
+#              var named like the bound does not change it. A `worktree ps`
+#              failure mid-wait, a bad clock, or a failed sleep each skips
+#              with its own reason.
 #   LOOKUP   — `terminal show` echoes another handle, gives empty tab/leaf
-#              ids, fails, or is not ok; `worktree ps` fails or is not ok:
+#              ids, fails, or is not ok; `worktree ps` fails, is not ok, or is
+#              JSON of the wrong shape:
 #              each is skipped, no send.
 #   REFUSE   — a bad cli (a path that is not ORCA_CLI_COMMAND included, or a
 #              name not on PATH) or handle, or the wrong argument count: exit 2,
@@ -68,12 +72,18 @@ case "$1 $2" in
   "terminal show") [ "$STUB_SHOW_RC" = 0 ] || exit "$STUB_SHOW_RC"; printf '%s' "$STUB_SHOW" ;;
   "worktree ps") [ "$STUB_PS_RC" = 0 ] || exit "$STUB_PS_RC"
     # STUB_PS is one output, or a JSON list played in order with the last
-    # repeated. Past 100 calls it fails, so a mutant that never stops waiting
-    # ends fast, as a skip.
+    # repeated; STUB_PS_RC_SEQ is the same for the exit code. Each call adds
+    # STUB_PS_TICK seconds to the fake clock. Past 100 calls it fails, so a
+    # mutant that never stops waiting ends fast, as a skip.
     python3 -I -c '
 import json, os, sys
 n = sum(1 for l in open(os.environ["STUB_LOG"]) if l.startswith("[\"worktree\", \"ps\""))
 if n > 100: sys.exit(99)
+c = os.environ["STUB_CLOCK"]
+now = int(open(c).read()) + int(os.environ.get("STUB_PS_TICK", "0"))
+open(c, "w").write("%d\n" % now)
+rcs = json.loads(os.environ.get("STUB_PS_RC_SEQ", "[0]"))
+if rcs[min(n, len(rcs)) - 1]: sys.exit(rcs[min(n, len(rcs)) - 1])
 v = os.environ["STUB_PS"]
 seq = json.loads(v) if v.startswith("[") else [v]
 sys.stdout.write(seq[min(n, len(seq)) - 1])' ;;
@@ -88,12 +98,15 @@ for alias in ("orca", "orca-dev"):
     os.symlink(STUB, os.path.join(BIN, alias))
 # The fake clock: `date +%s` prints the clock file, `sleep N` adds N to it and
 # logs N. Any other use of either is a failure the check can see.
+# STUB_DATE replaces the clock's answer; STUB_SLEEP_RC makes sleep fail.
 open(os.path.join(BIN, "date"), "w").write('''#!/usr/bin/env bash
 [ "$*" = "+%s" ] || exit 64
+[ -z "${STUB_DATE-}" ] || { echo "$STUB_DATE"; exit 0; }
 cat "$STUB_CLOCK"
 ''')
 open(os.path.join(BIN, "sleep"), "w").write('''#!/usr/bin/env bash
 [ $# -eq 1 ] && [[ $1 =~ ^[0-9]+$ ]] || exit 64
+[ "${STUB_SLEEP_RC:-0}" = 0 ] || exit "$STUB_SLEEP_RC"
 echo "$1" >>"$STUB_SLEEPS"
 echo $(( $(cat "$STUB_CLOCK") + $1 )) >"$STUB_CLOCK"
 ''')
@@ -169,9 +182,9 @@ def expect(name, args, rc, line, called=True, slept=(), **kw):
 # --- SEND ---
 rc, out, calls = run(["orca-ide", H])
 s = sends(calls)
-check = rc == 0 and out == ["Orca nudge sent to " + H] and s == [SEND_ARGV]
+check = rc == 0 and out == ["Orca nudge sent to " + H] and s == [SEND_ARGV] and SLEPT == []
 (ok if check else miss)("SEND done: one fixed send" if check else
-                         "SEND done: rc=%s out=%r sends=%r" % (rc, out, s))
+                         "SEND done: rc=%s out=%r sends=%r slept=%r" % (rc, out, s, SLEPT))
 check = all("--interrupt" not in c for c in calls)
 (ok if check else miss)("SEND never --interrupt" if check else "SEND never --interrupt: %r" % calls)
 look = [c for c in calls if c[:2] != ["terminal", "send"]]
@@ -181,8 +194,8 @@ check = look == [["terminal", "show", "--terminal", H, "--json"], ["worktree", "
 def sends_text(name, args, text, **kw):
     rc, out, calls = run(args, **kw)
     s = sends(calls)
-    good = rc == 0 and out == ["Orca nudge sent to " + H] and len(s) == 1 and s[0][5] == text
-    (ok if good else miss)(name if good else "%s: rc=%s out=%r sends=%r" % (name, rc, out, s))
+    good = rc == 0 and out == ["Orca nudge sent to " + H] and len(s) == 1 and s[0][5] == text and SLEPT == []
+    (ok if good else miss)(name if good else "%s: rc=%s out=%r sends=%r slept=%r" % (name, rc, out, s, SLEPT))
 
 sends_text("SEND orca-dev", ["orca-dev", H], TEXT.replace("orca-ide", "orca-dev"))
 sends_text("SEND cli path is ORCA_CLI_COMMAND", [STUB, H], TEXT.replace("orca-ide", STUB),
@@ -221,6 +234,17 @@ expect("WAIT working past the bound", ["orca-ide", H], 1,
 expect("WAIT bound ignores env", ["orca-ide", H], 1,
        SK + "the target is still working after 120 seconds", slept=[10] * 12, ps_json=ps(W),
        env_extra={"CEPA_NUDGE_WAIT": "1", "cepa_nudge_wait": "1", "cepa_nudge_poll": "1"})
+# A ps call that takes 3 s puts the clock off the poll grid: the last sleep
+# is clamped to what is left, and the bound is exact.
+expect("WAIT clock off the poll grid", ["orca-ide", H], 1,
+       SK + "the target is still working after 120 seconds", slept=[10] * 9 + [3], ps_json=ps(W),
+       env_extra={"STUB_PS_TICK": "3"})
+expect("WAIT ps fails mid-wait", ["orca-ide", H], 1, SK + "worktree ps failed or timed out",
+       slept=[10], ps_json=ps(W), env_extra={"STUB_PS_RC_SEQ": "[0, 1]"})
+expect("WAIT date gives no clock", ["orca-ide", H], 1, SK + "date gave no clock for the wait",
+       ps_json=ps(W), env_extra={"STUB_DATE": "12x"})
+expect("WAIT sleep fails", ["orca-ide", H], 1, SK + "sleep failed in the wait",
+       ps_json=ps(W), env_extra={"STUB_SLEEP_RC": "1"})
 
 # --- LOOKUP ---
 expect("LOOKUP show names another handle", ["orca-ide", H], 1,
@@ -234,6 +258,8 @@ expect("LOOKUP show fails", ["orca-ide", H], 1, SK + "terminal show failed or ti
 expect("LOOKUP ps fails", ["orca-ide", H], 1, SK + "worktree ps failed or timed out", ps_rc=1)
 expect("LOOKUP ps not ok", ["orca-ide", H], 1, SK + 'an Orca call did not return "ok": true',
        ps_json=json.dumps({"ok": False}))
+expect("LOOKUP ps wrong shape", ["orca-ide", H], 1, SK + "the Orca output has an unexpected shape",
+       ps_json="null")
 
 # --- REFUSE ---
 RF = "Orca nudge refused: "
