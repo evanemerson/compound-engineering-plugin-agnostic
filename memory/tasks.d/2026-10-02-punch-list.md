@@ -979,7 +979,12 @@ L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
 
 
 L31. **`residual-integrity` CI job is close to its 10-minute bound.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31: PR #104 merged (`c3ee641`, operator's AskUserQuestion
+    "Merge #104"). One job → three parallel jobs: check 1m45s, orca-detection
+    3m19s, orca-nudge 3m31s (hosted run 41211871504), each bound 10 min. CI
+    4/4 green on the updated head `01c548c`. 0 P1/P2; P3s in
+    `todos/review-2026-10-31-145500.md`. `roles` parked at origin/main.
     severity: P2
     owner: roles (`tab15@roles`, dispatched 2026-10-31 via Orca `worker-start`
     on Run `run_bf28fea0ea31`, task `task_f63bbbbc6b01`, dispatch
