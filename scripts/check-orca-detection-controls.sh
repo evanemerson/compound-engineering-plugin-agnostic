@@ -15,7 +15,7 @@
 # Mutants run four at a time, each against its own copies. Each run of the
 # check takes a few seconds because its hang cases use the shorter test bound
 # (see BOUNDS and TITLE-BOUNDS in the check's header); the whole set took
-# about two minutes locally on 2026-10-30. On
+# about 3.5 minutes locally on 2026-10-31. On
 # 2026-10-30 the hang cases waited out the shipped 12 s per mutant, and the
 # controls overran the residual-integrity job's 10-minute bound (run
 # 41072902545).
@@ -198,6 +198,8 @@ MUTANTS = [
      "TITLE-SURFACES"),
     ("rule6-no-show-ban", "skill", "**Never check a rename with `terminal show` or `terminal list`.**",
      "**Check a rename with `terminal show`.**", "TITLE-SURFACES"),
+    ("rule6-no-coord-first-turn", "skill", "A coordinator also names its own tab on its",
+     "A coordinator may name its own tab on its", "TITLE-SURFACES"),
     ("skill-runs-rename", "skill", "Then it names the\n   worker's tab (rule 6)",
      "Then it runs `/rename <role>@<wt>` in the\n   worker's tab (rule 6)", "TITLE-SURFACES"),
     ("task-launches-named", "task.md", "apply `cepa:autonomy` §12 —",

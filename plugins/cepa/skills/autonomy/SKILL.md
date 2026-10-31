@@ -1879,45 +1879,45 @@ limits.
    `coord@main` cannot tell one repo's coordinator from another's. The
    dashboard card is left to Claude Code, so it shows what the session is
    doing. Each Orca surface shows a different name, from a different setting
-   (measured 2026-10-31 on Orca 1.4.245 and Claude Code 2.1.316, punch-list
-   L37; the operator read the two UI surfaces):
+   (2026-10-31, Orca 1.4.245 and Claude Code 2.1.316, punch-list L37, on
+   probe tabs; the Source column says how each row was found):
 
-   | Surface | Shows | Set by |
-   |---|---|---|
-   | Tab strip | Orca's custom tab title | `terminal rename` (this rule), or `terminal create --title` |
-   | Agent Dashboard card | Claude Code's session name, else its topic title | Claude Code itself; `/rename` or `claude --name` replace it |
-   | `terminal show` / `terminal list` `title` | the program's own title (OSC escape) | Claude Code's name or topic; a shell's prompt |
-   | Worktree sidebar | the worktree's display name: its branch by default | `worker-start --display-name` / `--name`, for a NEW worktree only |
+   | Surface | Shows | Set by | Source |
+   |---|---|---|---|
+   | Tab strip | Orca's custom tab title | `terminal rename` (this rule) | operator read it after a rename |
+   | Agent Dashboard card | Claude Code's session name, else its topic title | Claude Code itself; `/rename` replaces it | operator read it after `/rename` |
+   | `terminal show` / `terminal list` `title` | the program's own title (OSC escape) | Claude Code's name or topic; a shell's prompt | CLI output before and after a rename |
+   | Worktree sidebar | the worktree's display name | `worker-start --display-name` / `--name`, for a NEW worktree only | `worktree list --json` and `--help`; not read in the UI |
 
-   So the operator reads identity on the tab, activity on the card, and the
-   work item on the sidebar: §10b's branch `<type>/<wt>/<desc>` carries both
-   the worktree and the item.
+   So the operator reads identity on the tab and activity on the card.
    - **When.** Each session names its own tab once per command, right after
      §12a prints `ORCA: present`. A coordinator also names its own tab on its
-     first turn, before any dispatch: a coordinator that runs no cepa command
-     otherwise never names it (L37 found three that had not). A coordinator
-     names each worker's tab right after `worker-start` returns that worker's
+     first turn, before any dispatch: it runs §12a's block, then this
+     block with `self`. A coordinator that runs no cepa command reaches this
+     sentence only through the operator's own instructions, which L37's PR
+     proposes for `~/.claude/CLAUDE.md`. L37 found coordinators that had not
+     named their tabs (count not taken). A coordinator names each worker's tab right after `worker-start` returns that worker's
      terminal handle (rule 2). Naming the same tab again is harmless: the
      title is the same.
-   - **Never set Claude Code's own name.** No session runs `/rename` or
-     starts Claude with `--name`/`-n` to carry a role. A set name replaces the
-     topic on the dashboard card and stays: a probe renamed with `/rename`
-     kept that name through a later, unrelated prompt. The card would then
-     show who the session is twice and what it is doing nowhere.
+   - **Never set Claude Code's own name.** cepa never tells a session to run
+     `/rename`, or to start Claude with `--name`/`-n`, to carry a role. A set
+     name replaces the topic on the dashboard card and stays: one probe
+     renamed with `/rename` kept that name through a later, unrelated prompt.
+     The card would then show who the session is twice and what it is doing
+     nowhere. `--name` is inferred to act the same (its `--help` says it sets
+     the terminal title); it was not probed alone.
    - **Never check a rename with `terminal show` or `terminal list`.** Their
-     `title` field is the program's own title, not the tab title: after a
-     rename that returned `"ok": true`, `terminal show` still reported
-     Claude Code's own title, while the tab strip showed the new title. The `"ok": true`
-     envelope is the only check the CLI gives; only the operator sees the tab.
+     `title` field is the program's own title, not the tab title. On two probe
+     tabs, a rename returned `"ok": true`, the operator saw the new title on
+     the tab strip, and `terminal show` still reported the old program title
+     (a shell prompt; a `/rename` name). The `"ok": true` envelope is the only
+     check the CLI gives; only the operator sees the tab.
    - **`worker-start --display-name` is not a tab title.** It names a new
      worktree, and Orca rejects it for `current` or an existing worktree
-     (`worker-start --help`). It
-     never stands in for the rename.
-   - **`tabN` stays.** Under Orca a worker is addressed by its handle, so the
-     number no longer routes anything. It still earns its place: one live
-     worker per checkout (§10) means successive workers in one worktree differ
-     only by it, and the punch list's owner lines, the Handoff block and
-     `/cepa:handoff`'s line 1 name a worker by it after its terminal is gone.
+     (`worker-start --help`). It never stands in for the rename.
+   - **`tabN` stays** in the §10a name. Orca routes by handle, but the number
+     is what names a worker in the records that outlive its terminal (§10a,
+     §10d).
    - **`<repo>`** is the main checkout's directory name: the parent of the
      absolute `git rev-parse --git-common-dir`. Never `--show-toplevel`,
      which names the worktree in a linked worktree.
