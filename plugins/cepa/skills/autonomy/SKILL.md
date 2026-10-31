@@ -1512,12 +1512,15 @@ else
     cepa_orca_why="$cepa_orca_cli not on PATH"
   fi
 fi
-cepa_orca_tmp= cepa_orca_err=
+cepa_orca_tmp= cepa_orca_err= cepa_orca_rc=
 cepa_orca_probe() {
-  timeout -k "$cepa_orca_kill" "$cepa_orca_wait" "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>"$cepa_orca_err"
+  timeout -k "$cepa_orca_kill" "$cepa_orca_wait" "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>"$cepa_orca_err" && return 0
+  cepa_orca_rc=$?
+  return 1
 }
 cepa_orca_vsock() {
-  cepa_orca_e=$(<"$cepa_orca_err") || return 1
+  [ "$cepa_orca_rc" != 124 ] && [ "$cepa_orca_rc" != 137 ] || return 1
+  { cepa_orca_e=$(<"$cepa_orca_err"); } 2>/dev/null || return 1
   [[ $cepa_orca_e == *UtilAcceptVsock* && $cepa_orca_e == *"accept4 failed 110"* ]]
 }
 if [ -n "$cepa_orca_why" ]; then
@@ -1568,8 +1571,8 @@ fi
   `UtilAcceptVsock` and `accept4 failed 110` (punch-list L26 re-probe,
   2026-10-31: it made this block read absent in two runs). When the probe
   exits non-zero with both texts in its stderr, the block runs it once more
-  with the same bounds. Any other failure, and a second failure, reads absent
-  as before. So the block's worst case is two bounds, not one: 2 × 3.5 s = 7 s
+  with the same bounds. A timed-out probe (exit 124, or 137 after the kill),
+  any other failure, and a second failure read absent as before. So the block's worst case is two bounds, not one: 2 × 3.5 s = 7 s
   on the `ORCA_CLI_COMMAND` path, and 2 × 12 s = 24 s on every other path.
 - **The bounds are literals in the block,** never read from the environment,
   so no variable a session happens to carry can lengthen or shorten them. The
@@ -1630,7 +1633,10 @@ limits.
      `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
      sessions in the L26 re-probe, 2026-10-31), retry that send once, with
      the same command, before reporting `Orca send failed`. No other error is
-     retried. When the send did not succeed, print the block for pasting as
+     retried, and a send that timed out is not retried. Not measured: whether
+     the failed send reached Orca, so the target can get the message twice
+     (#101 review); the retry is accepted with that limit. When the send did
+     not succeed, print the block for pasting as
      before, with one line saying
      why: `Orca send skipped: <no target> — paste below` when no send ran, or
      `Orca send failed: <exit and error> — paste below`. In every fallback
@@ -1688,7 +1694,9 @@ limits.
        Skipped, refused or failed, the send still stands: the message stays in
        the target's inbox, and only a sent nudge completes the delivery.
        Each Orca call inside the script is retried once on the WSL interop
-       error, and only on it; the script's header owns that retry.
+       error, and only on it; before it retries the send, it re-reads the
+       target's row and sends only on `done`. The script's header owns that
+       retry.
      - **Never type the line with `terminal send` yourself.** The commands
        grant the script instead of `terminal send`, which admits any text, any
        terminal and `--interrupt`. That narrows the permission layer only in a
@@ -1714,7 +1722,7 @@ limits.
 
      The block always exits 0: its first printed line is the result, and a
      second line, when there is one, is the ending's first line. A skipped,
-     refused or failed nudge is never retried, and never replaced by a typed
+     refused or failed nudge is never retried by the session, and never replaced by a typed
      `terminal send`.
 
      **Stated limit, accepted by the operator on 2026-10-30.** A nudge can

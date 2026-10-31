@@ -132,7 +132,7 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "`Orca nudge refused: <reason>`", "It never passes `--interrupt`.",
              "**Never type the line with `terminal send` yourself.**",
              "`Orca nudge failed: <reason>`", "Skipped, refused or failed, the send still stands: the message stays in the target's inbox, and only a sent nudge completes the delivery.",
-             "A skipped, refused or failed nudge is never retried, and never replaced by a typed `terminal send`.",
+             "A skipped, refused or failed nudge is never retried by the session, and never replaced by a typed `terminal send`.",
              # L28: the script prints the ending's first line; the session copies it.
              "Copy the text after `Ending first line: ` verbatim as the ending's first line",
              # L28: one retry of a send, only on the WSL interop error.

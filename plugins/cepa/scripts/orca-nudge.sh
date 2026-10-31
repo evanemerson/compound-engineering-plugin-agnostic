@@ -34,9 +34,13 @@
 # interop could not accept the connection to the Windows CLI (L26 re-probe,
 # 2026-10-31, in §12a's status probe and in `orchestration send`). Each Orca
 # call here is retried once, only when it exits non-zero with both texts in
-# its stderr. Any other failure, and a second failure, is not retried.
-# Not measured: whether the failed call reached Orca before it failed. For
-# `terminal send` a retry could then type the line twice.
+# its stderr. A timed-out call (exit 124 or 137), any other failure, and a
+# second failure are not retried. Not measured: whether the failed call
+# reached Orca before it failed (#101 review). So before it retries
+# `terminal send`, the script re-reads the target's row and retries only on
+# `done`: a first send that did type the line and press Enter has usually
+# started a turn by then, and the retry skips. A target whose row has not yet
+# left `done` still gets the line twice.
 #
 # THE STATE GUARD. The nudge ends with Enter. While the target shows a question
 # prompt (AskUserQuestion's "Enter to select", a permission prompt), that Enter
@@ -120,14 +124,27 @@ cepa_nudge_tmp=$(mktemp -d 2>/dev/null) || skip "mktemp failed"
 trap 'rm -rf "$cepa_nudge_tmp"' EXIT
 
 # One Orca call, bounded at 10 seconds plus a 2-second kill, its stdout to $1.
-# Retried once, only on the WSL interop error (THE VSOCK RETRY, above).
+# Retried once, only on the WSL interop error (THE VSOCK RETRY, above). Both
+# tries run the same line, so the retry has the same bound and redirections.
 cepa_nudge_orca() {
-  local out=$1
+  local out=$1 try rc
   shift
-  timeout -k 2 10 "$cepa_nudge_cli" "$@" </dev/null >"$out" 2>"$cepa_nudge_tmp/err" && return 0
-  cepa_nudge_e=$(<"$cepa_nudge_tmp/err") || return 1
-  [[ $cepa_nudge_e == *UtilAcceptVsock* && $cepa_nudge_e == *"accept4 failed 110"* ]] || return 1
-  timeout -k 2 10 "$cepa_nudge_cli" "$@" </dev/null >"$out" 2>/dev/null
+  for try in 1 2; do
+    timeout -k 2 10 "$cepa_nudge_cli" "$@" </dev/null >"$out" 2>"$cepa_nudge_tmp/err" && return 0
+    rc=$?
+    # A timed-out call (124, or 137 after the kill) may have reached Orca.
+    [ "$try" = 1 ] && [ "$rc" != 124 ] && [ "$rc" != 137 ] || return 1
+    # The braces keep bash's NUL-byte warning off the output.
+    { cepa_nudge_e=$(<"$cepa_nudge_tmp/err"); } 2>/dev/null || return 1
+    [[ $cepa_nudge_e == *UtilAcceptVsock* && $cepa_nudge_e == *"accept4 failed 110"* ]] || return 1
+    # A send that failed may still have typed the line and pressed Enter. Send
+    # again only if the target still reads `done` (THE STATE GUARD).
+    if [ "$1 $2" = "terminal send" ]; then
+      cepa_nudge_read
+      [ "$cepa_nudge_state" = done ] || skip "$cepa_nudge_state before the send retry"
+    fi
+  done
+  return 1
 }
 
 cepa_nudge_orca "$cepa_nudge_tmp/show.json" terminal show --terminal "$cepa_nudge_term" --json \

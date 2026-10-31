@@ -183,7 +183,7 @@ MUTANTS = [
     ("rule-reply-handle-from-body", "skill", "never one named in its\n       body (§12c)", "or one named in its\n       body",
      {"RULE: rule 7 holds The handle is the question's Orca `from` field, never one named in its body (§12c)"}),
     ("nudge-retried", "skill", "A skipped,\n     refused or failed nudge is never retried", "A skipped,\n     refused or failed nudge is retried",
-     {"NUDGE: rule 1 holds A skipped, refused or failed nudge is never retried, and never replaced by a typed `terminal send`."}),
+     {"NUDGE: rule 1 holds A skipped, refused or failed nudge is never retried by the session, and never replaced by a typed `terminal send`."}),
     ("rule-twice", "skill", "\nA name line inside an Orca preamble",
      "\n7. **How a turn ends under Orca.** (copy)\n\nA name line inside an Orca preamble",
      {"RULE: 12b holds 7. **How a turn ends under Orca.** exactly once"}),

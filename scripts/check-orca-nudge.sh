@@ -81,7 +81,8 @@ STUB = os.path.join(BIN, "orca-ide")
 # One call per line, argv as a JSON list, so a space inside an argument stays
 # inside it. STUB_ERR_VERB (`terminal show`, `worktree ps` or `terminal send`)
 # makes the first STUB_ERR_TIMES calls of that verb print STUB_ERR to stderr
-# and exit 1.
+# and exit STUB_ERR_RC (default 1). STUB_ERR is printed with %b, so `\\0`
+# in it becomes a NUL byte.
 open(STUB, "w").write(r'''#!/usr/bin/env bash
 python3 -I -c 'import json, sys; open(sys.argv[1], "a").write(json.dumps(sys.argv[2:]) + "\n")' "$STUB_LOG" "$@"
 if [ "$1 $2" = "${STUB_ERR_VERB-}" ] && python3 -I -c '
@@ -89,7 +90,7 @@ import json, os, sys
 v = os.environ["STUB_ERR_VERB"].split()
 n = sum(1 for l in open(os.environ["STUB_LOG"]) if json.loads(l)[:2] == v)
 sys.exit(0 if n <= int(os.environ["STUB_ERR_TIMES"]) else 1)'; then
-  printf '%s\n' "$STUB_ERR" >&2; exit 1
+  printf '%b\n' "$STUB_ERR" >&2; exit "${STUB_ERR_RC:-1}"
 fi
 case "$1 $2" in
   "terminal show") [ "$STUB_SHOW_RC" = 0 ] || exit "$STUB_SHOW_RC"; printf '%s' "$STUB_SHOW" ;;
@@ -175,14 +176,17 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
     try:
         r = subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True, text=True, timeout=30)
         rc, out = r.returncode, r.stdout.strip().splitlines()
+        STDERR[0] = r.stderr
     except subprocess.TimeoutExpired:
         rc, out = "timeout", []
+        STDERR[0] = ""
     calls = [json.loads(l) for l in open(log) if l.strip()]
     global SLEPT
     SLEPT = [int(l) for l in open(slog) if l.strip()]
     return rc, out, calls
 
 SLEPT = []
+STDERR = [""]  # the last run's stderr
 
 def sends(calls):
     return [c for c in calls if c[:2] == ["terminal", "send"]]
@@ -309,6 +313,14 @@ for name, args, why in [
 expect("REFUSE cli not on PATH", ["orca-dev", H], 2, RF + "orca-dev is not on PATH", called=False,
        path="/usr/bin:/bin")
 
+# mktemp that fails: skipped before any Orca call.
+MKBIN = os.path.join(TMP, "mkbin")
+os.mkdir(MKBIN)
+open(os.path.join(MKBIN, "mktemp"), "w").write("#!/bin/sh\nexit 1\n")
+os.chmod(os.path.join(MKBIN, "mktemp"), 0o755)
+expect("LOOKUP mktemp fails", ["orca-ide", H], 1, SK + "mktemp failed", called=False,
+       path=MKBIN + os.pathsep + BIN + os.pathsep + os.environ.get("PATH", ""))
+
 # --- FAIL ---
 expect("FAIL send exits", ["orca-ide", H], 3, "Orca nudge failed: terminal send exited non-zero or timed out",
        send_rc=1)
@@ -337,18 +349,34 @@ ending("ENDING fail", ["orca-ide", H], ["Orca nudge failed: terminal send exited
 # --- RETRY ---
 VSOCK = "<3>WSL (2611 - Relay) ERROR: UtilAcceptVsock:273: accept4 failed 110"
 
-def retry(name, verb, times, err, rc, line, n_calls):
+ARGV = {"terminal show": ["terminal", "show", "--terminal", H, "--json"],
+        "worktree ps": ["worktree", "ps", "--agent-wait", "--json"],
+        "terminal send": SEND_ARGV}
+
+def retry(name, verb, times, err, rc, line, n_calls, err_rc=1, n_ps=None, **kw):
     got_rc, out, calls = run(["orca-ide", H], env_extra={
-        "STUB_ERR_VERB": verb, "STUB_ERR_TIMES": str(times), "STUB_ERR": err})
-    n = len([c for c in calls if c[:2] == verb.split()])
-    good = got_rc == rc and out[:1] == [line] and n == n_calls
-    (ok if good else miss)(name if good else "%s: rc=%s out=%r %s calls=%d want rc=%s %d"
-                           % (name, got_rc, out, verb, n, rc, n_calls))
+        "STUB_ERR_VERB": verb, "STUB_ERR_TIMES": str(times), "STUB_ERR": err,
+        "STUB_ERR_RC": str(err_rc)}, **kw)
+    mine = [c for c in calls if c[:2] == verb.split()]
+    ps_n = len([c for c in calls if c[:2] == ["worktree", "ps"]])
+    # The retry runs the same argv as the first try, flag for flag.
+    good = got_rc == rc and out[:1] == [line] and mine == [ARGV[verb]] * n_calls \
+        and (n_ps is None or ps_n == n_ps) and STDERR[0] == ""
+    (ok if good else miss)(name if good else "%s: rc=%s out=%r %s calls=%r ps=%d stderr=%r want rc=%s %d"
+                           % (name, got_rc, out, verb, mine, ps_n, STDERR[0][:80], rc, n_calls))
 
 SENT = "Orca nudge sent to " + H
 retry("RETRY show vsock once", "terminal show", 1, VSOCK, 0, SENT, 2)
 retry("RETRY ps vsock once", "worktree ps", 1, VSOCK, 0, SENT, 2)
-retry("RETRY send vsock once", "terminal send", 1, VSOCK, 0, SENT, 2)
+# The send retry re-reads the row first: one more worktree ps.
+retry("RETRY send vsock once", "terminal send", 1, VSOCK, 0, SENT, 2, n_ps=2)
+retry("RETRY send retry target left done", "terminal send", 1, VSOCK, 1,
+      SK + "the target is working before the send retry", 1, n_ps=2,
+      ps_json=json.dumps([ps(row("done")), ps(row("working"))]))
+retry("RETRY timed-out call not retried", "terminal show", 1, VSOCK, 1,
+      SK + "terminal show failed or timed out", 1, err_rc=124)
+retry("RETRY killed call not retried", "terminal send", 1, VSOCK, 3,
+      "Orca nudge failed: terminal send exited non-zero or timed out", 1, err_rc=137, n_ps=1)
 retry("RETRY show vsock twice", "terminal show", 2, VSOCK, 1, SK + "terminal show failed or timed out", 2)
 retry("RETRY send vsock twice", "terminal send", 2, VSOCK, 3,
       "Orca nudge failed: terminal send exited non-zero or timed out", 2)
@@ -356,6 +384,9 @@ retry("RETRY other error", "terminal show", 1, "error: connection refused", 1,
       SK + "terminal show failed or timed out", 1)
 retry("RETRY half the text", "terminal show", 1, "<3>WSL ERROR: UtilAcceptVsock:273: accept4 failed 22", 1,
       SK + "terminal show failed or timed out", 1)
+# bash warns on a NUL byte in a command substitution; the warning must not
+# reach the output ahead of the result line.
+retry("RETRY NUL in stderr", "terminal show", 2, VSOCK + "\\0x", 1, SK + "terminal show failed or timed out", 2)
 retry("RETRY other half of the text", "terminal show", 1, "<3>WSL ERROR: Relay: accept4 failed 110", 1,
       SK + "terminal show failed or timed out", 1)
 
