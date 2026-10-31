@@ -523,7 +523,7 @@ for i in $(seq 0 $((N - 1))); do
   ok=1; detail=''
   if [ "$rc" -ne "${EXP_RC[$i]}" ]; then
     ok=0; detail="expected rc=${EXP_RC[$i]}, got rc=$rc"
-  elif [ -n "${EXP_RE[$i]}" ] && ! printf '%s' "$out" | grep -Eq -- "${EXP_RE[$i]}"; then
+  elif [ -n "${EXP_RE[$i]}" ] && ! grep -Eq -- "${EXP_RE[$i]}" <<<"$out"; then
     ok=0; detail="output did not match /${EXP_RE[$i]}/"
   fi
 

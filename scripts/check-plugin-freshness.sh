@@ -211,7 +211,7 @@ EOF
       #                    version-based verdict off a field it had silently
       #                    discarded. A leading dash also reaches git as an
       #                    OPTION, not a revision (measured: exit 129).
-      if [ "$INST_SHA" != "-" ] && ! printf '%s' "$INST_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+      if [ "$INST_SHA" != "-" ] && ! grep -Eq '^[0-9a-fA-F]{7,40}$' <<<"$INST_SHA"; then
         unknown "gitCommitSha in $INSTALLED_JSON is not a hex SHA ('$INST_SHA') — LOADED copy unverified"
       elif [ "$INST_SHA" = "-" ]; then
         # No recorded SHA: fall back to comparing the cached tree's own

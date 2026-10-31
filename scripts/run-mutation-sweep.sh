@@ -392,7 +392,7 @@ classify_transcript() {  # classify_transcript <transcript> [mode: controls|self
     trailer=$(printf '%s\n' "$out" | grep -oE -- '^-- [0-9]+/[0-9]+ classifier selftests passed --$' | tail -1)
     if [ -z "$trailer" ]; then
       CLASS='HARNESS-ERROR'
-      CLASS_DETAIL=$(printf '%s\n' "$out" | grep -m1 -E '^FATAL' \
+      CLASS_DETAIL=$(grep -m1 -E '^FATAL' <<<"$out" \
         || printf 'no selftest trailer (the driver exited before finishing — a mutation that cannot reach the trailer is never a finding about the mutant)')
       return
     fi
@@ -414,7 +414,7 @@ classify_transcript() {  # classify_transcript <transcript> [mode: controls|self
   # flipped a genuinely-surviving mutant to CAUGHT/exit 0. With 21 undeclared
   # survivors on the books, two environmentally-failing controls would have
   # turned the whole recorded backlog green in one run.
-  if printf '%s\n' "$out" | grep -q '^ERROR '; then
+  if grep -q '^ERROR ' <<<"$out"; then
     CLASS='HARNESS-ERROR'
     CLASS_DETAIL="a control could not be set up, so it never ran — not a kill: $(printf '%s\n' "$out" | grep -E '^-- [0-9]+ setup errors --$' | tail -1)"
     return
@@ -424,12 +424,12 @@ classify_transcript() {  # classify_transcript <transcript> [mode: controls|self
   # sentences, duplicated verbatim with no marker at either end — so an
   # ordinary copy edit there would have reported a re-anchorable mutant as a
   # broken environment and stopped the run.
-  if printf '%s\n' "$out" | grep -q '^BASELINE-ABORT dirty$'; then
+  if grep -q '^BASELINE-ABORT dirty$' <<<"$out"; then
     CLASS='BASELINE-DIRTY'
     CLASS_DETAIL='the mutated checker does not report 0 MISS / 0 WARN on the clean tree, so the harness aborted before running any control'
     return
   fi
-  if printf '%s\n' "$out" | grep -q '^BASELINE-ABORT zero-coverage$'; then
+  if grep -q '^BASELINE-ABORT zero-coverage$' <<<"$out"; then
     CLASS='BASELINE-DIRTY'
     CLASS_DETAIL='the mutated checker reported zero coverage in at least one counter, so the harness aborted before running any control'
     return
@@ -438,7 +438,7 @@ classify_transcript() {  # classify_transcript <transcript> [mode: controls|self
   trailer=$(printf '%s\n' "$out" | grep -oE -- '^-- [0-9]+/[0-9]+ controls passed --$' | tail -1)
   if [ -z "$trailer" ]; then
     CLASS='HARNESS-ERROR'
-    CLASS_DETAIL=$(printf '%s\n' "$out" | grep -m1 -E '^(FATAL|WARN)' || printf 'no trailer, no BASELINE-ABORT token, no FATAL line (empty or truncated transcript)')
+    CLASS_DETAIL=$(grep -m1 -E '^(FATAL|WARN)' <<<"$out" || printf 'no trailer, no BASELINE-ABORT token, no FATAL line (empty or truncated transcript)')
     return
   fi
 
@@ -1258,7 +1258,7 @@ EOF
     out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" "$budget"); got=$?
     [ "$got" -eq "$want" ] || { ok=1; why="rc $got, expected $want"; }
     for pat in "$@"; do
-      printf '%s\n' "$out" | grep -qE -- "$pat" || { ok=1; why="${why} missing /${pat}/"; }
+      grep -qE -- "$pat" <<<"$out" || { ok=1; why="${why} missing /${pat}/"; }
     done
     st_assert "$name" "$ok" "$why | $(printf '%s' "$out" | tr '\n' '|' | cut -c1-300)"
   }
@@ -1268,8 +1268,8 @@ EOF
   st_mlog 2 2 abc1234 m2 3 'SURVIVED-DECLARED m2    9/9 controls passed --'
   out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" 0); rc=$?
   ok=0; [ "$rc" -eq 0 ] || ok=1
-  printf '%s\n' "$out" | grep -qE '^(DUPLICATE|SURVIVED-UNDECLARED|INCOMPLETE|NOT-RUN)' && ok=1
-  printf '%s\n' "$out" | grep -qx -- '-- 2/2 mutants accounted for; 0 not run --' || ok=1
+  grep -qE '^(DUPLICATE|SURVIVED-UNDECLARED|INCOMPLETE|NOT-RUN)' <<<"$out" && ok=1
+  grep -qx -- '-- 2/2 mutants accounted for; 0 not run --' <<<"$out" || ok=1
   st_assert 'merge: a complete clean set exits 0; forged pre-header lines and the footer reprint are not read' "$ok" \
     "rc $rc | $(printf '%s' "$out" | tr '\n' '|' | cut -c1-300)"
 
@@ -1289,7 +1289,7 @@ EOF
   out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" 0); rc=$?
   n=$(printf '%s\n' "$out" | grep -cE '^SURVIVED-UNDECLARED m2 ')
   ok=0; { [ "$rc" -eq 1 ] && [ "$n" -eq 1 ]; } || ok=1
-  printf '%s\n' "$out" | grep -q '^DUPLICATE' && ok=1
+  grep -q '^DUPLICATE' <<<"$out" && ok=1
   st_assert 'merge: a finding is relayed once, its shard counts as finished' "$ok" "rc $rc, $n relays"
 
   st_mreset
@@ -1365,7 +1365,7 @@ EOF
   printf '2026-10-21T10:03:00.0000000Z FATAL: `x` @someone ::error::y\n' >> "$ST_MDIR/shard-2.log"
   out=$(merge_shards "$ST_MDIR" 2 'm1 m2' "$ST_MHEAD" 0)
   ok=0
-  printf '%s\n' "$out" | grep -qx -- '  | FATAL: x (at)someone ::error::y' || ok=1
+  grep -qx -- '  | FATAL: x (at)someone ::error::y' <<<"$out" || ok=1
   case "$out" in *'`'*|*'@'*) ok=1 ;; esac
   st_assert 'merge: a relayed FATAL is prefixed, backtick-free and cannot @-mention' "$ok" \
     "$(printf '%s' "$out" | tr '\n' '|' | cut -c1-300)"
