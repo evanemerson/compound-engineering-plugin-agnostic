@@ -41,13 +41,13 @@
 - P3 — The 28,000-byte cap counts bytes before the WSL bridge escapes `"` and
   `\`; a quote-heavy body under the cap can still exceed the Windows limit.
   It fails loudly (empty stdout, exit 5) — plugins/cepa/scripts/orca-send.sh size cap
-- P3 — The four `<cli>`/`<target>`/`<type>`/`<nudge>` values sit in double
+- P3 — (open copy tracked in `2026-10-31-fix-roles-orca-loss-audit.md`, L36 #19) The four `<cli>`/`<target>`/`<type>`/`<nudge>` values sit in double
   quotes on the block's command line; the script validates them only after
   bash parsed the line. Moving them onto stdin closes it —
   plugins/cepa/skills/autonomy/SKILL.md §12b rule 1 block
 - [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35/L36 #20): every call carries one request id, so the retry replays** — The vsock retry of a send is blind; the new inbox re-read could check
   for the first try's row before retrying (#101 finding 8) — orca-send.sh cepa_send_orca
-- P3 — The ending line names a terminal handle, not a session (#101 finding
+- P3 — (open copy tracked in `2026-10-31-fix-roles-orca-loss-audit.md`, L36 #21) The ending line names a terminal handle, not a session (#101 finding
   9) now also on every refused or failed send — orca-send.sh cepa_send_ending
 - P3 — Untested send branches: the send's own cli checks, the
   `timeout`/`python3`/`mktemp` guards, "orca-nudge.sh not found", and the
@@ -82,7 +82,7 @@ means stdout of 0 bytes: a ~33,000-char argument printed nothing and exited 1
 | `check` / `check --ack` (bound Run) | rules 5, 8 | `deliveryId`, replay until acked | a wrong `--ack` id returns `"ok": true` and acks nothing | batch replays | safe: duplicate, never loss |
 | `check` (no bound Run) | rule 8 | — | — | **the plain `check` marks read at once, returns no `deliveryId`, never replays; lost output = lost message (only `--all` still lists it)** | **fixed in prose (rule 8: drain from the peek)** |
 | `inbox --limit 200` | `orca-send.sh` re-read | rows newest first; the whole store was 203 rows, `sequence` 1-203 with no gap | — | exit 5 | safe |
-| `worker-start` / `dispatch` | rule 2, global CLAUDE.md | `"ok": true` + `result.dispatch.id` `ctx_…`, `status` `dispatched` | exit 1 `agent_unconfigured`, `task_not_found` | not proven either way | gap: no proof named → residual below |
+| `worker-start` / `dispatch` | rule 2, global CLAUDE.md | `"ok": true` + `result.dispatch.id` `ctx_…`, `status` `dispatched` | exit 1 `agent_unconfigured`, `task_not_found` | not proven either way | gap: no proof named → residual in `2026-10-31-fix-roles-orca-loss-audit.md` |
 | `agent launch` | global CLAUDE.md | `prompt.outcome` (global rule) | exit 1: `invalid_argument` (`"id": "local"`), `selector_not_found` | not proven | safe if the rule is read |
 | `terminal close` | global CLAUDE.md (probes) | absence from `terminal list` | stale handle: exit 1 `terminal_handle_stale` | — | `"ok": true` also for a handle already closed: `ok` is not proof |
 | `terminal rename` | rule 6 | `"ok": true` | exit 1 `terminal_handle_stale` | reads failed | safe |

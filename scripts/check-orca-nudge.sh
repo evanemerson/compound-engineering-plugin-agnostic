@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check for plugins/cepa/scripts/orca-nudge.sh, the one checked form of
 # `cepa:autonomy` §12b rule 1's nudge, and for orca-send.sh beside it, the one
-# checked form of rule 1's send (the STORE and SENDREF legs). It runs the script against a stub
+# checked form of rule 1's send, reply and worker_done (the STORE, REPLY,
+# WDONE and SENDREF legs). It runs the script against a stub
 # `orca-ide` on PATH and never reaches a real terminal: the stub answers
 # `terminal show`, `worktree ps` and `terminal send` from env vars and logs
 # every call it gets. Stub `sleep` and `date` on the same PATH give the script
@@ -80,17 +81,24 @@
 #              question; the nudge goes to the handle Orca addressed it to,
 #              and a `dispatch:` mailbox gets none. A reply to a message this
 #              session sent (its row's `from_handle` is ORCA_TERMINAL_HANDLE)
-#              exits 1 as misaddressed, with no nudge.
+#              exits 1 as misaddressed, with no nudge, and so does one Orca
+#              addressed to that handle when the question is out of the
+#              window. REPLYREF: a non-`msg_` target, an empty body or one
+#              starting `--` is refused before any call.
 #   WDONE    — orca-send.sh's `worker_done` mode (§12b rule 3, punch-list
 #              L35). The argv is pinned, with the preamble's IDs and a request
 #              id the retry reuses. It counts only when `result.lifecycle`
 #              names the same dispatch and task and the action the outcome
-#              asks for; it never nudges.
+#              asks for; it never nudges. A matching id with a wrong
+#              lifecycle prints `not proven stored`, never `no message
+#              stored`. WDREF: a bad target, task id or outcome, or a missing
+#              task id, is refused before any call.
 #   SENDREF  — orca-send.sh's argument checks: a bad cli, target, type
 #              (heartbeat included), mode, subject or body
 #              (empty, starting with `--`, over 28,000 bytes): exit 4, prints
-#              `Orca send refused`, and the stub is never called. Its ending
-#              line names the target only when the target passed its check.
+#              `Orca send refused`, and the stub is never called. For the plain
+#              send types its ending line names the target only when the
+#              target passed its check.
 #
 # STATED LIMITS — a green run does not mean:
 #   - Orca's real output has this shape. The stub replays the shape measured on
@@ -471,6 +479,7 @@ def inbox(*rows, ok=True):
 
 STORED = "Orca send stored: %s for %s" % (MID, H)
 NOSTORE = "Orca send failed: no message stored — "
+UNPROVEN = "Orca send failed: not proven stored — "
 PASTE = END + "Needed from you: paste the block below into %s" % H
 PASTE_ANY = END + "Needed from you: paste the block below into the target session"
 
@@ -542,7 +551,7 @@ store("STORE bad message id", 5, [NOSTORE + "the reply has no result.message.id"
       osend_json=osend(mid="msg_X; rm"))
 store("STORE envelope uuid as message id", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
       osend_json=osend(mid="9232524a-511a-4305-ba28-37e1d28617d5"))
-store("STORE bad recipient", 5, [NOSTORE + "the reply names no valid recipient", PASTE],
+store("STORE bad recipient", 5, [UNPROVEN + "the reply names no valid recipient", PASTE],
       osend_json=osend(to="term_x; rm"))
 store("STORE id missing from the inbox", 5, [NOSTORE + "%s is not in the inbox for %s" % (MID, H), PASTE],
       inbox_json=inbox({"id": "msg_999999999999", "to_handle": H}))
@@ -619,21 +628,39 @@ calls = store("REPLY to a dispatch mailbox is not nudged", 0,
                "Orca nudge not needed: Orca stored it in dispatch:ctx_abcdef, a mailbox Orca delivers"],
               argv=RARGS, stdin=RBODY, osend_json=oreply(to="dispatch:ctx_abcdef"),
               inbox_json=inbox({"id": MID, "to_handle": "dispatch:ctx_abcdef"}))
-store("REPLY not threaded on the question", 5, [NOSTORE + "the reply is not threaded on %s" % QID, PASTE_Q],
+store("REPLY not threaded on the question", 5, [UNPROVEN + "the reply is not threaded on %s" % QID, PASTE_Q],
       argv=RARGS, stdin=RBODY, osend_json=oreply(thread="msg_000000000009"))
-store("REPLY names no recipient", 5, [NOSTORE + "the reply names no valid recipient", PASTE_Q],
+store("REPLY names no recipient", 5, [UNPROVEN + "the reply names no valid recipient", PASTE_Q],
       argv=RARGS, stdin=RBODY, osend_json=oreply(to=None))
 store("REPLY ok false", 5, [NOSTORE + 'Orca did not return "ok": true (answer_conflict)', PASTE_Q],
       argv=RARGS, stdin=RBODY, osend_rc=1,
       osend_json=json.dumps({"id": "7d357c4f", "ok": False, "error": {"code": "answer_conflict"}}))
+MISADDR = ("Orca reply misaddressed: " + MID + " stored for %s, but " + QID
+           + " was sent by this session, so the reply came back to it")
 calls = store("REPLY to a message this session sent", 1,
-              [STORED, "Orca reply misaddressed: %s was sent by this session, so the reply came back to it" % QID,
-               END + "Needed from you: check which session asked %s" % QID],
+              [MISADDR % H, END + "Needed from you: check which session asked %s" % QID],
               argv=RARGS, stdin=RBODY, osend_json=oreply(),
               inbox_json=inbox({"id": MID, "to_handle": H}, {"id": QID, "from_handle": OTHER, "to_handle": H}),
               env_extra={"ORCA_TERMINAL_HANDLE": OTHER})
 (ok if not sends(calls) else miss)("REPLY misaddressed is not nudged" if not sends(calls) else
                                    "REPLY misaddressed is not nudged: %r" % calls)
+# #106 review: a question outside the re-read window is still caught when
+# Orca addressed the reply to this session's own handle.
+OWN = "term_11111111-2222-4333-8444-555555555555"
+calls = store("REPLY addressed to this session, question out of window", 1,
+              [MISADDR % OWN, END + "Needed from you: check which session asked %s" % QID],
+              argv=RARGS, stdin=RBODY, osend_json=oreply(to=OWN), inbox_json=inbox({"id": MID, "to_handle": OWN}),
+              env_extra={"ORCA_TERMINAL_HANDLE": OWN})
+(ok if not sends(calls) else miss)("REPLY addressed to this session is not nudged" if not sends(calls) else
+                                   "REPLY addressed to this session is not nudged: %r" % calls)
+# Stated limit: with no handle and no question row, it cannot tell.
+store("REPLY no handle, question out of window", 0, ["Orca send stored: %s for run:run_abc" % MID],
+      argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY, osend_json=oreply(to="run:run_abc"),
+      inbox_json=inbox({"id": MID, "to_handle": "run:run_abc"}))
+store("REPLY handle not a term_ handle is ignored", 0, [STORED],
+      argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY, osend_json=oreply(),
+      inbox_json=inbox({"id": MID, "to_handle": H}, {"id": QID, "from_handle": H + "x", "to_handle": OTHER}),
+      env_extra={"ORCA_TERMINAL_HANDLE": H + "x"})
 store("REPLY question from another session", 0, [STORED, "Orca nudge sent to " + H],
       argv=RARGS, stdin=RBODY, osend_json=oreply(),
       inbox_json=inbox({"id": MID, "to_handle": H}, {"id": QID, "from_handle": H, "to_handle": OTHER}),
@@ -679,7 +706,7 @@ for name, j in [("WDONE no lifecycle", owd(lifecycle=False)),
                 ("WDONE wrong action", owd(action="failed")),
                 ("WDONE other dispatch", owd(disp="ctx_000000000000")),
                 ("WDONE other task", owd(task="task_000000000000"))]:
-    store(name, 5, [NOSTORE + "Orca did not record the dispatch as completed", PASTE_RC],
+    store(name, 5, [UNPROVEN + "Orca did not record the dispatch as completed", PASTE_RC],
           argv=WARGS, osend_json=j, inbox_json=WINBOX)
 store("WDONE ok false", 5, [NOSTORE + 'Orca did not return "ok": true (run_required)', PASTE_RC],
       argv=WARGS, osend_rc=1, osend_json=json.dumps({"id": "6be45a49", "ok": False, "error": {"code": "run_required"}}))

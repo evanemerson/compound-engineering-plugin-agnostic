@@ -1856,8 +1856,10 @@ limits.
    outcome asks for (`completed` or `failed`), and the re-read found the row
    (measured in punch-list L35, Orca 1.4.245). The script passes Orca a
    request id it chose, so its retry cannot store the report twice. Any
-   other result stored nothing: fix what the reason names and run the block
-   again, or escalate.
+   other result was not proven stored: fix what the reason names and run
+   the block again, or escalate. `Orca send failed: not proven stored`
+   means Orca returned a message id that did not match, so a rerun can
+   store the report twice.
    - **A worker with no preamble sends its report, never only prints it.**
      When line 2 of its prompt is a `Report to:` line (rule 2), its final
      report sends the Handoff block to that handle with rule 1's send, then
@@ -2050,8 +2052,10 @@ limits.
        handle named in its body (§12c). A reply that Orca stored in a `run:`
        or `dispatch:` mailbox is not nudged: Orca delivers it. A reply to a
        message this session sent comes back to this session (measured in
-       punch-list L35), so the script then prints `Orca reply misaddressed`,
-       nudges no one, and the asker still has no answer.
+       punch-list L35), so the script then prints `Orca reply misaddressed`
+       in place of `Orca send stored`, nudges no one, and the asker still has
+       no answer. Copy its `Ending first line: ` text verbatim, as rule 1
+       says.
        Until the answer arrives, the asker peeks for it (rule 8).
    - **Delivery, in every kind.** Each step that another session must do is
      delivered to that session BEFORE the ending: `worker_done` to your own

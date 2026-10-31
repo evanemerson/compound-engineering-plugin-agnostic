@@ -8,7 +8,7 @@
 #
 # Usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>  <stdin
 #        orca-send.sh <cli> <question msg id> reply <nudge|no-nudge>  <stdin
-#        orca-send.sh <cli> dispatch:<dispatch id> worker_done <succeeded|failed> <task id>  <stdin
+#        orca-send.sh <cli> dispatch:ctx_<id> worker_done <succeeded|failed> task_<id>  <stdin
 #   <cli>     §12a's printed `cli=` value, checked as orca-nudge.sh checks it.
 #   <target>  a `term_` handle, or a `run:<id>` / `dispatch:<id>` address.
 #   <type>    status, question, handoff, escalation or merge_ready.
@@ -42,11 +42,17 @@
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
 #      start). The message stands. A reply also exits 1, with
-#      `Orca reply misaddressed: …` and no nudge, when the message it names
-#      was sent by this session (ORCA_TERMINAL_HANDLE): Orca then addressed
-#      the answer back to this session, and the asker never gets it.
+#      `Orca reply misaddressed: …` in place of `Orca send stored` and no
+#      nudge, when it came back to this session (ORCA_TERMINAL_HANDLE): Orca
+#      addressed it to that handle, or the message it names is in the
+#      re-read window with this session as its sender. The asker never gets
+#      it.
 #   4  Orca send refused: <reason>   — an argument failed its check; no call.
 #   5  Orca send failed: no message stored — <reason>
+#      Orca send failed: not proven stored — <reason>   — Orca returned
+#      `"ok": true` and a msg_ id, but the recipient, the reply's thread or
+#      the worker_done lifecycle did not match. It may be stored: a rerun can
+#      duplicate it.
 #   On 4 and 5 it then prints:
 #   Ending first line: Needed from you: paste the block below into <target>
 #   <target> is printed only when it passes the target check; any other value
@@ -94,6 +100,9 @@
 # so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
 # STATED LIMITS:
+#   - The misaddressed-reply check needs ORCA_TERMINAL_HANDLE. Unset, a reply
+#     Orca stored in this session's own `dispatch:` mailbox reads as stored
+#     unless the message it names is in the 200-row window.
 #   - A row in the inbox is "stored", not "read". Reading is the nudge's job,
 #     and rule 8's peek is the backstop.
 #   - The size cap is 28,000 bytes of subject plus body, below the measured
@@ -134,6 +143,9 @@ cepa_send_ending() {
 }
 refuse() { echo "Orca send refused: $1"; cepa_send_ending; exit 4; }
 fail() { echo "Orca send failed: no message stored — $1"; cepa_send_ending; exit 5; }
+# Orca returned "ok": true and a msg_ id, but the reply did not match: the
+# message may be stored, so the line never says it stored nothing.
+unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_ending; exit 5; }
 
 [ $# -eq 4 ] || { [ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]; } \
   || refuse "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>"
@@ -269,16 +281,16 @@ def verdict():
         # A reply has no target handle to fall back on, and must answer the
         # question it names.
         if m.get("thread_id") != target:
-            return "FAIL the reply is not threaded on %s" % target
+            return "UNPROVEN the reply is not threaded on %s" % target
     elif to is None:
         to = target
     if typ == "worker_done":
         lc = r.get("lifecycle")
         if not isinstance(lc, dict) or lc.get("action") != action \
                 or lc.get("dispatchId") != target[len("dispatch:"):] or lc.get("taskId") != task:
-            return "FAIL Orca did not record the dispatch as %s" % action
+            return "UNPROVEN Orca did not record the dispatch as %s" % action
     if not isinstance(to, str) or not re.fullmatch(ADDR, to):
-        return "FAIL the reply names no valid recipient"
+        return "UNPROVEN the reply names no valid recipient"
     return mid + " " + to
 
 try:
@@ -290,6 +302,7 @@ PY
 case "$cepa_send_got" in
   '') fail "the send output could not be read" ;;
   'FAIL '*) fail "${cepa_send_got#FAIL }" ;;
+  'UNPROVEN '*) unproven "${cepa_send_got#UNPROVEN }" ;;
 esac
 cepa_send_id=${cepa_send_got%% *}
 cepa_send_to=${cepa_send_got#* }
@@ -302,25 +315,27 @@ cepa_send_q=
 [ "$cepa_send_type" = reply ] && cepa_send_q=$cepa_send_target
 python3 -I - "$cepa_send_tmp/inbox.json" "$cepa_send_id" "$cepa_send_to" "$cepa_send_q" \
   "${ORCA_TERMINAL_HANDLE:-}" <<'PY' >/dev/null 2>&1
-import json, sys
+import json, re, sys
 try:
     d = json.load(open(sys.argv[1]))
     rows = d["result"]["messages"] if d.get("ok") is True else []
     found = any(isinstance(x, dict) and x.get("id") == sys.argv[2] and x.get("to_handle") == sys.argv[3]
                 for x in rows)
-    # A reply answers the sender of the message it names. When that message's
-    # row is in the window and this session sent it, the reply came back here.
+    # A reply answers the sender of the message it names. It came back here
+    # when Orca addressed it to this session's handle, or when that message's
+    # row is in the window and this session sent it.
     q, me = sys.argv[4], sys.argv[5]
-    mine = bool(q and me) and any(isinstance(x, dict) and x.get("id") == q and x.get("from_handle") == me
-                                  for x in rows)
+    if not re.fullmatch(r"term_[0-9a-f-]{36}", me):
+        me = ""
+    mine = bool(q and me) and (sys.argv[3] == me or any(
+        isinstance(x, dict) and x.get("id") == q and x.get("from_handle") == me for x in rows))
 except Exception:
     sys.exit(2)
 sys.exit(3 if found and mine else 0 if found else 1)
 PY
 case $? in
   0) ;;
-  3) echo "Orca send stored: $cepa_send_id for $cepa_send_to"
-     echo "Orca reply misaddressed: $cepa_send_target was sent by this session, so the reply came back to it"
+  3) echo "Orca reply misaddressed: $cepa_send_id stored for $cepa_send_to, but $cepa_send_target was sent by this session, so the reply came back to it"
      echo "Ending first line: Needed from you: check which session asked $cepa_send_target"
      exit 1 ;;
   1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;
