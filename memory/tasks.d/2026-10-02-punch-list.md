@@ -937,6 +937,16 @@ L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-3
 
 L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
     status: pending
+    Items 1-2 DONE 2026-10-31 — PR #102 (`5b71315`), v1.38.0, merged on the
+    operator's AskUserQuestion approval: worker-start default, `Report to:`
+    line 2 for any other worker (the Handoff block is sent, never only
+    printed), rule 8 inbox peek. Gates: turn-endings 177/177 + 141/141,
+    detection 87/87, nudge 63/63, CI green; hops run, freshness rc=0. Global
+    `~/.claude/CLAUDE.md` updated with #102's PR-body text, word for word
+    (backup `~/.claude/CLAUDE.md.bak-2026-10-31-l30`). 5 P3s in
+    `memory/tasks.d/2026-10-31-fix-roles-worker-report-channel.md`.
+    Item 3 OPEN: the operator restarts long-lived coordinators so they load
+    cepa 1.38.0 and the new global rules.
     severity: P1
     owner: roles (`tab14@roles`, dispatched via Orca 2026-10-31 on the
     operator's AskUserQuestion "Yes, dispatch a worker"; cepa 1.38.0)
