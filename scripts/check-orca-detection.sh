@@ -38,6 +38,13 @@
 #              file when it runs; every Linux case asserts bare `orca` did not
 #              run, and every ORCA_CLI_COMMAND case asserts exactly which stubs
 #              ran (the named CLI when the value is valid, none when not).
+#   RETRY    — part of FIXTURES: a stub that fails its first calls with the
+#              WSL interop error (stderr `UtilAcceptVsock … accept4 failed
+#              110`, exit 1) and counts its calls. Once: the probe runs twice
+#              and reads present, on both paths. Twice: two runs, absent.
+#              Another error, or only one of the two texts: one run, absent.
+#              The error then a hang (ORCA_CLI_COMMAND path): two runs,
+#              absent, under 1.2 s.
 #   TITLE-BLOCK — 12b rule 6 holds exactly one ```bash block (indented under
 #              its list item). A miss stops the run.
 #   TITLE-BOUNDS — that block bounds the rename with the literal
@@ -164,7 +171,7 @@ def answer(json_text, after=""):
     return ('if [ "$*" = "status --json" ]; then\ncat <<\'J\'\n%s\nJ\n%s\n'
             'else echo "unexpected argv: $*"; fi' % (json_text, after))
 
-def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.0, ran=None):
+def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.0, ran=None, calls=None):
     case = os.path.join(TMP, name)
     sd, td = os.path.join(case, "stubs"), os.path.join(case, "tools")
     os.makedirs(sd); os.makedirs(td)
@@ -182,7 +189,7 @@ def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.
     # it would also print "present cli=orca".
     stub(sd, "orca", "touch %s/orca\n%s" % (marks, answer(STATUS_OK)))
     for cli, body in stubs:
-        stub(sd, cli, "touch %s/%s\n%s" % (marks, cli, body))
+        stub(sd, cli, "touch %s/%s\n%s" % (marks, cli, body.replace("{CASE}", case)))
     e = {"PATH": sd + ":" + td, "HOME": case}
     for k, v in (env or {}).items():
         e[k] = v.replace("{STUBS}", sd)
@@ -206,6 +213,13 @@ def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.
         bad.append("took %.1fs, bound %.0fs" % (took, max_took))
     if uname == "Linux" and os.path.exists(os.path.join(marks, "orca")):
         bad.append("bare `orca` ran on Linux")
+    if calls is not None:
+        try:
+            n = len(open(os.path.join(case, "calls")).read().split())
+        except OSError:
+            n = 0
+        if n != calls:
+            bad.append("the CLI ran %d times, want %d" % (n, calls))
     if env and env.get("ORCA_CLI_COMMAND") and sorted(os.listdir(marks)) != sorted(ran or []):
         bad.append("stubs that ran: %s, want %s" % (sorted(os.listdir(marks)), sorted(ran or [])))
     if bad:
@@ -275,6 +289,34 @@ run_case("env-not-orca", "ORCA: absent (ORCA_CLI_COMMAND does not name an Orca C
          env={"ORCA_CLI_COMMAND": "cat"})
 run_case("env-not-on-path", "ORCA: absent (ORCA_CLI_COMMAND=orca-dev is not on PATH)",
          env={"ORCA_CLI_COMMAND": "orca-dev"})
+
+# RETRY (L28): the probe runs once more, only when it exits non-zero with the
+# WSL interop error in its stderr. The stub fails its first <n> calls with
+# <err> and counts every call in {CASE}/calls.
+VSOCK = "<3>WSL (2611 - Relay) ERROR: UtilAcceptVsock:273: accept4 failed 110"
+
+def flaky(n, err):
+    return ('echo x >>{CASE}/calls\n'
+            'if [ ! -e {CASE}/f%d ]; then i=1; while [ -e {CASE}/f$i ]; do i=$((i+1)); done\n'
+            '  touch {CASE}/f$i; echo "%s" >&2; exit 1; fi\n%s' % (n, err, answer(STATUS_OK)))
+
+run_case("retry-vsock-once", "ORCA: present cli=orca-ide via=status",
+         stubs=[("orca-ide", flaky(1, VSOCK))], calls=2)
+run_case("retry-vsock-twice", ABSENT_FAIL, stubs=[("orca-ide", flaky(2, VSOCK))], calls=2)
+run_case("retry-other-error", ABSENT_FAIL, stubs=[("orca-ide", flaky(1, "error: connection refused"))],
+         calls=1)
+run_case("retry-vsock-text-only", ABSENT_FAIL,
+         stubs=[("orca-ide", flaky(1, "<3>WSL ERROR: UtilAcceptVsock:273: accept4 failed 22"))], calls=1)
+run_case("retry-accept-text-only", ABSENT_FAIL,
+         stubs=[("orca-ide", flaky(1, "<3>WSL ERROR: Relay: accept4 failed 110"))], calls=1)
+run_case("env-retry-vsock-once", "ORCA: present cli=orca-ide via=ORCA_CLI_COMMAND",
+         stubs=[("orca-ide", flaky(1, VSOCK))], env=ENV_IDE, ran=["orca-ide"], calls=2)
+# The retry keeps the bound: an error, then a hang, ends within two bounds.
+# Only on the short-bound path: both paths run one probe function, and the
+# long-bound case would add 2.3 s to every control run.
+run_case("env-retry-vsock-then-hangs", ABSENT_FAIL,
+         stubs=[("orca-ide", flaky(1, VSOCK).replace(answer(STATUS_OK), HANG))], env=ENV_IDE,
+         ran=["orca-ide"], calls=2, max_took=1.2)
 
 # --- TITLE ---
 # 12b rule 6's block, run as the agent runs it: <cli> becomes a stub, the name

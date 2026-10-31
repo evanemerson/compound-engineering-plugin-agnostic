@@ -115,6 +115,13 @@ MUTANTS = [
      {"NUDGE: rule 1 holds When the row says `working`, the script re-reads it for up to 2 minutes, a bound fixed in the script."}),
     ("nudge-skip-is-delivery", "skill", "message stays unread and the delivery is not done.", "the delivery still stands.",
      {"NUDGE: rule 1 holds the message stays unread and the delivery is not done."}),
+    # L28: the printed ending line, the send retry, the first-line order.
+    ("nudge-ending-not-copied", "skill", "Copy the text after `Ending first line: `\n       verbatim", "Read the text after `Ending first line: `",
+     {"NUDGE: rule 1 holds Copy the text after `Ending first line: ` verbatim as the ending's first line"}),
+    ("send-no-vsock-retry", "skill", "retry that send once, with\n", "report it, with\n",
+     {"NUDGE: rule 1 holds retry that send once, with the same command, before reporting `Orca send failed`"}),
+    ("fallback-block-first", "skill", "block comes AFTER the ending's", "block comes BEFORE the ending's",
+     {"NUDGE: rule 1 holds the printed block comes AFTER the ending's `Needed from you: …` first line"}),
     ("nudge-skip-no-operator-line", "skill", "`Needed from you: tell <session> to check its Orca inbox`, and its body\n       lists the message id.", "`Needed from you: nothing`.",
      {"NUDGE: rule 1 holds `Needed from you: tell <session> to check its Orca inbox`, and its body lists the message id."}),
     ("nudge-handoff-skips-nudge", "skill", "after the send,\n     its nudge (above) and the printed copy.", "after the send and\n     the printed copy.",

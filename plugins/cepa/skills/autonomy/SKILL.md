@@ -1512,16 +1512,23 @@ else
     cepa_orca_why="$cepa_orca_cli not on PATH"
   fi
 fi
-cepa_orca_tmp=
+cepa_orca_tmp= cepa_orca_err=
+cepa_orca_probe() {
+  timeout -k "$cepa_orca_kill" "$cepa_orca_wait" "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>"$cepa_orca_err"
+}
+cepa_orca_vsock() {
+  cepa_orca_e=$(<"$cepa_orca_err") || return 1
+  [[ $cepa_orca_e == *UtilAcceptVsock* && $cepa_orca_e == *"accept4 failed 110"* ]]
+}
 if [ -n "$cepa_orca_why" ]; then
   echo "ORCA: absent ($cepa_orca_why)"
 elif ! command -v timeout >/dev/null 2>&1; then
   echo "ORCA: absent (no timeout command to bound the status probe)"
 elif ! command -v python3 >/dev/null 2>&1; then
   echo "ORCA: absent (no python3 to parse the status probe)"
-elif ! cepa_orca_tmp=$(mktemp 2>/dev/null); then
+elif ! cepa_orca_tmp=$(mktemp 2>/dev/null) || ! cepa_orca_err=$(mktemp 2>/dev/null); then
   echo "ORCA: absent (mktemp failed)"
-elif ! timeout -k "$cepa_orca_kill" "$cepa_orca_wait" "$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>/dev/null; then
+elif ! cepa_orca_probe && ! { cepa_orca_vsock && cepa_orca_probe; }; then
   echo "ORCA: absent ($cepa_orca_cli status failed or timed out)"
 elif python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("ok") is True else 1)' "$cepa_orca_tmp" >/dev/null 2>&1; then
   echo "ORCA: present cli=$cepa_orca_cli via=$cepa_orca_via"
@@ -1529,6 +1536,7 @@ else
   echo "ORCA: absent ($cepa_orca_cli status did not return \"ok\": true)"
 fi
 [ -z "$cepa_orca_tmp" ] || rm -f "$cepa_orca_tmp"
+[ -z "$cepa_orca_err" ] || rm -f "$cepa_orca_err"
 ```
 
 - **The CLI is resolved as Orca's own orchestration skill resolves it:**
@@ -1555,6 +1563,14 @@ fi
   cannot stall the block. Only JSON whose top-level `"ok"` is the value `true`
   reads as present. A failed probe never reads as present: absent is today's
   behavior, so it is the safe answer, and the printed reason says what failed.
+- **The probe is retried once, only on the WSL interop error.** Under several
+  concurrent WSL sessions, an `orca-ide` call can fail with stderr holding
+  `UtilAcceptVsock` and `accept4 failed 110` (punch-list L26 re-probe,
+  2026-10-31: it made this block read absent in two runs). When the probe
+  exits non-zero with both texts in its stderr, the block runs it once more
+  with the same bounds. Any other failure, and a second failure, reads absent
+  as before. So the block's worst case is two bounds, not one: 2 × 3.5 s = 7 s
+  on the `ORCA_CLI_COMMAND` path, and 2 × 12 s = 24 s on every other path.
 - **The bounds are literals in the block,** never read from the environment,
   so no variable a session happens to carry can lengthen or shorten them. The
   checker pins the shipped values as text and runs its hang cases against its
@@ -1610,9 +1626,18 @@ limits.
      )"`), so no character in it is evaluated. The flag that carries it comes
      from the guide.
    - **A send succeeded** only when it exits 0 and prints a message id.
-     Otherwise print the block for pasting as before, with one line saying
+     When it fails with the WSL interop error (stderr holding
+     `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
+     sessions in the L26 re-probe, 2026-10-31), retry that send once, with
+     the same command, before reporting `Orca send failed`. No other error is
+     retried. When the send did not succeed, print the block for pasting as
+     before, with one line saying
      why: `Orca send skipped: <no target> — paste below` when no send ran, or
-     `Orca send failed: <exit and error> — paste below`.
+     `Orca send failed: <exit and error> — paste below`. In every fallback
+     (send skipped or failed, nudge skipped, refused or failed), the printed
+     block comes AFTER the ending's `Needed from you: …` first line (rule 7),
+     never before it. The L26 re-probe put the paste block first in four
+     endings (C2, C3, C2b, C3b).
    - **Send, then nudge.** Orca prompts a Run coordinator when a message
      reaches its mailbox. A plain session gets no prompt, so an idle one never
      reads the message (measured 2026-10-30, punch-list L26: the recipient
@@ -1641,14 +1666,19 @@ limits.
        `waiting`, `blocked`, an unknown state or no row from the start (no
        wait on those), it exits 1 and prints `Orca nudge skipped: <reason>`
        (operator decision, 2026-10-30). Run the block with a tool timeout of
-       at least 3 minutes.
+       at least 4 minutes.
      - **Only a sent nudge completes the delivery.** When the block prints
        anything but `Orca nudge sent to <handle>` — skipped, refused, failed,
        not found, or no line at all because a tool timeout killed it — the
        message stays unread and the delivery is not done.
        The sender's ending's first line is then
        `Needed from you: tell <session> to check its Orca inbox`, and its body
-       lists the message id. A Run coordinator gets no nudge, so its send
+       lists the message id. The script prints that line for you, after its
+       result line: `Ending first line: Needed from you: tell <handle> to
+       check its Orca inbox`. Copy the text after `Ending first line: `
+       verbatim as the ending's first line. Why: in the L26 re-probe (C2c)
+       the script skipped correctly, and the session still wrote
+       `Needed from you: nothing`. A Run coordinator gets no nudge, so its send
        alone completes the delivery.
      - **The script checks its arguments.** A `<cli>` that is not a bare
        §12a name on PATH (or an absolute path equal to `ORCA_CLI_COMMAND`), or
@@ -1657,6 +1687,8 @@ limits.
        `--interrupt`. A nudge that fails prints `Orca nudge failed: <reason>`.
        Skipped, refused or failed, the send still stands: the message stays in
        the target's inbox, and only a sent nudge completes the delivery.
+       Each Orca call inside the script is retried once on the WSL interop
+       error, and only on it; the script's header owns that retry.
      - **Never type the line with `terminal send` yourself.** The commands
        grant the script instead of `terminal send`, which admits any text, any
        terminal and `--interrupt`. That narrows the permission layer only in a
@@ -1664,7 +1696,7 @@ limits.
        others this rule, not the permission layer, keeps `terminal send` out.
 
      ```bash
-     # Run with a tool timeout of at least 3 minutes: the wait can take ~170 s.
+     # Run with a tool timeout of at least 4 minutes: the wait can take ~220 s.
      unset CEPA_ROOT
      for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
               "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
@@ -1674,12 +1706,14 @@ limits.
      done
      if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-nudge.sh" ]; then
        echo "Orca nudge skipped: orca-nudge.sh not found (set CEPA_PLUGIN_ROOT)"
+       echo "Ending first line: Needed from you: tell <target> to check its Orca inbox"
      else
        bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<target>" || true
      fi
      ```
 
-     The block always exits 0: its one printed line is the result. A skipped,
+     The block always exits 0: its first printed line is the result, and a
+     second line, when there is one, is the ending's first line. A skipped,
      refused or failed nudge is never retried, and never replaced by a typed
      `terminal send`.
 

@@ -40,6 +40,20 @@
 #   FAIL     — `terminal send` exits non-zero, or returns `"ok"` that is not
 #              the value true:
 #              exit 3, prints `failed`.
+#   ENDING   — the exact whole output of one case per outcome. Sent prints one
+#              line. Skipped, refused (bad cli, wrong argument count) and
+#              failed print a second line, `Ending first line: Needed from
+#              you: tell <handle> to check its Orca inbox`. A refused handle
+#              prints `the target session` in place of the handle, so a handle
+#              that failed its check is never printed. Every other leg only
+#              asserts that a second line, when there is one, starts
+#              `Ending first line: `.
+#   RETRY    — the WSL interop error (stderr with `UtilAcceptVsock` and
+#              `accept4 failed 110`, exit 1) once on `terminal show`,
+#              `worktree ps` or `terminal send`: that call runs twice and the
+#              nudge is sent. The error twice: the call runs twice and the
+#              run skips (show) or fails (send). Another error, or only one
+#              of the two texts (either one): the call runs once, with no retry.
 #
 # STATED LIMITS — a green run does not mean:
 #   - Orca's real output has this shape. The stub replays the shape measured on
@@ -65,9 +79,18 @@ BIN = os.path.join(TMP, "bin")
 os.mkdir(BIN)
 STUB = os.path.join(BIN, "orca-ide")
 # One call per line, argv as a JSON list, so a space inside an argument stays
-# inside it.
+# inside it. STUB_ERR_VERB (`terminal show`, `worktree ps` or `terminal send`)
+# makes the first STUB_ERR_TIMES calls of that verb print STUB_ERR to stderr
+# and exit 1.
 open(STUB, "w").write(r'''#!/usr/bin/env bash
 python3 -I -c 'import json, sys; open(sys.argv[1], "a").write(json.dumps(sys.argv[2:]) + "\n")' "$STUB_LOG" "$@"
+if [ "$1 $2" = "${STUB_ERR_VERB-}" ] && python3 -I -c '
+import json, os, sys
+v = os.environ["STUB_ERR_VERB"].split()
+n = sum(1 for l in open(os.environ["STUB_LOG"]) if json.loads(l)[:2] == v)
+sys.exit(0 if n <= int(os.environ["STUB_ERR_TIMES"]) else 1)'; then
+  printf '%s\n' "$STUB_ERR" >&2; exit 1
+fi
 case "$1 $2" in
   "terminal show") [ "$STUB_SHOW_RC" = 0 ] || exit "$STUB_SHOW_RC"; printf '%s' "$STUB_SHOW" ;;
   "worktree ps") [ "$STUB_PS_RC" = 0 ] || exit "$STUB_PS_RC"
@@ -164,6 +187,8 @@ SLEPT = []
 def sends(calls):
     return [c for c in calls if c[:2] == ["terminal", "send"]]
 
+END = "Ending first line: "
+
 def expect(name, args, rc, line, called=True, slept=(), **kw):
     got_rc, out, calls = run(args, **kw)
     why = []
@@ -171,7 +196,8 @@ def expect(name, args, rc, line, called=True, slept=(), **kw):
         why.append("slept %r want %r" % (SLEPT, list(slept)))
     if got_rc != rc:
         why.append("rc=%s want %s" % (got_rc, rc))
-    if len(out) != 1 or out[0] != line:
+    # The second line's text is the ENDING leg's; here it only has to be one.
+    if not out or out[0] != line or len(out) > 2 or (len(out) == 2 and not out[1].startswith(END)):
         why.append("output %r want %r" % (out, line))
     if rc in (1, 2) and sends(calls):
         why.append("sent %r" % sends(calls))
@@ -290,6 +316,48 @@ expect("FAIL send not ok", ["orca-ide", H], 3, 'Orca nudge failed: terminal send
        send='{"ok": false}')
 expect("FAIL send ok truthy", ["orca-ide", H], 3, 'Orca nudge failed: terminal send did not return "ok": true',
        send='{"ok": "yes"}')
+
+# --- ENDING ---
+END_H = END + "Needed from you: tell %s to check its Orca inbox" % H
+END_ANY = END + "Needed from you: tell the target session to check its Orca inbox"
+
+def ending(name, args, want, **kw):
+    rc, out, calls = run(args, **kw)
+    (ok if out == want else miss)(name if out == want else "%s: output %r want %r" % (name, out, want))
+
+ending("ENDING sent has no ending line", ["orca-ide", H], ["Orca nudge sent to " + H])
+ending("ENDING skip", ["orca-ide", H], [SK + "the target is waiting", END_H], ps_json=ps(row("waiting")))
+ending("ENDING refuse cli", ["bash", H], [RF + "the cli does not name an Orca CLI", END_H])
+ending("ENDING refuse arg count", ["orca-ide", H, "x"], [RF + "usage: orca-nudge.sh <cli> <handle>", END_H])
+ending("ENDING refuse handle is not printed", ["orca-ide", "term_x;id"],
+       [RF + "the handle is not a terminal handle", END_ANY])
+ending("ENDING fail", ["orca-ide", H], ["Orca nudge failed: terminal send exited non-zero or timed out", END_H],
+       send_rc=1)
+
+# --- RETRY ---
+VSOCK = "<3>WSL (2611 - Relay) ERROR: UtilAcceptVsock:273: accept4 failed 110"
+
+def retry(name, verb, times, err, rc, line, n_calls):
+    got_rc, out, calls = run(["orca-ide", H], env_extra={
+        "STUB_ERR_VERB": verb, "STUB_ERR_TIMES": str(times), "STUB_ERR": err})
+    n = len([c for c in calls if c[:2] == verb.split()])
+    good = got_rc == rc and out[:1] == [line] and n == n_calls
+    (ok if good else miss)(name if good else "%s: rc=%s out=%r %s calls=%d want rc=%s %d"
+                           % (name, got_rc, out, verb, n, rc, n_calls))
+
+SENT = "Orca nudge sent to " + H
+retry("RETRY show vsock once", "terminal show", 1, VSOCK, 0, SENT, 2)
+retry("RETRY ps vsock once", "worktree ps", 1, VSOCK, 0, SENT, 2)
+retry("RETRY send vsock once", "terminal send", 1, VSOCK, 0, SENT, 2)
+retry("RETRY show vsock twice", "terminal show", 2, VSOCK, 1, SK + "terminal show failed or timed out", 2)
+retry("RETRY send vsock twice", "terminal send", 2, VSOCK, 3,
+      "Orca nudge failed: terminal send exited non-zero or timed out", 2)
+retry("RETRY other error", "terminal show", 1, "error: connection refused", 1,
+      SK + "terminal show failed or timed out", 1)
+retry("RETRY half the text", "terminal show", 1, "<3>WSL ERROR: UtilAcceptVsock:273: accept4 failed 22", 1,
+      SK + "terminal show failed or timed out", 1)
+retry("RETRY other half of the text", "terminal show", 1, "<3>WSL ERROR: Relay: accept4 failed 110", 1,
+      SK + "terminal show failed or timed out", 1)
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("-- %d/%d checks passed --" % (passed, passed + failed))

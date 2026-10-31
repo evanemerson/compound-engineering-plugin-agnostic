@@ -13,14 +13,30 @@
 #             run and would type into another session (#100 review).
 #   <handle>  the target terminal handle, `term_` and 36 hex-or-dash chars.
 #
-# Prints exactly one line, and its exit code says which:
+# Prints one result line, and its exit code says which:
 #   0  Orca nudge sent to <handle>
 #   1  Orca nudge skipped: <reason>   — the target is not idle, or unknown
 #      (§12b rule 1: a skip leaves the message unread, so the delivery is not
 #      done)
 #   2  Orca nudge refused: <reason>   — an argument failed its check
 #   3  Orca nudge failed: <reason>    — the send itself failed
+# On exit 1, 2 or 3 it then prints one more line:
+#   Ending first line: Needed from you: tell <handle> to check its Orca inbox
+# §12b rule 1 says the session copies the text after `Ending first line: `
+# verbatim as its ending's first line. Why: in the L26 re-probe (C2c,
+# 2026-10-31) the script skipped correctly, and the session still wrote
+# `Needed from you: nothing`. <handle> is printed only when it passes the
+# handle check; any other value prints `the target session` in its place.
 # The message send that came before it stands in every case.
+#
+# THE VSOCK RETRY. Under several concurrent WSL sessions, an Orca call can fail
+# with stderr holding `UtilAcceptVsock` and `accept4 failed 110`: WSL's
+# interop could not accept the connection to the Windows CLI (L26 re-probe,
+# 2026-10-31, in §12a's status probe and in `orchestration send`). Each Orca
+# call here is retried once, only when it exits non-zero with both texts in
+# its stderr. Any other failure, and a second failure, is not retried.
+# Not measured: whether the failed call reached Orca before it failed. For
+# `terminal send` a retry could then type the line twice.
 #
 # THE STATE GUARD. The nudge ends with Enter. While the target shows a question
 # prompt (AskUserQuestion's "Enter to select", a permission prompt), that Enter
@@ -53,10 +69,12 @@
 #   - The row state while a permission prompt is open was not measured. The
 #     guard skips it unless it reads `done`.
 #   - The clock starts after the first `worktree ps`, and the wait can
-#     overrun its bound by one more call, so with every call at its 12-second
-#     bound a run takes at most about 170 seconds in all. That is
-#     longer than a default 2-minute tool timeout: a caller that kills the
-#     run gets no line, and §12b rule 1 counts that as not delivered.
+#     overrun its bound by one more call. With every call at its 12-second
+#     bound and no retry, a run takes at most about 170 seconds. With the
+#     vsock retry on every call (each call then takes two bounds), it takes
+#     at most about 220 seconds. That is longer than a default 2-minute tool
+#     timeout: a caller that kills the run gets no line, and §12b rule 1
+#     counts that as not delivered.
 #   - The bound is wall-clock: a clock stepped back mid-wait lengthens it by
 #     that step.
 #   - Each Orca call is bounded at 10 seconds plus a 2-second kill, as §12a's
@@ -69,8 +87,18 @@ set -u
 cepa_nudge_cli=${1-}
 cepa_nudge_term=${2-}
 
-refuse() { echo "Orca nudge refused: $1"; exit 2; }
-skip() { echo "Orca nudge skipped: $1"; exit 1; }
+cepa_nudge_valid_term() { [[ $cepa_nudge_term =~ ^term_[0-9a-f-]{36}$ ]]; }
+# The ending's first line, for every outcome but sent (§12b rule 1).
+cepa_nudge_ending() {
+  if cepa_nudge_valid_term; then
+    echo "Ending first line: Needed from you: tell $cepa_nudge_term to check its Orca inbox"
+  else
+    echo "Ending first line: Needed from you: tell the target session to check its Orca inbox"
+  fi
+}
+refuse() { echo "Orca nudge refused: $1"; cepa_nudge_ending; exit 2; }
+skip() { echo "Orca nudge skipped: $1"; cepa_nudge_ending; exit 1; }
+fail() { echo "Orca nudge failed: $1"; cepa_nudge_ending; exit 3; }
 
 [ $# -eq 2 ] || refuse "usage: orca-nudge.sh <cli> <handle>"
 case "$cepa_nudge_cli" in
@@ -83,7 +111,7 @@ case "${cepa_nudge_cli##*/}" in
   orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
-[[ $cepa_nudge_term =~ ^term_[0-9a-f-]{36}$ ]] || refuse "the handle is not a terminal handle"
+cepa_nudge_valid_term || refuse "the handle is not a terminal handle"
 command -v "$cepa_nudge_cli" >/dev/null 2>&1 || refuse "$cepa_nudge_cli is not on PATH"
 command -v timeout >/dev/null 2>&1 || skip "no timeout command to bound the Orca calls"
 command -v python3 >/dev/null 2>&1 || skip "no python3 to read the Orca output"
@@ -91,16 +119,25 @@ command -v python3 >/dev/null 2>&1 || skip "no python3 to read the Orca output"
 cepa_nudge_tmp=$(mktemp -d 2>/dev/null) || skip "mktemp failed"
 trap 'rm -rf "$cepa_nudge_tmp"' EXIT
 
-timeout -k 2 10 "$cepa_nudge_cli" terminal show --terminal "$cepa_nudge_term" --json \
-  </dev/null >"$cepa_nudge_tmp/show.json" 2>/dev/null \
+# One Orca call, bounded at 10 seconds plus a 2-second kill, its stdout to $1.
+# Retried once, only on the WSL interop error (THE VSOCK RETRY, above).
+cepa_nudge_orca() {
+  local out=$1
+  shift
+  timeout -k 2 10 "$cepa_nudge_cli" "$@" </dev/null >"$out" 2>"$cepa_nudge_tmp/err" && return 0
+  cepa_nudge_e=$(<"$cepa_nudge_tmp/err") || return 1
+  [[ $cepa_nudge_e == *UtilAcceptVsock* && $cepa_nudge_e == *"accept4 failed 110"* ]] || return 1
+  timeout -k 2 10 "$cepa_nudge_cli" "$@" </dev/null >"$out" 2>/dev/null
+}
+
+cepa_nudge_orca "$cepa_nudge_tmp/show.json" terminal show --terminal "$cepa_nudge_term" --json \
   || skip "terminal show failed or timed out"
 
 # Sets cepa_nudge_state to `done`, or to the reason not to nudge. The reason
 # holds no Orca text except a state name, and only when that name is a plain
 # word.
 cepa_nudge_read() {
-timeout -k 2 10 "$cepa_nudge_cli" worktree ps --agent-wait --json \
-  </dev/null >"$cepa_nudge_tmp/ps.json" 2>/dev/null \
+cepa_nudge_orca "$cepa_nudge_tmp/ps.json" worktree ps --agent-wait --json \
   || skip "worktree ps failed or timed out"
 cepa_nudge_state=$(python3 -I - "$cepa_nudge_term" "$cepa_nudge_tmp/show.json" "$cepa_nudge_tmp/ps.json" <<'PY' 2>/dev/null
 import json, re, sys
@@ -165,12 +202,12 @@ fi
 
 # The text is fixed. Only the checked cli is substituted into it.
 cepa_nudge_text="You have 1 orchestration message. Run $cepa_nudge_cli orchestration check --peek --json"
-if ! timeout -k 2 10 "$cepa_nudge_cli" terminal send --terminal "$cepa_nudge_term" \
-     --text "$cepa_nudge_text" --enter --json </dev/null >"$cepa_nudge_tmp/send.json" 2>/dev/null; then
-  echo "Orca nudge failed: terminal send exited non-zero or timed out"; exit 3
+if ! cepa_nudge_orca "$cepa_nudge_tmp/send.json" terminal send --terminal "$cepa_nudge_term" \
+     --text "$cepa_nudge_text" --enter --json; then
+  fail "terminal send exited non-zero or timed out"
 fi
 if ! python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("ok") is True else 1)' \
      "$cepa_nudge_tmp/send.json" >/dev/null 2>&1; then
-  echo 'Orca nudge failed: terminal send did not return "ok": true'; exit 3
+  fail 'terminal send did not return "ok": true'
 fi
 echo "Orca nudge sent to $cepa_nudge_term"

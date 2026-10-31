@@ -7,7 +7,7 @@
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped script changed shape and these mutants need re-reading.
 #
-# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL) has at least one
+# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel, so the whole set runs in about a minute.
 #
@@ -25,8 +25,7 @@ CHECK = "scripts/check-orca-nudge.sh"
 # (name, old, new, exact MISS case set)
 MUTANTS = [
     # SEND
-    ("send-interrupt", '--enter --json </dev/null >"$cepa_nudge_tmp/send.json"',
-     '--enter --interrupt --json </dev/null >"$cepa_nudge_tmp/send.json"',
+    ("send-interrupt", '--enter --json; then', '--enter --interrupt --json; then',
      {"SEND done", "SEND never --interrupt", "WAIT working then done sends"}),
     ("send-content-spliced", 'check --peek --json"\n', 'check --peek --json $cepa_nudge_term"\n',
      {"SEND done", "SEND orca-dev", "SEND cli path is ORCA_CLI_COMMAND", "SEND row in second worktree", "WAIT working then done sends"}),
@@ -35,7 +34,7 @@ MUTANTS = [
     ('state-waiting-idle', 'if state == "done":', 'if state in ("done", "waiting"):',
      # The decoy case's target row is `waiting` too, and so is the row a
      # wait ends on.
-     {"STATE waiting", "STATE other row done", "WAIT working then waiting"}),
+     {"STATE waiting", "STATE other row done", "WAIT working then waiting", "ENDING skip"}),
     ('state-blocked-idle', 'if state == "done":', 'if state in ("done", "blocked"):', {"STATE blocked"}),
     ('state-working-idle', 'if state == "done":', 'if state in ("done", "working"):',
      {"WAIT bound ignores env", "WAIT clock off the poll grid", "WAIT date gives no clock", "WAIT ps fails mid-wait", "WAIT sleep fails", "WAIT working past the bound", "WAIT working then done sends", "WAIT working then waiting"}),
@@ -50,7 +49,7 @@ MUTANTS = [
      {"STATE waiting", "STATE blocked", "STATE not a word", "STATE missing",
       "STATE no row", "STATE two rows", "STATE other row done",
       "LOOKUP show names another handle", "LOOKUP ps not ok", "LOOKUP show not ok", "LOOKUP show empty ids",
-      "LOOKUP ps wrong shape", "WAIT working then waiting"}),
+      "LOOKUP ps wrong shape", "WAIT working then waiting", "ENDING skip"}),
     # WAIT
     ("wait-bound-from-env", "cepa_nudge_wait=120\n", "cepa_nudge_wait=${CEPA_NUDGE_WAIT:-120}\n",
      {"WAIT bound ignores env"}),
@@ -81,7 +80,10 @@ MUTANTS = [
     # LOOKUP
     ("lookup-shape-uncaught", "except Exception:\n", "except ValueError:\n", {"LOOKUP ps wrong shape"}),
     ("lookup-handle-unchecked", 't.get("handle") != term or ', "", {"LOOKUP show names another handle"}),
-    ("lookup-show-rc-ignored", '|| skip "terminal show failed or timed out"', "|| true", {"LOOKUP show fails"}),
+    ("lookup-show-rc-ignored", '|| skip "terminal show failed or timed out"', "|| true",
+     # The RETRY cases that end in a skip fail terminal show, as this case does.
+     {"LOOKUP show fails", "RETRY show vsock twice", "RETRY other error", "RETRY half the text",
+      "RETRY other half of the text"}),
     ("lookup-ps-rc-ignored", '|| skip "worktree ps failed or timed out"', "|| true", {"LOOKUP ps fails", "WAIT ps fails mid-wait"}),
     ("lookup-ok-unchecked", 'if show.get("ok") is not True or ps.get("ok") is not True:', "if False:",
      {"LOOKUP ps not ok", "LOOKUP show not ok"}),
@@ -89,7 +91,7 @@ MUTANTS = [
     ("lookup-empty-ids", " or not tab or not leaf:", ":", {"LOOKUP show empty ids"}),
     ("lookup-show-no-json", 'terminal show --terminal "$cepa_nudge_term" --json', 'terminal show --terminal "$cepa_nudge_term"',
      {"SEND lookup argv"}),
-    ("lookup-ps-no-agent-wait", '"$cepa_nudge_cli" worktree ps --agent-wait --json', '"$cepa_nudge_cli" worktree ps --json', {"SEND lookup argv"}),
+    ("lookup-ps-no-agent-wait", '"$cepa_nudge_tmp/ps.json" worktree ps --agent-wait --json', '"$cepa_nudge_tmp/ps.json" worktree ps --json', {"SEND lookup argv"}),
     ("lookup-first-worktree-only", '.get("worktrees") or [])', '.get("worktrees") or [])[:1]',
      {"SEND row in second worktree"}),
     # REFUSE
@@ -97,7 +99,7 @@ MUTANTS = [
      "orca) ;;", {"REFUSE cli bare orca"}),
     ("refuse-cli-flag", "''|-*|*[!A-Za-z0-9._/-]*) refuse", "''|*[!A-Za-z0-9._/-]*) refuse", {"REFUSE cli flag"}),
     ("refuse-cli-chars", "''|-*|*[!A-Za-z0-9._/-]*) refuse", "''|-*) refuse", {"REFUSE cli shell text"}),
-    ("refuse-cli-any", "  orca-ide|orca-dev) ;;", "  orca-ide|orca-dev|bash) ;;", {"REFUSE cli not orca"}),
+    ("refuse-cli-any", "  orca-ide|orca-dev) ;;", "  orca-ide|orca-dev|bash) ;;", {"REFUSE cli not orca", "ENDING refuse cli"}),
     ("refuse-cli-no-orca-dev", "  orca-ide|orca-dev) ;;", "  orca-ide) ;;",
      # The not-on-PATH case uses orca-dev too, and now meets the earlier refusal.
      {"SEND orca-dev", "REFUSE cli not on PATH"}),
@@ -108,15 +110,44 @@ MUTANTS = [
     ("refuse-cli-not-on-path", 'command -v "$cepa_nudge_cli" >/dev/null 2>&1 || refuse "$cepa_nudge_cli is not on PATH"\n', "",
      {"REFUSE cli not on PATH"}),
     ("refuse-handle-unanchored", "=~ ^term_[0-9a-f-]{36}$ ]]", "=~ ^term_ ]]",
-     {"REFUSE handle upper", "REFUSE handle trailing", "REFUSE handle newline"}),
+     {"REFUSE handle upper", "REFUSE handle trailing", "REFUSE handle newline", "ENDING refuse handle is not printed"}),
     ("refuse-handle-case", "=~ ^term_[0-9a-f-]{36}$ ]]", "=~ ^term_[0-9a-fA-F-]{36}$ ]]", {"REFUSE handle upper"}),
-    ("refuse-argc", "[ $# -eq 2 ]", "[ $# -ge 2 ]", {"REFUSE arg count"}),
+    ("refuse-argc", "[ $# -eq 2 ]", "[ $# -ge 2 ]", {"REFUSE arg count", "ENDING refuse arg count"}),
     # FAIL
-    ("fail-send-rc-ignored", 'echo "Orca nudge failed: terminal send exited non-zero or timed out"; exit 3', ":",
-     {"FAIL send exits"}),
+    ("fail-send-rc-ignored", '  fail "terminal send exited non-zero or timed out"\n', "  :\n",
+     # A send that fails twice on the vsock error now reaches the ok check.
+     {"FAIL send exits", "ENDING fail", "RETRY send vsock twice"}),
     ("fail-send-ok-unchecked", 'sys.exit(0 if json.load(open(sys.argv[1])).get("ok") is True else 1)',
      "sys.exit(0)", {"FAIL send not ok", "FAIL send ok truthy"}),
     ("fail-send-ok-truthy", '.get("ok") is True else 1)', '.get("ok") else 1)', {"FAIL send ok truthy"}),
+    # ENDING (L28): the ending's first line after every outcome but sent.
+    ("ending-skip-dropped", 'skip() { echo "Orca nudge skipped: $1"; cepa_nudge_ending; exit 1; }',
+     'skip() { echo "Orca nudge skipped: $1"; exit 1; }', {"ENDING skip"}),
+    ("ending-refuse-dropped", 'refuse() { echo "Orca nudge refused: $1"; cepa_nudge_ending; exit 2; }',
+     'refuse() { echo "Orca nudge refused: $1"; exit 2; }',
+     {"ENDING refuse cli", "ENDING refuse arg count", "ENDING refuse handle is not printed"}),
+    ("ending-fail-dropped", 'fail() { echo "Orca nudge failed: $1"; cepa_nudge_ending; exit 3; }',
+     'fail() { echo "Orca nudge failed: $1"; exit 3; }', {"ENDING fail"}),
+    ("ending-on-send", 'echo "Orca nudge sent to $cepa_nudge_term"\n',
+     'echo "Orca nudge sent to $cepa_nudge_term"\ncepa_nudge_ending\n',
+     {"ENDING sent has no ending line", "SEND done", "SEND orca-dev", "SEND cli path is ORCA_CLI_COMMAND",
+      "SEND row in second worktree", "WAIT working then done sends"}),
+    # The newline handle, printed raw, adds a third output line.
+    ("ending-raw-handle", "  if cepa_nudge_valid_term; then", "  if true; then",
+     {"ENDING refuse handle is not printed", "REFUSE handle newline"}),
+    ("ending-text-wrong", 'tell $cepa_nudge_term to check its Orca inbox"', 'tell $cepa_nudge_term to check Orca"',
+     {"ENDING skip", "ENDING refuse cli", "ENDING refuse arg count", "ENDING fail"}),
+    # RETRY (L28): once, only on the WSL interop error.
+    ("retry-none", '  cepa_nudge_e=$(<"$cepa_nudge_tmp/err") || return 1\n', "  return 1\n",
+     {"RETRY show vsock once", "RETRY ps vsock once", "RETRY send vsock once",
+      "RETRY show vsock twice", "RETRY send vsock twice"}),
+    ("retry-any-error",
+     '  [[ $cepa_nudge_e == *UtilAcceptVsock* && $cepa_nudge_e == *"accept4 failed 110"* ]] || return 1\n', "",
+     {"RETRY other error", "RETRY half the text", "RETRY other half of the text"}),
+    ("retry-vsock-text-only", ' && $cepa_nudge_e == *"accept4 failed 110"*', "", {"RETRY half the text"}),
+    ("retry-accept-text-only", "$cepa_nudge_e == *UtilAcceptVsock* && ", "", {"RETRY other half of the text"}),
+    ("retry-unbounded", '  timeout -k 2 10 "$cepa_nudge_cli" "$@" </dev/null >"$out" 2>/dev/null\n}',
+     '  cepa_nudge_orca "$out" "$@"\n}', {"RETRY show vsock twice", "RETRY send vsock twice"}),
 ]
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-ctl-")
