@@ -1329,10 +1329,10 @@ fi
 # The checker's INFO lines are its own coverage accounting. A zero in any of
 # them means it scanned nothing and said so politely.
 baseline_bad=''
-printf '%s\n' "$CHK_OUT" | grep -qE 'agent definitions checked: [1-9]' || baseline_bad="${baseline_bad}agent-definitions "
-printf '%s\n' "$CHK_OUT" | grep -qE 'citations checked: [1-9]'         || baseline_bad="${baseline_bad}citations "
-printf '%s\n' "$CHK_OUT" | grep -qE '[1-9][0-9]* anchors defined by [1-9]' || baseline_bad="${baseline_bad}anchors/skills "
-printf '%s\n' "$CHK_OUT" | grep -qE 'across ([1-9][0-9]*) of \1 roots'  || baseline_bad="${baseline_bad}roots-scanned "
+grep -qE 'agent definitions checked: [1-9]' <<<"$CHK_OUT" || baseline_bad="${baseline_bad}agent-definitions "
+grep -qE 'citations checked: [1-9]' <<<"$CHK_OUT"         || baseline_bad="${baseline_bad}citations "
+grep -qE '[1-9][0-9]* anchors defined by [1-9]' <<<"$CHK_OUT" || baseline_bad="${baseline_bad}anchors/skills "
+grep -qE 'across ([1-9][0-9]*) of \1 roots' <<<"$CHK_OUT"  || baseline_bad="${baseline_bad}roots-scanned "
 if [ -n "$baseline_bad" ]; then
   printf 'BASELINE-ABORT zero-coverage\n'
   printf 'FATAL: baseline reports zero coverage in: %s\n' "$baseline_bad"
@@ -1415,12 +1415,12 @@ run_one() {
     return
   fi
 
-  if [ -n "${EXP_RE[$i]}" ] && ! printf '%s\n' "$CHK_OUT" | grep -qE "${EXP_RE[$i]}"; then
+  if [ -n "${EXP_RE[$i]}" ] && ! grep -qE "${EXP_RE[$i]}" <<<"$CHK_OUT"; then
     fail_case "$i" "counts matched but output does not match: ${EXP_RE[$i]}"
     return
   fi
 
-  if [ -n "${FORBID_RE[$i]}" ] && printf '%s\n' "$CHK_OUT" | grep -qE "${FORBID_RE[$i]}"; then
+  if [ -n "${FORBID_RE[$i]}" ] && grep -qE "${FORBID_RE[$i]}" <<<"$CHK_OUT"; then
     fail_case "$i" "output must NOT match, but does: ${FORBID_RE[$i]}"
     return
   fi

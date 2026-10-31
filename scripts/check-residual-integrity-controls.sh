@@ -648,8 +648,8 @@ fi
 # own coverage accounting, and a zero in either means it scanned nothing and
 # said so politely.
 baseline_bad=''
-printf '%s\n' "$CHK_OUT" | grep -qE 'summary blocks checked: [1-9]' || baseline_bad="${baseline_bad}summary-blocks "
-printf '%s\n' "$CHK_OUT" | grep -qE 'shard prose scanned: [1-9]'    || baseline_bad="${baseline_bad}shard-prose "
+grep -qE 'summary blocks checked: [1-9]' <<<"$CHK_OUT" || baseline_bad="${baseline_bad}summary-blocks "
+grep -qE 'shard prose scanned: [1-9]' <<<"$CHK_OUT"    || baseline_bad="${baseline_bad}shard-prose "
 if [ -n "$baseline_bad" ]; then
   printf 'BASELINE-ABORT zero-coverage\n'
   printf 'FATAL: baseline reports zero coverage in: %s\n' "$baseline_bad"
@@ -724,10 +724,10 @@ while [ $i -lt ${#IDS[@]} ]; do
     fail_case "$i" "expected exit ${exp_rc}, got ${CHK_RC} — the exit code is how CI fails"
     i=$((i + 1)); continue
   fi
-  if [ -n "${EXP_RE[$i]}" ] && ! printf '%s\n' "$CHK_OUT" | grep -qE "${EXP_RE[$i]}"; then
+  if [ -n "${EXP_RE[$i]}" ] && ! grep -qE "${EXP_RE[$i]}" <<<"$CHK_OUT"; then
     fail_case "$i" "output did not match /${EXP_RE[$i]}/"; i=$((i + 1)); continue
   fi
-  if [ -n "${FORBID_RE[$i]}" ] && printf '%s\n' "$CHK_OUT" | grep -qE "${FORBID_RE[$i]}"; then
+  if [ -n "${FORBID_RE[$i]}" ] && grep -qE "${FORBID_RE[$i]}" <<<"$CHK_OUT"; then
     fail_case "$i" "output matched forbidden /${FORBID_RE[$i]}/"; i=$((i + 1)); continue
   fi
 

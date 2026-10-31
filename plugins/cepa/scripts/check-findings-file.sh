@@ -293,8 +293,9 @@ _cff_counters() {
   # took the whole file out of legs 1a/1b/1c and reported `0 MISS, 0 WARN`.
   # A self-service exemption granted by writing prose is exactly the
   # "unreadable to every consumer" defect the field exists to prevent.
-  if printf '%s\n' "$(awk 'NR==1 && /^---[[:space:]]*$/ {infm=1; next} infm && /^---[[:space:]]*$/ {exit} infm' "$f")" |
-     grep -qE '^counter_convention:'; then
+  # Here-string, not `printf | grep -q` — see the fields leg below.
+  if grep -qE '^counter_convention:' \
+       <<<"$(awk 'NR==1 && /^---[[:space:]]*$/ {infm=1; next} infm && /^---[[:space:]]*$/ {exit} infm' "$f")"; then
     CFF_SKIPPED=$((CFF_SKIPPED + 1))
     _cff_info "residual: ${f} carries counter_convention: — counters follow a superseded convention and are not verifiable from the body"
     return 0

@@ -339,8 +339,8 @@ scan_body() {
     range=$(block_range "$f" "$ln")
     local scope
     scope=$(sed -n "${range% *},${range#* }p" "$f")
-    printf '%s' "$scope" | grep -qE "$PIN_RE" && continue
-    printf '%s' "$scope" | grep -qF "$SUPPRESS_MARKER" && continue
+    grep -qE "$PIN_RE" <<<"$scope" && continue
+    grep -qF "$SUPPRESS_MARKER" <<<"$scope" && continue
     printf '%s\n' "$ln"
   done <<< "$hits"
 }
@@ -368,7 +368,7 @@ scan_conditional() {
     # whose only escape was deleting the marker being documented.
     range=$(block_range "$f" "$ln")
     scope=$(sed -n "${range% *},${range#* }p" "$f")
-    printf '%s' "$scope" | grep -qF "$SUPPRESS_MARKER" && continue
+    grep -qF "$SUPPRESS_MARKER" <<<"$scope" && continue
 
     inter=$(printf '%s' "$marker" |
       sed -n 's/.*[^a-z]interactive=\([a-z]*\).*/\1/p' | tr '[:upper:]' '[:lower:]')
