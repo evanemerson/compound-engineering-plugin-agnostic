@@ -755,9 +755,11 @@ L24. **Orca adapter rule 7: how a turn ends under Orca.**
     setup/sweep + a citation checker; plugin 1.37.0. NOT in this item: the
     global CLAUDE.md edits and the farmtender-laravel/contexthub edits (plan
     §8) — they follow only after the plan §10 probe test passes here.
-    Operator also chose to LEAVE `.env`/`.env.local` in `.worktreeinclude` in
-    artist360, dpc-insider-www, dpc-pro-www, farmtender-laravel (all env files
-    gitignored, untracked, 0 commits ever — measured 2026-10-30).
+    Operator first chose (2026-10-30) to leave `.env`/`.env.local` in
+    `.worktreeinclude` in artist360, dpc-insider-www, dpc-pro-www,
+    farmtender-laravel (all env files gitignored, untracked, 0 commits ever).
+    **SUPERSEDED 2026-10-31 by the operator: no `.worktreeinclude` anywhere,
+    and never an env or secret file in one — see L32.**
 
 
 L25. **Cite §12b rule 7 in `review.md` and `resolve-pr.md`.**
@@ -982,6 +984,27 @@ L31. **`residual-integrity` CI job is close to its 10-minute bound.**
     their controls) added most of it. Split the job (precedent: L11 split the
     mutation sweep into shards) before the next leg tips it over; a cancelled
     job reads as a red check on every PR.
+
+
+L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
+    status: pending
+    severity: P2
+    owner: coord@main (this repo); each repo's coord@main (hand-offs)
+    Operator: "i do not want to use .worktreeinclude and do not want to
+    include .env/.env.local in .worktreeinclude." Rule added to the global
+    `~/.claude/CLAUDE.md` (Orca section, "Never use `.worktreeinclude`";
+    backup `~/.claude/CLAUDE.md.bak-2026-10-31-worktreeinclude`).
+    Measured 2026-10-31 (main checkouts, `cat <repo>/.worktreeinclude`):
+    - compound-engineering: `cepa.local.md` → PR #103 removes it (open).
+    - artist360: `.env`, `.env.local` → hand-off needed.
+    - dpc-insider-www: `.env` → hand-off needed.
+    - artist360-docs, kcprimetime: comments only → hand-off (delete the file).
+    - farmtender-laravel: none on `master`, but open PR #79
+      (`chore/main/orca-config`) ADDS one listing `.env` → it must drop
+      `.worktreeinclude` before merge, or close.
+    - Already gone from main checkouts: ci-ops-self-hosted, hillberry-app,
+      youtube, dpc-pro-www (their sessions were told to remove it).
+    No env file is or ever was in git in any of these (L24 measurement).
 
 ---
 
