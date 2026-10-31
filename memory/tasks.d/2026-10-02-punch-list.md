@@ -1128,6 +1128,13 @@ L35. **Root-cause hardening: can this class of silent loss happen anywhere else?
     dispatched `worker_done` not mechanized) and the unproven D6 `question`
     loss. Output: a table of every path with its proof, plus fixes or filed
     residuals.
+    2026-10-31 progress: tab17@roles opened PR #106 (v1.40.0, head
+    945247f, Handoff `done`); operator approved "Merge + L38 + CLAUDE.md".
+    After `gh pr update-branch 106` (head 40036f1) the `orca-nudge` job hit
+    its 10-minute bound inside `check-orca-nudge-controls.sh` (run
+    41234402058; suite 154/154 passed first). Follow-up dispatched to
+    `tab18@roles` on the same branch: task `task_5626f99fa50c`, dispatch
+    `ctx_6e87ff5d779c`. #106 merges when CI is green on tab18's head.
 
 L36. **Triage L33's open residuals and recommend fixes.**
     status: completed
@@ -1191,6 +1198,22 @@ L37. **Session names: rule 6 does not stick, and the naming scheme itself is in 
     3. Implement the chosen scheme in rule 6 (and the global
        `~/.claude/CLAUDE.md` naming text, as a proposed diff in the PR body —
        the operator's file), with a gate if one fits.
+
+L38. **Send block: move its 4 arguments onto stdin, and name the session in the ending line.**
+    status: pending
+    severity: P3
+    owner: unassigned (start after L37 merges: both edit
+      `plugins/cepa/skills/autonomy/SKILL.md` §12b)
+    L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), split
+    out of L35 by tab17@roles because they change the interface of the send
+    block every session runs; operator chose "new item" (AskUserQuestion
+    "Merge + L38 + CLAUDE.md", 2026-10-31).
+    - #19: four model-filled values (cli, target, type, nudge) sit in double
+      quotes on the block's command line, against the repo rule "a value
+      filled from agent output never goes inside a quoted shell string".
+    - #21: `orca-send.sh`'s ending line names a terminal handle, not a
+      session. Add an optional session-name argument.
+    Then #22 (send-branch gate cases, L36) on the final interface.
 
 ---
 
