@@ -1050,9 +1050,10 @@ L33. **A send that stores nothing is reported "sent", and the nudge still fires.
     ~32 KB command line fails on WSL with empty stdout. The D6 `question`
     loss is unproven. Residuals (2 P2: `orchestration reply` and dispatched
     `worker_done` not yet mechanized; 7 P3s) in
-    `memory/tasks.d/2026-10-31-fix-roles-orca-send-verify.md`. Open
-    follow-up: global `~/.claude/CLAUDE.md` still names `orca-nudge.sh`, not
-    `orca-send.sh` (operator's file).
+    `memory/tasks.d/2026-10-31-fix-roles-orca-send-verify.md`. Global
+    `~/.claude/CLAUDE.md` "A session that is already running" bullet now
+    routes sends through `orca-send.sh` (operator approved via
+    AskUserQuestion; backup `~/.claude/CLAUDE.md.bak-2026-10-31-l33`).
     severity: P1
     owner: roles (`tab16@roles`, dispatched via Orca 2026-10-31 on the
       operator's "dispatch a worker for it now": `worker-start` on Run
