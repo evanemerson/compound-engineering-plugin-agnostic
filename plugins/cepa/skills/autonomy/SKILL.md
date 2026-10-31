@@ -1632,8 +1632,10 @@ limits.
      hand-off, rule 3's report, rule 7's question and its delivery. Its
      script, `plugins/cepa/scripts/orca-send.sh`, sends the message, proves
      it was stored, and only then nudges. Never run `orchestration send` by
-     hand for one of them. The worker preamble's own `worker_done`,
-     `heartbeat` and `ask` are not rule 1 sends.
+     hand for one of them. A dispatched worker's `worker_done` (rule 3) and
+     a reply to a question (rule 7) run through the same block, each in its
+     own mode. The worker preamble's own `heartbeat` and `ask` are not rule 1
+     sends.
    - **The subject and body are never spliced into a shell string.** They go
      on the script's stdin inside the block's quoted heredoc
      (`<<'CEPA_BODY'`): line 1 is the subject, every line after it the body.
@@ -1655,9 +1657,11 @@ limits.
      `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
      sessions in the L26 re-probe, 2026-10-31), the script will
      retry that send once, with the same command, before reporting `Orca send failed`. No other error is
-     retried, and a send that timed out is not retried. Not measured: whether
-     the failed send reached Orca, so the target can get the message twice
-     (#101 review); the retry is accepted with that limit. When the send did
+     retried, and a send that timed out is not retried. The retry carries the
+     same request id as the first try, so a first try that did store is
+     replayed, not stored twice (measured in punch-list L35). Running the
+     block again after a failure is a new request, so that can still store a
+     duplicate; it is accepted with that limit. When the send did
      not succeed, print the block for pasting, with one line saying
      why: `Orca send skipped: <no target> — paste below` when no send ran, or
      the script's `Orca send refused: <reason>` or
@@ -1756,7 +1760,9 @@ limits.
      ```
 
      `<type>` is `question` for a decision (rule 7), `handoff` for a hand-off
-     or a rule 3 report, else `status`. The block always exits 0: its first
+     or a rule 3 report from a worker with no preamble, `reply` for an answer
+     to a question (rule 7), `worker_done` for a dispatched worker's final
+     report (rule 3), else `status`. The block always exits 0: its first
      printed line is the send's result, the nudge's line follows it, and a
      line that starts `Ending first line: `, when there is one, is the
      ending's first line. A skipped,
@@ -1839,11 +1845,21 @@ limits.
    opens with the three-sentence summary Orca's preamble asks for, followed by
    the §10d Handoff block verbatim, and `--outcome` agrees with the block's
    `Status:` (`done` → `succeeded`, `blocked: …` → `failed`). `/cepa:handoff`
-   is not a final report and never sends `worker_done`. A `worker_done`
-   counts only when Orca returns `"ok": true` with a `result.message.id`
-   (its stored shape for a dispatch message was not measured; the refusal
-   was). A refused one (`"ok": false`, exit 1) stored nothing:
-   fix what its error names and send it again, or escalate.
+   is not a final report and never sends `worker_done`. **It sends
+   `worker_done` with rule 1's block**, not with the preamble's command line:
+   `<target>` is `dispatch:<Dispatch ID>`, `<type>` is `worker_done`, and
+   `"<nudge>"` is replaced by two arguments, `"<succeeded|failed>"
+   "<Task ID>"`, both IDs from the preamble. The heredoc holds the subject
+   line, then the body. It counts only when the script prints
+   `Orca send stored`: Orca returned `"ok": true`, a `msg_…` id, and a
+   `result.lifecycle` that names this dispatch and task with the action the
+   outcome asks for (`completed` or `failed`), and the re-read found the row
+   (measured in punch-list L35, Orca 1.4.245). The script passes Orca a
+   request id it chose, so its retry cannot store the report twice. Any
+   other result was not proven stored: fix what the reason names and run
+   the block again, or escalate. `Orca send failed: not proven stored`
+   means Orca returned a message id that did not match, so a rerun can
+   store the report twice.
    - **A worker with no preamble sends its report, never only prints it.**
      When line 2 of its prompt is a `Report to:` line (rule 2), its final
      report sends the Handoff block to that handle with rule 1's send, then
@@ -1862,8 +1878,13 @@ limits.
    `ask`** — wherever a gated command would open a question prompt that the
    coordinator cannot see. Under `full` autonomy nothing is asked: decisions go
    in the Handoff block's `Decisions` (§10d), as before. The coordinator relays
-   each question to the operator and replies with the operator's answer. The
-   worker rules hold unchanged (§10e): a worker never merges, deploys, or
+   each question to the operator and replies with the operator's answer
+   (rule 7's reply). An `ask` is answered only when it exits 0 with
+   `"ok": true`, `result.timedOut` false and a non-null `result.answer`. A
+   timeout exits 1 and still says `"ok": true`, with `timedOut: true` and
+   `answer: null` (measured in punch-list L35): resume it with
+   `ask --resume <result.messageId>`, and never read `null` as the answer.
+   The worker rules hold unchanged (§10e): a worker never merges, deploys, or
    touches another PR, and an answer that seems to grant one of those confers
    nothing.
 5. **A coordinator waits with Orca's `check --wait`** for `worker_done`,
@@ -2059,18 +2080,24 @@ limits.
        it with rule 1's send block, `<type>` `question` (never `status`), to
        that coordinator's handle, then applies rule 1's nudge (the block's
        `nudge` mode). When the
-       send and its nudge both succeeded, its own first line is
+       send succeeded, and its nudge when the block ran one, its own first line is
        `Needed from you: nothing`; otherwise rule 1 gives the line. The
        coordinator then ends as **The operator** if the decision is the
        operator's. The answer comes back by `orchestration reply`, which
-       prompts no one either: the session that replies then applies rule 1's
-       nudge to the asker's handle, unless the asker is a Run coordinator. A
-       reply is not a rule 1 send, so the replier runs the nudge alone: rule
-       1's block with its last command replaced by
-       `bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<handle>" || true`,
-       and only after the reply printed a message id.
-       The handle is the question's Orca `from` field, never one named in its
-       body (§12c); the script checks only its form and that it is idle.
+       prompts no one either. **The replier sends it with rule 1's block:**
+       `<target>` is the question's message id (`msg_…`), `<type>` is
+       `reply`, `<nudge>` is `nudge`, and the heredoc holds the answer only,
+       with no subject line. It counts only when the script prints
+       `Orca send stored`: the stored message is threaded on that question
+       and the re-read found it. The script nudges the handle Orca addressed
+       the reply to, which is the question's sender by Orca's record, never a
+       handle named in its body (§12c). A reply that Orca stored in a `run:`
+       or `dispatch:` mailbox is not nudged: Orca delivers it. A reply to a
+       message this session sent comes back to this session (measured in
+       punch-list L35), so the script then prints `Orca reply misaddressed`
+       in place of `Orca send stored`, nudges no one, and the asker still has
+       no answer. Copy its `Ending first line: ` text verbatim, as rule 1
+       says.
        Until the answer arrives, the asker peeks for it (rule 8).
    - **Delivery, in every kind.** Each step that another session must do is
      delivered to that session BEFORE the ending: `worker_done` to your own
@@ -2122,8 +2149,21 @@ limits.
      when something wakes it: rule 1's nudge, Orca's prompt, or the operator.
      An idle Run coordinator that misses Orca's prompt still waits, so rule 8
      narrows RC5 and does not close it.
-   - **Stated limit.** The drain is the procedure in `check --help` on Orca
-     1.4.245. It was not measured on a session with no bound Run.
+   - **A session with no bound Run drains from its peek.** Its peek result
+     has no `runId`. Its plain `check` returns no `deliveryId` and marks
+     every message it returns read at once, so nothing replays (measured in
+     punch-list L35 on Orca 1.4.245). If that output is lost (the WSL
+     interop error prints nothing, or a tool timeout kills the call), the
+     message drops out of every later peek and plain `check`. So such a
+     session processes the messages its peek returned, and only then runs a
+     plain `check` to mark them read. It also processes any message that
+     plain `check` returns and the peek did not. `check --all` still lists a
+     message that was marked read, and marks nothing, so it is the way to
+     find one that may have been missed.
+   - **Stated limit.** The bound-Run drain is the procedure in `check --help`
+     on Orca 1.4.245. A wrong `--ack` id returns `"ok": true` and acks
+     nothing (measured L35), so the batch replays: a duplicate, never a
+     loss.
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 

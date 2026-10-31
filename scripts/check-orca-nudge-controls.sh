@@ -8,10 +8,19 @@
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped script changed shape and these mutants need re-reading.
 #
-# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, SENDREF) has at least one
+# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
-# mutants run in parallel: the whole set took 2m21s on 2026-10-31
-# (`time bash scripts/check-orca-nudge-controls.sh`).
+# mutants run in parallel.
+#
+# Each mutant runs only the half of the check that can see it
+# (CEPA_NUDGE_CHECK_LEGS): an orca-nudge.sh mutant runs the nudge legs, and an
+# orca-send.sh mutant runs the send legs. The send legs run the shipped nudge
+# beside orca-send.sh, never argument 1, so a nudge mutant cannot change them;
+# the nudge legs never run orca-send.sh. The unmutated copy runs whole and as
+# both halves, and the halves must partition the whole run's cases. Cost, with
+# `time bash scripts/check-orca-nudge-controls.sh` on a 16-core box: 3m33s
+# when every mutant ran all 154 cases; see the PR #106 body for the time after
+# the split. On a 4-vCPU CI runner the old cost hit the job's 10-minute bound.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -159,7 +168,7 @@ SEND_MUTANTS = [
     ('send-ok-truthy', 'if d.get("ok") is not True:', 'if not d.get("ok"):',
      {'STORE ok truthy'}),
     ('send-ok-unchecked', 'if d.get("ok") is not True:', 'if False:',
-     {'STORE ok truthy', 'STORE ok false code not a word', 'STORE ok false'}),
+     {'REPLY ok false', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok truthy', 'WDONE ok false'}),
     ('send-rc-unchecked', '    if rc != 0:\n', '    if False:\n',
      {'STORE ok reply with a non-zero exit'}),
     ('send-no-reread', '  1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;', '  1) ;;',
@@ -172,30 +181,67 @@ SEND_MUTANTS = [
      {'STORE id in the inbox for another recipient'}),
     ('send-inbox-fail-ignored', '|| fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"', '|| true',
      {'STORE inbox fails'}),
-    ('send-fail-continues', 'cepa_send_ending; exit 5; }', 'cepa_send_ending; }',
-     {'STORE not JSON', 'STORE ok reply with a non-zero exit', 'STORE ok false', 'STORE bad message id', 'STORE envelope uuid as message id', 'STORE send vsock twice', 'STORE bad recipient', 'STORE envelope id without result.message', 'STORE empty stdout', 'STORE send timeout not retried', 'STORE ok truthy', 'STORE inbox not ok', 'STORE inbox not JSON', 'STORE id in the inbox for another recipient', 'STORE JSON list', 'STORE id missing from the inbox', 'STORE warning-only result', 'STORE ok false code not a word', 'STORE inbox fails', 'STORE inbox wrong shape'}),
+    ('send-fail-continues', 'no message stored — $1"; cepa_send_ending; exit 5; }', 'no message stored — $1"; cepa_send_ending; }',
+     {'REPLY ok false', 'STORE JSON list', 'STORE bad message id', 'STORE empty stdout', 'STORE envelope id without result.message', 'STORE envelope uuid as message id', 'STORE id in the inbox for another recipient', 'STORE id missing from the inbox', 'STORE inbox fails', 'STORE inbox not JSON', 'STORE inbox not ok', 'STORE inbox wrong shape', 'STORE not JSON', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok reply with a non-zero exit', 'STORE ok truthy', 'STORE send timeout not retried', 'STORE send vsock twice', 'STORE warning-only result', 'WDONE empty stdout', 'WDONE ok false'}),
     ('send-no-size-cap', '-le 28000 ]', '-le 99999999 ]',
      {'SENDREF cap counts bytes', 'SENDREF over the size cap'}),
     ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
      {'SENDREF cap counts bytes'}),
-    ('send-type-worker_done', '  status|question|handoff|escalation|merge_ready) ;;', '  status|question|handoff|escalation|merge_ready|worker_done) ;;',
-     {'SENDREF type worker_done'}),
-    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* ]] ||', 'nudge) true ||',
+    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] ||', 'nudge) true ||',
      {'SENDREF nudge a run address'}),
+    ('send-five-args-any', '[ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]', '[ $# -eq 5 ]',
+     {'SENDREF five args for a send'}),
+    # L36 #20: every send carries a request id, so its vsock retry replays.
+    ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
+     {'STORE argv and order', 'STORE retry reuses the request id'}),
+    # reply mode (punch-list L35)
+    ('reply-thread-unchecked', 'if m.get("thread_id") != target:', 'if False:',
+     {'REPLY not threaded on the question'}),
+    ('reply-self-unchecked', 'sys.exit(3 if found and mine else 0 if found else 1)', 'sys.exit(0 if found else 1)',
+     {'REPLY addressed to this session, question out of window', 'REPLY misaddressed is not nudged', 'REPLY to a message this session sent'}),
+    ('reply-no-request-id', '--body "$cepa_send_body" --retry-request "$cepa_send_req" --json ;;', '--body "$cepa_send_body" --json ;;',
+     {'REPLY argv', 'REPLY retry reuses the request id'}),
+    ('reply-dispatch-nudged', 'if [[ $cepa_send_to != term_* ]]; then', 'if false; then',
+     {'REPLY to a dispatch mailbox is not nudged'}),
+    ('reply-target-loose', '[[ $cepa_send_target =~ ^msg_[0-9a-f]{6,32}$ ]] || refuse "a reply', 'true || refuse "a reply',
+     {'REPLYREF target is a handle'}),
+    # #106 review: a reply Orca addressed to this session is misaddressed
+    # even when the question is outside the re-read window.
+    ('reply-to-me-unchecked', '(sys.argv[3] == me or any(', '(any(',
+     {'REPLY addressed to this session, question out of window'}),
+    ('reply-handle-unvalidated', 'if not re.fullmatch(r"term_[0-9a-f-]{36}", me):', 'if False:',
+     {'REPLY handle not a term_ handle is ignored'}),
+    ('unproven-says-nothing-stored', 'unproven "${cepa_send_got#UNPROVEN }"', 'fail "${cepa_send_got#UNPROVEN }"',
+     {'STORE bad recipient', 'REPLY not threaded on the question', 'REPLY names no recipient', 'WDONE no lifecycle', 'WDONE wrong action', 'WDONE other dispatch', 'WDONE other task'}),
+    # worker_done mode (punch-list L35)
+    ('wd-target-loose', '    [[ $cepa_send_target =~ ^dispatch:ctx_[0-9a-f]{6,32}$ ]] || refuse', '    true || refuse',
+     {'WDREF target not a dispatch'}),
+    ('wd-action-unchecked', 'lc.get("action") != action \\', 'False \\',
+     {'WDONE wrong action'}),
+    ('wd-dispatch-unchecked', 'lc.get("dispatchId") != target[len("dispatch:"):]', 'False',
+     {'WDONE other dispatch'}),
+    ('wd-task-unchecked', 'or lc.get("taskId") != task:', ':',
+     {'WDONE other task'}),
+    ('wd-outcome-map', '      failed) cepa_send_outcome=failed ;;', '      failed) cepa_send_outcome=completed ;;',
+     {'WDONE failed outcome'}),
+    ('wd-task-arg-unchecked', '[[ $cepa_send_task =~ ^task_[0-9a-f]{6,32}$ ]] || refuse', 'true || refuse',
+     {'WDREF bad task id'}),
+    ('wd-no-request-id', '      --retry-request "$cepa_send_req" --json ;;\n  *)', '      --json ;;\n  *)',
+     {'WDONE argv, no nudge', 'WDONE retry reuses the request id'}),
     ('send-reroute-nudged', 'if [ "$cepa_send_to" != "$cepa_send_target" ]; then', 'if false; then',
      {'STORE stored for another handle', 'STORE rerouted to a Run mailbox'}),
     ('send-no-vsock-retry', '  for try in 1 2; do\n    timeout -k 2 15', '  for try in 1; do\n    timeout -k 2 15',
-     {'STORE send vsock twice', 'STORE send vsock once', 'STORE inbox vsock once'}),
+     {'REPLY retry reuses the request id', 'REPLY vsock retry', 'STORE inbox vsock once', 'STORE retry reuses the request id', 'STORE send retry', 'STORE send vsock once', 'STORE send vsock twice', 'WDONE retry reuses the request id', 'WDONE vsock retry'}),
     ('send-timeout-retried', '[ "$cepa_send_rc" != 124 ] && [ "$cepa_send_rc" != 137 ] ||', 'true ||',
      {'STORE send timeout not retried'}),
     ('send-dashdash-body', '[[ $cepa_send_body != --* ]] || refuse "the body starts with --, which Orca reads as a flag"\n', '',
-     {'SENDREF body starts --'}),
+     {'REPLYREF body starts --', 'SENDREF body starts --'}),
     ('send-code-raw', 're.fullmatch(r"[a-z_]{1,40}", code)', 'code',
      {'STORE ok false code not a word'}),
     ('send-target-loose', '^(term_[0-9a-f-]{36}|run:', '(term_[0-9a-f-]{36}|run:',
      {'SENDREF target newline'}),
     ('send-empty-body-ok', '[ -n "${cepa_send_body//[[:space:]]/}" ] || refuse "the body is empty"\n', '',
-     {'SENDREF empty body'}),
+     {'REPLYREF empty body', 'SENDREF empty body'}),
 ]
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-ctl-")
@@ -206,18 +252,33 @@ def ok(msg):
 def miss(msg):
     global failed; failed += 1; print("MISS", msg)
 
-def run(script):
-    r = subprocess.run(["bash", CHECK, script], capture_output=True, text=True, timeout=300)
-    return r.returncode, {l[5:].split(":", 1)[0] for l in r.stdout.splitlines() if l.startswith("MISS ")}
+def check(args, legs="all"):
+    r = subprocess.run(["bash", CHECK] + args, capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, CEPA_NUDGE_CHECK_LEGS=legs))
+    lines = r.stdout.splitlines()
+    return (r.returncode, {l[5:].split(":", 1)[0] for l in lines if l.startswith("MISS ")},
+            {l[5:] for l in lines if l.startswith("PASS ")})
+
+def run(script, legs="all"):
+    return check([script], legs)[:2]
 
 src = open(SCRIPT, encoding="utf-8").read()
 clean = os.path.join(TMP, "clean.sh")
 open(clean, "w", encoding="utf-8").write(src)
-rc, misses = run(clean)
+with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+    (rc, misses, whole), (nrc, nmiss, nudge), (src_, smiss, send) = pool.map(
+        lambda legs: check([clean], legs), ("all", "nudge", "send"))
 if rc == 0 and not misses:
     ok("unmutated copy runs with no MISS")
 else:
     miss("unmutated copy: rc=%s, MISS %r" % (rc, sorted(misses)[:3]))
+# The halves split the whole run: each case runs in exactly one half.
+if nrc == src_ == 0 and not nmiss | smiss and nudge and send and not nudge & send \
+        and nudge | send == whole:
+    ok("the nudge half (%d) and send half (%d) partition the %d cases" % (len(nudge), len(send), len(whole)))
+else:
+    miss("halves: rc %s/%s, %d+%d cases, %d shared, %d not in either"
+         % (nrc, src_, len(nudge), len(send), len(nudge & send), len(whole - nudge - send)))
 
 def run_mutant(m):
     name, old, new, want = m
@@ -225,7 +286,7 @@ def run_mutant(m):
         return m, None, None
     path = os.path.join(TMP, name + ".sh")
     open(path, "w", encoding="utf-8").write(src.replace(old, new))
-    return (m,) + run(path)
+    return (m,) + run(path, "nudge")
 
 # Each check run makes its own temp dir, so the runs share nothing.
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -249,9 +310,7 @@ def run_send_mutant(m):
     os.mkdir(d)
     open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
     shutil.copy(SCRIPT, d)
-    r = subprocess.run(["bash", CHECK, SCRIPT, os.path.join(d, "orca-send.sh")],
-                       capture_output=True, text=True, timeout=300)
-    return m, r.returncode, {l[5:].split(":", 1)[0] for l in r.stdout.splitlines() if l.startswith("MISS ")}
+    return (m,) + check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
     results = list(pool.map(run_send_mutant, SEND_MUTANTS))

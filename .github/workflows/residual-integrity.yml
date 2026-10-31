@@ -171,8 +171,9 @@ jobs:
         run: bash scripts/check-orca-turn-endings-controls.sh
 
   orca-nudge:
-    # Orca nudge. About four minutes (4m05s on PR #104), almost all of it
-    # the controls.
+    # Orca nudge. About three minutes (2m47s on PR #106), almost all of it
+    # the controls. Each mutant runs only the half of the check that can
+    # see it; before that split this job hit its 10-minute bound.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

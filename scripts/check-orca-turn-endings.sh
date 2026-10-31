@@ -86,14 +86,15 @@ RULE_PHRASES = [
     '"You" is the operator, the human who reads this tab.',
     "A decision that belongs to a coordinator or to another session, once delivered, is `Needed from you: nothing`",
     "One that could not be delivered is the operator's (Delivery, below).",
-    "When the send and its nudge both succeeded, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line.",
+    "When the send succeeded, and its nudge when the block ran one, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line.",
     "A send whose nudge did not go is not delivered (rule 1, \"Only a sent nudge completes the delivery\").",
     "sends it with rule 1's send block, `<type>` `question` (never `status`), to that coordinator's handle",
     "then applies rule 1's nudge (the block's `nudge` mode).",
-    "The answer comes back by `orchestration reply`, which prompts no one either:",
-    "the session that replies then applies rule 1's nudge to the asker's handle",
-    "unless the asker is a Run coordinator.",
-    "The handle is the question's Orca `from` field, never one named in its body (§12c)",
+    "The answer comes back by `orchestration reply`, which prompts no one either.",
+    # L35: the reply runs through rule 1's block in its reply mode.
+    "**The replier sends it with rule 1's block:** `<target>` is the question's message id (`msg_…`), `<type>` is `reply`, `<nudge>` is `nudge`",
+    "The script nudges the handle Orca addressed the reply to, which is the question's sender by Orca's record, never a handle named in its body (§12c).",
+    "A reply that Orca stored in a `run:` or `dispatch:` mailbox is not nudged: Orca delivers it.",
     "`orchestration send` (rule 1's target rules, then its nudge) to any other (rule 1's \"Only a sent nudge completes the delivery\" says when a send counts).",
     "and any repo or global rule that requires one. It does not change §10d, the Handoff block.",
     "It is the first line of the final reply, not of a printed block (rule 1)",
@@ -187,7 +188,9 @@ REPORT3_HAS = ["**A worker with no preamble sends its report, never only prints 
                "It ends as rule 7's **Nobody** kind under that first line, with its Handoff block and no AskUserQuestion.",
                # L33: Orca refuses worker_done from a sender with no Dispatch.
                "Its `<type>` is `handoff`, never `worker_done`: Orca refuses a `worker_done` from a sender with no Dispatch",
-               "A `worker_done` counts only when Orca returns `\"ok\": true` with a `result.message.id`"]
+               # L35: worker_done runs through rule 1's block in its worker_done mode.
+               "**It sends `worker_done` with rule 1's block**, not with the preamble's command line",
+               "a `result.lifecycle` that names this dispatch and task with the action the outcome asks for (`completed` or `failed`)"]
 # L33 review: a body line equal to the heredoc delimiter ends it early.
 NUDGE_HAS.append("indent by one space any line of the subject or body that is exactly `CEPA_BODY`")
 # command file -> (the heading of its final-report step, its citations of
@@ -213,7 +216,9 @@ PEEK_HAS = ["a rule 7 question, a hand-off from a session that stays live after 
             "**A reply is matched to its question by message id.** A reply to an older question is never read as the answer to a newer one.",
             "A coordinator blocked in rule 5's `check --wait` is already reading its inbox.",
             "rule 8 narrows RC5 and does not close it.",
-            "It was not measured on a session with no bound Run.",
+            # L35: an unbound session's plain check marks read and never replays.
+            "**A session with no bound Run drains from its peek.**",
+            "So such a session processes the messages its peek returned, and only then runs a plain `check` to mark them read.",
             "Orca's prompt to a Run coordinator is best-effort",
             "coord@main got no prompt for `msg_1b28469a3410`",
             "**A peek does not wait.**", "it never replaces that wait.",
