@@ -10,7 +10,8 @@
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, SENDREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
-# mutants run in parallel, so the whole set runs in about a minute.
+# mutants run in parallel: the whole set took 2m21s on 2026-10-31
+# (`time bash scripts/check-orca-nudge-controls.sh`).
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -158,27 +159,33 @@ SEND_MUTANTS = [
     ('send-ok-truthy', 'if d.get("ok") is not True:', 'if not d.get("ok"):',
      {'STORE ok truthy'}),
     ('send-ok-unchecked', 'if d.get("ok") is not True:', 'if False:',
-     {'STORE ok false code not a word', 'STORE ok false', 'STORE ok truthy'}),
+     {'STORE ok truthy', 'STORE ok false code not a word', 'STORE ok false'}),
     ('send-rc-unchecked', '    if rc != 0:\n', '    if False:\n',
      {'STORE ok reply with a non-zero exit'}),
-    ('send-no-reread', '|| fail "$cepa_send_id is not in the inbox for $cepa_send_to"', '|| true',
-     {'STORE id missing from the inbox', 'STORE inbox not ok', 'STORE id in the inbox for another recipient'}),
+    ('send-no-reread', '  1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;', '  1) ;;',
+     {'STORE id in the inbox for another recipient', 'STORE inbox not ok', 'STORE id missing from the inbox'}),
+    ('send-inbox-parse-ignored', '  *) fail "the inbox could not be parsed, so $cepa_send_id is unconfirmed" ;;', '  *) ;;',
+     {'STORE inbox not JSON', 'STORE inbox wrong shape'}),
+    ('send-inbox-ok-unchecked', 'rows = d["result"]["messages"] if d.get("ok") is True else []', 'rows = d["result"]["messages"]',
+     {'STORE inbox not ok'}),
     ('send-reread-any-recipient', ' and x.get("to_handle") == sys.argv[3]', '',
      {'STORE id in the inbox for another recipient'}),
     ('send-inbox-fail-ignored', '|| fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"', '|| true',
      {'STORE inbox fails'}),
     ('send-fail-continues', 'cepa_send_ending; exit 5; }', 'cepa_send_ending; }',
-     {'STORE id missing from the inbox', 'STORE send timeout not retried', 'STORE empty stdout', 'STORE ok reply with a non-zero exit', 'STORE send vsock twice', 'STORE id in the inbox for another recipient', 'STORE bad message id', 'STORE inbox not ok', 'STORE warning-only result', 'STORE envelope uuid as message id', 'STORE bad recipient', 'STORE ok false code not a word', 'STORE envelope id without result.message', 'STORE inbox fails', 'STORE ok false', 'STORE not JSON', 'STORE ok truthy', 'STORE JSON list'}),
+     {'STORE not JSON', 'STORE ok reply with a non-zero exit', 'STORE ok false', 'STORE bad message id', 'STORE envelope uuid as message id', 'STORE send vsock twice', 'STORE bad recipient', 'STORE envelope id without result.message', 'STORE empty stdout', 'STORE send timeout not retried', 'STORE ok truthy', 'STORE inbox not ok', 'STORE inbox not JSON', 'STORE id in the inbox for another recipient', 'STORE JSON list', 'STORE id missing from the inbox', 'STORE warning-only result', 'STORE ok false code not a word', 'STORE inbox fails', 'STORE inbox wrong shape'}),
     ('send-no-size-cap', '-le 28000 ]', '-le 99999999 ]',
-     {'SENDREF over the size cap'}),
+     {'SENDREF cap counts bytes', 'SENDREF over the size cap'}),
+    ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
+     {'SENDREF cap counts bytes'}),
     ('send-type-worker_done', '  status|question|handoff|escalation|merge_ready) ;;', '  status|question|handoff|escalation|merge_ready|worker_done) ;;',
      {'SENDREF type worker_done'}),
     ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* ]] ||', 'nudge) true ||',
      {'SENDREF nudge a run address'}),
     ('send-reroute-nudged', 'if [ "$cepa_send_to" != "$cepa_send_target" ]; then', 'if false; then',
-     {'STORE rerouted to a Run mailbox', 'STORE stored for another handle'}),
+     {'STORE stored for another handle', 'STORE rerouted to a Run mailbox'}),
     ('send-no-vsock-retry', '  for try in 1 2; do\n    timeout -k 2 15', '  for try in 1; do\n    timeout -k 2 15',
-     {'STORE send vsock once', 'STORE send vsock twice', 'STORE inbox vsock once'}),
+     {'STORE send vsock twice', 'STORE send vsock once', 'STORE inbox vsock once'}),
     ('send-timeout-retried', '[ "$cepa_send_rc" != 124 ] && [ "$cepa_send_rc" != 137 ] ||', 'true ||',
      {'STORE send timeout not retried'}),
     ('send-dashdash-body', '[[ $cepa_send_body != --* ]] || refuse "the body starts with --, which Orca reads as a flag"\n', '',

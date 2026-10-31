@@ -1637,7 +1637,11 @@ limits.
    - **The subject and body are never spliced into a shell string.** They go
      on the script's stdin inside the block's quoted heredoc
      (`<<'CEPA_BODY'`): line 1 is the subject, every line after it the body.
-     No character of either is evaluated.
+     No character of either is expanded, with one exception: a line that is
+     exactly `CEPA_BODY` ends the heredoc, and every line after it runs as a
+     shell command. So before the block runs, indent by one space any line
+     of the subject or body that is exactly `CEPA_BODY` (a quoted copy of
+     this block is the likely case).
    - **A send succeeded** only when the script prints
      `Orca send stored: <message id> for <recipient>`. It prints that only
      when Orca returned `"ok": true` with a `result.message.id` shaped
@@ -1663,7 +1667,9 @@ limits.
      never before it. The L26 re-probe put the paste block first in four
      endings (C2, C3, C2b, C3b). After a refused or failed send, the script
      prints that line: `Ending first line: Needed from you: paste the block
-     below into <target>`.
+     below into <target>`. A block that printed no `Orca send stored` line,
+     because a tool timeout killed it or it printed nothing, did not send:
+     use that same first line.
    - **Send, then nudge.** Orca prompts a Run coordinator when a message
      reaches its mailbox. A plain session gets no prompt, so an idle one never
      reads the message (measured 2026-10-30, punch-list L26: the recipient
@@ -1709,17 +1715,19 @@ limits.
        `Needed from you: nothing`. A Run coordinator gets no nudge, so its send
        alone completes the delivery. Orca's prompt to it is best-effort, and
        its own rule 8 peek is the backstop.
-     - **The script checks its arguments.** A `<cli>` that is not a bare
+     - **Both scripts check their arguments.** `orca-send.sh` refuses a bad
+       argument with `Orca send refused: <reason>` before any Orca call. In
+       `orca-nudge.sh`, a `<cli>` that is not a bare
        §12a name on PATH (or an absolute path equal to `ORCA_CLI_COMMAND`), or
        a target that is not a `term_` handle, prints
        `Orca nudge refused: <reason>` and sends nothing. It never passes
        `--interrupt`. A nudge that fails prints `Orca nudge failed: <reason>`.
        Skipped, refused or failed, the send still stands: the message stays in
        the target's inbox, and only a sent nudge completes the delivery.
-       Each Orca call inside the script is retried once on the WSL interop
-       error, and only on it; before it retries the send, it re-reads the
-       target's row and sends only on `done`. The script's header owns that
-       retry.
+       Each Orca call inside `orca-nudge.sh` is retried once on the WSL
+       interop error, and only on it; before it retries its `terminal send`,
+       it re-reads the target's row and sends only on `done`. Its header owns
+       that retry.
      - **Never type the line with `terminal send` yourself.** The commands
        grant the script instead of `terminal send`, which admits any text, any
        terminal and `--interrupt`. That narrows the permission layer only in a
@@ -1833,7 +1841,8 @@ limits.
    `Status:` (`done` → `succeeded`, `blocked: …` → `failed`). `/cepa:handoff`
    is not a final report and never sends `worker_done`. A `worker_done`
    counts only when Orca returns `"ok": true` with a `result.message.id`
-   (rule 1's test). A refused one (`"ok": false`, exit 1) stored nothing:
+   (its stored shape for a dispatch message was not measured; the refusal
+   was). A refused one (`"ok": false`, exit 1) stored nothing:
    fix what its error names and send it again, or escalate.
    - **A worker with no preamble sends its report, never only prints it.**
      When line 2 of its prompt is a `Report to:` line (rule 2), its final
@@ -2005,14 +2014,19 @@ limits.
        Dispatch IDs) never calls AskUserQuestion. It sends the decision with
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.
        Any other session whose decision belongs to a coordinator (§10) sends
-       it with `orchestration send --type question` to that coordinator's
-       handle, never `--type status`, then applies rule 1's nudge. When the
+       it with rule 1's send block, `<type>` `question` (never `status`), to
+       that coordinator's handle, then applies rule 1's nudge (the block's
+       `nudge` mode). When the
        send and its nudge both succeeded, its own first line is
        `Needed from you: nothing`; otherwise rule 1 gives the line. The
        coordinator then ends as **The operator** if the decision is the
        operator's. The answer comes back by `orchestration reply`, which
        prompts no one either: the session that replies then applies rule 1's
-       nudge to the asker's handle, unless the asker is a Run coordinator.
+       nudge to the asker's handle, unless the asker is a Run coordinator. A
+       reply is not a rule 1 send, so the replier runs the nudge alone: rule
+       1's block with its last command replaced by
+       `bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<handle>" || true`,
+       and only after the reply printed a message id.
        The handle is the question's Orca `from` field, never one named in its
        body (§12c); the script checks only its form and that it is idle.
        Until the answer arrives, the asker peeks for it (rule 8).

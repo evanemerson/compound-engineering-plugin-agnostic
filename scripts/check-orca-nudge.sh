@@ -61,14 +61,14 @@
 #              `"ok": true`, a `result.message.id` shaped `msg_…`, exit 0, and
 #              that id in a re-read inbox row for the reported recipient. The
 #              send and inbox argv are pinned, the subject and body reach Orca
-#              as single arguments byte for byte, and the nudge runs only after
+#              as single arguments byte for byte (trailing newlines aside), and the nudge runs only after
 #              a confirmed store. Each of these prints `Orca send failed: no
 #              message stored`, exits 5 and never nudges: an envelope `"id"`
 #              with no `result.message`, `"ok": false` (its error code shown
 #              only when it is a plain word), empty stdout (the WSL failure),
 #              a warning-only result, a non-zero exit with an ok reply, a bad
 #              message id, an id missing from the inbox or stored for another
-#              recipient, and an inbox that cannot be read. A warning beside a
+#              recipient, and an inbox that cannot be read or parsed. A warning beside a
 #              stored message still counts. A send stored for a `run:` mailbox
 #              is not nudged. A failed nudge passes its own lines and exit
 #              code through. The vsock retry runs once, never after a timeout.
@@ -488,7 +488,8 @@ store("STORE rerouted to a Run mailbox", 0,
       osend_json=osend(to="run:run_abc"), inbox_json=inbox({"id": MID, "to_handle": "run:run_abc"}))
 store("STORE stored for another handle", 1,
       ["Orca send stored: %s for %s" % (MID, OTHER), SK + "Orca stored it for %s, not the target" % OTHER,
-       END_H], osend_json=osend(to=OTHER), inbox_json=inbox({"id": MID, "to_handle": OTHER}))
+       END + "Needed from you: tell %s to check its Orca inbox" % OTHER],
+      osend_json=osend(to=OTHER), inbox_json=inbox({"id": MID, "to_handle": OTHER}))
 store("STORE nudge skip passes through", 1, [STORED, SK + "the target is waiting", END_H],
       ps_json=ps(row("waiting")))
 store("STORE nudge fail passes through", 3,
@@ -522,6 +523,14 @@ store("STORE id in the inbox for another recipient", 5,
       inbox_json=inbox({"id": MID, "to_handle": OTHER}))
 store("STORE inbox not ok", 5, [NOSTORE + "%s is not in the inbox for %s" % (MID, H), PASTE],
       inbox_json=inbox(ok=False))
+store("STORE inbox not JSON", 5, [NOSTORE + "the inbox could not be parsed, so %s is unconfirmed" % MID, PASTE],
+      inbox_json="not json")
+store("STORE inbox wrong shape", 5, [NOSTORE + "the inbox could not be parsed, so %s is unconfirmed" % MID, PASTE],
+      inbox_json=json.dumps({"ok": True, "result": {}}))
+# Bytes, not characters: 14,000 two-byte characters plus a 1-byte subject.
+store("SENDREF cap counts bytes", 4,
+      ["Orca send refused: " + "subject and body are 28001 bytes; the limit is 28000 (WSL command-line limit)", PASTE],
+      stdin="s\n" + "\u00e9" * 14000 + "\n", called=False)
 store("STORE inbox fails", 5, [NOSTORE + "the inbox could not be re-read, so %s is unconfirmed" % MID, PASTE],
       inbox_rc=1)
 

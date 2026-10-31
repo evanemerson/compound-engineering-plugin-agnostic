@@ -88,8 +88,8 @@ RULE_PHRASES = [
     "One that could not be delivered is the operator's (Delivery, below).",
     "When the send and its nudge both succeeded, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line.",
     "A send whose nudge did not go is not delivered (rule 1, \"Only a sent nudge completes the delivery\").",
-    "sends it with `orchestration send --type question` to that coordinator's handle, never `--type status`",
-    "then applies rule 1's nudge.",
+    "sends it with rule 1's send block, `<type>` `question` (never `status`), to that coordinator's handle",
+    "then applies rule 1's nudge (the block's `nudge` mode).",
     "The answer comes back by `orchestration reply`, which prompts no one either:",
     "the session that replies then applies rule 1's nudge to the asker's handle",
     "unless the asker is a Run coordinator.",
@@ -188,6 +188,8 @@ REPORT3_HAS = ["**A worker with no preamble sends its report, never only prints 
                # L33: Orca refuses worker_done from a sender with no Dispatch.
                "Its `<type>` is `handoff`, never `worker_done`: Orca refuses a `worker_done` from a sender with no Dispatch",
                "A `worker_done` counts only when Orca returns `\"ok\": true` with a `result.message.id`"]
+# L33 review: a body line equal to the heredoc delimiter ends it early.
+NUDGE_HAS.append("indent by one space any line of the subject or body that is exactly `CEPA_BODY`")
 # command file -> (the heading of its final-report step, its citations of
 # rules 1, 2 or 8). Each citation is there exactly once outside fences, and
 # inside that step. check-orca-detection.sh pins the rule 3 half.
