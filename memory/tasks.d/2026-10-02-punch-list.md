@@ -1161,6 +1161,36 @@ L36. **Triage L33's open residuals and recommend fixes.**
     recommendation for each remaining item. Overlaps L35 on the 2 P2s:
     whichever runs first owns them.
 
+L37. **Session names: rule 6 does not stick, and the naming scheme itself is in question.**
+    status: pending
+    severity: P1
+    owner: integrity (`tab2@integrity`, dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "file and dispatch")
+    Measured 2026-10-31 by coord@main: `orca-ide terminal rename --terminal
+    $ORCA_TERMINAL_HANDLE --title "compound-engineering · coord@main"`
+    returned `"ok": true`, but `terminal show` still reported the title
+    Claude Code set itself ("Coord@main L31 punch-list handoff").
+    `worker-start --display-name "tab16@roles L33 send verify"` did not show
+    either: `terminal list` showed "Orca send loss audit L35"-style Claude
+    titles. Coordinators (this one included) also skipped rule 6's rename.
+    Operator, 2026-10-31: "research the best names for these. with orca,
+    maybe claude code's own name is better so i can see what's going on. i
+    don't have to do the old copy/paste orchestration with orca, so this is
+    an adjustment."
+    1. Measure which name each Orca surface shows (tab strip, Agent
+       Dashboard card, `terminal list` title, worktree sidebar) and which
+       setting drives each (`terminal rename`, `worker-start
+       --display-name`, Claude Code's own session title / `/rename`, OSC
+       title escapes).
+    2. Recommend a scheme. The operator must be able to tell at a glance:
+       repo, worktree, role (coordinator or worker), and what it is doing.
+       Weigh: Claude's own topic title; `<repo> · <role>@<wt>`; a mix (e.g.
+       role@wt in one surface, topic in another); and whether `tabN`
+       numbering still earns its keep now that prompts are not pasted.
+    3. Implement the chosen scheme in rule 6 (and the global
+       `~/.claude/CLAUDE.md` naming text, as a proposed diff in the PR body —
+       the operator's file), with a gate if one fits.
+
 ---
 
 ## How this list is used
