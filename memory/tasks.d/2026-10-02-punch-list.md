@@ -792,8 +792,11 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
     farmtender-laravel: DONE — PR #80 merged as `79a4311` (verified via
     `gh api repos/Halyard-Digital/farmtender-laravel/pulls/80`); its reply
     `msg_1b28469a3410` (12:11 UTC) sat unread in coord@main's inbox (see L29,
-    RC5). contexthub: its coordinator is `waiting` on an AskUserQuestion for
-    the operator about the edit.
+    RC5). contexthub: replied `msg_71145c7f2edc` (12:19 UTC) — PR #98
+    (evanemerson/contexthub, branch `chore/main/claude-md-rule7`, head
+    `8bd2204`, OPEN, MERGEABLE; diff verified: line 947 exactly as sent). Its
+    merge was blocked by the auto-mode permission check, so the OPERATOR
+    merges it. L26 closes when #98 merges.
     **Probe run 2026-10-30 (17:07-17:10 CDT, cepa 1.37.0, Haiku 4.5,
     terminal surface; states from `worktree ps --agent-wait`):**
     - A (Nobody): PASS — `done`; first line `Needed from you: nothing`; no
