@@ -1169,7 +1169,23 @@ L36. **Triage L33's open residuals and recommend fixes.**
     whichever runs first owns them.
 
 L37. **Session names: rule 6 does not stick, and the naming scheme itself is in question.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — PR #107 merged `cd40fdb` (v1.40.0) on the operator's
+    AskUserQuestion "Merge #107 first": head check 6ace5bb = Handoff `Head:`,
+    update-branch → 5df993d, CI 9/9 green; `integrity` parked at cd40fdb,
+    branch deleted, tab closed; plugin hops run 1.39.0 → 1.40.0, freshness
+    rc=0. Measured (tab2's probes + operator's eyes): the tab strip shows
+    `terminal rename` (rule 6 always worked); the Agent Dashboard card shows
+    Claude Code's session name/topic; `terminal show`/`list` report the
+    program's OSC title, which is why the rename looked lost;
+    `worker-start --display-name` names a new worktree only. Scheme: tab =
+    `<repo> · <role>@<wt>`, card = Claude's topic (never `/rename` or
+    `--name`), coordinators name their own tab on turn 1, keep `tabN`.
+    Global `~/.claude/CLAUDE.md` "Your name" gained #107's text (backup
+    `~/.claude/CLAUDE.md.bak-2026-10-31-l37`). 2 P3s in
+    `memory/tasks.d/2026-10-31-fix-integrity-session-names.md`.
+    Version clash: #106 (L35) also claimed 1.40.0; tab18@roles told to
+    re-bump it to 1.41.0 (`msg_3f6c177179ca`).
     severity: P1
     owner: integrity (`tab2@integrity`, task `task_6c1cc3b554b2`, dispatch
       `ctx_356b8089190f`; dispatched via Orca 2026-10-31 on the
