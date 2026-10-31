@@ -7,14 +7,25 @@
 # inbox finds that id. Nothing else counts: not exit 0, not an `"id"` field.
 #
 # Usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>  <stdin
+#        orca-send.sh <cli> <question msg id> reply <nudge|no-nudge>  <stdin
+#        orca-send.sh <cli> dispatch:<dispatch id> worker_done <succeeded|failed> <task id>  <stdin
 #   <cli>     §12a's printed `cli=` value, checked as orca-nudge.sh checks it.
 #   <target>  a `term_` handle, or a `run:<id>` / `dispatch:<id>` address.
 #   <type>    status, question, handoff, escalation or merge_ready.
 #             Orca refuses `escalation` from a sender with no Dispatch.
-#             worker_done and heartbeat carry Dispatch IDs: a dispatched
-#             worker sends them with its preamble's own command.
+#             heartbeat is not sent here: the preamble's own command sends it.
 #   <nudge|no-nudge>  `nudge` for a target that is not a Run coordinator
 #             (only a `term_` handle); `no-nudge` for a Run coordinator.
+#   reply (§12b rule 7, punch-list L35): <target> is the question's message
+#             id. stdin is the answer body only, with no subject line. With
+#             `nudge`, the script nudges the handle Orca addressed the reply to
+#             (the asker), never a handle the session names; a reply that Orca
+#             stored in a `run:` or `dispatch:` mailbox gets no nudge.
+#   worker_done (§12b rule 3, punch-list L35): a dispatched worker's final
+#             report, with the preamble's Dispatch and Task IDs. It counts only
+#             when Orca also returns `result.lifecycle` with that dispatch and
+#             task and the action the outcome asks for (`succeeded` →
+#             `completed`, `failed` → `failed`). It is never nudged.
 #   stdin     line 1 is the subject; every line after it is the body. The
 #             session writes both inside a quoted heredoc (`<<'CEPA_BODY'`),
 #             so no character of either is expanded. The one exception is a
@@ -30,7 +41,10 @@
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
-#      start). The message stands.
+#      start). The message stands. A reply also exits 1, with
+#      `Orca reply misaddressed: …` and no nudge, when the message it names
+#      was sent by this session (ORCA_TERMINAL_HANDLE): Orca then addressed
+#      the answer back to this session, and the asker never gets it.
 #   4  Orca send refused: <reason>   — an argument failed its check; no call.
 #   5  Orca send failed: no message stored — <reason>
 #   On 4 and 5 it then prints:
@@ -93,12 +107,22 @@ cepa_send_cli=${1-}
 cepa_send_target=${2-}
 cepa_send_type=${3-}
 cepa_send_mode=${4-}
+cepa_send_task=${5-}
+cepa_send_outcome=
 
 cepa_send_valid_target() {
   [[ $cepa_send_target =~ ^(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]]
 }
 cepa_send_ending() {
-  if cepa_send_valid_target; then
+  if [ "$cepa_send_type" = reply ]; then
+    if [[ $cepa_send_target =~ ^msg_[0-9a-f]{6,32}$ ]]; then
+      echo "Ending first line: Needed from you: paste the block below into the session that asked $cepa_send_target"
+    else
+      echo "Ending first line: Needed from you: paste the block below into the session that asked"
+    fi
+  elif [ "$cepa_send_type" = worker_done ]; then
+    echo "Ending first line: Needed from you: paste the block below into the Run coordinator"
+  elif cepa_send_valid_target; then
     echo "Ending first line: Needed from you: paste the block below into $cepa_send_target"
   else
     echo "Ending first line: Needed from you: paste the block below into the target session"
@@ -107,7 +131,8 @@ cepa_send_ending() {
 refuse() { echo "Orca send refused: $1"; cepa_send_ending; exit 4; }
 fail() { echo "Orca send failed: no message stored — $1"; cepa_send_ending; exit 5; }
 
-[ $# -eq 4 ] || refuse "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>"
+[ $# -eq 4 ] || { [ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]; } \
+  || refuse "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>"
 case "$cepa_send_cli" in
   ''|-*|*[!A-Za-z0-9._/-]*) refuse "the cli is not a plain command name" ;;
   /*) [ "$cepa_send_cli" = "${ORCA_CLI_COMMAND:-}" ] || refuse "a cli path must equal ORCA_CLI_COMMAND" ;;
@@ -118,25 +143,45 @@ case "${cepa_send_cli##*/}" in
   orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
-cepa_send_valid_target || refuse "the target is not a term_ handle, run: or dispatch: address"
 case "$cepa_send_type" in
-  status|question|handoff|escalation|merge_ready) ;;
-  *) refuse "the type is not status, question, handoff, escalation or merge_ready" ;;
+  status|question|handoff|escalation|merge_ready)
+    cepa_send_valid_target || refuse "the target is not a term_ handle, run: or dispatch: address" ;;
+  reply)
+    [[ $cepa_send_target =~ ^msg_[0-9a-f]{6,32}$ ]] || refuse "a reply's target is not a msg_ message id" ;;
+  worker_done)
+    [[ $cepa_send_target =~ ^dispatch:ctx_[0-9a-f]{6,32}$ ]] || refuse "a worker_done target is not dispatch:ctx_<id>"
+    [ $# -eq 5 ] || refuse "worker_done takes <outcome> <task id> after the type"
+    [[ $cepa_send_task =~ ^task_[0-9a-f]{6,32}$ ]] || refuse "the task id is not task_<id>"
+    case "$cepa_send_mode" in
+      succeeded) cepa_send_outcome=completed ;;
+      failed) cepa_send_outcome=failed ;;
+      *) refuse "the worker_done outcome is not succeeded or failed" ;;
+    esac
+    cepa_send_outcome_arg=$cepa_send_mode
+    cepa_send_mode=no-nudge ;;
+  *) refuse "the type is not status, question, handoff, escalation, merge_ready, reply or worker_done" ;;
 esac
 case "$cepa_send_mode" in
   no-nudge) ;;
-  nudge) [[ $cepa_send_target == term_* ]] || refuse "only a term_ handle is nudged" ;;
+  nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] || refuse "only a term_ handle is nudged" ;;
   *) refuse "the fourth argument is not nudge or no-nudge" ;;
 esac
 command -v "$cepa_send_cli" >/dev/null 2>&1 || refuse "$cepa_send_cli is not on PATH"
 
 # The subject is line 1 of stdin, the body the rest. The braces keep bash's
 # NUL-byte warning off the output.
-IFS= read -r cepa_send_subject || [ -n "${cepa_send_subject:-}" ] || refuse "stdin has no subject line"
+# A reply has no subject: all of stdin is its body.
+if [ "$cepa_send_type" = reply ]; then
+  cepa_send_subject=
+else
+  IFS= read -r cepa_send_subject || [ -n "${cepa_send_subject:-}" ] || refuse "stdin has no subject line"
+fi
 { cepa_send_body=$(cat); } 2>/dev/null
-[ -n "${cepa_send_subject//[[:space:]]/}" ] || refuse "the subject is empty"
+if [ "$cepa_send_type" != reply ]; then
+  [ -n "${cepa_send_subject//[[:space:]]/}" ] || refuse "the subject is empty"
+  [[ $cepa_send_subject != --* ]] || refuse "the subject starts with --, which Orca reads as a flag"
+fi
 [ -n "${cepa_send_body//[[:space:]]/}" ] || refuse "the body is empty"
-[[ $cepa_send_subject != --* ]] || refuse "the subject starts with --, which Orca reads as a flag"
 [[ $cepa_send_body != --* ]] || refuse "the body starts with --, which Orca reads as a flag"
 cepa_send_bytes=$(LC_ALL=C; printf '%s%s' "$cepa_send_subject" "$cepa_send_body" | wc -c)
 cepa_send_bytes=${cepa_send_bytes//[!0-9]/}
@@ -164,14 +209,35 @@ cepa_send_orca() {
   return 1
 }
 
+# A reply and a worker_done carry a request id the script chose, so the vsock
+# retry replays the first try instead of storing a second message (measured
+# L35: the same --retry-request returned the same msg_ id, `replayed: true`).
+case "$cepa_send_type" in
+  reply|worker_done)
+    cepa_send_req=$(python3 -I -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)
+    [[ $cepa_send_req =~ ^[0-9a-f-]{36}$ ]] || fail "no request id could be made" ;;
+esac
+case "$cepa_send_type" in
+  reply)
+    cepa_send_orca "$cepa_send_tmp/send.json" orchestration reply --id "$cepa_send_target" \
+      --body "$cepa_send_body" --retry-request "$cepa_send_req" --json ;;
+  worker_done)
+    cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --type worker_done \
+      --subject "$cepa_send_subject" --body "$cepa_send_body" --task-id "$cepa_send_task" \
+      --dispatch-id "${cepa_send_target#dispatch:}" --outcome "$cepa_send_outcome_arg" \
+      --retry-request "$cepa_send_req" --json ;;
+  *)
 cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --to "$cepa_send_target" \
-  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" --json
+  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" --json ;;
+esac
 
 # Prints `<msg id> <recipient>`, or `FAIL <reason>`. The reason holds no Orca
 # text except an error code that is a plain word.
-cepa_send_got=$(python3 -I - "$cepa_send_tmp/send.json" "$cepa_send_rc" "$cepa_send_target" <<'PY' 2>/dev/null
+cepa_send_got=$(python3 -I - "$cepa_send_tmp/send.json" "$cepa_send_rc" "$cepa_send_target" \
+  "$cepa_send_type" "$cepa_send_task" "$cepa_send_outcome" <<'PY' 2>/dev/null
 import json, re, sys
 path, rc, target = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+typ, task, action = sys.argv[4], sys.argv[5], sys.argv[6]
 ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})"
 
 def verdict():
@@ -197,8 +263,18 @@ def verdict():
     if not isinstance(mid, str) or not re.fullmatch(r"msg_[0-9a-f]{6,32}", mid):
         return "FAIL the reply has no result.message.id"
     to = m.get("to_handle")
-    if to is None:
+    if typ == "reply":
+        # A reply has no target handle to fall back on, and must answer the
+        # question it names.
+        if m.get("thread_id") != target:
+            return "FAIL the reply is not threaded on %s" % target
+    elif to is None:
         to = target
+    if typ == "worker_done":
+        lc = r.get("lifecycle")
+        if not isinstance(lc, dict) or lc.get("action") != action \
+                or lc.get("dispatchId") != target[len("dispatch:"):] or lc.get("taskId") != task:
+            return "FAIL Orca did not record the dispatch as %s" % action
     if not isinstance(to, str) or not re.fullmatch(ADDR, to):
         return "FAIL the reply names no valid recipient"
     return mid + " " + to
@@ -220,24 +296,44 @@ cepa_send_to=${cepa_send_got#* }
 # THE RE-READ.
 cepa_send_orca "$cepa_send_tmp/inbox.json" orchestration inbox --limit 200 --json \
   || fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"
-python3 -I - "$cepa_send_tmp/inbox.json" "$cepa_send_id" "$cepa_send_to" <<'PY' >/dev/null 2>&1
+cepa_send_q=
+[ "$cepa_send_type" = reply ] && cepa_send_q=$cepa_send_target
+python3 -I - "$cepa_send_tmp/inbox.json" "$cepa_send_id" "$cepa_send_to" "$cepa_send_q" \
+  "${ORCA_TERMINAL_HANDLE:-}" <<'PY' >/dev/null 2>&1
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
     rows = d["result"]["messages"] if d.get("ok") is True else []
     found = any(isinstance(x, dict) and x.get("id") == sys.argv[2] and x.get("to_handle") == sys.argv[3]
                 for x in rows)
+    # A reply answers the sender of the message it names. When that message's
+    # row is in the window and this session sent it, the reply came back here.
+    q, me = sys.argv[4], sys.argv[5]
+    mine = bool(q and me) and any(isinstance(x, dict) and x.get("id") == q and x.get("from_handle") == me
+                                  for x in rows)
 except Exception:
     sys.exit(2)
-sys.exit(0 if found else 1)
+sys.exit(3 if found and mine else 0 if found else 1)
 PY
 case $? in
   0) ;;
+  3) echo "Orca send stored: $cepa_send_id for $cepa_send_to"
+     echo "Orca reply misaddressed: $cepa_send_target was sent by this session, so the reply came back to it"
+     echo "Ending first line: Needed from you: check which session asked $cepa_send_target"
+     exit 1 ;;
   1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;
   *) fail "the inbox could not be parsed, so $cepa_send_id is unconfirmed" ;;
 esac
 
 echo "Orca send stored: $cepa_send_id for $cepa_send_to"
+if [ "$cepa_send_type" = reply ]; then
+  [ "$cepa_send_mode" = nudge ] || exit 0
+  if [[ $cepa_send_to != term_* ]]; then
+    echo "Orca nudge not needed: Orca stored it in $cepa_send_to, a mailbox Orca delivers"
+    exit 0
+  fi
+  cepa_send_target=$cepa_send_to
+fi
 [ "$cepa_send_mode" = nudge ] || exit 0
 if [ "$cepa_send_to" != "$cepa_send_target" ]; then
   if [[ $cepa_send_to == run:* ]]; then

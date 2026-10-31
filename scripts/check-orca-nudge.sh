@@ -72,8 +72,21 @@
 #              stored message still counts. A send stored for a `run:` mailbox
 #              is not nudged. A failed nudge passes its own lines and exit
 #              code through. The vsock retry runs once, never after a timeout.
+#   REPLY    — orca-send.sh's `reply` mode (§12b rule 7, punch-list L35). The
+#              argv is pinned (`reply --id <q> --body <b> --retry-request
+#              <uuid> --json`), and the vsock retry reuses the same request id.
+#              It counts only when the stored message is threaded on the
+#              question; the nudge goes to the handle Orca addressed it to,
+#              and a `dispatch:` mailbox gets none. A reply to a message this
+#              session sent (its row's `from_handle` is ORCA_TERMINAL_HANDLE)
+#              exits 1 as misaddressed, with no nudge.
+#   WDONE    — orca-send.sh's `worker_done` mode (§12b rule 3, punch-list
+#              L35). The argv is pinned, with the preamble's IDs and a request
+#              id the retry reuses. It counts only when `result.lifecycle`
+#              names the same dispatch and task and the action the outcome
+#              asks for; it never nudges.
 #   SENDREF  — orca-send.sh's argument checks: a bad cli, target, type
-#              (worker_done and heartbeat included), mode, subject or body
+#              (heartbeat included), mode, subject or body
 #              (empty, starting with `--`, over 28,000 bytes): exit 4, prints
 #              `Orca send refused`, and the stub is never called. Its ending
 #              line names the target only when the target passed its check.
@@ -137,7 +150,7 @@ v = os.environ["STUB_PS"]
 seq = json.loads(v) if v.startswith("[") else [v]
 sys.stdout.write(seq[min(n, len(seq)) - 1])' ;;
   "terminal send") printf '%s' "$STUB_SEND"; exit "$STUB_SEND_RC" ;;
-  "orchestration send") printf '%s' "${STUB_OSEND-}"; exit "${STUB_OSEND_RC:-0}" ;;
+  "orchestration send"|"orchestration reply") printf '%s' "${STUB_OSEND-}"; exit "${STUB_OSEND_RC:-0}" ;;
   "orchestration inbox") printf '%s' "${STUB_INBOX-}"; exit "${STUB_INBOX_RC:-0}" ;;
   *) exit 64 ;;
 esac
@@ -197,6 +210,9 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
                STUB_SHOW_RC=str(show_rc), STUB_PS_RC=str(ps_rc),
                STUB_SEND=send, STUB_SEND_RC=str(send_rc))
     env.pop("ORCA_CLI_COMMAND", None)
+    # The checker may run inside an Orca terminal; its own handle must not
+    # reach the script unless a case sets one.
+    env.pop("ORCA_TERMINAL_HANDLE", None)
     env.update(env_extra or {})
     if path is not None:
         env["PATH"] = path
@@ -548,11 +564,128 @@ store_retry("STORE send timeout not retried", "orchestration send", 1, 5,
             [NOSTORE + "the send exited 124 and printed nothing", PASTE], 1, err_rc=124)
 store_retry("STORE inbox vsock once", "orchestration inbox", 1, 0, [STORED], 2)
 
+# --- REPLY (orca-send.sh reply mode, punch-list L35) ---
+QID = "msg_a3dc2b4b1de4"
+UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+import re as _re
+
+def oreply(mid=MID, to=H, thread=QID, ok=True):
+    m = {"id": mid, "subject": "Re: q", "thread_id": thread}
+    if to is not None:
+        m["to_handle"] = to
+    return json.dumps({"id": "fba9f64f-afb0-43cf-ac63-f350c5b929b5", "ok": ok, "result": {"message": m}})
+
+PASTE_Q = END + "Needed from you: paste the block below into the session that asked %s" % QID
+RARGS = ["orca-ide", QID, "reply", "nudge"]
+RBODY = BODY + "\n"
+
+def req_ids(calls, verb):
+    out = []
+    for c in calls:
+        if c[:2] == verb and "--retry-request" in c:
+            out.append(c[c.index("--retry-request") + 1])
+    return out
+
+calls = store("REPLY stored then nudged the asker", 0, [STORED, "Orca nudge sent to " + H],
+              argv=RARGS, stdin=RBODY, osend_json=oreply())
+rc_ = [c for c in calls if c[:2] == ["orchestration", "reply"]]
+check = len(rc_) == 1 and len(rc_[0]) == 9 and rc_[0][:6] == ["orchestration", "reply", "--id", QID, "--body", BODY] \
+    and rc_[0][6] == "--retry-request" and _re.fullmatch(UUID_RE, rc_[0][7] or "") and rc_[0][8:] == ["--json"] \
+    and sends(calls) == [SEND_ARGV]
+(ok if check else miss)("REPLY argv" if check else "REPLY argv: %r" % calls)
+calls = store("REPLY no-nudge stores only", 0, [STORED], argv=["orca-ide", QID, "reply", "no-nudge"],
+              stdin=RBODY, osend_json=oreply())
+(ok if not sends(calls) else miss)("REPLY no-nudge makes no nudge call" if not sends(calls) else
+                                   "REPLY no-nudge makes no nudge call: %r" % calls)
+calls = store("REPLY to a dispatch mailbox is not nudged", 0,
+              ["Orca send stored: %s for dispatch:ctx_abcdef" % MID,
+               "Orca nudge not needed: Orca stored it in dispatch:ctx_abcdef, a mailbox Orca delivers"],
+              argv=RARGS, stdin=RBODY, osend_json=oreply(to="dispatch:ctx_abcdef"),
+              inbox_json=inbox({"id": MID, "to_handle": "dispatch:ctx_abcdef"}))
+store("REPLY not threaded on the question", 5, [NOSTORE + "the reply is not threaded on %s" % QID, PASTE_Q],
+      argv=RARGS, stdin=RBODY, osend_json=oreply(thread="msg_000000000009"))
+store("REPLY names no recipient", 5, [NOSTORE + "the reply names no valid recipient", PASTE_Q],
+      argv=RARGS, stdin=RBODY, osend_json=oreply(to=None))
+store("REPLY ok false", 5, [NOSTORE + 'Orca did not return "ok": true (answer_conflict)', PASTE_Q],
+      argv=RARGS, stdin=RBODY, osend_rc=1,
+      osend_json=json.dumps({"id": "7d357c4f", "ok": False, "error": {"code": "answer_conflict"}}))
+calls = store("REPLY to a message this session sent", 1,
+              [STORED, "Orca reply misaddressed: %s was sent by this session, so the reply came back to it" % QID,
+               END + "Needed from you: check which session asked %s" % QID],
+              argv=RARGS, stdin=RBODY, osend_json=oreply(),
+              inbox_json=inbox({"id": MID, "to_handle": H}, {"id": QID, "from_handle": OTHER, "to_handle": H}),
+              env_extra={"ORCA_TERMINAL_HANDLE": OTHER})
+(ok if not sends(calls) else miss)("REPLY misaddressed is not nudged" if not sends(calls) else
+                                   "REPLY misaddressed is not nudged: %r" % calls)
+store("REPLY question from another session", 0, [STORED, "Orca nudge sent to " + H],
+      argv=RARGS, stdin=RBODY, osend_json=oreply(),
+      inbox_json=inbox({"id": MID, "to_handle": H}, {"id": QID, "from_handle": H, "to_handle": OTHER}),
+      env_extra={"ORCA_TERMINAL_HANDLE": OTHER})
+calls = store("REPLY vsock retry", 0, [STORED], argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY,
+              osend_json=oreply(), env_extra={"STUB_ERR_VERB": "orchestration reply", "STUB_ERR_TIMES": "1",
+                                              "STUB_ERR": VSOCK})
+ids = req_ids(calls, ["orchestration", "reply"])
+check = len(ids) == 2 and ids[0] == ids[1]
+(ok if check else miss)("REPLY retry reuses the request id" if check else "REPLY retry reuses the request id: %r" % ids)
+for name, args, stdin, why, end in [
+        ("REPLYREF target is a handle", ["orca-ide", H, "reply", "nudge"], RBODY,
+         "a reply's target is not a msg_ message id",
+         END + "Needed from you: paste the block below into the session that asked"),
+        ("REPLYREF empty body", RARGS, " \n", "the body is empty", PASTE_Q),
+        ("REPLYREF body starts --", RARGS, "--json\n", "the body starts with --, which Orca reads as a flag", PASTE_Q)]:
+    store(name, 4, ["Orca send refused: " + why, end], argv=args, stdin=stdin, called=False)
+
+# --- WDONE (orca-send.sh worker_done mode, punch-list L35) ---
+DID, TID = "ctx_0cb768293e95", "task_ce89e0b1b529"
+WARGS = ["orca-ide", "dispatch:" + DID, "worker_done", "succeeded", TID]
+RUN = "run:run_ca27e456fd42"
+WSTORED = "Orca send stored: %s for %s" % (MID, RUN)
+PASTE_RC = END + "Needed from you: paste the block below into the Run coordinator"
+
+def owd(action="completed", disp=DID, task=TID, lifecycle=True):
+    r = {"message": {"id": MID, "to_handle": RUN, "type": "worker_done"}}
+    if lifecycle:
+        r["lifecycle"] = {"action": action, "taskId": task, "dispatchId": disp}
+    return json.dumps({"id": "193ad389", "ok": True, "result": r})
+
+WINBOX = inbox({"id": MID, "to_handle": RUN})
+calls = store("WDONE stored", 0, [WSTORED], argv=WARGS, osend_json=owd(), inbox_json=WINBOX)
+oc = [c for c in calls if c[:2] == ["orchestration", "send"]]
+check = len(oc) == 1 and len(oc[0]) == 17 and oc[0][:16] == ["orchestration", "send", "--type", "worker_done", "--subject", SUBJ,
+                                        "--body", BODY, "--task-id", TID, "--dispatch-id", DID,
+                                        "--outcome", "succeeded", "--retry-request", oc[0][15]] \
+    and _re.fullmatch(UUID_RE, oc[0][15]) and oc[0][16:] == ["--json"] and not sends(calls)
+(ok if check else miss)("WDONE argv, no nudge" if check else "WDONE argv, no nudge: %r" % calls)
+store("WDONE failed outcome", 0, [WSTORED], argv=WARGS[:3] + ["failed", TID],
+      osend_json=owd(action="failed"), inbox_json=WINBOX)
+for name, j in [("WDONE no lifecycle", owd(lifecycle=False)),
+                ("WDONE wrong action", owd(action="failed")),
+                ("WDONE other dispatch", owd(disp="ctx_000000000000")),
+                ("WDONE other task", owd(task="task_000000000000"))]:
+    store(name, 5, [NOSTORE + "Orca did not record the dispatch as completed", PASTE_RC],
+          argv=WARGS, osend_json=j, inbox_json=WINBOX)
+store("WDONE ok false", 5, [NOSTORE + 'Orca did not return "ok": true (run_required)', PASTE_RC],
+      argv=WARGS, osend_rc=1, osend_json=json.dumps({"id": "6be45a49", "ok": False, "error": {"code": "run_required"}}))
+store("WDONE empty stdout", 5, [NOSTORE + "the send exited 1 and printed nothing", PASTE_RC],
+      argv=WARGS, osend_rc=1, osend_json="")
+calls = store("WDONE vsock retry", 0, [WSTORED], argv=WARGS, osend_json=owd(), inbox_json=WINBOX,
+              env_extra={"STUB_ERR_VERB": "orchestration send", "STUB_ERR_TIMES": "1", "STUB_ERR": VSOCK})
+ids = req_ids(calls, ["orchestration", "send"])
+check = len(ids) == 2 and ids[0] == ids[1]
+(ok if check else miss)("WDONE retry reuses the request id" if check else "WDONE retry reuses the request id: %r" % ids)
+for name, args, why in [
+        ("WDREF target not a dispatch", ["orca-ide", H, "worker_done", "succeeded", TID],
+         "a worker_done target is not dispatch:ctx_<id>"),
+        ("WDREF no task id", WARGS[:4], "worker_done takes <outcome> <task id> after the type"),
+        ("WDREF bad task id", WARGS[:4] + ["task_x;rm"], "the task id is not task_<id>"),
+        ("WDREF bad outcome", WARGS[:3] + ["done", TID], "the worker_done outcome is not succeeded or failed")]:
+    store(name, 4, ["Orca send refused: " + why, PASTE_RC], argv=args, called=False)
+
 # --- SENDREF ---
 SR = "Orca send refused: "
 for name, args, stdin, why, end in [
         ("SENDREF arg count", ["orca-ide", H, "status"], STDIN,
-         "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>", PASTE),
+         "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>", PASTE),
         ("SENDREF cli not orca", ["bash", H, "status", "nudge"], STDIN, "the cli does not name an Orca CLI", PASTE),
         ("SENDREF cli shell text", ["orca-ide;id", H, "status", "nudge"], STDIN,
          "the cli is not a plain command name", PASTE),
@@ -562,10 +695,10 @@ for name, args, stdin, why, end in [
          "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
         ("SENDREF target newline", ["orca-ide", H + "\n" + H, "status", "nudge"], STDIN,
          "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
-        ("SENDREF type worker_done", ["orca-ide", H, "worker_done", "nudge"], STDIN,
-         "the type is not status, question, handoff, escalation or merge_ready", PASTE),
         ("SENDREF type heartbeat", ["orca-ide", H, "heartbeat", "nudge"], STDIN,
-         "the type is not status, question, handoff, escalation or merge_ready", PASTE),
+         "the type is not status, question, handoff, escalation, merge_ready, reply or worker_done", PASTE),
+        ("SENDREF five args for a send", ["orca-ide", H, "status", "nudge", "task_abcdef"], STDIN,
+         "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>", PASTE),
         ("SENDREF nudge a run address", ["orca-ide", "run:run_abc", "status", "nudge"], STDIN,
          "only a term_ handle is nudged", END + "Needed from you: paste the block below into run:run_abc"),
         ("SENDREF bad mode", ["orca-ide", H, "status", "yes"], STDIN,
