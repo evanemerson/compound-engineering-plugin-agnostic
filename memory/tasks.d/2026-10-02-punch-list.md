@@ -1036,7 +1036,23 @@ L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
 
 
 L33. **A send that stores nothing is reported "sent", and the nudge still fires.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — PR #105 merged `cb608d4` (v1.39.0) on the
+    operator's AskUserQuestion "Merge when green": head check 366704f =
+    Handoff `Head:`, branch already contained main, CI 9/9 green; `roles`
+    parked at cb608d4, branch deleted; plugin hops run, 1.38.0 → 1.39.0,
+    freshness rc=0. `plugins/cepa/scripts/orca-send.sh` counts a send only
+    on `"ok": true` + `result.message.id` (`msg_…`) + an inbox re-read, else
+    prints `Orca send failed: no message stored`, exits 5, no nudge.
+    Measured root cause (worker's probes): Orca refuses `worker_done`,
+    `escalation` and `ask` from a sender with no Dispatch (exit 1,
+    `"ok": false`) while the refusal still carries a top-level `"id"`; a
+    ~32 KB command line fails on WSL with empty stdout. The D6 `question`
+    loss is unproven. Residuals (2 P2: `orchestration reply` and dispatched
+    `worker_done` not yet mechanized; 7 P3s) in
+    `memory/tasks.d/2026-10-31-fix-roles-orca-send-verify.md`. Open
+    follow-up: global `~/.claude/CLAUDE.md` still names `orca-nudge.sh`, not
+    `orca-send.sh` (operator's file).
     severity: P1
     owner: roles (`tab16@roles`, dispatched via Orca 2026-10-31 on the
       operator's "dispatch a worker for it now": `worker-start` on Run
