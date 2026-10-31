@@ -7,8 +7,8 @@ name: residual-integrity
 # whose eight occurrences were each found by a human noticing prose disagreed
 # with a field. `/cepa:sweep` and `/cepa:triage` read the field.
 #
-# The check is read-only and takes seconds. Its pass condition, its four legs,
-# and its stated limits are defined in scripts/check-residual-integrity.sh's
+# The residual-integrity check is read-only and takes seconds. Its pass
+# condition, its four legs, and its stated limits are defined in scripts/check-residual-integrity.sh's
 # own header (leg 1 itself is plugins/cepa/scripts/check-findings-file.sh,
 # which that script sources) — read them there rather than inferring them from this comment or
 # from any one leg's output verb.
@@ -42,11 +42,22 @@ permissions:
   contents: read
 
 jobs:
+  # Three jobs, not one (punch-list L31). One job ran every step in series
+  # and took 7m42s-8m58s of its 10-minute bound on main by 2026-10-31
+  # (`gh run list --branch main --workflow residual-integrity.yml`); a
+  # cancelled job reads as a red check on every PR. The jobs run in parallel,
+  # each under its own bound. The `check` job's comments below on step order
+  # and on the bound apply to all three: in each job a checker runs before its
+  # controls, and every step keeps the `if: always()` it had. Per-job times are
+  # hosted step times from run 41210093858 (`gh run view <id> --json jobs`).
+  # A new step goes in the job whose subject it shares; when a job nears half
+  # its bound, split it again rather than raise the bound.
   check:
+    # Every check that is not an Orca check. About two minutes.
+    # The bound exists because this job reads files reachable from an
+    # untrusted PR branch, and the default is 360 minutes. Same rationale
+    # as model-pins.yml's `check` job.
     runs-on: ubuntu-latest
-    # Both checks finish in seconds. The bound exists because this job reads
-    # files reachable from an untrusted PR branch, and the default is 360
-    # minutes. Same rationale as model-pins.yml's `check` job.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -103,40 +114,6 @@ jobs:
       - name: Check dispatch isolation
         if: always()
         run: bash scripts/check-dispatch-isolation.sh
-      # Orca detection (autonomy section 12a) decides whether a run routes its
-      # hand-offs through Orca. The check runs the shipped block against stub
-      # CLIs and the controls mutate it; their headers own the legs and limits.
-      # The controls are the slowest step here (about two minutes); the
-      # check's BOUNDS and TITLE-BOUNDS legs keep them inside this job's timeout. Static
-      # commands, no workflow-context interpolation.
-      - name: Check Orca detection
-        if: always()
-        run: bash scripts/check-orca-detection.sh
-      - name: Check Orca detection controls
-        if: always()
-        run: bash scripts/check-orca-detection-controls.sh
-      # How a turn ends under Orca (autonomy section 12b rule 7) is cited once
-      # and restated nowhere. The check guards the rule and every citation of
-      # it; the controls mutate it. Text checks only, a few seconds. Headers
-      # own the legs and limits. Static commands, no workflow-context
-      # interpolation.
-      - name: Check Orca turn endings
-        if: always()
-        run: bash scripts/check-orca-turn-endings.sh
-      - name: Check Orca turn endings controls
-        if: always()
-        run: bash scripts/check-orca-turn-endings-controls.sh
-      # The rule 1 nudge runs only through plugins/cepa/scripts/orca-nudge.sh,
-      # which nudges an idle (`done`) target only. The check runs it against a
-      # stub CLI and never reaches a real terminal; the controls mutate it.
-      # Headers own the cases and limits. Static commands, no workflow-context
-      # interpolation.
-      - name: Check Orca nudge
-        if: always()
-        run: bash scripts/check-orca-nudge.sh
-      - name: Check Orca nudge controls
-        if: always()
-        run: bash scripts/check-orca-nudge-controls.sh
       # Residual 2g: a fenced-block instruction file must never carry state
       # across a block boundary in a shell variable. SIX instances shipped on
       # the brain-writeback surface alone, and instances 5 and 6 were each
@@ -161,3 +138,54 @@ jobs:
       - name: Check brain-client argument guards
         if: always()
         run: bash scripts/check-brain-client-args.sh
+
+  orca-detection:
+    # Orca detection and turn endings. About three and a half minutes
+    # (3m25s on PR #104), almost all of it the detection controls.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Orca detection (autonomy section 12a) decides whether a run routes its
+      # hand-offs through Orca. The check runs the shipped block against stub
+      # CLIs and the controls mutate it; their headers own the legs and limits.
+      # The controls took about three minutes hosted; the check's BOUNDS and
+      # TITLE-BOUNDS legs keep them inside this job's timeout. Static
+      # commands, no workflow-context interpolation.
+      - name: Check Orca detection
+        if: always()
+        run: bash scripts/check-orca-detection.sh
+      - name: Check Orca detection controls
+        if: always()
+        run: bash scripts/check-orca-detection-controls.sh
+      # How a turn ends under Orca (autonomy section 12b rule 7) is cited once
+      # and restated nowhere. The check guards the rule and every citation of
+      # it; the controls mutate it. Text checks only, a few seconds. Headers
+      # own the legs and limits. Static commands, no workflow-context
+      # interpolation.
+      - name: Check Orca turn endings
+        if: always()
+        run: bash scripts/check-orca-turn-endings.sh
+      - name: Check Orca turn endings controls
+        if: always()
+        run: bash scripts/check-orca-turn-endings-controls.sh
+
+  orca-nudge:
+    # Orca nudge. About four minutes (4m05s on PR #104), almost all of it
+    # the controls.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The autonomy section 12b rule 1 nudge runs only through
+      # plugins/cepa/scripts/orca-nudge.sh, which nudges an idle (`done`)
+      # target only. The check runs it against a
+      # stub CLI and never reaches a real terminal; the controls mutate it.
+      # Headers own the cases and limits. Static commands, no workflow-context
+      # interpolation.
+      - name: Check Orca nudge
+        if: always()
+        run: bash scripts/check-orca-nudge.sh
+      - name: Check Orca nudge controls
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh
