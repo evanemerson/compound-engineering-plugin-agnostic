@@ -7,9 +7,9 @@
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped script changed shape and these mutants need re-reading.
 #
-# Every leg of the check (SEND, STATE, LOOKUP, REFUSE, FAIL) has at least one
-# mutant here that only its cases kill. The check has no slow cases, so the
-# whole set runs in well under a minute.
+# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL) has at least one
+# mutant here that only its cases kill. WAIT runs on a fake clock, and the
+# mutants run in parallel, so the whole set runs in about a minute.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -18,7 +18,7 @@ set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
 python3 - <<'PY'
-import os, shutil, subprocess, tempfile
+import concurrent.futures, os, shutil, subprocess, tempfile
 
 SCRIPT = "plugins/cepa/scripts/orca-nudge.sh"
 CHECK = "scripts/check-orca-nudge.sh"
@@ -27,16 +27,18 @@ MUTANTS = [
     # SEND
     ("send-interrupt", '--enter --json </dev/null >"$cepa_nudge_tmp/send.json"',
      '--enter --interrupt --json </dev/null >"$cepa_nudge_tmp/send.json"',
-     {"SEND done", "SEND never --interrupt"}),
+     {"SEND done", "SEND never --interrupt", "WAIT working then done sends"}),
     ("send-content-spliced", 'check --peek --json"\n', 'check --peek --json $cepa_nudge_term"\n',
-     {"SEND done", "SEND orca-dev", "SEND cli path is ORCA_CLI_COMMAND", "SEND row in second worktree"}),
-    ("send-no-enter", '--text "$cepa_nudge_text" --enter --json', '--text "$cepa_nudge_text" --json', {"SEND done"}),
+     {"SEND done", "SEND orca-dev", "SEND cli path is ORCA_CLI_COMMAND", "SEND row in second worktree", "WAIT working then done sends"}),
+    ("send-no-enter", '--text "$cepa_nudge_text" --enter --json', '--text "$cepa_nudge_text" --json', {"SEND done", "WAIT working then done sends"}),
     # STATE
     ('state-waiting-idle', 'if state == "done":', 'if state in ("done", "waiting"):',
-     # The decoy case's target row is `waiting` too.
-     {"STATE waiting", "STATE other row done"}),
+     # The decoy case's target row is `waiting` too, and so is the row a
+     # wait ends on.
+     {"STATE waiting", "STATE other row done", "WAIT working then waiting"}),
     ('state-blocked-idle', 'if state == "done":', 'if state in ("done", "blocked"):', {"STATE blocked"}),
-    ('state-working-idle', 'if state == "done":', 'if state in ("done", "working"):', {"STATE working"}),
+    ('state-working-idle', 'if state == "done":', 'if state in ("done", "working"):',
+     {"WAIT working past the bound", "WAIT bound ignores env", "WAIT working then waiting", "WAIT working then done sends"}),
     ("state-echoed-raw", 'elif isinstance(state, str) and re.fullmatch(r"[a-z_-]{1,20}", state):',
      "elif isinstance(state, str):", {"STATE not a word"}),
     ("state-missing-is-done", 'state = rows[0].get("state")', 'state = rows[0].get("state", "done")',
@@ -45,9 +47,29 @@ MUTANTS = [
     ("state-loose-match", 'if a.get("paneKey") == key]', 'if str(a.get("paneKey")).startswith(tab)]',
      {"STATE other row done"}),
     ("state-guard-gone", '[ "$cepa_nudge_state" = done ] || skip "$cepa_nudge_state"\n', "\n",
-     {"STATE waiting", "STATE blocked", "STATE working", "STATE not a word", "STATE missing",
+     {"STATE waiting", "STATE blocked", "STATE not a word", "STATE missing",
       "STATE no row", "STATE two rows", "STATE other row done",
-      "LOOKUP show names another handle", "LOOKUP ps not ok", "LOOKUP show not ok", "LOOKUP show empty ids"}),
+      "LOOKUP show names another handle", "LOOKUP ps not ok", "LOOKUP show not ok", "LOOKUP show empty ids",
+      "WAIT working then waiting"}),
+    # WAIT
+    ("wait-bound-from-env", "cepa_nudge_wait=120\n", "cepa_nudge_wait=${CEPA_NUDGE_WAIT:-120}\n",
+     {"WAIT bound ignores env"}),
+    ("wait-bound-long", "cepa_nudge_wait=120\n", "cepa_nudge_wait=600\n",
+     {"WAIT working past the bound", "WAIT bound ignores env"}),
+    ("wait-poll-long", "cepa_nudge_poll=10\n", "cepa_nudge_poll=60\n",
+     {"WAIT working then done sends", "WAIT working then waiting", "WAIT working past the bound",
+      "WAIT bound ignores env"}),
+    ("wait-none", 'if [ "$cepa_nudge_state" = "the target is working" ]; then',
+     'if false; then',
+     {"WAIT working then done sends", "WAIT working then waiting", "WAIT working past the bound",
+      "WAIT bound ignores env"}),
+    ("wait-no-reread", "    cepa_nudge_read\n  done\n", "  done\n",
+     {"WAIT working then done sends", "WAIT working then waiting"}),
+    ("wait-on-every-state", '  while [ "$cepa_nudge_state" = "the target is working" ]; do',
+     '  while [ "$cepa_nudge_state" != done ]; do',
+     {"WAIT working then waiting"}),
+    ("wait-unbounded", '[ "$cepa_nudge_left" -gt 0 ] || skip', '[ 1 -gt 0 ] || skip',
+     {"WAIT working past the bound", "WAIT bound ignores env"}),
     # LOOKUP
     ("lookup-handle-unchecked", 't.get("handle") != term or ', "", {"LOOKUP show names another handle"}),
     ("lookup-show-rc-ignored", '|| skip "terminal show failed or timed out"', "|| true", {"LOOKUP show fails"}),
@@ -109,12 +131,20 @@ if rc == 0 and not misses:
 else:
     miss("unmutated copy: rc=%s, MISS %r" % (rc, sorted(misses)[:3]))
 
-for name, old, new, want in MUTANTS:
+def run_mutant(m):
+    name, old, new, want = m
     if src.count(old) != 1:
-        miss("%s: anchor found %d times, want 1" % (name, src.count(old))); continue
+        return m, None, None
     path = os.path.join(TMP, name + ".sh")
     open(path, "w", encoding="utf-8").write(src.replace(old, new))
-    rc, got = run(path)
+    return (m,) + run(path)
+
+# Each check run makes its own temp dir, so the runs share nothing.
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    results = list(pool.map(run_mutant, MUTANTS))
+for (name, old, new, want), rc, got in results:
+    if rc is None:
+        miss("%s: anchor found %d times, want 1" % (name, src.count(old))); continue
     if rc == 1 and got == want:
         ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
     else:

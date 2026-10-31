@@ -3,7 +3,9 @@
 # `cepa:autonomy` §12b rule 1's nudge. It runs the script against a stub
 # `orca-ide` on PATH and never reaches a real terminal: the stub answers
 # `terminal show`, `worktree ps` and `terminal send` from env vars and logs
-# every call it gets.
+# every call it gets. Stub `sleep` and `date` on the same PATH give the script
+# a fake clock, so the 120-second wait costs no real time. The script reads no
+# env var for its clock or its bound; only the PATH is changed.
 #
 # Usage: check-orca-nudge.sh [orca-nudge.sh]
 #   The optional path replaces the shipped script. Only
@@ -16,10 +18,15 @@
 #              argument, `--enter`, no `--interrupt`). The `terminal show` and
 #              `worktree ps` argv are pinned too. `orca-dev`, a cli path equal
 #              to ORCA_CLI_COMMAND, and a row in a later worktree also send.
-#   STATE    — `waiting`, `blocked`, `working`, a state that is not a plain
-#              word, no state, no agent row, two rows, and a `done` row that
-#              is not the target's while the target's is `waiting`: each
-#              exits 1, prints `skipped` with its reason, and never sends.
+#   STATE    — `waiting`, `blocked`, a state that is not a plain word, no
+#              state, no agent row, two rows, and a `done` row that is not the
+#              target's while the target's is `waiting`: each exits 1, prints
+#              `skipped` with its reason, never sends, and never sleeps.
+#   WAIT     — `working`: the script re-reads the row every 10 seconds for at
+#              most 120. Turning `done` sends; turning `waiting` skips at once
+#              with that reason; still `working` at the bound exits 1 with
+#              "still working after 120 seconds" having slept exactly 120. An
+#              env var named like the bound does not change it.
 #   LOOKUP   — `terminal show` echoes another handle, gives empty tab/leaf
 #              ids, fails, or is not ok; `worktree ps` fails or is not ok:
 #              each is skipped, no send.
@@ -59,7 +66,17 @@ open(STUB, "w").write(r'''#!/usr/bin/env bash
 python3 -I -c 'import json, sys; open(sys.argv[1], "a").write(json.dumps(sys.argv[2:]) + "\n")' "$STUB_LOG" "$@"
 case "$1 $2" in
   "terminal show") [ "$STUB_SHOW_RC" = 0 ] || exit "$STUB_SHOW_RC"; printf '%s' "$STUB_SHOW" ;;
-  "worktree ps") [ "$STUB_PS_RC" = 0 ] || exit "$STUB_PS_RC"; printf '%s' "$STUB_PS" ;;
+  "worktree ps") [ "$STUB_PS_RC" = 0 ] || exit "$STUB_PS_RC"
+    # STUB_PS is one output, or a JSON list played in order with the last
+    # repeated. Past 100 calls it fails, so a mutant that never stops waiting
+    # ends fast, as a skip.
+    python3 -I -c '
+import json, os, sys
+n = sum(1 for l in open(os.environ["STUB_LOG"]) if l.startswith("[\"worktree\", \"ps\""))
+if n > 100: sys.exit(99)
+v = os.environ["STUB_PS"]
+seq = json.loads(v) if v.startswith("[") else [v]
+sys.stdout.write(seq[min(n, len(seq)) - 1])' ;;
   "terminal send") printf '%s' "$STUB_SEND"; exit "$STUB_SEND_RC" ;;
   *) exit 64 ;;
 esac
@@ -69,6 +86,19 @@ os.chmod(STUB, 0o755)
 # `orca` calls the stub and never the GNOME screen reader.
 for alias in ("orca", "orca-dev"):
     os.symlink(STUB, os.path.join(BIN, alias))
+# The fake clock: `date +%s` prints the clock file, `sleep N` adds N to it and
+# logs N. Any other use of either is a failure the check can see.
+open(os.path.join(BIN, "date"), "w").write('''#!/usr/bin/env bash
+[ "$*" = "+%s" ] || exit 64
+cat "$STUB_CLOCK"
+''')
+open(os.path.join(BIN, "sleep"), "w").write('''#!/usr/bin/env bash
+[ $# -eq 1 ] && [[ $1 =~ ^[0-9]+$ ]] || exit 64
+echo "$1" >>"$STUB_SLEEPS"
+echo $(( $(cat "$STUB_CLOCK") + $1 )) >"$STUB_CLOCK"
+''')
+for f in ("date", "sleep"):
+    os.chmod(os.path.join(BIN, f), 0o755)
 
 def show(handle=H, tab="tab-1", leaf="leaf-1"):
     return json.dumps({"ok": True, "result": {"terminal": {"handle": handle, "tabId": tab, "leafId": leaf}}})
@@ -93,10 +123,12 @@ def miss(msg):
 
 def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
         send='{"ok": true}', send_rc=0, env_extra=None, path=None):
-    log = os.path.join(TMP, "log")
+    log, clock, slog = (os.path.join(TMP, f) for f in ("log", "clock", "sleeps"))
     open(log, "w").close()
+    open(slog, "w").close()
+    open(clock, "w").write("1000000\n")
     env = dict(os.environ, PATH=BIN + os.pathsep + os.environ.get("PATH", ""),
-               STUB_LOG=log, STUB_SHOW=show_json if show_json is not None else show(),
+               STUB_LOG=log, STUB_CLOCK=clock, STUB_SLEEPS=slog, STUB_SHOW=show_json if show_json is not None else show(),
                STUB_PS=ps_json if ps_json is not None else ps(row("done")),
                STUB_SHOW_RC=str(show_rc), STUB_PS_RC=str(ps_rc),
                STUB_SEND=send, STUB_SEND_RC=str(send_rc))
@@ -104,16 +136,26 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
     env.update(env_extra or {})
     if path is not None:
         env["PATH"] = path
-    r = subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True, text=True, timeout=60)
+    try:
+        r = subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True, text=True, timeout=30)
+        rc, out = r.returncode, r.stdout.strip().splitlines()
+    except subprocess.TimeoutExpired:
+        rc, out = "timeout", []
     calls = [json.loads(l) for l in open(log) if l.strip()]
-    return r.returncode, r.stdout.strip().splitlines(), calls
+    global SLEPT
+    SLEPT = [int(l) for l in open(slog) if l.strip()]
+    return rc, out, calls
+
+SLEPT = []
 
 def sends(calls):
     return [c for c in calls if c[:2] == ["terminal", "send"]]
 
-def expect(name, args, rc, line, called=True, **kw):
+def expect(name, args, rc, line, called=True, slept=(), **kw):
     got_rc, out, calls = run(args, **kw)
     why = []
+    if SLEPT != list(slept):
+        why.append("slept %r want %r" % (SLEPT, list(slept)))
     if got_rc != rc:
         why.append("rc=%s want %s" % (got_rc, rc))
     if len(out) != 1 or out[0] != line:
@@ -150,7 +192,7 @@ sends_text("SEND row in second worktree", ["orca-ide", H], TEXT,
 
 # --- STATE ---
 SK = "Orca nudge skipped: "
-for st in ("waiting", "blocked", "working"):
+for st in ("waiting", "blocked"):
     expect("STATE " + st, ["orca-ide", H], 1, SK + "the target is " + st, ps_json=ps(row(st)))
 expect("STATE not a word", ["orca-ide", H], 1, SK + "the target state is unknown",
        ps_json=ps(row("Done; rm")))
@@ -162,6 +204,23 @@ expect("STATE two rows", ["orca-ide", H], 1, SK + "the target matches 2 agent ro
 # A `done` row whose title matches is not the target: only paneKey decides.
 expect("STATE other row done", ["orca-ide", H], 1, SK + "the target is waiting",
        ps_json=ps(row("done", key="tab-1:leaf-9"), row("waiting")))
+
+# --- WAIT ---
+W = row("working")
+rc, out, calls = run(["orca-ide", H], ps_json=json.dumps([ps(W), ps(W), ps(row("done"))]))
+n_ps = len([c for c in calls if c[:2] == ["worktree", "ps"]])
+check = rc == 0 and out == ["Orca nudge sent to " + H] and sends(calls) == [SEND_ARGV] \
+    and SLEPT == [10, 10] and n_ps == 3
+(ok if check else miss)("WAIT working then done sends" if check else
+                         "WAIT working then done sends: rc=%s out=%r sends=%r slept=%r ps=%d"
+                         % (rc, out, sends(calls), SLEPT, n_ps))
+expect("WAIT working then waiting", ["orca-ide", H], 1, SK + "the target is waiting",
+       slept=[10], ps_json=json.dumps([ps(W), ps(row("waiting"))]))
+expect("WAIT working past the bound", ["orca-ide", H], 1,
+       SK + "the target is still working after 120 seconds", slept=[10] * 12, ps_json=ps(W))
+expect("WAIT bound ignores env", ["orca-ide", H], 1,
+       SK + "the target is still working after 120 seconds", slept=[10] * 12, ps_json=ps(W),
+       env_extra={"CEPA_NUDGE_WAIT": "1", "cepa_nudge_wait": "1", "cepa_nudge_poll": "1"})
 
 # --- LOOKUP ---
 expect("LOOKUP show names another handle", ["orca-ide", H], 1,

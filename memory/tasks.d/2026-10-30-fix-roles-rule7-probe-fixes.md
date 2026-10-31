@@ -26,10 +26,10 @@ Canonical findings: `todos/review-2026-10-30-192000.md` (findings 3-7, 9, 10, 14
 
 ## Deferred from /cepa:review of PR #100 commit 21cd031 (2026-10-30)
 
-Canonical findings: `todos/review-2026-10-30-181219.md` (findings 2, 3, 5, 13-16).
+Canonical findings: `todos/review-2026-10-30-181219.md` (findings 5, 13-16; 2 and 3 applied 2026-10-30).
 
-- [ ] P2 — A skipped nudge on a busy (`working`) target is skip-and-forget; rule 7's `Needed from you: nothing` depends only on the send, so the L26 lost message returns. Operator's call: bounded wait-then-nudge, or a skip counts as not delivered — `plugins/cepa/skills/autonomy/SKILL.md` §12b rule 1 / rule 7 (finding 2).
-- [ ] P2 — `done` does not prove an empty input box (operator draft is submitted with the nudge); row state with AskUserQuestion / a permission prompt open is unmeasured. Stated limit added; measure, or drop `--enter` — `plugins/cepa/scripts/orca-nudge.sh` (finding 3).
+- [x] P2 — A skipped nudge on a busy (`working`) target is skip-and-forget; rule 7's `Needed from you: nothing` depends only on the send, so the L26 lost message returns. Operator's call: bounded wait-then-nudge, or a skip counts as not delivered — `plugins/cepa/skills/autonomy/SKILL.md` §12b rule 1 / rule 7 (finding 2). Applied 2026-10-30: both (120 s wait on `working`; an unsent nudge is an operator line).
+- [x] P2 — `done` does not prove an empty input box (operator draft is submitted with the nudge); row state with AskUserQuestion / a permission prompt open is unmeasured. Stated limit added; measure, or drop `--enter` — `plugins/cepa/scripts/orca-nudge.sh` (finding 3). Applied 2026-10-30 as a stated limit the operator accepted; AskUserQuestion measured as `waiting`.
 - [ ] P3 — In `/cepa:handoff` the nudge block's resolver lines are ungranted, so the nudge likely prompts or is refused there — `plugins/cepa/commands/handoff.md` allowed-tools (finding 5).
 - [ ] P3 — Timeout bounds, no-timeout/no-python3/mktemp skips and the cleanup trap are untested — `scripts/check-orca-nudge.sh` (finding 13).
 - [ ] P3 — Nudge text lives in three places with no cross-check — `scripts/check-orca-turn-endings.sh` (finding 14).

@@ -16,6 +16,8 @@
 # Prints exactly one line, and its exit code says which:
 #   0  Orca nudge sent to <handle>
 #   1  Orca nudge skipped: <reason>   — the target is not idle, or unknown
+#      (§12b rule 1: a skip leaves the message unread, so the delivery is not
+#      done)
 #   2  Orca nudge refused: <reason>   — an argument failed its check
 #   3  Orca nudge failed: <reason>    — the send itself failed
 # The message send that came before it stands in every case.
@@ -25,7 +27,16 @@
 # picks the highlighted option: an operator decision made without the operator
 # (#100 finding 3, measured by coord@main in the L26 probe). So the script
 # sends only when the target's agent row says `done`, and skips on any other
-# state, an unknown one, or no row. Measured 2026-10-30 on this box: the agent
+# state, an unknown one, or no row. An open AskUserQuestion shows `waiting`
+# (measured by coord@main twice on 2026-10-30), so the guard skips it.
+#
+# THE BOUNDED WAIT. A `working` target is busy, not asking: the script
+# re-reads its row every `cepa_nudge_poll` seconds for at most
+# `cepa_nudge_wait` seconds (fixed below, never read from the environment).
+# It nudges if the row turns `done`, skips with the new reason if the row turns
+# to any other state, and skips with "still working" at the bound (operator
+# decision, 2026-10-30, #100 finding 2). Every other state skips at once,
+# with no wait. Measured 2026-10-30 on this box: the agent
 # rows of `worktree ps --agent-wait --json` carry no terminal handle, only
 # `paneKey`, and `paneKey` equals `<tabId>:<leafId>` from
 # `terminal show --terminal <handle> --json`. So the script looks the handle
@@ -36,8 +47,13 @@
 #   - The state is read, then the line is sent. A target that leaves `done`
 #     between the two (the operator starts a turn) still gets the line.
 #   - `done` comes from Claude Code's Stop hook, and typing at the prompt fires
-#     no hook. A draft the operator has half-typed into an idle target is
-#     submitted with the nudge line appended.
+#     no hook. So a nudge can submit a draft the operator has half-typed into
+#     an idle target, with the nudge line appended. The operator accepted this
+#     on 2026-10-30 and kept `--enter` (#100 finding 3).
+#   - The row state while a permission prompt is open was not measured. The
+#     guard skips it unless it reads `done`.
+#   - The wait can overrun its bound by one `worktree ps` call (at most 12
+#     seconds), so a run takes at most about 150 seconds in all.
 #   - Each Orca call is bounded at 10 seconds plus a 2-second kill, as §12a's
 #     status probe is. No `timeout` or no `python3` reads as skipped.
 #   - The flags are from `terminal show --help`, `worktree ps --help` and
@@ -73,12 +89,14 @@ trap 'rm -rf "$cepa_nudge_tmp"' EXIT
 timeout -k 2 10 "$cepa_nudge_cli" terminal show --terminal "$cepa_nudge_term" --json \
   </dev/null >"$cepa_nudge_tmp/show.json" 2>/dev/null \
   || skip "terminal show failed or timed out"
+
+# Sets cepa_nudge_state to `done`, or to the reason not to nudge. The reason
+# holds no Orca text except a state name, and only when that name is a plain
+# word.
+cepa_nudge_read() {
 timeout -k 2 10 "$cepa_nudge_cli" worktree ps --agent-wait --json \
   </dev/null >"$cepa_nudge_tmp/ps.json" 2>/dev/null \
   || skip "worktree ps failed or timed out"
-
-# Prints `done`, or the reason not to nudge. The reason holds no Orca text
-# except a state name, and only when that name is a plain word.
 cepa_nudge_state=$(python3 -I - "$cepa_nudge_term" "$cepa_nudge_tmp/show.json" "$cepa_nudge_tmp/ps.json" <<'PY' 2>/dev/null
 import json, re, sys
 term, show_p, ps_p = sys.argv[1:4]
@@ -109,6 +127,27 @@ else:
 PY
 ) || cepa_nudge_state=
 [ -n "$cepa_nudge_state" ] || skip "the Orca output could not be read"
+}
+
+cepa_nudge_now() {
+  cepa_nudge_t=$(date +%s 2>/dev/null)
+  [[ $cepa_nudge_t =~ ^[0-9]+$ ]] || skip "date gave no clock for the wait"
+}
+
+cepa_nudge_wait=120
+cepa_nudge_poll=10
+cepa_nudge_read
+if [ "$cepa_nudge_state" = "the target is working" ]; then
+  cepa_nudge_now
+  cepa_nudge_end=$((cepa_nudge_t + cepa_nudge_wait))
+  while [ "$cepa_nudge_state" = "the target is working" ]; do
+    cepa_nudge_now
+    cepa_nudge_left=$((cepa_nudge_end - cepa_nudge_t))
+    [ "$cepa_nudge_left" -gt 0 ] || skip "the target is still working after $cepa_nudge_wait seconds"
+    sleep "$((cepa_nudge_left < cepa_nudge_poll ? cepa_nudge_left : cepa_nudge_poll))"
+    cepa_nudge_read
+  done
+fi
 [ "$cepa_nudge_state" = done ] || skip "$cepa_nudge_state"
 
 # The text is fixed. Only the checked cli is substituted into it.
