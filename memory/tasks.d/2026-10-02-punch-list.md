@@ -801,10 +801,31 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
     **Operator decisions (AskUserQuestion, 2026-10-30):** wake path = "Send,
     then nudge"; rollout = "Fix, re-probe, then roll out" → L27, then re-probe
     C + an idle recipient, then the plan §8 edits.
+    **Re-probe 2026-10-31 00:26-00:37 UTC (cepa 1.37.2, Haiku, terminal):**
+    - C1 → idle stub: PASS — first line `nothing`, `--type question` sent,
+      guarded nudge fired, and the idle stub WOKE and quoted the subject.
+    - C2c → stub with an open AskUserQuestion: script PASS (`Orca nudge
+      skipped: the target is waiting`; the question stayed unanswered), but
+      the session wrote `Needed from you: nothing` instead of the operator
+      line rule 1 requires after a skipped nudge (model miss).
+    - Busy-target path: not exercised live (the busy runs hit the WSL error
+      below); covered by stub tests only.
+    - **New finding:** concurrent `orca-ide` calls from several WSL sessions
+      fail intermittently with `<3>WSL … UtilAcceptVsock:273: accept4 failed
+      110` (WSL→Windows interop timeout). It made §12a read absent (C2, C3b)
+      and a send fail (C2b). cepa fell back safely each time (paste block, no
+      nudge), but the `Needed from you` line was not first in those endings.
+    Proposed follow-up: the nudge script prints the exact first line on a
+    skip, and orca-ide calls retry once on the vsock error.
 
 
 L27. **Rule 7 fixes from the L26 probe.**
-    status: pending
+    status: completed
+    **CLOSED 2026-10-30** — PR #100 (`d9fd9b5`), v1.37.2, merged on the
+    operator's "Fix busy-target, then merge" (tab10 → tab11 → tab12). Final
+    gates: CI 4/4 green on `bbe4b32`; turn-endings 124/124 + 89/89; nudge
+    44/44 + 48/48; orca detection 76/76; 0 co-author trailers. Hops run,
+    freshness rc=0.
     severity: P2
     owner: roles (`tab10@roles`, then `tab11@roles`, via Orca 2026-10-30)
     PR #100 (head `f82e2d8`, v1.37.2) passed every pre-merge check, but review
