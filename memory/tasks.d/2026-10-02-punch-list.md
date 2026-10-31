@@ -995,13 +995,18 @@ L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
     `~/.claude/CLAUDE.md` (Orca section, "Never use `.worktreeinclude`";
     backup `~/.claude/CLAUDE.md.bak-2026-10-31-worktreeinclude`).
     Measured 2026-10-31 (main checkouts, `cat <repo>/.worktreeinclude`):
-    - compound-engineering: `cepa.local.md` → PR #103 removes it (open).
-    - artist360: `.env`, `.env.local` → hand-off needed.
-    - dpc-insider-www: `.env` → hand-off needed.
-    - artist360-docs, kcprimetime: comments only → hand-off (delete the file).
-    - farmtender-laravel: none on `master`, but open PR #79
-      (`chore/main/orca-config`) ADDS one listing `.env` → it must drop
-      `.worktreeinclude` before merge, or close.
+    - compound-engineering: `cepa.local.md` → DONE, PR #103 merged
+      (`7cc5027`, CI 4/4 green).
+    Hand-offs sent 2026-10-31 via Orca (operator: "Send all five"), each with
+    `Report to: term_8e8ae1c2…` (cepa coord@main) — waiting on replies:
+    - farmtender-laravel PR #79 (adds `.worktreeinclude` listing `.env`; drop
+      it before merge, or close) — `msg_8aa242b8e3b6`, nudged.
+    - artist360 (`.env`, `.env.local`; after its deploy work) —
+      `msg_e48462d6c133`, NOT nudged: `worktree ps` hit the WSL vsock error
+      twice → operator tells it to check its inbox.
+    - dpc-insider-www (`.env`) — `msg_c9f4600af1e4`, nudged.
+    - artist360-docs (comments only) — `msg_995c25131277`, nudged.
+    - kcprimetime (comments only) — `msg_70f99f3ee73c`, nudged.
     - Already gone from main checkouts: ci-ops-self-hosted, hillberry-app,
       youtube, dpc-pro-www (their sessions were told to remove it).
     No env file is or ever was in git in any of these (L24 measurement).
