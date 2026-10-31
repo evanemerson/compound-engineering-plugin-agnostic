@@ -53,13 +53,12 @@
 #      `"ok": true` and a msg_ id, but the recipient, the reply's thread or
 #      the worker_done lifecycle did not match. It may be stored: a rerun can
 #      duplicate it.
-#   On 4 and 5 it then prints:
+#   On 4 and 5 it then prints one line about the alert file (THE ALERT,
+#   below): `Orca alert recorded: <file> (orca-health.sh reports it)`, or
+#   `Orca alert not recorded: <reason>`. Last, it prints:
 #   Ending first line: Needed from you: paste the block below into <target>
 #   <target> is printed only when it passes the target check; any other value
 #   prints `the target session`.
-#   Last, on 4 and 5 only, one line about the alert file (THE ALERT, below):
-#   `Orca alert recorded: <file> (orca-health.sh reports it)`, or
-#   `Orca alert not recorded: <reason>`.
 #
 # WHY (punch-list L33, measured 2026-10-31 on Orca 1.4.245, WSL, probe
 # terminals in the `roles` worktree). A worker counted two sends as stored by
@@ -185,11 +184,11 @@ cepa_send_alert() {
     echo "Orca alert not recorded: the alert file could not be written"
   fi
 }
-refuse() { echo "Orca send refused: $1"; cepa_send_ending; cepa_send_alert send_refused "$1"; exit 4; }
-fail() { echo "Orca send failed: no message stored — $1"; cepa_send_ending; cepa_send_alert send_failed "$1"; exit 5; }
+refuse() { echo "Orca send refused: $1"; cepa_send_alert send_refused "$1"; cepa_send_ending; exit 4; }
+fail() { echo "Orca send failed: no message stored — $1"; cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }
 # Orca returned "ok": true and a msg_ id, but the reply did not match: the
 # message may be stored, so the line never says it stored nothing.
-unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_ending; cepa_send_alert send_unproven "$1"; exit 5; }
+unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_alert send_unproven "$1"; cepa_send_ending; exit 5; }
 
 [ $# -eq 4 ] || { [ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]; } \
   || refuse "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>"

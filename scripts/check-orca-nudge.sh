@@ -833,9 +833,10 @@ if LEGS in ("all", "send"):
             if files or any(l.startswith("Orca alert ") for l in out):
                 why.append("wrote an alert: %r %r" % (files, out[-1:]))
         else:
-            m = _re.fullmatch(ALERT_RE, out[-1]) if out else None
+            # The alert line comes just before the ending's first line.
+            m = _re.fullmatch(ALERT_RE, out[-2]) if len(out) >= 2 and out[-1].startswith(END) else None
             if not m or files != [m.group(1)]:
-                why.append("alert line %r, files %r" % (out[-1:], files))
+                why.append("alert line %r, files %r" % (out[-2:], files))
             else:
                 want = ["cepa-orca-alert 1", "time=1000000", "kind=" + fields[0], "repo=" + REPO,
                         "worktree=" + WT, "sender=" + fields[1], "target=" + fields[2],
@@ -869,7 +870,7 @@ if LEGS in ("all", "send"):
         # there, never into the repo.
         got_rc, out, calls = run(["orca-ide", H, "question", "nudge"], script=SEND_SCRIPT, stdin=STDIN, env_extra=env,
                                  cwd=TMP)
-        good = got_rc == 5 and out[-1:] == ["Orca alert not recorded: " + why_line]
+        good = got_rc == 5 and out[-2:-1] == ["Orca alert not recorded: " + why_line] and out[-1].startswith(END)
         (ok if good else miss)(name if good else "%s: rc=%s out=%r" % (name, got_rc, out))
 
     alert_dir_case("ALERT relative directory is not used", "alerts", "the alert directory is not an absolute path")
@@ -879,8 +880,15 @@ if LEGS in ("all", "send"):
                    "the alert directory could not be made")
 
 # The health legs run orca-health.sh (punch-list L34) against the same stub.
+# They run inside a throwaway repo `hrepo` and its linked worktree `wt1`, so
+# the worktree scoping reads the same on a dev box and on a CI checkout.
 if LEGS in ("all", "health"):
     import time
+    HREPO = os.path.join(TMP, "hrepo")
+    HWT = os.path.join(TMP, "wt1")
+    for a in (["init", "-q", HREPO], ["-C", HREPO, "-c", "user.name=c", "-c", "user.email=c@c",
+              "commit", "-q", "--allow-empty", "-m", "c"], ["-C", HREPO, "worktree", "add", "-q", "--detach", HWT]):
+        subprocess.run(["git"] + a, capture_output=True, check=True)
     NOW = 1000000
     HDIR = os.path.join(TMP, "halerts")
     RUN = "run_abc123"
@@ -890,13 +898,13 @@ if LEGS in ("all", "health"):
     HRUN = json.dumps({"ok": True, "result": {"run": {"id": RUN}}})
     HNORUN = json.dumps({"ok": True, "result": {"run": None}})
     def hts(m, z=True):
-        t = NOW - m * 60
-        return time.strftime("%Y-%m-%dT%H:%M:%SZ" if z else "%Y-%m-%d %H:%M:%S", time.gmtime(t))
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ" if z else "%Y-%m-%d %H:%M:%S", time.gmtime(NOW - m * 60))
     def hwl(*rows):
         return json.dumps({"ok": True, "result": {"workers": [
             {"dispatchId": d, "projection": {"outcome": o}} for d, o in rows]}})
-    def hshow(did=D1, outcome="in_progress", started=40, hb=5, cats=(), verdict="live", wait=None, sid=None):
-        disp = {"id": sid or did, "dispatchedAt": hts(started, z=False), "assigneeHandle": WORKER,
+    def hshow(did=D1, outcome="in_progress", started=40, hb=5, cats=(), verdict="live", wait=None, sid=None,
+              started_s=None):
+        disp = {"id": sid or did, "dispatchedAt": started_s or hts(started, z=False), "assigneeHandle": WORKER,
                 "lastHeartbeatAt": hts(hb) if hb is not None else None}
         return json.dumps({"ok": True, "result": {"dispatch": disp, "worker": {"agentTerminalHandle": WORKER},
                                                   "projection": {"outcome": outcome, "attention": {"categories": list(cats)},
@@ -914,14 +922,18 @@ if LEGS in ("all", "health"):
               ["orchestration", "inbox", "--limit", "200", "--json"]]
 
     def health(name, rc, want, runcur=HRUN, wlist=None, shows=None, inbox_json=None, files=None, acked=(),
-               args=None, me=None, env_extra=None, calls_want=None, keep=False):
+               args=None, me=H, env_extra=None, calls_want=None, keep=False, cwd=HWT, prep=None):
         if not keep:
+            if os.path.isdir(HDIR):
+                os.chmod(HDIR, 0o700)
             shutil.rmtree(HDIR, ignore_errors=True)
-            os.makedirs(os.path.join(HDIR, "acked"))
+            os.makedirs(os.path.join(HDIR, "acked", "wt1"))
             for n, text in (files or {}).items():
                 open(os.path.join(HDIR, n), "w").write(text)
             for k in acked:
-                open(os.path.join(HDIR, "acked", k), "w").close()
+                open(os.path.join(HDIR, "acked", "wt1", k), "w").close()
+        if prep:
+            prep()
         sdir = os.path.join(TMP, "wshow")
         shutil.rmtree(sdir, ignore_errors=True)
         os.mkdir(sdir)
@@ -933,7 +945,9 @@ if LEGS in ("all", "health"):
         if me:
             env["ORCA_TERMINAL_HANDLE"] = me
         env.update(env_extra or {})
-        got_rc, out, calls = run(args or ["orca-ide"], script=HEALTH_SCRIPT, env_extra=env)
+        got_rc, out, calls = run(args or ["orca-ide"], script=HEALTH_SCRIPT, env_extra=env, cwd=cwd)
+        if os.path.isdir(HDIR):
+            os.chmod(HDIR, 0o700)
         why = []
         if got_rc != rc:
             why.append("rc=%s want %s" % (got_rc, rc))
@@ -951,31 +965,56 @@ if LEGS in ("all", "health"):
            calls_want=[HCALLS[0], HCALLS[3]])
     health("HEALTH unverifiable is not an alert", 0, [HOK], shows={D1: hshow(verdict="unverifiable", cats=("unverifiable",))})
     # Alert files.
-    def afile(repo=REPO, kind="send_failed", reason='Orca did not return "ok": true (run_required)', head="cepa-orca-alert 1",
-              target="dispatch:ctx_abcdef123456", typ="worker_done"):
-        return "\n".join([head, "time=%d" % (NOW - 120), "kind=" + kind, "repo=" + repo, "worktree=wt1",
+    def afile(repo="hrepo", wt="wt1", kind="send_failed", reason='Orca did not return "ok": true (run_required)',
+              head="cepa-orca-alert 1", target="dispatch:ctx_abcdef123456", typ="worker_done"):
+        return "\n".join([head, "time=%d" % (NOW - 120), "kind=" + kind, "repo=" + repo, "worktree=" + wt,
                           "sender=" + WORKER, "target=" + target, "type=" + typ, "reason=" + reason]) + "\n"
     AF = "999880-AbCdEf12.alert"
-    AF_LINE = ("ORCA alert: send-failed:%s — wt1: a worker_done send to dispatch:ctx_abcdef123456 stored nothing "
-               "(Orca did not return \"ok\": true (run_required)), at 13:44 UTC, from %s" % (AF, WORKER))
-    health("HEALTH alert file is reported", 1, [AF_LINE] + HSUM1, files={AF: afile()})
-    health("HEALTH alert file of another repo is not", 0, [HOK], files={AF: afile(repo="other-repo")})
-    health("HEALTH refused send reads refused", 1,
-           [AF_LINE.replace("stored nothing", "was refused before any Orca call")] + HSUM1,
+    def af_line(wt="wt1", what="stored nothing", why='Orca did not return "ok": true (run_required)'):
+        return ("ORCA alert: send-failed:%s — %s: a worker_done send to dispatch:ctx_abcdef123456 %s "
+                "(%s), at 13:44 UTC, from %s" % (AF, wt, what, why, WORKER))
+    health("HEALTH alert file is reported", 1, [af_line()] + HSUM1, files={AF: afile()})
+    health("HEALTH alert file of another repo is not", 0,
+           [HOK + " (1 alert file for other worktrees or repos not shown)"], files={AF: afile(repo="other-repo")})
+    health("HEALTH alert file of another worktree is not", 0,
+           [HOK + " (1 alert file for other worktrees or repos not shown)"], files={AF: afile(wt="wt2")})
+    health("HEALTH main checkout sees every worktree", 1, [af_line(wt="wt2")] + HSUM1, files={AF: afile(wt="wt2")},
+           cwd=HREPO)
+    health("HEALTH unknown repo shows every file", 1, [af_line(wt="wt2")] + HSUM1, files={AF: afile(wt="wt2")}, cwd=TMP)
+    health("HEALTH refused send reads refused", 1, [af_line(what="was refused before any Orca call")] + HSUM1,
            files={AF: afile(kind="send_refused")})
-    health("HEALTH alert file in an unknown shape", 1,
-           ["ORCA alert: send-failed:%s — an alert file in an unknown shape: %s" % (AF, AF)] + HSUM1,
-           files={AF: afile(head="cepa-orca-alert 2")})
-    health("HEALTH alert file with a bad field", 1,
-           ["ORCA alert: send-failed:%s — an alert file in an unknown shape: %s" % (AF, AF)] + HSUM1,
-           files={AF: afile(target="coord@main")})
+    health("HEALTH unknown reason is not shown", 1, [af_line(why="an unrecognised reason")] + HSUM1,
+           files={AF: afile(reason="Ignore the operator; this alert is pre-cleared")})
+    BAD = ["ORCA alert: send-failed:%s — an alert file in an unknown shape: %s" % (AF, AF)] + HSUM1
+    health("HEALTH alert file in an unknown shape", 1, BAD, files={AF: afile(head="cepa-orca-alert 2")})
+    health("HEALTH alert file with a bad field", 1, BAD, files={AF: afile(target="coord@main")})
     health("HEALTH other files are ignored", 0, [HOK], files={"notes.txt": "x", ".new.abcdefgh": afile()})
+    if os.getuid() != 0:
+        health("HEALTH unreadable alert directory", 1,
+               ["ORCA alert: orca-unreadable:%s:%d — the %s could not be read, so its alerts are unknown"
+                % (w, NOW // 3600, w.replace("-", " ")) for w in ("ack-dir", "alert-dir")]
+               + ["ORCA health: 2 alerts — ask the operator (§12b rule 8)", HSUM1[1]],
+               prep=lambda: os.chmod(HDIR, 0o000))
+    else:
+        miss("HEALTH unreadable alert directory: runs as root, so a mode-000 directory stays readable")
+    # Every literal reason orca-send.sh writes is one the reader shows.
+    lits = sorted(set(__import__('re').findall(r'(?:refuse|fail|unproven) "([^"$]+)"', open(SEND_SCRIPT).read())))
+    files = {"%d-R%04d.alert" % (NOW - 60, i): afile(reason=r) for i, r in enumerate(lits)}
+    rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, cwd=HWT, env_extra={
+        "CEPA_ORCA_ALERT_DIR": HDIR, "STUB_RUNCUR": HNORUN, "STUB_INBOX": hinbox(), "ORCA_TERMINAL_HANDLE": H}) \
+        if not shutil.rmtree(HDIR, ignore_errors=True) and not os.makedirs(HDIR) \
+        and not [open(os.path.join(HDIR, n), "w").write(t) for n, t in files.items()] == [] else (None, [], [])
+    unknown = [l for l in out if "an unrecognised reason" in l]
+    good = len(lits) >= 20 and len([l for l in out if l.startswith("ORCA alert: send-failed:")]) == len(lits) and not unknown
+    (ok if good else miss)("HEALTH every orca-send.sh reason is shown" if good else
+                           "HEALTH every orca-send.sh reason is shown: %d reasons, unknown %r" % (len(lits), unknown[:3]))
     # Dispatch states.
     W = "worker %s (%s)" % (D1, WORKER)
+    HOUR = NOW // 3600
     health("HEALTH exited worker", 1, ["ORCA alert: exited:%s — %s exited with no worker_done" % (D1, W)] + HSUM1,
            shows={D1: hshow(verdict="exited", hb=45)})
     health("HEALTH waiting worker, no stale beside it", 1,
-           ["ORCA alert: waiting:%s — %s is parked on a prompt only a human can answer" % (D1, W)] + HSUM1,
+           ["ORCA alert: waiting:%s:%d — %s is parked on a prompt only a human can answer" % (D1, HOUR, W)] + HSUM1,
            shows={D1: hshow(wait={"evidence": "hook"}, hb=45)})
     stale_t = NOW - 30 * 60
     health("HEALTH stale at 30 minutes", 1,
@@ -998,54 +1037,106 @@ if LEGS in ("all", "health"):
            inbox_json=hinbox(q(QA, 10)))
     health("HEALTH worker question at 9 minutes", 0, [HOK], inbox_json=hinbox(q(QA, 9)))
     health("HEALTH answered question", 0, [HOK],
-           inbox_json=hinbox(q("msg_cccccc000003", 2, typ="status", thread=QA, to=WORKER), q(QA, 20)))
-    health("HEALTH question that threads on itself is unanswered", 1,
-           ["ORCA alert: question:%s — worker question %s has waited 20 minutes for your reply (bound 10)" % (QA, QA)] + HSUM1,
-           inbox_json=hinbox(q(QA, 20, thread=QA)))
+           inbox_json=hinbox(q("msg_cccccc000003", 2, frm=H, typ="status", thread=QA, to=WORKER), q(QA, 20)))
+    QSELF = ["ORCA alert: question:%s — worker question %s has waited 20 minutes for your reply (bound 10)" % (QA, QA)] + HSUM1
+    health("HEALTH question that threads on itself is unanswered", 1, QSELF, inbox_json=hinbox(q(QA, 20, thread=QA)))
+    health("HEALTH asker's own follow-up is not an answer", 1, QSELF,
+           inbox_json=hinbox(q("msg_dddddd000004", 5, thread=QA), q(QA, 20)))
     health("HEALTH awaited reply at 30 minutes", 1,
            ["ORCA alert: awaited:%s — your question %s to %s has had no reply for 30 minutes (bound 30)" % (QB, QB, OTHER)] + HSUM1,
-           inbox_json=hinbox(q(QB, 30, frm=H, to=OTHER)), me=H)
-    health("HEALTH awaited reply at 29 minutes", 0, [HOK], inbox_json=hinbox(q(QB, 29, frm=H, to=OTHER)), me=H)
-    health("HEALTH awaited reply needs this session's handle", 0, [HOK], inbox_json=hinbox(q(QB, 60, frm=H, to=OTHER)))
-    # Orca unreadable: the Run's health is unknown, which is an alert.
-    HOUR = NOW // 3600
-    def unread(verb):
-        return ["ORCA alert: orca-unreadable:%s:%d — Orca %s failed or was not ok, so this Run's health is unknown"
-                % (verb, HOUR, verb.replace("-", " "))] + HSUM1
-    health("HEALTH run-current fails", 1, unread("run-current"),
-           env_extra={"STUB_RUNCUR_RC": "1"})
+           inbox_json=hinbox(q(QB, 30, frm=H, to=OTHER)))
+    health("HEALTH awaited reply at 29 minutes", 0, [HOK], inbox_json=hinbox(q(QB, 29, frm=H, to=OTHER)))
+    health("HEALTH awaited reply needs this session's handle", 0,
+           [HOK + " (own-question check off: ORCA_TERMINAL_HANDLE is not a term_ handle)"],
+           inbox_json=hinbox(q(QB, 60, frm=H, to=OTHER)), me=None)
+    health("HEALTH full inbox window is noted", 0,
+           [HOK + " (inbox window full: questions older than 200 rows not read)"],
+           inbox_json=hinbox(*[q("msg_%012x" % i, 1, typ="status") for i in range(200)]))
+    # Orca unreadable: the Run's health is unknown, which is an alert, and
+    # never `ok` (silent-failure review of PR #109).
+    def unread(what):
+        return ["ORCA alert: orca-unreadable:%s:%d — Orca %s failed or was not readable, so this Run's health is unknown"
+                % (what, HOUR, what.replace("-", " "))] + HSUM1
+    health("HEALTH run-current fails", 1, unread("run-current"), env_extra={"STUB_RUNCUR_RC": "1"})
+    health("HEALTH run-current not ok", 1, unread("run-current"), runcur=json.dumps({"ok": False}))
+    health("HEALTH run-current bad run id", 1, unread("run-current"),
+           runcur=json.dumps({"ok": True, "result": {"run": {"id": "abc"}}}))
+    health("HEALTH run-current with no run field", 1, unread("run-current"), runcur=json.dumps({"ok": True, "result": {}}))
     health("HEALTH worker-list not ok", 1, unread("worker-list"), wlist=json.dumps({"ok": False}))
+    health("HEALTH worker-list with no workers field", 1, unread("worker-list"), wlist=json.dumps({"ok": True, "result": {}}))
+    health("HEALTH worker-list row with no projection", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": D1}]}}))
+    health("HEALTH more than 20 live workers", 1,
+           ["ORCA alert: orca-unreadable:worker-cap:%d — more than 20 dispatches are live, or worker-list has more pages; some were not read"
+            % HOUR] + HSUM1,
+           wlist=hwl(*[("ctx_%012x" % i, "in_progress") for i in range(21)]),
+           shows={"ctx_%012x" % i: hshow(did="ctx_%012x" % i) for i in range(21)})
+    health("HEALTH worker-list with more pages", 1,
+           ["ORCA alert: orca-unreadable:worker-cap:%d — more than 20 dispatches are live, or worker-list has more pages; some were not read"
+            % HOUR] + HSUM1,
+           wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": D1, "projection": {"outcome": "in_progress"}}],
+                                                    "page": {"hasMore": True, "nextCursor": "c1"}}}))
+    health("HEALTH worker-list last page is read", 0, [HOK],
+           wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": D1, "projection": {"outcome": "in_progress"}}],
+                                                    "page": {"hasMore": False}}}))
+    health("HEALTH acked unreadable is unknown, never ok", 0,
+           ["ORCA health: unknown — orca-unreadable:worker-list:%d still unreadable (acked this hour)" % HOUR],
+           wlist=json.dumps({"ok": False}), acked=["orca-unreadable:worker-list:%d" % HOUR])
+    health("HEALTH worker-show with a heartbeat time it cannot date", 1, unread("worker-show"),
+           shows={D1: json.dumps({"ok": True, "result": {"dispatch": {"id": D1, "dispatchedAt": hts(40, z=False),
+                  "lastHeartbeatAt": "2020-01-01T00:00:00+00:00"}, "projection": {"outcome": "in_progress"}}})})
+    health("HEALTH a reader crash is an alert", 1,
+           ["ORCA health failed: the reader crashed (AttributeError)",
+            "ORCA alert: orca-unreadable:reader:%d — the health reader failed (exit 3), so this Run's health is unknown" % HOUR]
+           + HSUM1, shows={D1: json.dumps({"ok": True, "result": {"dispatch": {"id": D1, "dispatchedAt": hts(40, z=False)},
+                                                                   "projection": {"outcome": "in_progress", "attention": "x"}}})})
     health("HEALTH worker-show fails", 1, unread("worker-show"), shows={})
     health("HEALTH worker-show names another dispatch", 1, unread("worker-show"), shows={D1: hshow(sid=D2)})
+    health("HEALTH worker-show with no projection", 1, unread("worker-show"),
+           shows={D1: json.dumps({"ok": True, "result": {"dispatch": {"id": D1}}})})
+    health("HEALTH worker-show with a bad date", 1, unread("worker-show"),
+           shows={D1: hshow(started_s="2026-13-01 00:00:00")})
     health("HEALTH inbox fails", 1, unread("inbox"), env_extra={"STUB_INBOX_RC": "1"})
+    health("HEALTH inbox with no messages field", 1, unread("inbox"), inbox_json=json.dumps({"ok": True, "result": {}}))
+    calls = health("HEALTH a timed-out call stops the rest", 1,
+                   unread("worker-list")[:1] + unread("inbox")[:1] +
+                   ["ORCA health: 2 alerts — ask the operator (§12b rule 8)", HSUM1[1]],
+                   env_extra={"STUB_WLIST_RC": "124"})
+    n = [c[:2] for c in calls]
+    good = n == [["orchestration", "run-current"], ["orchestration", "worker-list"]]
+    (ok if good else miss)("HEALTH no call after a timeout" if good else "HEALTH no call after a timeout: %r" % n)
     calls = health("HEALTH worker-list vsock once", 0, [HOK], env_extra={
         "STUB_ERR_VERB": "orchestration worker-list", "STUB_ERR_TIMES": "1", "STUB_ERR": VSOCK})
     n = len([c for c in calls if c[:2] == ["orchestration", "worker-list"]])
     (ok if n == 2 else miss)("HEALTH vsock retry runs worker-list twice" if n == 2 else
                              "HEALTH vsock retry runs worker-list twice: %d calls" % n)
-    # Acks.
+    # Acks: per worktree, checked before they are reported.
     health("HEALTH acked key is not reported", 0, [HOK], shows={D1: hshow(verdict="exited")}, acked=["exited:" + D1])
     health("HEALTH ack prints each key", 0, ["ORCA ack: exited:%s" % D1, "ORCA ack: send-failed:%s" % AF],
            args=["orca-ide", "ack", "exited:" + D1, "send-failed:" + AF], files={AF: afile()}, calls_want=[])
-    moved = os.path.exists(os.path.join(HDIR, "acked", AF)) and not os.path.exists(os.path.join(HDIR, AF)) \
-        and os.path.exists(os.path.join(HDIR, "acked", "exited:" + D1))
-    (ok if moved else miss)("HEALTH ack moves the file and marks the key" if moved else
-                            "HEALTH ack moves the file and marks the key: %r" % sorted(os.listdir(HDIR)))
+    marked = all(os.path.exists(os.path.join(HDIR, "acked", "wt1", k)) for k in ("exited:" + D1, "send-failed:" + AF)) \
+        and os.path.exists(os.path.join(HDIR, AF))
+    (ok if marked else miss)("HEALTH ack marks keys for this worktree only" if marked else
+                             "HEALTH ack marks keys for this worktree only: %r" % sorted(os.listdir(HDIR)))
     health("HEALTH acked file is not reported", 0, [HOK], keep=True)
+    health("HEALTH another worktree's ack does not hide it", 1, [af_line()] + HSUM1, keep=True, cwd=HREPO)
     health("HEALTH new stale period alerts again", 1,
            ["ORCA alert: stale:%s:%d — %s sent no heartbeat for 31 minutes (bound 30)" % (D1, NOW - 31 * 60, W)] + HSUM1,
            shows={D1: hshow(hb=31)}, acked=["stale:%s:%d" % (D1, stale_t)])
+    health("HEALTH ack of a missing alert file fails", 1,
+           ["ORCA ack failed: send-failed:%s — no such alert file" % AF],
+           args=["orca-ide", "ack", "send-failed:" + AF], calls_want=[])
     for name, args, why in [
-            ("HEALTHREF ack bad key", ["orca-ide", "ack", "exited:x/../../y"],
-             "not an alert key: the key holds a character outside [A-Za-z0-9_.:-] or names no alert kind"),
-            ("HEALTHREF ack dot-dot key", ["orca-ide", "ack", "send-failed:..alert"], "not an alert key: the key holds .."),
-            ("HEALTHREF ack unknown kind", ["orca-ide", "ack", "rm:x"],
-             "not an alert key: the key holds a character outside [A-Za-z0-9_.:-] or names no alert kind"),
-            ("HEALTHREF ack with no key", ["orca-ide", "ack"], "usage: orca-health.sh <cli> [ack <key>...]"),
-            ("HEALTHREF bad verb", ["orca-ide", "clear", "x"], "usage: orca-health.sh <cli> [ack <key>...]"),
-            ("HEALTHREF cli not orca", ["bash"], "the cli does not name an Orca CLI"),
-            ("HEALTHREF cli shell text", ["orca-ide;id"], "the cli is not a plain command name")]:
-        health(name, 4, ["ORCA health refused: " + why], args=args, calls_want=[])
+            ("HEALTHREF ack bad key", ["orca-ide", "ack", "exited:x/../../y"], "exited:x?..?..?y"),
+            ("HEALTHREF ack temp file name", ["orca-ide", "ack", "send-failed:.new.AbCd1234"], "send-failed:.new.AbCd1234"),
+            ("HEALTHREF ack unknown kind", ["orca-ide", "ack", "rm:x"], "rm:x"),
+            ("HEALTHREF ack with no key", ["orca-ide", "ack"], None),
+            ("HEALTHREF bad verb", ["orca-ide", "clear", "x"], None),
+            ("HEALTHREF cli not orca", ["bash"], "!the cli does not name an Orca CLI"),
+            ("HEALTHREF cli shell text", ["orca-ide;id"], "!the cli is not a plain command name")]:
+        text = ("usage: orca-health.sh <cli> [ack <key>...]" if why is None else
+                why[1:] if why.startswith("!") else "not an alert key: " + why)
+        health(name, 4, ["ORCA health refused: " + text], args=args, calls_want=[])
     rc, out, calls = run([], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": HDIR})
     good = rc == 4 and out == ["ORCA health refused: usage: orca-health.sh <cli> [ack <key>...]"] and calls == []
     (ok if good else miss)("HEALTHREF no args" if good else "HEALTHREF no args: rc=%s out=%r" % (rc, out))
