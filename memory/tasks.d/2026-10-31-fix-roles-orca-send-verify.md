@@ -1,13 +1,13 @@
 # Residuals — fix/roles/orca-send-verify (L33)
 
 ## 2026-10-31 — send paths not yet mechanized (L33 item 3)
-- [x] P2 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35): `orca-send.sh` reply mode** — `orchestration reply` (rule 7's answer path) is not run through
+- [x] P2 — **CLOSED in PR fix/roles/orca-loss-audit (1.41.0, L35): `orca-send.sh` reply mode** — `orchestration reply` (rule 7's answer path) is not run through
   `orca-send.sh`: rule 7 now runs `orca-nudge.sh` alone after a reply that
   printed a message id, but no script proves the reply stored. Its reply
   shape was not measured. Next: measure `reply --json` on a probe pair, then
   give `orca-send.sh` a reply mode or a sibling — plugins/cepa/skills/autonomy/SKILL.md
   §12b rule 7 (coordinator kind)
-- [x] P2 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35): `orca-send.sh` worker_done mode** — A dispatched worker's `worker_done` (rule 3) is checked by prose only
+- [x] P2 — **CLOSED in PR fix/roles/orca-loss-audit (1.41.0, L35): `orca-send.sh` worker_done mode** — A dispatched worker's `worker_done` (rule 3) is checked by prose only
   ("counts only when Orca returns `"ok": true` with a `result.message.id`").
   Orca refuses a bad one loudly (exit 1, `"ok": false`), so a session that reads
   the result sees it; one that pipes it to grep does not. Next: a checked
@@ -45,7 +45,7 @@
   quotes on the block's command line; the script validates them only after
   bash parsed the line. Moving them onto stdin closes it —
   plugins/cepa/skills/autonomy/SKILL.md §12b rule 1 block
-- [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35/L36 #20): every call carries one request id, so the retry replays** — The vsock retry of a send is blind; the new inbox re-read could check
+- [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.41.0, L35/L36 #20): every call carries one request id, so the retry replays** — The vsock retry of a send is blind; the new inbox re-read could check
   for the first try's row before retrying (#101 finding 8) — orca-send.sh cepa_send_orca
 - P3 — (open copy tracked in `2026-10-31-fix-roles-orca-loss-audit.md`, L36 #21) The ending line names a terminal handle, not a session (#101 finding
   9) now also on every refused or failed send — orca-send.sh cepa_send_ending
@@ -55,7 +55,7 @@
 - P3 — `Bash(orca-ide orchestration send:*)` is still granted beside the
   script, so "never run `orchestration send` by hand" is prose only —
   plugins/cepa/commands/*.md allowed-tools
-- [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35/L36 #24)** — Rule 7's "When the send and its nudge both succeeded" does not name a
+- [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.41.0, L35/L36 #24)** — Rule 7's "When the send and its nudge both succeeded" does not name a
   `no-nudge` send to a Run coordinator (rule 1 already says the send alone
   completes it) — plugins/cepa/skills/autonomy/SKILL.md §12b rule 7 (finding 24)
 
