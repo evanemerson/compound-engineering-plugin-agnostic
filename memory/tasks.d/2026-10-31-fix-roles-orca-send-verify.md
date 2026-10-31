@@ -45,7 +45,7 @@
   quotes on the block's command line; the script validates them only after
   bash parsed the line. Moving them onto stdin closes it —
   plugins/cepa/skills/autonomy/SKILL.md §12b rule 1 block
-- P3 — The vsock retry of a send is blind; the new inbox re-read could check
+- [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35/L36 #20): every call carries one request id, so the retry replays** — The vsock retry of a send is blind; the new inbox re-read could check
   for the first try's row before retrying (#101 finding 8) — orca-send.sh cepa_send_orca
 - P3 — The ending line names a terminal handle, not a session (#101 finding
   9) now also on every refused or failed send — orca-send.sh cepa_send_ending
@@ -55,7 +55,7 @@
 - P3 — `Bash(orca-ide orchestration send:*)` is still granted beside the
   script, so "never run `orchestration send` by hand" is prose only —
   plugins/cepa/commands/*.md allowed-tools
-- P3 — Rule 7's "When the send and its nudge both succeeded" does not name a
+- [x] P3 — **CLOSED in PR fix/roles/orca-loss-audit (1.40.0, L35/L36 #24)** — Rule 7's "When the send and its nudge both succeeded" does not name a
   `no-nudge` send to a Run coordinator (rule 1 already says the send alone
   completes it) — plugins/cepa/skills/autonomy/SKILL.md §12b rule 7 (finding 24)
 

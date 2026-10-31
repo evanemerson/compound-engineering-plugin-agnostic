@@ -1657,9 +1657,11 @@ limits.
      `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
      sessions in the L26 re-probe, 2026-10-31), the script will
      retry that send once, with the same command, before reporting `Orca send failed`. No other error is
-     retried, and a send that timed out is not retried. Not measured: whether
-     the failed send reached Orca, so the target can get the message twice
-     (#101 review); the retry is accepted with that limit. When the send did
+     retried, and a send that timed out is not retried. The retry carries the
+     same request id as the first try, so a first try that did store is
+     replayed, not stored twice (measured in punch-list L35). Running the
+     block again after a failure is a new request, so that can still store a
+     duplicate; it is accepted with that limit. When the send did
      not succeed, print the block for pasting, with one line saying
      why: `Orca send skipped: <no target> — paste below` when no send ran, or
      the script's `Orca send refused: <reason>` or
@@ -2034,7 +2036,7 @@ limits.
        it with rule 1's send block, `<type>` `question` (never `status`), to
        that coordinator's handle, then applies rule 1's nudge (the block's
        `nudge` mode). When the
-       send and its nudge both succeeded, its own first line is
+       send succeeded, and its nudge when the block ran one, its own first line is
        `Needed from you: nothing`; otherwise rule 1 gives the line. The
        coordinator then ends as **The operator** if the decision is the
        operator's. The answer comes back by `orchestration reply`, which

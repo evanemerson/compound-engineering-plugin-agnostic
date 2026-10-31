@@ -182,6 +182,9 @@ SEND_MUTANTS = [
      {'SENDREF nudge a run address'}),
     ('send-five-args-any', '[ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]', '[ $# -eq 5 ]',
      {'SENDREF five args for a send'}),
+    # L36 #20: every send carries a request id, so its vsock retry replays.
+    ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
+     {'STORE argv and order', 'STORE retry reuses the request id'}),
     # reply mode (punch-list L35)
     ('reply-thread-unchecked', 'if m.get("thread_id") != target:', 'if False:',
      {'REPLY not threaded on the question'}),
@@ -211,7 +214,7 @@ SEND_MUTANTS = [
     ('send-reroute-nudged', 'if [ "$cepa_send_to" != "$cepa_send_target" ]; then', 'if false; then',
      {'STORE stored for another handle', 'STORE rerouted to a Run mailbox'}),
     ('send-no-vsock-retry', '  for try in 1 2; do\n    timeout -k 2 15', '  for try in 1; do\n    timeout -k 2 15',
-     {'REPLY retry reuses the request id', 'REPLY vsock retry', 'STORE inbox vsock once', 'STORE send vsock once', 'STORE send vsock twice', 'WDONE retry reuses the request id', 'WDONE vsock retry'}),
+     {'REPLY retry reuses the request id', 'REPLY vsock retry', 'STORE inbox vsock once', 'STORE retry reuses the request id', 'STORE send retry', 'STORE send vsock once', 'STORE send vsock twice', 'WDONE retry reuses the request id', 'WDONE vsock retry'}),
     ('send-timeout-retried', '[ "$cepa_send_rc" != 124 ] && [ "$cepa_send_rc" != 137 ] ||', 'true ||',
      {'STORE send timeout not retried'}),
     ('send-dashdash-body', '[[ $cepa_send_body != --* ]] || refuse "the body starts with --, which Orca reads as a flag"\n', '',

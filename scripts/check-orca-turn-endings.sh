@@ -86,7 +86,7 @@ RULE_PHRASES = [
     '"You" is the operator, the human who reads this tab.',
     "A decision that belongs to a coordinator or to another session, once delivered, is `Needed from you: nothing`",
     "One that could not be delivered is the operator's (Delivery, below).",
-    "When the send and its nudge both succeeded, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line.",
+    "When the send succeeded, and its nudge when the block ran one, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line.",
     "A send whose nudge did not go is not delivered (rule 1, \"Only a sent nudge completes the delivery\").",
     "sends it with rule 1's send block, `<type>` `question` (never `status`), to that coordinator's handle",
     "then applies rule 1's nudge (the block's `nudge` mode).",

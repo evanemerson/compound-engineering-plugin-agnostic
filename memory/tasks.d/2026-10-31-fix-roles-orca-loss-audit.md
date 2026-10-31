@@ -15,9 +15,13 @@ audit").
   only. A script would make it the one checked form — plugins/cepa/skills/autonomy/SKILL.md §12b rule 8
 - P3 — Rule 4's `ask` result test (exit 0, `timedOut` false, `answer`
   non-null; resume on timeout) is prose only — plugins/cepa/skills/autonomy/SKILL.md §12b rule 4
-- P3 — `send` mode could pass a caller `--retry-request` as the new modes do,
-  which makes its vsock retry idempotent. That is the "blind vsock retry"
-  residual L36 owns; left to it — plugins/cepa/scripts/orca-send.sh cepa_send_orca
+- P3 — L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), folded
+  into L35 by coord@main and split back out: move `<cli>`/`<target>`/`<type>`/
+  `<nudge>` off the block's quoted command line onto stdin (#19), and give the
+  script an optional session name for its ending line (#21). Both change the
+  stdin interface of the block every session runs, so they are one PR of their
+  own, gated by new STORE/SENDREF cases — plugins/cepa/scripts/orca-send.sh,
+  plugins/cepa/skills/autonomy/SKILL.md §12b rule 1 block
 - P3 — The global `~/.claude/CLAUDE.md` Orca section tells a worker to send its
   Handoff block as the `worker_done` body, and says a probe terminal is closed;
   it should name `orca-send.sh … worker_done` (rule 3) and prove a close by

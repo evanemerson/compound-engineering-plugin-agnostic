@@ -71,7 +71,8 @@
 #              recipient, and an inbox that cannot be read or parsed. A warning beside a
 #              stored message still counts. A send stored for a `run:` mailbox
 #              is not nudged. A failed nudge passes its own lines and exit
-#              code through. The vsock retry runs once, never after a timeout.
+#              code through. The vsock retry runs once, never after a timeout, and
+#              carries the first try's request id (L36 #20).
 #   REPLY    — orca-send.sh's `reply` mode (§12b rule 7, punch-list L35). The
 #              argv is pinned (`reply --id <q> --body <b> --retry-request
 #              <uuid> --json`), and the vsock retry reuses the same request id.
@@ -440,7 +441,18 @@ SUBJ = "tab9@wt: L1 done"
 BODY = 'line 1\n"quoted" $HOME `x` \\ end\n\n- last'
 STDIN = SUBJ + "\n" + BODY + "\n"
 OSEND_ARGV = ["orchestration", "send", "--to", H, "--type", "question", "--subject", SUBJ,
-              "--body", BODY, "--json"]
+              "--body", BODY, "--retry-request", "<uuid>", "--json"]
+UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+import re as _re
+
+def strip_req(c):
+    # The request id is fresh per run: pin its shape, then its position.
+    c = list(c)
+    if "--retry-request" in c:
+        i = c.index("--retry-request") + 1
+        if i < len(c) and _re.fullmatch(UUID_RE, c[i]):
+            c[i] = "<uuid>"
+    return c
 INBOX_ARGV = ["orchestration", "inbox", "--limit", "200", "--json"]
 WARN = [{"code": "legacy_terminal_recipient", "recipient": H}]
 
@@ -487,7 +499,7 @@ os_calls = [c for c in calls if c[:2] == ["orchestration", "send"]]
 in_calls = [c for c in calls if c[:2] == ["orchestration", "inbox"]]
 # Send, then re-read, then the nudge's own calls: never the nudge first.
 order = [c[:2] for c in calls]
-check = os_calls == [OSEND_ARGV] and in_calls == [INBOX_ARGV] and sends(calls) == [SEND_ARGV] \
+check = [strip_req(c) for c in os_calls] == [OSEND_ARGV] and in_calls == [INBOX_ARGV] and sends(calls) == [SEND_ARGV] \
     and order[:2] == [["orchestration", "send"], ["orchestration", "inbox"]]
 (ok if check else miss)("STORE argv and order" if check else "STORE argv and order: %r" % calls)
 calls = store("STORE no-nudge stores only", 0, [STORED], mode="no-nudge")
@@ -563,11 +575,16 @@ store_retry("STORE send vsock twice", "orchestration send", 2, 5,
 store_retry("STORE send timeout not retried", "orchestration send", 1, 5,
             [NOSTORE + "the send exited 124 and printed nothing", PASTE], 1, err_rc=124)
 store_retry("STORE inbox vsock once", "orchestration inbox", 1, 0, [STORED], 2)
+# L36 #20: the send's vsock retry is the first try replayed, by request id.
+calls = store("STORE send retry", 0, [STORED], mode="no-nudge", env_extra={
+    "STUB_ERR_VERB": "orchestration send", "STUB_ERR_TIMES": "1", "STUB_ERR": VSOCK})
+ids = [c[c.index("--retry-request") + 1] for c in calls
+       if c[:2] == ["orchestration", "send"] and "--retry-request" in c[:-1]]
+check = len(ids) == 2 and ids[0] == ids[1] and bool(_re.fullmatch(UUID_RE, ids[0]))
+(ok if check else miss)("STORE retry reuses the request id" if check else "STORE retry reuses the request id: %r" % ids)
 
 # --- REPLY (orca-send.sh reply mode, punch-list L35) ---
 QID = "msg_a3dc2b4b1de4"
-UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-import re as _re
 
 def oreply(mid=MID, to=H, thread=QID, ok=True):
     m = {"id": mid, "subject": "Re: q", "thread_id": thread}

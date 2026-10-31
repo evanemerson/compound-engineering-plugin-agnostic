@@ -81,13 +81,17 @@
 #
 # THE VSOCK RETRY follows orca-nudge.sh's rule: one retry, only on a non-zero
 # exit whose stderr holds both `UtilAcceptVsock` and `accept4 failed 110`;
-# never after a timeout. Unlike the nudge, it re-reads nothing before the
-# retry.
+# never after a timeout. The retry is the same call with the same
+# `--retry-request` id, which the script chose, so if the first try stored,
+# Orca replays its result (same `msg_…`, `replayed: true`) and stores nothing
+# more (measured L35, Orca 1.4.245). Different input under the same id is
+# refused (`request_mismatch`).
 #
 # TIME BUDGET. Each Orca call is bounded at 15 s plus a 2 s kill, so with its
 # retry a call takes at most 34 s: the send and the re-read take at most 68 s,
-# plus the nudge's own bound (about 220 s, its header): about 290 s in all. Not measured: whether the failed send reached Orca, so the target
-# can get the message twice (§12b rule 1 accepts that limit).
+# plus the nudge's own bound (about 220 s, its header): about 290 s in all.
+# A session that runs the block again after a failure makes a new request id,
+# so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
 # STATED LIMITS:
 #   - A row in the inbox is "stored", not "read". Reading is the nudge's job,
@@ -209,14 +213,11 @@ cepa_send_orca() {
   return 1
 }
 
-# A reply and a worker_done carry a request id the script chose, so the vsock
-# retry replays the first try instead of storing a second message (measured
-# L35: the same --retry-request returned the same msg_ id, `replayed: true`).
-case "$cepa_send_type" in
-  reply|worker_done)
-    cepa_send_req=$(python3 -I -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)
-    [[ $cepa_send_req =~ ^[0-9a-f-]{36}$ ]] || fail "no request id could be made" ;;
-esac
+# Every call carries a request id the script chose, so the vsock retry
+# replays the first try instead of storing a second message (measured L35:
+# the same --retry-request returned the same msg_ id with `replayed: true`).
+cepa_send_req=$(python3 -I -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)
+[[ $cepa_send_req =~ ^[0-9a-f-]{36}$ ]] || fail "no request id could be made"
 case "$cepa_send_type" in
   reply)
     cepa_send_orca "$cepa_send_tmp/send.json" orchestration reply --id "$cepa_send_target" \
@@ -228,7 +229,8 @@ case "$cepa_send_type" in
       --retry-request "$cepa_send_req" --json ;;
   *)
 cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --to "$cepa_send_target" \
-  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" --json ;;
+  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \
+  --retry-request "$cepa_send_req" --json ;;
 esac
 
 # Prints `<msg id> <recipient>`, or `FAIL <reason>`. The reason holds no Orca

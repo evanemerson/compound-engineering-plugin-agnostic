@@ -80,11 +80,11 @@ MUTANTS = [
     # #100 review: an undelivered decision must not read as `nothing`.
     ("rule-undelivered-is-nothing", "skill", "One that could not be delivered is the operator's (Delivery, below).", "",
      {"RULE: rule 7 holds One that could not be delivered is the operator's (Delivery, below)."}),
-    ("rule-coordinator-nothing-unconditional", "skill", "When the\n       send and its nudge both succeeded, its own first line", "Its own first line",
-     {"RULE: rule 7 holds When the send and its nudge both succeeded, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line."}),
+    ("rule-coordinator-nothing-unconditional", "skill", "When the\n       send succeeded, and its nudge when the block ran one, its own first line", "Its own first line",
+     {"RULE: rule 7 holds When the send succeeded, and its nudge when the block ran one, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line."}),
     # #100 finding 2: a send whose nudge did not go is not delivered.
-    ("rule-coordinator-send-only", "skill", "send and its nudge both succeeded", "send succeeded",
-     {"RULE: rule 7 holds When the send and its nudge both succeeded, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line."}),
+    ("rule-coordinator-send-only", "skill", "send succeeded, and its nudge when the block ran one,", "send succeeded,",
+     {"RULE: rule 7 holds When the send succeeded, and its nudge when the block ran one, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line."}),
     ("rule-skip-delivered", "skill", " A\n     send whose nudge did not go is not delivered (rule 1, \"Only a sent\n     nudge completes the delivery\").\n", "\n",
      {"RULE: rule 7 holds A send whose nudge did not go is not delivered (rule 1, \"Only a sent nudge completes the delivery\")."}),
     # Probe C of L26: the decision sent as a status, not a question.
@@ -178,11 +178,11 @@ MUTANTS = [
     ("nudge-head-gone", "skill", "**Send, then nudge.** Orca", "Orca",
      {"NUDGE: rule 1 holds **Send, then nudge.**"}),
     # Rule 7 cites the nudge; a copy of its text there is a restatement.
-    ("nudge-restated-in-rule-7", "skill", "`nudge` mode). When the\n       send and its nudge both succeeded",
-     '`nudge` mode). It types "You have 1 orchestration message." When the\n       send and its nudge both succeeded',
+    ("nudge-restated-in-rule-7", "skill", "`nudge` mode). When the\n       send succeeded, and its nudge when the block ran one",
+     '`nudge` mode). It types "You have 1 orchestration message." When the\n       send succeeded, and its nudge when the block ran one',
      {"NUDGE: rule 7 cites the nudge and holds no copy of it"}),
-    ("nudge-command-in-rule-7", "skill", "`nudge` mode). When the\n       send and its nudge both succeeded",
-     "`nudge` mode). It may use `<cli> terminal send`. When the\n       send and its nudge both succeeded",
+    ("nudge-command-in-rule-7", "skill", "`nudge` mode). When the\n       send succeeded, and its nudge when the block ran one",
+     "`nudge` mode). It may use `<cli> terminal send`. When the\n       send succeeded, and its nudge when the block ran one",
      {"NUDGE: rule 7 cites the nudge and holds no copy of it"}),
     # #100 finding 4: the answer comes back by reply, which has no prompt.
     ("rule-reply-not-scripted", "skill", " **The replier sends it with rule 1's block:**", " The replier sends it by hand:",
