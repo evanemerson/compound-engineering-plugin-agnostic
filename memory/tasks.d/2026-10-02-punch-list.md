@@ -1038,7 +1038,10 @@ L32. **Remove `.worktreeinclude` from every repo (operator rule, 2026-10-31).**
 L33. **A send that stores nothing is reported "sent", and the nudge still fires.**
     status: pending
     severity: P1
-    owner: unassigned (proposed: roles, as tab16@roles)
+    owner: roles (`tab16@roles`, dispatched via Orca 2026-10-31 on the
+      operator's "dispatch a worker for it now": `worker-start` on Run
+      `run_bf28fea0ea31`, task `task_274fcd5c69b6`, dispatch
+      `ctx_a6fe62d18144`, terminal `term_00c2e1ba…`, claude-opus-5-5)
     Source: artist360 tab24@merch-builder-v2 (L66), message
     `msg_6d1566506a61`, 2026-10-31 17:33Z, relaying the operator's request:
     "put it in the scripts orca nudge SH file in cepa ... have CEPA do deep
