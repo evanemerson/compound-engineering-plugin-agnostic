@@ -10,8 +10,17 @@
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
-# mutants run in parallel: the whole set took 3m19s on 2026-10-31 after L35
-# (`time bash scripts/check-orca-nudge-controls.sh`).
+# mutants run in parallel.
+#
+# Each mutant runs only the half of the check that can see it
+# (CEPA_NUDGE_CHECK_LEGS): an orca-nudge.sh mutant runs the nudge legs, and an
+# orca-send.sh mutant runs the send legs. The send legs run the shipped nudge
+# beside orca-send.sh, never argument 1, so a nudge mutant cannot change them;
+# the nudge legs never run orca-send.sh. The unmutated copy runs whole and as
+# both halves, and the halves must partition the whole run's cases. Cost, with
+# `time bash scripts/check-orca-nudge-controls.sh` on a 16-core box: 3m33s
+# when every mutant ran all 154 cases; see the PR #106 body for the time after
+# the split. On a 4-vCPU CI runner the old cost hit the job's 10-minute bound.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -243,18 +252,33 @@ def ok(msg):
 def miss(msg):
     global failed; failed += 1; print("MISS", msg)
 
-def run(script):
-    r = subprocess.run(["bash", CHECK, script], capture_output=True, text=True, timeout=300)
-    return r.returncode, {l[5:].split(":", 1)[0] for l in r.stdout.splitlines() if l.startswith("MISS ")}
+def check(args, legs="all"):
+    r = subprocess.run(["bash", CHECK] + args, capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, CEPA_NUDGE_CHECK_LEGS=legs))
+    lines = r.stdout.splitlines()
+    return (r.returncode, {l[5:].split(":", 1)[0] for l in lines if l.startswith("MISS ")},
+            {l[5:] for l in lines if l.startswith("PASS ")})
+
+def run(script, legs="all"):
+    return check([script], legs)[:2]
 
 src = open(SCRIPT, encoding="utf-8").read()
 clean = os.path.join(TMP, "clean.sh")
 open(clean, "w", encoding="utf-8").write(src)
-rc, misses = run(clean)
+with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+    (rc, misses, whole), (nrc, nmiss, nudge), (src_, smiss, send) = pool.map(
+        lambda legs: check([clean], legs), ("all", "nudge", "send"))
 if rc == 0 and not misses:
     ok("unmutated copy runs with no MISS")
 else:
     miss("unmutated copy: rc=%s, MISS %r" % (rc, sorted(misses)[:3]))
+# The halves split the whole run: each case runs in exactly one half.
+if nrc == src_ == 0 and not nmiss | smiss and nudge and send and not nudge & send \
+        and nudge | send == whole:
+    ok("the nudge half (%d) and send half (%d) partition the %d cases" % (len(nudge), len(send), len(whole)))
+else:
+    miss("halves: rc %s/%s, %d+%d cases, %d shared, %d not in either"
+         % (nrc, src_, len(nudge), len(send), len(nudge & send), len(whole - nudge - send)))
 
 def run_mutant(m):
     name, old, new, want = m
@@ -262,7 +286,7 @@ def run_mutant(m):
         return m, None, None
     path = os.path.join(TMP, name + ".sh")
     open(path, "w", encoding="utf-8").write(src.replace(old, new))
-    return (m,) + run(path)
+    return (m,) + run(path, "nudge")
 
 # Each check run makes its own temp dir, so the runs share nothing.
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -286,9 +310,7 @@ def run_send_mutant(m):
     os.mkdir(d)
     open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
     shutil.copy(SCRIPT, d)
-    r = subprocess.run(["bash", CHECK, SCRIPT, os.path.join(d, "orca-send.sh")],
-                       capture_output=True, text=True, timeout=300)
-    return m, r.returncode, {l[5:].split(":", 1)[0] for l in r.stdout.splitlines() if l.startswith("MISS ")}
+    return (m,) + check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
     results = list(pool.map(run_send_mutant, SEND_MUTANTS))
