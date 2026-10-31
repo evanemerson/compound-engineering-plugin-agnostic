@@ -851,6 +851,20 @@ L27. **Rule 7 fixes from the L26 probe.**
        command declares allowed-tools; cover it in the checker.
     Then coord@main re-runs probe C and an idle-recipient probe (L26).
 
+
+L28. **Rule 7 hardening from the L26 re-probe.**
+    status: pending
+    severity: P2
+    owner: roles (`tab13@roles`, dispatched via Orca 2026-10-31)
+    Operator chose (AskUserQuestion) "Small fix, then roll out". (1)
+    `orca-nudge.sh` prints the exact ending first line on a skip
+    (`Needed from you: tell <session> to check its Orca inbox`) so the
+    session copies it (C2c wrote `nothing`). (2) An `orca-ide` call retries
+    once on the WSL interop error `UtilAcceptVsock … accept4 failed 110`
+    (seen in §12a and `orchestration send` under concurrency). Then:
+    operator approves the global CLAUDE.md diff; hand-offs to
+    farmtender-laravel and contexthub (plan §8).
+
 ---
 
 ## How this list is used
