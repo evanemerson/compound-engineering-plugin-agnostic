@@ -19,8 +19,8 @@
 #   POINTER  — section 6 holds POINTER exactly once.
 #   SCOPE    — 12b rule 1 holds each phrase in SCOPE_HAS (its head and its
 #              send-scope bullets), and no longer holds SCOPE_LACKS.
-#   NUDGE    — 12b rule 1 holds NUDGE_LINE (the orca-nudge.sh call) exactly
-#              once, NUDGE_TEXT once, and each phrase in NUDGE_HAS (who is
+#   NUDGE    — 12b rule 1 holds NUDGE_LINE (the orca-send.sh call, which
+#              runs orca-nudge.sh only after a stored send) exactly once, NUDGE_TEXT once, and each phrase in NUDGE_HAS (who is
 #              nudged, who is not, the idle-state guard, the fixed text), and
 #              no raw `terminal send --terminal` command. Rule 7 holds no copy
 #              of the text and no `terminal send`: it cites rule 1's nudge.
@@ -88,8 +88,8 @@ RULE_PHRASES = [
     "One that could not be delivered is the operator's (Delivery, below).",
     "When the send and its nudge both succeeded, its own first line is `Needed from you: nothing`; otherwise rule 1 gives the line.",
     "A send whose nudge did not go is not delivered (rule 1, \"Only a sent nudge completes the delivery\").",
-    "sends it with `orchestration send --type question` to that coordinator's handle, never `--type status`",
-    "then applies rule 1's nudge.",
+    "sends it with rule 1's send block, `<type>` `question` (never `status`), to that coordinator's handle",
+    "then applies rule 1's nudge (the block's `nudge` mode).",
     "The answer comes back by `orchestration reply`, which prompts no one either:",
     "the session that replies then applies rule 1's nudge to the asker's handle",
     "unless the asker is a Run coordinator.",
@@ -116,7 +116,7 @@ SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
 SCOPE_LACKS = "is printed as before."
-NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-nudge.sh" "<cli>" "<target>"'
+NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-send.sh" "<cli>" "<target>" "<type>" "<nudge>" <<\'CEPA_BODY\' || true'
 NUDGE_HAS = ["**Send, then nudge.**",
              "after a send succeeds to a target that is not a Run coordinator",
              "A Run coordinator is a target taken from a live Orca preamble, or a `run:` or `dispatch:` address.",
@@ -131,7 +131,14 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "When the row says `working`, the script re-reads it for up to 2 minutes, a bound fixed in the script.",
              "It nudges if the row turns `done`.",
              "Still `working` at the bound, or `waiting`, `blocked`, an unknown state or no row from the start (no wait on those), it exits 1 and prints `Orca nudge skipped: <reason>`",
-             "Run the block with a tool timeout of at least 4 minutes.",
+             "Run the block with a tool timeout of at least 6 minutes.",
+             # L33: every send runs through orca-send.sh, which counts a send
+             # only by its stored result.message.id.
+             "**Every send runs through the block below.**",
+             "Never run `orchestration send` by hand for one of them.",
+             "only when Orca returned `\"ok\": true` with a `result.message.id` shaped `msg_…`, AND a re-read of the inbox found that id.",
+             "The reply's top-level `\"id\"` is not a message id: a refused send has one too.",
+             "`Orca send failed: no message stored — <reason>`",
              "**Only a sent nudge completes the delivery.**",
              "ends its run right after the send, its nudge (above) and the printed copy.",
              "the message stays unread and the delivery is not done.",
@@ -157,7 +164,9 @@ GRANTS = ["orca-ide status", "orca-ide skills get",
           "orca-ide orchestration send", "orca-ide orchestration ask",
           # L30: rule 8's peek, for a rule 7 question that awaits its answer.
           "orca-ide orchestration check",
-          'bash "$CEPA_ROOT/scripts/orca-nudge.sh"']
+          'bash "$CEPA_ROOT/scripts/orca-nudge.sh"',
+          # L33: rule 1's send, which runs the nudge after a stored send.
+          'bash "$CEPA_ROOT/scripts/orca-send.sh"']
 REPORT2_HAS = ["2. **A coordinator dispatches workers with Orca, by default.**",
                "It is the default because the preamble gives the worker a way back: its `worker_done` and `ask` reach the coordinator.",
                "**Any other start carries a `Report to:` line.**",
@@ -175,7 +184,12 @@ REPORT3_HAS = ["**A worker with no preamble sends its report, never only prints 
                "**A worker with neither** a preamble nor a `Report to:` line ends with the first line `Needed from you: tell <coordinator> that <worker> is done`",
                "When line 2 of its prompt is a `Report to:` line (rule 2), its final report sends",
                "with `<worker>` its own name and `<coordinator>` the coordinator its prompt names, else `your coordinator`.",
-               "It ends as rule 7's **Nobody** kind under that first line, with its Handoff block and no AskUserQuestion."]
+               "It ends as rule 7's **Nobody** kind under that first line, with its Handoff block and no AskUserQuestion.",
+               # L33: Orca refuses worker_done from a sender with no Dispatch.
+               "Its `<type>` is `handoff`, never `worker_done`: Orca refuses a `worker_done` from a sender with no Dispatch",
+               "A `worker_done` counts only when Orca returns `\"ok\": true` with a `result.message.id`"]
+# L33 review: a body line equal to the heredoc delimiter ends it early.
+NUDGE_HAS.append("indent by one space any line of the subject or body that is exactly `CEPA_BODY`")
 # command file -> (the heading of its final-report step, its citations of
 # rules 1, 2 or 8). Each citation is there exactly once outside fences, and
 # inside that step. check-orca-detection.sh pins the rule 3 half.

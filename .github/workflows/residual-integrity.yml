@@ -177,9 +177,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The autonomy section 12b rule 1 nudge runs only through
-      # plugins/cepa/scripts/orca-nudge.sh, which nudges an idle (`done`)
-      # target only. The check runs it against a
+      # The autonomy section 12b rule 1 send runs only through
+      # plugins/cepa/scripts/orca-send.sh, which counts a send only by its
+      # stored result.message.id, then runs orca-nudge.sh, which nudges an
+      # idle (`done`) target only. The check runs both against a
       # stub CLI and never reaches a real terminal; the controls mutate it.
       # Headers own the cases and limits. Static commands, no workflow-context
       # interpolation.

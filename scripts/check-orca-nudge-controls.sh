@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-nudge.sh. Each mutant is one substitution in
-# a temp copy of plugins/cepa/scripts/orca-nudge.sh. It must turn the check red
+# a temp copy of plugins/cepa/scripts/orca-nudge.sh, or of orca-send.sh
+# (SEND_MUTANTS). It must turn the check red
 # with EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped script changed shape and these mutants need re-reading.
 #
-# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY) has at least one
+# Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, SENDREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
-# mutants run in parallel, so the whole set runs in about a minute.
+# mutants run in parallel: the whole set took 2m21s on 2026-10-31
+# (`time bash scripts/check-orca-nudge-controls.sh`).
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -148,6 +150,53 @@ MUTANTS = [
     ("retry-vsock-text-only", ' && $cepa_nudge_e == *"accept4 failed 110"*', "", {"RETRY half the text"}),
     ("retry-accept-text-only", "$cepa_nudge_e == *UtilAcceptVsock* && ", "", {"RETRY other half of the text"}),
 ]
+# orca-send.sh mutants (punch-list L33). Each runs the check with the shipped
+# nudge as its first argument and the mutant send script, a copy of the shipped
+# nudge beside it, as its second.
+SEND_MUTANTS = [
+    ('send-msg-id-any', 're.fullmatch(r"msg_[0-9a-f]{6,32}", mid)', 're.fullmatch(r"\\S+", mid)',
+     {'STORE envelope uuid as message id'}),
+    ('send-ok-truthy', 'if d.get("ok") is not True:', 'if not d.get("ok"):',
+     {'STORE ok truthy'}),
+    ('send-ok-unchecked', 'if d.get("ok") is not True:', 'if False:',
+     {'STORE ok truthy', 'STORE ok false code not a word', 'STORE ok false'}),
+    ('send-rc-unchecked', '    if rc != 0:\n', '    if False:\n',
+     {'STORE ok reply with a non-zero exit'}),
+    ('send-no-reread', '  1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;', '  1) ;;',
+     {'STORE id in the inbox for another recipient', 'STORE inbox not ok', 'STORE id missing from the inbox'}),
+    ('send-inbox-parse-ignored', '  *) fail "the inbox could not be parsed, so $cepa_send_id is unconfirmed" ;;', '  *) ;;',
+     {'STORE inbox not JSON', 'STORE inbox wrong shape'}),
+    ('send-inbox-ok-unchecked', 'rows = d["result"]["messages"] if d.get("ok") is True else []', 'rows = d["result"]["messages"]',
+     {'STORE inbox not ok'}),
+    ('send-reread-any-recipient', ' and x.get("to_handle") == sys.argv[3]', '',
+     {'STORE id in the inbox for another recipient'}),
+    ('send-inbox-fail-ignored', '|| fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"', '|| true',
+     {'STORE inbox fails'}),
+    ('send-fail-continues', 'cepa_send_ending; exit 5; }', 'cepa_send_ending; }',
+     {'STORE not JSON', 'STORE ok reply with a non-zero exit', 'STORE ok false', 'STORE bad message id', 'STORE envelope uuid as message id', 'STORE send vsock twice', 'STORE bad recipient', 'STORE envelope id without result.message', 'STORE empty stdout', 'STORE send timeout not retried', 'STORE ok truthy', 'STORE inbox not ok', 'STORE inbox not JSON', 'STORE id in the inbox for another recipient', 'STORE JSON list', 'STORE id missing from the inbox', 'STORE warning-only result', 'STORE ok false code not a word', 'STORE inbox fails', 'STORE inbox wrong shape'}),
+    ('send-no-size-cap', '-le 28000 ]', '-le 99999999 ]',
+     {'SENDREF cap counts bytes', 'SENDREF over the size cap'}),
+    ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
+     {'SENDREF cap counts bytes'}),
+    ('send-type-worker_done', '  status|question|handoff|escalation|merge_ready) ;;', '  status|question|handoff|escalation|merge_ready|worker_done) ;;',
+     {'SENDREF type worker_done'}),
+    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* ]] ||', 'nudge) true ||',
+     {'SENDREF nudge a run address'}),
+    ('send-reroute-nudged', 'if [ "$cepa_send_to" != "$cepa_send_target" ]; then', 'if false; then',
+     {'STORE stored for another handle', 'STORE rerouted to a Run mailbox'}),
+    ('send-no-vsock-retry', '  for try in 1 2; do\n    timeout -k 2 15', '  for try in 1; do\n    timeout -k 2 15',
+     {'STORE send vsock twice', 'STORE send vsock once', 'STORE inbox vsock once'}),
+    ('send-timeout-retried', '[ "$cepa_send_rc" != 124 ] && [ "$cepa_send_rc" != 137 ] ||', 'true ||',
+     {'STORE send timeout not retried'}),
+    ('send-dashdash-body', '[[ $cepa_send_body != --* ]] || refuse "the body starts with --, which Orca reads as a flag"\n', '',
+     {'SENDREF body starts --'}),
+    ('send-code-raw', 're.fullmatch(r"[a-z_]{1,40}", code)', 'code',
+     {'STORE ok false code not a word'}),
+    ('send-target-loose', '^(term_[0-9a-f-]{36}|run:', '(term_[0-9a-f-]{36}|run:',
+     {'SENDREF target newline'}),
+    ('send-empty-body-ok', '[ -n "${cepa_send_body//[[:space:]]/}" ] || refuse "the body is empty"\n', '',
+     {'SENDREF empty body'}),
+]
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-ctl-")
 
@@ -184,6 +233,31 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
 for (name, old, new, want), rc, got in results:
     if rc is None:
         miss("%s: anchor found %d times, want 1" % (name, src.count(old))); continue
+    if rc == 1 and got == want:
+        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
+    else:
+        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
+
+SEND = "plugins/cepa/scripts/orca-send.sh"
+send_src = open(SEND, encoding="utf-8").read()
+
+def run_send_mutant(m):
+    name, old, new, want = m
+    if send_src.count(old) != 1:
+        return m, None, None
+    d = os.path.join(TMP, "send-" + name)
+    os.mkdir(d)
+    open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
+    shutil.copy(SCRIPT, d)
+    r = subprocess.run(["bash", CHECK, SCRIPT, os.path.join(d, "orca-send.sh")],
+                       capture_output=True, text=True, timeout=300)
+    return m, r.returncode, {l[5:].split(":", 1)[0] for l in r.stdout.splitlines() if l.startswith("MISS ")}
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    results = list(pool.map(run_send_mutant, SEND_MUTANTS))
+for (name, old, new, want), rc, got in results:
+    if rc is None:
+        miss("%s: anchor found %d times, want 1" % (name, send_src.count(old))); continue
     if rc == 1 and got == want:
         ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
     else:
