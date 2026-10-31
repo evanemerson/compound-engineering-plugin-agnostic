@@ -57,6 +57,9 @@
 #   Ending first line: Needed from you: paste the block below into <target>
 #   <target> is printed only when it passes the target check; any other value
 #   prints `the target session`.
+#   Last, on 4 and 5 only, one line about the alert file (THE ALERT, below):
+#   `Orca alert recorded: <file> (orca-health.sh reports it)`, or
+#   `Orca alert not recorded: <reason>`.
 #
 # WHY (punch-list L33, measured 2026-10-31 on Orca 1.4.245, WSL, probe
 # terminals in the `roles` worktree). A worker counted two sends as stored by
@@ -141,11 +144,52 @@ cepa_send_ending() {
     echo "Ending first line: Needed from you: paste the block below into the target session"
   fi
 }
-refuse() { echo "Orca send refused: $1"; cepa_send_ending; exit 4; }
-fail() { echo "Orca send failed: no message stored — $1"; cepa_send_ending; exit 5; }
+# THE ALERT (punch-list L34). Exit 4 and exit 5 print only into the sending
+# session's own output, so a session that then ends its turn tells no one.
+# Each of them also writes one alert file, which orca-health.sh (beside this
+# script) reads at a coordinator's per-turn check (§12b rule 8) and turns into
+# an operator question. One file per failure, never an append, so concurrent
+# senders never share a write. Every field is checked or replaced before it is
+# written; no Orca text goes in but the plain-word error code that is already
+# in the reason. The directory is CEPA_ORCA_ALERT_DIR, else
+# ${XDG_STATE_HOME:-$HOME/.local/state}/cepa/orca-alerts: on this machine,
+# never in a repo. A file that cannot be written prints
+# `Orca alert not recorded: <reason>`, and the exit code stays the same.
+cepa_send_alert() {
+  local kind=$1 why=$2 dir t repo wt me tgt typ tmp
+  dir=${CEPA_ORCA_ALERT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/orca-alerts}
+  [[ $dir == /* ]] || { echo "Orca alert not recorded: the alert directory is not an absolute path"; return 0; }
+  mkdir -p "$dir" 2>/dev/null || { echo "Orca alert not recorded: the alert directory could not be made"; return 0; }
+  t=$(date +%s 2>/dev/null) || t=
+  [[ $t =~ ^[0-9]{1,12}$ ]] || t=0
+  repo=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || repo=
+  case "$repo" in /*/.git) repo=${repo%/.git} repo=${repo##*/} ;; *) repo=unknown ;; esac
+  [[ $repo =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || repo=unknown
+  wt=$(git rev-parse --show-toplevel 2>/dev/null) || wt=
+  wt=${wt##*/}
+  [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
+  me=${ORCA_TERMINAL_HANDLE:-}
+  [[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
+  tgt=$cepa_send_target
+  [[ $tgt =~ ^(msg_[0-9a-f]{6,32}|term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]] || tgt=invalid
+  typ=$cepa_send_type
+  [[ $typ =~ ^[a-z_]{1,20}$ ]] || typ=invalid
+  why=$(LC_ALL=C; printf '%s' "${why:0:300}" | tr -c ' -~' '?')
+  tmp=$(mktemp "$dir/.new.XXXXXXXX" 2>/dev/null) || { echo "Orca alert not recorded: mktemp failed in the alert directory"; return 0; }
+  if printf '%s\n' "cepa-orca-alert 1" "time=$t" "kind=$kind" "repo=$repo" "worktree=$wt" \
+      "sender=$me" "target=$tgt" "type=$typ" "reason=$why" >"$tmp" 2>/dev/null \
+      && mv -f "$tmp" "$dir/$t-${tmp##*.new.}.alert" 2>/dev/null; then
+    echo "Orca alert recorded: $t-${tmp##*.new.}.alert (orca-health.sh reports it)"
+  else
+    rm -f "$tmp" 2>/dev/null
+    echo "Orca alert not recorded: the alert file could not be written"
+  fi
+}
+refuse() { echo "Orca send refused: $1"; cepa_send_ending; cepa_send_alert send_refused "$1"; exit 4; }
+fail() { echo "Orca send failed: no message stored — $1"; cepa_send_ending; cepa_send_alert send_failed "$1"; exit 5; }
 # Orca returned "ok": true and a msg_ id, but the reply did not match: the
 # message may be stored, so the line never says it stored nothing.
-unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_ending; exit 5; }
+unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_ending; cepa_send_alert send_unproven "$1"; exit 5; }
 
 [ $# -eq 4 ] || { [ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]; } \
   || refuse "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>"

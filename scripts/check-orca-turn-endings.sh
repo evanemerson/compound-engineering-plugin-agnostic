@@ -167,7 +167,9 @@ GRANTS = ["orca-ide status", "orca-ide skills get",
           "orca-ide orchestration check",
           'bash "$CEPA_ROOT/scripts/orca-nudge.sh"',
           # L33: rule 1's send, which runs the nudge after a stored send.
-          'bash "$CEPA_ROOT/scripts/orca-send.sh"']
+          'bash "$CEPA_ROOT/scripts/orca-send.sh"',
+          # L34: rule 8's health check, beside each coordinator peek.
+          'bash "$CEPA_ROOT/scripts/orca-health.sh"']
 REPORT2_HAS = ["2. **A coordinator dispatches workers with Orca, by default.**",
                "It is the default because the preamble gives the worker a way back: its `worker_done` and `ask` reach the coordinator.",
                "**Any other start carries a `Report to:` line.**",

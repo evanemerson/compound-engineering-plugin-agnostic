@@ -1673,7 +1673,11 @@ limits.
      prints that line: `Ending first line: Needed from you: paste the block
      below into <target>`. A block that printed no `Orca send stored` line,
      because a tool timeout killed it or it printed nothing, did not send:
-     use that same first line.
+     use that same first line. On a refused or failed send (exit 4 or 5) the
+     script also writes one alert file outside the repo and prints
+     `Orca alert recorded: <file>` (or `Orca alert not recorded: <reason>`),
+     so the failure outlives this session's output: the coordinator's health
+     check (rule 8) turns it into an operator question (punch-list L34).
    - **Send, then nudge.** Orca prompts a Run coordinator when a message
      reaches its mailbox. A plain session gets no prompt, so an idle one never
      reads the message (measured 2026-10-30, punch-list L26: the recipient
@@ -2145,6 +2149,58 @@ limits.
    - **A peek does not wait.** A coordinator blocked in rule 5's
      `check --wait` is already reading its inbox. The peek is for the turns
      in between, and it never replaces that wait.
+   - **A coordinator also runs the health check, beside each peek.** A
+     coordinator (§10) under Orca runs the block below at the start and at
+     the end of every turn, whether or not it awaits a reply. Its script,
+     `plugins/cepa/scripts/orca-health.sh`, reads and never sends. It prints
+     one `ORCA alert: <key> — <text>` line for each of these (its header
+     owns the measured sources and bounds, punch-list L34, Orca 1.4.245):
+     a send that `orca-send.sh` refused or could not prove stored (it
+     writes an alert file on exit 4 and 5); a worker of the bound Run that
+     `exited`, is parked on a prompt only a human can answer, sent no
+     heartbeat for 30 minutes, or has run 180 minutes with no `worker_done`;
+     a worker question unanswered after 10 minutes; this session's own
+     question with no reply after 30 minutes; and an Orca call that failed,
+     so the Run's health is unknown.
+     **When it prints an `ORCA alert:` line, the turn ends as rule 7's
+     The operator kind**, after any delivery the turn owes: the body lists
+     every alert line verbatim, the first line is the script's
+     `Ending first line: ` text, and the last action is one AskUserQuestion
+     that names the sessions to check. Its options are `I will check them
+     (Recommended)`, `Ignore them`, and, when the alerts allow one, a single
+     fix this session can run itself. After the answer, the session runs
+     the block's `ack` form with every key it showed, so the next turn asks
+     only about new alerts. Why: the operator, 2026-10-31: "how do i know a
+     session is hung? i need to know to check it so i can fix it." Exit 5
+     printed only into the sending session's own output, and a worker that
+     stopped heartbeating showed nothing: Orca's liveness reads the agent's
+     status, never its heartbeats (an agent probe that sent none stayed
+     `live` with no attention category), and NEEDS YOU lists a session only
+     while it has a prompt open.
+     ```bash
+     unset CEPA_ROOT
+     for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+              "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+       [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+     done
+     if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-health.sh" ]; then
+       echo "ORCA health: not run (orca-health.sh not found; set CEPA_PLUGIN_ROOT)"
+     else
+       bash "$CEPA_ROOT/scripts/orca-health.sh" "<cli>" || true
+     fi
+     ```
+     The `ack` form replaces the script call's arguments with
+     `"<cli>" ack <key> <key> …`, each key the text between `ORCA alert: `
+     and ` — `. A key is checked before use, so a key copied wrong is
+     refused (`ORCA health refused`), never acted on. A block that printed
+     no `ORCA health:` line did not run: the session says so in its body and
+     ends as it would without the check.
+   - **Stated limit.** The health check runs only inside a turn, so an idle
+     coordinator watches nothing until something wakes it (the limit
+     above). A dispatched worker never runs it: its own failed sends reach
+     its coordinator through the alert file.
    - **Stated limit.** A session that is idle runs no turn, so it peeks only
      when something wakes it: rule 1's nudge, Orca's prompt, or the operator.
      An idle Run coordinator that misses Orca's prompt still waits, so rule 8
