@@ -7,8 +7,8 @@ name: residual-integrity
 # whose eight occurrences were each found by a human noticing prose disagreed
 # with a field. `/cepa:sweep` and `/cepa:triage` read the field.
 #
-# The check is read-only and takes seconds. Its pass condition, its four legs,
-# and its stated limits are defined in scripts/check-residual-integrity.sh's
+# The residual-integrity check is read-only and takes seconds. Its pass
+# condition, its four legs, and its stated limits are defined in scripts/check-residual-integrity.sh's
 # own header (leg 1 itself is plugins/cepa/scripts/check-findings-file.sh,
 # which that script sources) — read them there rather than inferring them from this comment or
 # from any one leg's output verb.
@@ -53,8 +53,7 @@ jobs:
   # A new step goes in the job whose subject it shares; when a job nears half
   # its bound, split it again rather than raise the bound.
   check:
-    # Residual integrity, findings-file, sweep, worktree and fenced-block
-    # checks. About two minutes.
+    # Every check that is not an Orca check. About two minutes.
     # The bound exists because this job reads files reachable from an
     # untrusted PR branch, and the default is 360 minutes. Same rationale
     # as model-pins.yml's `check` job.
@@ -141,8 +140,8 @@ jobs:
         run: bash scripts/check-brain-client-args.sh
 
   orca-detection:
-    # Orca detection and turn endings. About three and a half minutes,
-    # almost all of it the detection controls.
+    # Orca detection and turn endings. About three and a half minutes
+    # (3m25s on PR #104), almost all of it the detection controls.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -172,13 +171,15 @@ jobs:
         run: bash scripts/check-orca-turn-endings-controls.sh
 
   orca-nudge:
-    # Orca nudge. About four minutes, almost all of it the controls.
+    # Orca nudge. About four minutes (4m05s on PR #104), almost all of it
+    # the controls.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The rule 1 nudge runs only through plugins/cepa/scripts/orca-nudge.sh,
-      # which nudges an idle (`done`) target only. The check runs it against a
+      # The autonomy section 12b rule 1 nudge runs only through
+      # plugins/cepa/scripts/orca-nudge.sh, which nudges an idle (`done`)
+      # target only. The check runs it against a
       # stub CLI and never reaches a real terminal; the controls mutate it.
       # Headers own the cases and limits. Static commands, no workflow-context
       # interpolation.
