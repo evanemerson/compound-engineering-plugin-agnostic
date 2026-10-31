@@ -789,6 +789,11 @@ L26. **Plan §10 probe test of rule 7, then rollout.**
     sent via Orca to each repo's main-checkout terminal: farmtender-laravel
     `msg_e9542ddacda0` (nudge skipped once on a `worktree ps` timeout, then
     sent), contexthub `msg_9f46605f4776` (nudged). Waiting on their PR numbers.
+    farmtender-laravel: DONE — PR #80 merged as `79a4311` (verified via
+    `gh api repos/Halyard-Digital/farmtender-laravel/pulls/80`); its reply
+    `msg_1b28469a3410` (12:11 UTC) sat unread in coord@main's inbox (see L29,
+    RC5). contexthub: its coordinator is `waiting` on an AskUserQuestion for
+    the operator about the edit.
     **Probe run 2026-10-30 (17:07-17:10 CDT, cepa 1.37.0, Haiku 4.5,
     terminal surface; states from `worktree ps --agent-wait`):**
     - A (Nobody): PASS — `done`; first line `Needed from you: nothing`; no
@@ -879,6 +884,57 @@ L28. **Rule 7 hardening from the L26 re-probe.**
     (seen in §12a and `orchestration send` under concurrency). Then:
     operator approves the global CLAUDE.md diff; hand-offs to
     farmtender-laravel and contexthub (plan §8).
+
+
+L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-31).**
+    status: pending
+    severity: P1
+    owner: coord@main (diagnosis); fix items below
+    Operator report with 8 screenshots: artist360 coord@main sent
+    coord@merch-builder-v2 L65; it started tab23; tab23 finished (PR #830,
+    Handoff `done`) but never reported back, so coord@merch-builder-v2 and
+    coord@main both stalled until the operator relayed it by hand. Same shape
+    for tab17 (PR #828 → coord@feat-u3b-supply-missing-hexes: "paste it here
+    or tell me it is done") and tab1@feat-streaming-tier-fee-columns (PR #835
+    → its coord: "Tell me when tab1 ends"). Measured 2026-10-31 07:30 CDT via
+    `orca-ide worktree ps --agent-wait` (read-only; nothing run in artist360).
+    Root causes, each with its evidence and whether the current fix covers it:
+    - RC1 (NOT covered). A worker started outside an Orca Run (`agent launch`
+      or a pasted prompt) has no channel back: no Dispatch → no `worker_done`,
+      and no coordinator handle → rule 7's delivery has no target. The worker
+      prompts (tab23, tab17, tab1) say "End with the Handoff block… stop", with
+      no send step. The global CLAUDE.md recommended `agent launch` for new
+      workers until 2026-10-31. Fix → L30.
+    - RC2 (covered for new senders, 1.37.2+). An idle recipient is never told
+      a message arrived (L26). Guarded nudge, verified C1.
+    - RC3 (covered for new sessions). Decisions written as text land in DONE
+      (coord@merch-builder-v2 D1/D3, helm, dpc-insider-www, artist360-docs…).
+      Rule 7 + the global CLAUDE.md edit.
+    - RC4 (operational). Long-lived sessions keep the rules they started with:
+      most coordinators are 7-22 h old (cepa ≤1.36, pre-Orca global rules), so
+      none of RC2/RC3's fixes reach them until restarted. farmtender's
+      coordinator replied without a nudge for this reason.
+    - RC5 (NOT covered). Orca's own prompt to a Run coordinator is
+      best-effort: coord@main got no prompt for `msg_1b28469a3410`, which
+      arrived while it was busy (12:11 UTC). Fix → L30: a session that awaits
+      replies peeks its inbox at the start and end of every turn.
+    Also seen: tab23's input box holds an unsent draft ("1 and 3") — exactly
+    the half-typed-draft risk accepted in L28; a nudge there would submit it.
+
+L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
+    status: pending
+    severity: P1
+    owner: unassigned (proposal; needs the operator's go)
+    1. A coordinator dispatches workers with `worker-start` on a Run (rule 2)
+       by default, so `worker_done` and `ask` reach it. When it must use
+       `agent launch` or a pasted prompt, line 2 of the worker prompt is
+       `Report to: <coordinator's ORCA_TERMINAL_HANDLE>`; rule 7 treats that
+       as an operator-given target, so the worker sends its Handoff block
+       there and nudges.
+    2. A session that has sent a message expecting a reply peeks its inbox
+       (`check --peek`) at the start and end of every turn until the reply
+       arrives, because Orca's prompt is best-effort.
+    3. Restart long-lived coordinators after the current merges (RC4).
 
 ---
 
