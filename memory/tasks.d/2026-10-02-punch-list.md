@@ -1130,7 +1130,24 @@ L35. **Root-cause hardening: can this class of silent loss happen anywhere else?
     residuals.
 
 L36. **Triage L33's open residuals and recommend fixes.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — tab1@integrity ran `/cepa:triage` (batch): all 7
+    deferred findings are `action_class: judgment`, so none auto-applied; no
+    PR (branch created with 0 commits, deleted; worktree parked at f97f6f0 —
+    verified). Operator accepted every recommendation (AskUserQuestion
+    "Accept all"):
+    - #19, #20, #21, #24 → folded into L35; sent to tab17@roles as
+      `msg_67bd4cb9c080` (via `orca-send.sh`, stored in dispatch
+      `ctx_b1afb520c506`'s mailbox).
+    - #22 (send-branch gate cases) → after L35 merges, on the final
+      `orca-send.sh`. Owner: whoever closes L35 dispatches it.
+    - #18 (byte cap vs WSL escaping) → won't fix: it fails loudly (exit 5,
+      `Orca send failed`), no silent loss.
+    - #23 (raw `orchestration send` grant) → won't fix until L35's checked
+      `worker_done` wrapper exists; reopen then.
+    #18 and #23 stay `status: deferred` in `todos/review-2026-10-31-184500.md`
+    with this entry as the decision record (a human-triage `skipped` would
+    remove them from the file; the evidence is worth keeping).
     severity: P2
     owner: integrity (`tab1@integrity`, dispatched via Orca 2026-10-31 on the
       same answer: task `task_cae146baf33d`, dispatch `ctx_6e30ef942095`;
