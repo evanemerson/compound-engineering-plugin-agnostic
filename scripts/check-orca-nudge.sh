@@ -219,7 +219,7 @@ def miss(msg):
     global failed; failed += 1; print("MISS", msg)
 
 def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
-        send='{"ok": true}', send_rc=0, env_extra=None, path=None, script=None, stdin=""):
+        send='{"ok": true}', send_rc=0, env_extra=None, path=None, script=None, stdin="", cwd=None):
     log, clock, slog = (os.path.join(TMP, f) for f in ("log", "clock", "sleeps"))
     open(log, "w").close()
     open(slog, "w").close()
@@ -255,7 +255,7 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
     env.update(STUB_PSDIR=psdir, STUB_PS_N=str(len(outs)), STUB_PS_RCN=str(len(rcs)))
     try:
         r = subprocess.run(["bash", script or SCRIPT] + args, env=env, capture_output=True, text=True,
-                           timeout=30, input=stdin)
+                           timeout=30, input=stdin, cwd=cwd)
         rc, out = r.returncode, r.stdout.strip().splitlines()
         STDERR[0] = r.stderr
     except subprocess.TimeoutExpired:
@@ -865,7 +865,10 @@ if LEGS in ("all", "send"):
 
     def alert_dir_case(name, adir, why_line):
         env = {"CEPA_ORCA_ALERT_DIR": adir, "STUB_OSEND": "", "STUB_OSEND_RC": "1", "STUB_INBOX": inbox()}
-        got_rc, out, calls = run(["orca-ide", H, "question", "nudge"], script=SEND_SCRIPT, stdin=STDIN, env_extra=env)
+        # From the temp dir: a mutant that uses a relative directory writes
+        # there, never into the repo.
+        got_rc, out, calls = run(["orca-ide", H, "question", "nudge"], script=SEND_SCRIPT, stdin=STDIN, env_extra=env,
+                                 cwd=TMP)
         good = got_rc == 5 and out[-1:] == ["Orca alert not recorded: " + why_line]
         (ok if good else miss)(name if good else "%s: rc=%s out=%r" % (name, got_rc, out))
 
@@ -1046,7 +1049,7 @@ if LEGS in ("all", "health"):
     rc, out, calls = run([], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": HDIR})
     good = rc == 4 and out == ["ORCA health refused: usage: orca-health.sh <cli> [ack <key>...]"] and calls == []
     (ok if good else miss)("HEALTHREF no args" if good else "HEALTHREF no args: rc=%s out=%r" % (rc, out))
-    rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": "rel/dir"})
+    rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": "rel/dir"}, cwd=TMP)
     good = rc == 4 and out == ["ORCA health refused: the alert directory is not an absolute path"] and calls == []
     (ok if good else miss)("HEALTHREF relative alert directory" if good else
                            "HEALTHREF relative alert directory: rc=%s out=%r" % (rc, out))
