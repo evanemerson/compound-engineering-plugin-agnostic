@@ -16,14 +16,15 @@
 #              once, and its text (whitespace folded, up to the next numbered
 #              rule or the line after the list) holds each phrase in
 #              RULE_PHRASES. The phrases pin clauses, not the whole rule.
-#   POINTER  — section 6 holds POINTER exactly once.
+#   POINTER  — section 6 holds POINTER exactly once outside fenced blocks.
 #   SCOPE    — 12b rule 1 holds each phrase in SCOPE_HAS (its head and its
 #              send-scope bullets), and no longer holds SCOPE_LACKS.
 #   NUDGE    — 12b rule 1 holds NUDGE_LINE (the orca-send.sh call, which
 #              runs orca-nudge.sh only after a stored send) exactly once, NUDGE_TEXT once, and each phrase in NUDGE_HAS (who is
 #              nudged, who is not, the idle-state guard, the fixed text), and
 #              no raw `terminal send --terminal` command. Rule 7 holds no copy
-#              of the text and no `terminal send`: it cites rule 1's nudge.
+#              of the text, no `terminal send` and no `--enter`: it cites
+#              rule 1's nudge.
 #              The script itself is tested by check-orca-nudge.sh.
 #   REPORT   — 12b rules 1-3 give every worker a way back (punch-list L30,
 #              RC1): rule 2 makes worker-start the default and puts a
@@ -276,9 +277,26 @@ if i7 >= 0:
 for p in RULE_PHRASES:
     check(fold(p) in r7, "RULE: rule 7 holds %s" % p)
 
+def unfenced(s):
+    # Drop fenced blocks, matching the closing fence's character and length.
+    out, fence = [], None
+    for line in s.split("\n"):
+        m = re.match(r"\s*(`{3,}|~{3,})", line)
+        if fence is None and m:
+            fence = m.group(1)
+        elif fence is not None and m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
+                and line.strip() == m.group(1):
+            fence = None
+        elif fence is None:
+            out.append(line)
+    return "\n".join(out)
+
 # --- POINTER ---
 s6 = between(skill, "\n## 6.", "\n## 7.") or ""
-check(fold(s6).count(POINTER) == 1, "POINTER: section 6 holds %s once" % POINTER)
+# Fenced copies do not count: a pointer moved into a fence is not read as the
+# rule (review-2026-10-30-161650 #21).
+check(fold(unfenced(s6)).count(POINTER) == 1,
+      "POINTER: section 6 holds %s once outside fences" % POINTER)
 
 # --- SCOPE ---
 r1 = fold(between(b12, "\n1. **Hand-offs", "\n2. **") or "")
@@ -293,7 +311,9 @@ check(r1 != "" and NUDGE_RAW not in r1, "NUDGE: rule 1 holds no raw terminal sen
 for p in NUDGE_HAS:
     check(p in r1, "NUDGE: rule 1 holds %s" % p)
 # A missing rule 7 is RULE's finding, so an empty r7 passes here.
-check(NUDGE_HEAD not in r7 and "terminal send" not in r7,
+# `--enter` too: a restatement in other words still types the line
+# (review-2026-10-30-192000 #9).
+check(NUDGE_HEAD not in r7 and "terminal send" not in r7 and "--enter" not in r7,
       "NUDGE: rule 7 cites the nudge and holds no copy of it")
 
 # --- PEEK ---
@@ -312,7 +332,7 @@ r7c = between(r7, "**A coordinator.**", "- **Delivery, in every kind.**") or ""
 check(r7 == "" or (r7.count(PEEK_CITE) == 1 and PEEK_CITE in r7c),
       "PEEK: rule 7's coordinator kind holds %s" % PEEK_CITE)
 
-# --- REPORT (skill half; the command half runs after unfenced() below) ---
+# --- REPORT (skill half; the command half runs with CITES below) ---
 r2 = fold(between(b12, "\n2. **", "\n3. **") or "")
 r3 = fold(between(b12, "\n3. **", "\n4. **") or "")
 for p in REPORT1_HAS:
@@ -323,20 +343,6 @@ for p in REPORT3_HAS:
     check(p in r3, "REPORT: rule 3 holds %s" % p)
 
 # --- CITES and GRANTS ---
-def unfenced(s):
-    # Drop fenced blocks, matching the closing fence's character and length.
-    out, fence = [], None
-    for line in s.split("\n"):
-        m = re.match(r"\s*(`{3,}|~{3,})", line)
-        if fence is None and m:
-            fence = m.group(1)
-        elif fence is not None and m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
-                and line.strip() == m.group(1):
-            fence = None
-        elif fence is None:
-            out.append(line)
-    return "\n".join(out)
-
 def step(u, head):
     # The text of the step under `head`, up to a heading of the same or a
     # higher level; None when the heading is gone.

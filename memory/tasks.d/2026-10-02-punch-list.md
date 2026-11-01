@@ -1488,7 +1488,9 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
     status: pending
     severity: P2
     owner: roles (`tab25@roles`, dispatched via Orca 2026-11-01 on the
-      operator's AskUserQuestion "One worker for the 4 P2s")
+      operator's AskUserQuestion "One worker for the 4 P2s": task
+      `task_5bd477f61f8b`, dispatch `ctx_a418f891de98`, branch
+      `fix/roles/rename-rebind-hardening`)
     1. Rule 6 rename block runs `<cli>` unchecked and unquoted
        (`memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md` line 11,
        security-sentinel: `orca-ide;touch${IFS}/tmp/x` runs the touch).
@@ -1496,6 +1498,114 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
        (`memory/tasks.d/2026-11-01-fix-roles-run-rebind-on-restart.md` lines
        5-7): no gate runs the rule 2 re-bind block; two re-binders can both
        print `done`; a `run:`-only Run is taken with no ownership check.
+
+L47. **Too many send blocks are refused: 4 of the first sends after the reboot.**
+    status: pending
+    severity: P2
+    owner: unassigned — after L46 merges (same files: §12b rule 1, the
+      send script and `check-orca-nudge.sh`)
+    Measured 2026-11-01 by coord@main from the alert files in
+    `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
+    senders' terminals (Orca `terminal read`, read only). Sessions started on
+    cepa 1.45.0 had 4 refused sends in 8 minutes:
+    - helm `term_35229546…`: message file named `msg-takeover.txt`, not
+      `cepa-send-<name>.txt`.
+    - dpc-pro `term_ac4053b1…` (3): a wrong file name; a file the script had
+      already read and removed, so it was gone at the retry ("not a regular
+      file this user owns"); and `nudge: nudge` for a `dispatch:` target
+      ("only a term_ handle is nudged").
+    Each sender retried, got `Orca send stored`, and acked its alert. So the
+    guard worked: nothing was lost, and nothing ran. But each refusal costs a
+    turn and an alert. Fix candidates: a `run:`/`dispatch:` target with
+    `nudge` is sent as no-nudge, not refused (Orca already delivers it);
+    rule 1 shows the exact Write path for the message file; the refusal
+    message for a missing file says that the script removes a file once it
+    reads it, so a retry needs a new file. Keep the security checks.
+    Also (L48 D3, operator "Accept all"): drop `orca-health.sh`'s
+    pre-1.43.0 and pre-1.44.0 REASONS groups (review-2026-10-31-233000 #10).
+
+L48. **Triage the open P3 backlog (recent shards and older open todos).**
+    status: completed
+    CLOSED 2026-11-01 — PR #115 merged `160e03d` (operator's AskUserQuestion
+    "Merge when green"). 1 finding applied, 15 closed with evidence, ~50 left
+    for after L46, decisions D1-D10 accepted as recommended ("Accept all")
+    and filed as L49-L53 (+ D3 into L47). Head b397bf2 = Handoff `Head:`, CI
+    10/10 green; main had gained only this file since the base. No plugin
+    change. integrity parked, branch deleted, tab6 closed (absent from
+    `terminal list`). Record: `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+    severity: P3
+    owner: integrity (`tab6@integrity`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "Triage the P3 backlog": task
+      `task_975fa81c480b`, dispatch `ctx_191959f15dc1`, branch
+      `chore/integrity/p3-backlog-triage`)
+    Scope: open `- [ ] P3` lines in `memory/tasks.d/2026-10-3*.md` and
+    `2026-11-*.md` (60 by `grep -cE '^\s*- \[ \] P3'`, before the run) and the
+    open findings in 6 `todos/` files (`grep -lE 'status:\s*(pending|ready)'
+    todos/*.md`). Skips L46's two shards and files, and L47. Safe fixes
+    applied; the rest comes back as one decision table for the operator.
+
+L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4 and 6.**
+    status: completed
+    CLOSED 2026-11-01 — PR #117 merged `882a7b2` (1.45.1), on the operator's
+    AskUserQuestion "Merge when green". Head bd68adf = Handoff `Head:`, CI
+    10/10 green; main had gained only this file since the base. integrity
+    parked, branch deleted, tab7 closed (absent from `terminal list`); both
+    hops run, freshness rc=0 (loaded copy contains 882a7b2). Review: 5 P3,
+    4 applied, 1 deferred (no control pins first-match `q`). Shard:
+    `memory/tasks.d/2026-11-01-chore-integrity-l48-cleanup-batch.md`.
+    severity: P3
+    owner: integrity (`tab7@integrity`, dispatched via Orca 2026-11-01:
+      task `task_bb4fd07dec6c`, dispatch `ctx_eaaae10c4e7c`, branch
+      `chore/integrity/l48-cleanup-batch`)
+    Operator accepted all of L48's recommendations, 2026-11-01. Items in
+    `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`: D1 turn-endings checker (POINTER outside fences; `--enter` in rule
+    7's guard — patch already tested by tab6); D2 close six findings with no
+    change (status only); D6 `check-findings-file.sh` `sed …p | head -1` →
+    `sed -n '…{p;q}'` (patch bump), accept #3; D9 fix the dangling PR #107
+    pointer in the session-names shard; #115 review findings 4 and 6 (two
+    one-line wording fixes). Must not touch L46 files.
+
+L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
+    status: pending
+    severity: P3
+    owner: unassigned (its own worker)
+    review-2026-10-31-230000 #5, judgment 80. The repo rule: such a value is
+    read through a quoted heredoc and checked inside the block. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+
+L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
+    status: pending
+    severity: P3
+    owner: unassigned (via `/cepa:compound`)
+    review-2026-10-30-192000 #16. L48 measured 7 shard lines that lagged
+    findings or punch-list items already closed. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+
+L52. **Detection-gate control gaps (L48 D7) — after L46.**
+    status: pending
+    severity: P3
+    owner: unassigned (a test-only worker, after L46 merges)
+    152000 #11, session-names finding 12, hostile `json.py` fixture (094500
+    #24 + 125030 #15; #15 also covers the rule 6 block). See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+
+L53. **`orca-health.sh` hardening batch (L48 D4) — after L47.**
+    status: deferred
+    severity: P3
+    owner: unassigned (one worker after L47 merges)
+    review-2026-10-31-214500 #21 #23 #24 #29 #31 #32, review-2026-10-31-230000
+    #7. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+
+L54. **Two reviews in the same second write one findings file; the second overwrites the first.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From L49 (tab7@integrity, operator chose to file it 2026-11-01).
+    Findings files are named `todos/review-YYYY-MM-DD-HHMMSS.md`. PR #108
+    (`8d71f58`) replaced PR #107's `todos/review-2026-10-31-213000.md`
+    (`cd40fdb`), so PR #107's 13 findings exist only in git history. This
+    is the shared-sink rule (repo CLAUDE.md "Shared sinks are sharded or
+    serialized"): the path needs a per-run component (branch slug or PR
+    number) composed with autonomy §5 `slug(x)`, and every reader of
+    `todos/review-*.md` must accept the new name. Source line:
+    `memory/tasks.d/2026-11-01-chore-integrity-l48-cleanup-batch.md` line 11.
 
 ---
 

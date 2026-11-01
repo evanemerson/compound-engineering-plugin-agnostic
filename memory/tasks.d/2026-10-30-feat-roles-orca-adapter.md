@@ -16,7 +16,7 @@ Canonical findings: `todos/review-2026-10-30-152000.md` (findings 3, 7, 9, 11).
 
 - [ ] P2 — On stock macOS (no `timeout`) a valid `ORCA_CLI_COMMAND` reads absent; limit stated in §12a, fallback (`gtimeout` or a python3-bounded probe) not built — `plugins/cepa/skills/autonomy/SKILL.md` §12a (finding 3).
 - [ ] P3 — Probe failure reason covers stale CLI, timeout and crash alike; tracked as finding 21 above — `plugins/cepa/skills/autonomy/SKILL.md` §12a (finding 7).
-- [ ] P3 — Punch-list L21 text predates the probe and send-and-print decisions; coord@main owns it — `memory/tasks.d/2026-10-02-punch-list.md` L21 (finding 9).
+- [x] P3 — Punch-list L21 text predates the probe and send-and-print decisions; coord@main owns it — `memory/tasks.d/2026-10-02-punch-list.md` L21 (finding 9). Closed 2026-11-01 by triage: L21 CLOSED (PR #94).
 - [ ] P3 — `env-stale-not-ok`, `env-bare-orca-darwin`, `setsid-grandchild-holds-stdout` have no control naming them — `scripts/check-orca-detection-controls.sh` (finding 11).
 
 ## Proposed CLAUDE.md rules (learnings, PR #94)

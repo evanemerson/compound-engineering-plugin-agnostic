@@ -315,7 +315,11 @@ _cff_counters() {
   # arithmetic reads `09` as invalid octal and aborts the whole top-level
   # command — in the repo checker, the rest of the walk — with no MISS of its
   # own. A declared `total: 09` must read as 9, like the spec means it.
-  declared_total=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*total:[[:space:]]*0*([0-9]+).*/\1/p' | head -1)
+  # Each capture takes the FIRST match with `{s//…/p;q;}` and reads a
+  # here-string: no pipe, so neither side can take SIGPIPE under `pipefail`
+  # (review-2026-10-31-213000 #4; `| head -1` could, and so could a `printf |`
+  # feeding a sed that quits early).
+  declared_total=$(sed -nE '/^[[:space:]]*total:[[:space:]]*0*([0-9]+).*/{s//\1/p;q;}' <<<"$block")
   # Same class as the missing-`summary:` case above: a summary block that
   # parses but carries no `total:` is a misspelled or truncated block, and
   # every downstream sub-invariant is derived from `total`. Falling through
@@ -401,13 +405,13 @@ _cff_counters() {
   # even on a file whose body carries a non-tallyable shape.
   state_sum=0
   for s in $STATES; do
-    v=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
+    v=$(sed -nE "/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/{s//\1/p;q;}" <<<"$block")
     state_sum=$((state_sum + ${v:-0}))
   done
   sev_sum=0
   sev_missing=0
   for s in p1 p2 p3; do
-    v=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
+    v=$(sed -nE "/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/{s//\1/p;q;}" <<<"$block")
     [ -n "$v" ] || sev_missing=1
     sev_sum=$((sev_sum + ${v:-0}))
   done
@@ -467,7 +471,7 @@ _cff_counters() {
   # of skip behave differently and this must not assume one: human-triage skips
   # are REMOVED from the body, /cepa:resolve-pr verdict skips are RETAINED in
   # it. A file with only retained skips has no gap.
-  declared_skipped=$(printf '%s\n' "$block" | sed -nE 's/^[[:space:]]*skipped:[[:space:]]*0*([0-9]+).*/\1/p' | head -1)
+  declared_skipped=$(sed -nE '/^[[:space:]]*skipped:[[:space:]]*0*([0-9]+).*/{s//\1/p;q;}' <<<"$block")
   declared_skipped=${declared_skipped:-0}
   body_skipped=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}skipped${VAL_TAIL}" || true)
   _cff_numeric "$f" "$body_skipped" || return 0
@@ -488,7 +492,7 @@ _cff_counters() {
   # 1b — agreement, per state. Each counter equals its body count plus the
   # human-triage removals, which only `skipped` can carry.
   for s in $STATES; do
-    declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
+    declared=$(sed -nE "/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/{s//\1/p;q;}" <<<"$block")
     declared=${declared:-0}
     actual=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}status${FIELD_POST}${s}${VAL_TAIL}" || true)
     _cff_numeric "$f" "$actual" || return 0
@@ -510,7 +514,7 @@ _cff_counters() {
     _cff_info "residual: ${f} declares no complete p1/p2/p3 set — the severity sum and distribution were not checked"
   else
     for s in p1 p2 p3; do
-      declared=$(printf '%s\n' "$block" | sed -nE "s/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/\1/p" | head -1)
+      declared=$(sed -nE "/^[[:space:]]*${s}:[[:space:]]*0*([0-9]+).*/{s//\1/p;q;}" <<<"$block")
       up=$(printf '%s' "$s" | tr '[:lower:]' '[:upper:]')
       actual=$(printf '%s\n' "$body" | grep -ciE "${FIELD_PRE}severity${FIELD_POST}${up}${VAL_TAIL}" || true)
       _cff_numeric "$f" "$actual" || return 0
