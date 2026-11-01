@@ -48,7 +48,8 @@ jobs:
   # cancelled job reads as a red check on every PR. The jobs run in parallel,
   # each under its own bound. The `check` job's comments below on step order
   # and on the bound apply to every job: in each job a checker runs before its
-  # controls, and every step keeps the `if: always()` it had. Per-job times are
+  # controls (a nudge shard job runs its baseline check inside the controls),
+  # and every step keeps the `if: always()` it had. Per-job times are
   # hosted step times from run 41210093858 (`gh run view <id> --json jobs`).
   # A new step goes in the job whose subject it shares; when a job nears half
   # its bound, split it again rather than raise the bound.
@@ -170,13 +171,16 @@ jobs:
         if: always()
         run: bash scripts/check-orca-turn-endings-controls.sh
 
-  # The nudge controls run as three shards, one job each (punch-list L42).
-  # One job ran them all and took 7m24s-7m58s of its 10-minute bound after
+  # The nudge controls run as N shards, one job each (punch-list L42). One
+  # job ran them all and took 7m24s-7m58s of its 10-minute bound after
   # PR #110 (runs 41264491281 and 41265227855, `gh run view <id> --json jobs`).
-  # Each shard runs every third mutant; the controls fail unless this file
-  # runs each of shards 1/3 to 3/3 exactly once, so keep all three run: lines
-  # literal. When a shard nears half its bound, raise N here (add a job, and
-  # change every --shard I/N) rather than raise the bound.
+  # Each shard runs every Nth mutant. The controls read N from the number of
+  # `--shard` run: lines here and fail unless shards 1/N to N/N each appear
+  # once, in the plain step form, one per job, with no job-level `if:` or
+  # continue-on-error. Only the first job runs the check itself: every shard
+  # runs the unmutated copy through the check before its mutants. When a
+  # shard nears half its bound, add a job and renumber every --shard I/N
+  # rather than raise the bound.
   orca-nudge:
     # The nudge check, then controls shard 1/3.
     runs-on: ubuntu-latest

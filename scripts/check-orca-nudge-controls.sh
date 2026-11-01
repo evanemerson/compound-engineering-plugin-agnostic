@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-nudge.sh. Each mutant is one substitution in
-# a temp copy of plugins/cepa/scripts/orca-nudge.sh, or of orca-send.sh
-# (SEND_MUTANTS). It must turn the check red
+# a temp copy of plugins/cepa/scripts/orca-nudge.sh, of orca-send.sh
+# (SEND_MUTANTS), or of orca-health.sh (HEALTH_MUTANTS). It must turn the
+# check red
 # with EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
@@ -23,12 +24,14 @@
 # `--shard I/N` runs only mutants I, I+N, I+2N, ... of the one list that holds
 # every nudge, send and health mutant in order (no argument means 1/1, every
 # mutant). Each shard still runs the unmutated copy and the partition control
-# first. CI runs shards 1/N to N/N as N parallel jobs (punch-list L42), and a
-# control here fails unless residual-integrity.yml runs each of them exactly
-# once, so a dropped job cannot silently drop mutants. Cost history: 3m33s on
-# a 16-core box when every mutant ran all 154 cases; the PR #106 body has the
-# time after the part split; PR #110 took the one hosted job to 7m24s of its
-# 10-minute bound; the PR that added `--shard` has the per-shard times.
+# first. CI runs shards 1/N to N/N as N parallel jobs (punch-list L42). Controls
+# here fail unless residual-integrity.yml runs each shard exactly once, one per
+# job, never disabled, and unless every shard of that N is non-empty; planted
+# workflow edits prove that check can fail. So a dropped job cannot silently
+# drop mutants. Cost history: 3m33s on a 16-core box when every mutant ran all
+# 154 cases; the PR #106 body has the time after the part split; after PR #110
+# the one hosted job took 7m24s-7m58s of its 10-minute bound (runs 41264491281,
+# 41265227855); the PR #111 body has the per-shard times.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -404,25 +407,100 @@ def ok(msg):
 def miss(msg):
     global failed; failed += 1; print("MISS", msg)
 
-# The shards split the mutants: each name is unique, so each runs in exactly
-# one shard, and the workflow runs every shard of one N exactly once. Without
-# the second half, a deleted or renamed CI job silently drops 1/N of the
-# mutants and every remaining job stays green.
+# Names must be unique: each result line, and each mutant's temp path, is
+# keyed by name. Shard membership comes from the list index, not the name.
 names = [m[0] for _, m in ALL]
 dup = sorted({n for n in names if names.count(n) > 1})
 if dup:
     miss("mutant names are not unique: %r" % dup[:3])
 else:
-    ok("the %d mutant names are unique, so each runs in exactly one of N shards" % len(names))
+    ok("the %d mutant names are unique" % len(names))
+
+def shard_split(n):
+    """The mutant names each of shards 1..n runs, as a list of n lists."""
+    return [[name for i, name in enumerate(names) if shard_of(i, n) == s] for s in range(1, n + 1)]
+
+def wf_problems(wf):
+    """What is wrong with how the workflow text runs the shards; [] if sound.
+    Each `--shard I/N` run line must be the plain step form, in its own job,
+    with `if: always()` on the step, no job-level `if:`, and no
+    continue-on-error, and the lines must be 1/N..N/N, each once. Any other
+    non-comment line that names the controls script is a problem, so a block
+    scalar (`run: |`) or a quoted form fails closed instead of being skipped."""
+    probs, specs = [], []
+    body = wf.split("\njobs:\n", 1)[-1]
+    for job in re.split(r"(?m)^  (?=[A-Za-z0-9_-]+:[ \t]*$)", body)[1:]:
+        jname, lines = job.split(":", 1)[0], job.splitlines()
+        hits = []
+        for k, line in enumerate(lines):
+            if "check-orca-nudge-controls.sh" not in line or line.lstrip().startswith("#"):
+                continue
+            m = re.fullmatch(r"        run: bash scripts/check-orca-nudge-controls\.sh --shard (\S+)", line)
+            if not m:
+                probs.append("%s: unrecognized line %r" % (jname, line.strip()))
+                continue
+            hits.append(m.group(1))
+            step = k
+            while step > 0 and not lines[step].startswith("      - "):
+                step -= 1
+            if "        if: always()" not in lines[step:k]:
+                probs.append("%s: the --shard %s step has no `if: always()`" % (jname, m.group(1)))
+        if not hits:
+            continue
+        specs += hits
+        if len(hits) > 1:
+            probs.append("%s: runs %d shards in one job" % (jname, len(hits)))
+        if any(re.match(r"    if:", l) for l in lines):
+            probs.append("%s: job-level `if:`" % jname)
+        if any(re.match(r"\s+continue-on-error:", l) for l in lines):
+            probs.append("%s: continue-on-error" % jname)
+    want = ["%d/%d" % (i, len(specs)) for i in range(1, len(specs) + 1)]
+    if not specs or sorted(specs) != sorted(want):
+        probs.append("shards %r, want each of %r once" % (specs, want))
+    return probs, len(specs)
+
+# Without this, a deleted, disabled or merged CI job silently drops 1/N of the
+# mutants while every remaining job stays green.
 wf = open(WORKFLOW, encoding="utf-8").read()
-runs = re.findall(r"^\s*run: bash scripts/check-orca-nudge-controls\.sh(.*)$", wf, re.M)
-specs = [r.strip() for r in runs]
-want_n = len(specs)
-want = ["--shard %d/%d" % (i, want_n) for i in range(1, want_n + 1)]
-if want_n and sorted(specs) == sorted(want):
-    ok("%s runs the controls as shards 1/%d to %d/%d, each once" % (WORKFLOW, want_n, want_n, want_n))
+probs, want_n = wf_problems(wf)
+if probs:
+    miss("%s: %s" % (WORKFLOW, "; ".join(probs)))
 else:
-    miss("%s runs the controls with %r, want each of %r once" % (WORKFLOW, specs, want))
+    ok("%s runs shards 1/%d to %d/%d, one per job, each once" % (WORKFLOW, want_n, want_n, want_n))
+# The shards of that N and of this run's N each partition the mutants, and no
+# shard is empty: an empty shard passes on its baseline alone.
+for n in sorted({want_n or 1, NSHARDS}):
+    parts = shard_split(n)
+    if sorted(sum(parts, [])) == sorted(names) and all(parts):
+        ok("shards 1/%d to %d/%d partition the %d mutants, none empty" % (n, n, n, len(names)))
+    else:
+        miss("shards of N=%d: sizes %r, %d of %d names covered"
+             % (n, [len(x) for x in parts], len(set(sum(parts, []))), len(names)))
+# Planted workflow edits, checked in process: each must make wf_problems red.
+J2, J3 = "\n  orca-nudge-2:\n", "\n  orca-nudge-3:\n"
+R3 = "        run: bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"
+WF_PLANTS = [
+    ("two shards in one job", J2, "\n"),
+    ("job-level if: false", J3, J3 + "    if: false\n"),
+    ("continue-on-error on a job", J3, J3 + "    continue-on-error: true\n"),
+    ("shard 3 job deleted", wf[wf.find(J3):] if J3 in wf else J3, "\n"),
+    ("shard 3 run line commented out", R3, "        # run: bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"),
+    ("shard 3 run line in a block scalar", R3,
+     "        run: |\n          bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"),
+    ("shard 3 run line with || true", R3, R3[:-1] + " || true\n"),
+    ("a quoted mention beside the shard 3 run line", R3,
+     R3 + "      - run: echo bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"),
+    ("shard 2 step without if: always()",
+     "        if: always()\n        run: bash scripts/check-orca-nudge-controls.sh --shard 2/3\n",
+     "        run: bash scripts/check-orca-nudge-controls.sh --shard 2/3\n"),
+]
+for label, old, new in WF_PLANTS:
+    if wf.count(old) != 1:
+        miss("workflow plant %r: anchor found %d times, want 1" % (label, wf.count(old)))
+    elif wf_problems(wf.replace(old, new))[0]:
+        ok("workflow plant goes red: %s" % label)
+    else:
+        miss("workflow plant stays green: %s" % label)
 
 def check(args, legs="all"):
     r = subprocess.run(["bash", CHECK] + args, capture_output=True, text=True, timeout=300,
@@ -455,25 +533,35 @@ else:
          % (nrc, src_, hrc, len(nudge), len(send), len(hlth), len(whole - nudge - send - hlth)))
 
 def run_mutant(part, m):
+    try:
+        return run_part(part, m)
+    except (subprocess.SubprocessError, OSError) as e:
+        return -1, {"exception %s" % type(e).__name__}
+
+def run_part(part, m):
+    # Each part writes under its own directory, so names only need to be
+    # unique within a part for the paths to be distinct.
     name, old, new, want = m
+    base = os.path.join(TMP, part)
+    os.makedirs(base, exist_ok=True)
     if part == "nudge":
         if src.count(old) != 1:
             return None, src.count(old)
-        path = os.path.join(TMP, name + ".sh")
+        path = os.path.join(base, name + ".sh")
         open(path, "w", encoding="utf-8").write(src.replace(old, new))
         return run(path, "nudge")
     if part == "send":
         # The send legs run the shipped nudge beside orca-send.sh.
         if send_src.count(old) != 1:
             return None, send_src.count(old)
-        d = os.path.join(TMP, "send-" + name)
+        d = os.path.join(base, name)
         os.mkdir(d)
         open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
         shutil.copy(SCRIPT, d)
         return check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
     if health_src.count(old) != 1:
         return None, health_src.count(old)
-    path = os.path.join(TMP, "health-" + name + ".sh")
+    path = os.path.join(base, name + ".sh")
     open(path, "w", encoding="utf-8").write(health_src.replace(old, new))
     return check([SCRIPT, SEND, path], "health")[:2]
 
