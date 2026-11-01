@@ -1427,7 +1427,18 @@ L43. **Orca chat UI shows an old message below new ones, so live output moves up
     live terminals (ghost rows from ended sessions).
 
 L45. **A restarted coordinator does not re-bind its Run, so Orca prompts a dead terminal.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #113 merged `83cc1f9` (1.45.0), on the operator's
+    AskUserQuestion "Merge #113". `orca-rebind.sh` + §12b rule 2 first-turn
+    re-bind; rule 8 `unbound` alert; `/cepa:handoff` emits `Orca Run:`. Head
+    7d48764 = Handoff `Head:`, CI 10/10 green; main had gained only this file
+    since the base. `roles` parked, branch deleted, tab23 closed; both hops
+    run, freshness rc=0 (loaded copy v1.45.0 contains 83cc1f9). Not yet run
+    against a live Run (Orca has no Run-close verb, so no probe Run): the
+    next coordinator restart is its first live test. 11 deferred findings
+    (P2 10-12: rule 2 block has no gate, re-bind race, no ownership check
+    for a `run:`-only Run) in
+    `memory/tasks.d/2026-11-01-fix-roles-run-rebind-on-restart.md`.
     severity: P1
     owner: roles (`tab23@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "Fix L45 first": task `task_37b4876306f2`,
