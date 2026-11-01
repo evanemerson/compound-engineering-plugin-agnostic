@@ -8,3 +8,7 @@
 - [ ] P2 — `scripts/check-orca-nudge.sh` REBIND — no case runs a hanging Orca call, so `timeout -k 2 15` and the 225 s bound are unpinned (finding 21). Copy the TITLE leg's hang pattern.
 - [ ] P3 — `scripts/check-orca-nudge.sh` REBIND / `scripts/check-orca-detection.sh` TITLE — small untested branches (finding 22): vsock retry on `run-show` and `terminal list`, only one of the two vsock texts, the error twice; the first `run-show` exiting non-zero; `terminals` not a list; `run:` id length bounds (0 and 65 chars); a field line with no trailing newline; TITLE `cli-inject` with `ORCA_TERMINAL_HANDLE` unset (the `[ -z "$cepa_title_why" ] &&` guard).
 - `orca-rebind.sh` run-use's real exit code is discarded (reliability P3-2): already filed as #113 finding 16 in `2026-11-01-fix-roles-run-rebind-on-restart.md`; not re-filed.
+
+## 2026-11-01 — tab25@roles, compound (inline)
+
+- [ ] P3 — proposed CLAUDE.md rule (operator's call): **a leg that runs a fenced block selects it by a line no mutant edits.** In #116, HEALTHBLOCK found rule 8's block by its `orca-health.sh" "${` call line and RULE2BLOCK's regex needed the quote and `|| true`, so three mutants of exactly those texts went red because the block was not found — the controls read green while the behaviour went untested. Probe: run a mutant and read its MISS lines; `output []` on every case of a leg means the selector, not the block, failed. Fixed here by selecting on `cepa_health_args=$(cat` and tolerating both edits in the regex.
