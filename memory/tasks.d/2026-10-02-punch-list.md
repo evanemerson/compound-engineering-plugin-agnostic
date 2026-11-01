@@ -1626,8 +1626,12 @@ L54. **Two reviews in the same second write one findings file; the second overwr
 L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.**
     status: pending
     severity: P2
-    owner: coord@main (plan + plan-review); build waits for operator approval
-      AND for #116 (L46), which edits §12b rule 2
+    owner: unassigned (build: next roles worker after #116 merges)
+    APPROVED 2026-11-01 (operator AskUserQuestion "Approve as recommended";
+    rm: "List them, then remove"). Plan review: 21 findings, 6 applied, 15
+    judgment accepted as recommended — `todos/review-2026-11-01-135437.md`,
+    `memory/tasks.d/2026-11-01-plan-main-orca-lane-lifecycle.md`. Build waits
+    for #116 (same §12b rule 2 and controls file).
     Hand-off from artist360-docs coord@main, 2026-11-01 (pasted by the
     operator). Plan (local, docs/ is gitignored):
     `docs/plans/2026-11-01-orca-lane-lifecycle.md`. Facts re-measured from
