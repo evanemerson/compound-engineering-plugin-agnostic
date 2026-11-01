@@ -1486,6 +1486,18 @@ L44. **WISHLIST: make Orca's chat UI work more like the Claude Code VS Code chat
 
 L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
     status: pending
+    2026-11-01: tab25 reported done on PR #116 (fe32bbc, 1.46.0, CI 10/10,
+    review 23 findings / 17 applied). Re-opened on the branch by two
+    coord@main messages: msg_5f9c440d11a0 (merge main after #117, re-bump)
+    and msg_50d5f27fc0ad (scope fix, operator's AskUserQuestion "Fix in
+    #116 first"). Measured by coord@main, read only, Orca 1.4.245:
+    `orca-ide orchestration run-current --json` returns run_5682a0ed1455
+    from /tmp, from this checkout, and with ORCA_TERMINAL_HANDLE unset — it
+    is SERVER-WIDE. So 1.45.0's re-bind would let the first coordinator of
+    any repo take cepa's Run after a reboot (only the live-holder check
+    stops it today), and orca-health.sh in other repos reads cepa's Run.
+    Fix in #116: take only a Run the session's own prompt names (`run:`) or
+    a `confirm:` names; health checks only a named Run.
     severity: P2
     owner: roles (`tab25@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "One worker for the 4 P2s": task
