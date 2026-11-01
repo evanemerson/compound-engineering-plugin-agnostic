@@ -212,6 +212,8 @@ MUTANTS = [
     ("pointer-gone", "skill", "**Under Orca (§12a present), §12b rule 7 replaces this tail.**", "",
      {"POINTER: section 6 holds **Under Orca (§12a present), §12b rule 7 replaces this tail.** once outside fences"}),
     # review-2026-10-30-161650 #21: a pointer moved into a fence is not the rule.
+    # Same MISS line as pointer-gone, but only this control guards unfenced()
+    # in POINTER: drop it from the leg and pointer-gone still passes.
     ("pointer-fenced", "skill", "\n**Under Orca (§12a present), §12b rule 7 replaces this tail.**\n",
      "\n```\n**Under Orca (§12a present), §12b rule 7 replaces this tail.**\n```\n",
      {"POINTER: section 6 holds **Under Orca (§12a present), §12b rule 7 replaces this tail.** once outside fences"}),
