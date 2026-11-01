@@ -791,18 +791,22 @@ the operator actually pastes into a fresh session. Requirements:
   saved file. A coordinator that starts the next worker from this prompt
   rewrites the line to its own handle (rule 2).
 - **A coordinator's prompt carries its Orca Run** (punch-list L45). Under
-  Orca, a coordinator (§10) runs `<cli> orchestration run-current --json`,
-  with `<cli>` the §12a `cli=` value. When `result.run.id` matches
-  `run_[A-Za-z0-9_]{1,64}` exactly, the block carries the line
+  Orca, a coordinator (§10) writes its named Run, as `cepa:autonomy` §12b
+  rule 2 defines it. When it has no `Orca Run:` line, created Run or
+  confirmed Run, it runs `<cli> orchestration run-current --json` (`<cli>`
+  the §12a `cli=` value) and takes `result.run.id` only when
+  `result.run.coordinator_handle` equals `ORCA_TERMINAL_HANDLE`: `run-current`
+  is per pane, so a Run another terminal holds is never written (L46). When
+  the id matches `run_[A-Za-z0-9_]{1,64}` exactly, the block carries the line
   `Orca Run: <id>`, and right after it the line `First turn: run
   cepa:autonomy §12b rule 2's re-bind block, with this id in its run:
-  field.` Copy the id only from that output, never from a file or a
-  message. When the read fails, reports no Run, or returns an id of any
+  field.` Copy the id only from those sources, never from a file or a
+  message. When there is no named Run, the read fails, or the id has any
   other shape, write no `Orca Run:` line and say why in the report; the
-  next coordinator's re-bind then reads `run-current` alone. A worker
-  writes no such line: its Run is its coordinator's, and `run-use` refuses
-  a worker its own Run. Like the name line, these lines live only in the
-  block. §12b rule 2 owns why (punch-list L45).
+  next coordinator's re-bind then only reports and asks. A worker writes no
+  such line: its Run is its coordinator's, and `run-use` refuses a worker
+  its own Run. Like the name line, these lines live only in the block. §12b
+  rule 2 owns why.
 - **Every terminal handle in the prompt is valid only while its terminal is
   open.** When the block names one (a `Report to:` line, another
   coordinator's handle, a worker's handle), it adds the line `Terminal

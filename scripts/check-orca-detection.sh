@@ -52,13 +52,14 @@
 #   TITLE-BLOCK — 12b rule 6 holds exactly one ```bash block (indented under
 #              its list item). A miss stops the run.
 #   TITLE-BOUNDS — that block bounds the rename with the literal
-#              `timeout -k 0.5 3 <cli> terminal rename `, exactly once. TITLE
+#              `timeout -k 0.5 3 "$cepa_title_cli" terminal rename `, exactly
+#              once. TITLE
 #              runs it with `timeout -k 0.1 0.3`, so rename-hangs waits about
 #              0.4 s. A miss stops the run.
 #   TITLE    — the block runs under `bash -e`, one process per case, as the
-#              agent runs it: `<cli>` becomes a stub orca-ide that writes each
-#              argv word on its own line and some noise to stderr, and the name
-#              and handle go between their heredoc lines (one case leaves the
+#              agent runs it: the cli, the name and the handle go between
+#              their heredoc lines, and the cli is a stub orca-ide that writes
+#              each argv word on its own line and some noise to stderr (one case leaves the
 #              shipped `<handle-or-self>` line, as a coordinator that forgot
 #              the worker's handle would). stdin is a pipe held open, TMPDIR a
 #              per-case dir. The cwd is a real git repo built here, whose
@@ -69,8 +70,14 @@
 #              (the title is ONE argument with the U+00B7 separator), that the
 #              stub ran exactly when the line is not `skipped`, an empty stderr
 #              (bar the SIGKILL notice on the hang case), an empty TMPDIR, and
-#              that no name was evaluated as shell. A fixture repo that cannot
-#              be built is a MISS that stops the run.
+#              that no name was evaluated as shell. The cli cases (punch-list
+#              L46: the block once spliced `<cli>` unquoted, so shell text in
+#              it ran) put `;`, `$(…)`, a non-Orca name, a relative path, a
+#              path other than ORCA_CLI_COMMAND (unset, or naming another
+#              path), bare `orca` on Linux, and a name not on PATH in the
+#              cli slot: each is skipped with its reason and nothing runs; a
+#              path equal to ORCA_CLI_COMMAND renames. A fixture repo that
+#              cannot be built is a MISS that stops the run.
 #   CITES    — section 12's prose names both do-not-paste first lines and
 #              the title format `<repo> · <role>@<wt>`;
 #              /cepa:handoff, /cepa:task and /cepa:lfg each carry 12's citation
@@ -372,14 +379,14 @@ if len(tblocks) != 1:
 ok("TITLE-BLOCK: 12b rule 6 holds one bash block")
 ind, tcode = tblocks[0]
 tcode = re.sub(r"^" + ind, "", tcode, flags=re.M)
-TITLE_BOUND = "timeout -k 0.5 3 <cli> terminal rename "
+TITLE_BOUND = 'timeout -k 0.5 3 "$cepa_title_cli" terminal rename '
 if tcode.count(TITLE_BOUND) == 1:
     ok("TITLE-BOUNDS: the rename is bounded by `timeout -k 0.5 3`")
 else:
     miss("TITLE-BOUNDS: want exactly one %r in the block" % TITLE_BOUND); finish()
-tcode = tcode.replace(TITLE_BOUND, "timeout -k 0.1 0.3 <cli> terminal rename ")
+tcode = tcode.replace(TITLE_BOUND, 'timeout -k 0.1 0.3 "$cepa_title_cli" terminal rename ')
 SLOT = r"(<<'CEPA_%s'\n)[^\n]*(\nCEPA_%s\n)"
-for ph in ("<session>@<wt>\nCEPA_NAME", "<cli>"):
+for ph in ("<session>@<wt>\nCEPA_NAME", "<cli>\nCEPA_CLI"):
     if ph not in tcode:
         miss("TITLE-BLOCK: placeholder %r is gone" % ph); finish()
 if len(re.findall(SLOT % ("TERM", "TERM"), tcode)) != 1:
@@ -406,13 +413,13 @@ RENAME_OK = 'printf "%s\\n" "$@" >ARGV\necho \'{"id": "r", "ok": true, "result":
 TERM_ENV = {"ORCA_TERMINAL_HANDLE": "term_self-1"}
 
 def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="self",
-              env=None, argv=None, max_took=4.0, fail_tools=(), killed=False):
+              env=None, argv=None, max_took=4.0, fail_tools=(), killed=False, cli="orca-ide"):
     name = "title-" + name
     case = os.path.join(TMP, name)
     sd, td, tmpd = (os.path.join(case, d) for d in ("stubs", "tools", "tmp"))
     for d in (sd, td, tmpd):
         os.makedirs(d)
-    for t in TOOLS + ["git", "printf"]:
+    for t in TOOLS + ["git", "printf", "uname"]:
         if t in fail_tools:
             stub(td, t, "exit 1"); continue
         real = shutil.which(t)
@@ -423,13 +430,14 @@ def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="se
     stub(sd, "orca-ide", "touch %s/ran\necho stub-noise >&2\n%s" % (
         case, stub_body.replace("ARGV", argv_file)))
     # term=None leaves the shipped placeholder line as an agent that forgot it would.
-    body = tcode.replace("<session>@<wt>\nCEPA_NAME", sname + "\nCEPA_NAME").replace("<cli>", "orca-ide")
+    body = tcode.replace("<session>@<wt>\nCEPA_NAME", sname + "\nCEPA_NAME").replace(
+        "<cli>\nCEPA_CLI", cli.replace("STUBS", sd) + "\nCEPA_CLI")
     if term is not None:
         body = re.sub(SLOT % ("TERM", "TERM"), lambda m: m.group(1) + term + m.group(2), body)
     script = os.path.join(case, "title.sh")
     open(script, "w").write(body)
     e = {"PATH": sd + ":" + td, "HOME": case, "TMPDIR": tmpd, "GIT_CEILING_DIRECTORIES": GROOT}
-    e.update(env or {})
+    e.update({k: v.replace("STUBS", sd) for k, v in (env or {}).items()})
     pwned = os.path.join(cwd, "pwned")
     if os.path.exists(pwned):
         os.remove(pwned)
@@ -514,6 +522,24 @@ run_title("rename-fails", FAILED, WT, stub_body="exit 3", env=TERM_ENV)
 run_title("rename-not-ok", NOT_OK, WT, stub_body='echo \'{"ok": "true"}\'', env=TERM_ENV)
 run_title("rename-not-json", NOT_OK, WT, stub_body="echo not json", env=TERM_ENV)
 run_title("rename-hangs", FAILED, WT, stub_body=HANG, env=TERM_ENV, max_took=1.2, killed=True)
+# L46: the cli comes from a quoted heredoc and is checked before it runs.
+BAD_CLI = skipped("the cli is not a plain command name")
+run_title("cli-inject", BAD_CLI, WT, cli="orca-ide;touch${IFS}pwned", env=TERM_ENV)
+run_title("cli-subst", BAD_CLI, WT, cli="orca-ide$(touch pwned)", env=TERM_ENV)
+run_title("cli-not-orca", skipped("the cli does not name an Orca CLI"), WT, cli="python3", env=TERM_ENV)
+run_title("cli-relative-path", skipped("a cli path must be absolute and equal ORCA_CLI_COMMAND"), WT,
+          cli="stubs/orca-ide", env=TERM_ENV)
+run_title("cli-path-not-env", skipped("a cli path must equal ORCA_CLI_COMMAND"), WT, cli="STUBS/orca-ide",
+          env=TERM_ENV)
+run_title("cli-not-on-path", skipped("orca-dev is not on PATH"), WT, cli="orca-dev", env=TERM_ENV)
+# PR #116 review: bare orca on Linux (the screen reader), and a path when
+# ORCA_CLI_COMMAND names another one.
+run_title("cli-bare-orca", skipped("bare orca on Linux is the screen reader"), WT, cli="orca", env=TERM_ENV)
+run_title("cli-path-env-differs", skipped("a cli path must equal ORCA_CLI_COMMAND"), WT, cli="STUBS/orca-ide",
+          env=dict(TERM_ENV, ORCA_CLI_COMMAND="/usr/bin/other/orca-ide"))
+run_title("cli-path-is-env", 'ORCA title: set "%s" on term_self-1' % TITLE, WT,
+          cli="STUBS/orca-ide", env=dict(TERM_ENV, ORCA_CLI_COMMAND="STUBS/orca-ide"),
+          argv=rename_argv("term_self-1"))
 
 # --- CITES ---
 sec12 =re.search(r"^## 12\..*?(?=^## |\Z)", text, re.M | re.S)
