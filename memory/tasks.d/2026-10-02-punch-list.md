@@ -1522,6 +1522,19 @@ L47. **Too many send blocks are refused: 4 of the first sends after the reboot.*
     message for a missing file says that the script removes a file once it
     reads it, so a retry needs a new file. Keep the security checks.
 
+L48. **Triage the open P3 backlog (recent shards and older open todos).**
+    status: pending
+    severity: P3
+    owner: integrity (`tab6@integrity`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "Triage the P3 backlog": task
+      `task_975fa81c480b`, dispatch `ctx_191959f15dc1`, branch
+      `chore/integrity/p3-backlog-triage`)
+    Scope: open `- [ ] P3` lines in `memory/tasks.d/2026-10-3*.md` and
+    `2026-11-*.md` (60 by `grep -cE '^\s*- \[ \] P3'`, before the run) and the
+    open findings in 6 `todos/` files (`grep -lE 'status:\s*(pending|ready)'
+    todos/*.md`). Skips L46's two shards and files, and L47. Safe fixes
+    applied; the rest comes back as one decision table for the operator.
+
 ---
 
 ## How this list is used
