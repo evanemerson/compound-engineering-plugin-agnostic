@@ -1335,7 +1335,18 @@ L40. **Run the health check while every coordinator is idle (Orca automation).**
     per Run (`orchestration inbox` lists the newest 200 rows across all
     recipients), so a fresh Run does not clear it.
 L41. **A body line that is exactly `CEPA_BODY` ends the send heredoc early.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #112 merged `447409a` (v1.44.0) after #111, on
+    the operator's "Merge after #111". tab5@integrity merged main: the FILE
+    mutants joined SEND_MUTANTS; the 3 BLOCK mutants became a fourth part
+    ("skill"), one per shard. Head 74ec68e = Handoff `Head:`, branch
+    contained main, CI 11/11 green (hosted orca-nudge 3m53s / 3m04s /
+    3m36s). `integrity` parked, branch deleted, tabs closed (absent from
+    `terminal list`); hops 1.43.0 → 1.44.0, freshness rc=0. BREAKING for
+    live sessions again: a 1.43.0-style block (message in the heredoc) is
+    refused with exit 4 + alert until the session restarts (L30 item 3).
+    4 P3s filed in
+    `memory/tasks.d/2026-10-31-fix-integrity-send-heredoc-delimiter.md`.
     severity: P2
     owner: integrity (`tab4@integrity`, dispatched via Orca 2026-10-31 on the
       operator's AskUserQuestion "L42 + L41 now": Run `run_5682a0ed1455`,
