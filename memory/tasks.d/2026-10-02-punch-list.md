@@ -1354,8 +1354,20 @@ L41. **A body line that is exactly `CEPA_BODY` ends the send heredoc early.**
     reads and removes the file; a 1.43.0-style block is refused (exit 4 +
     alert). Operator chose "Merge after #111" (one restart for both); 4 P3s
     stay filed in `memory/tasks.d/2026-10-31-fix-integrity-send-heredoc-delimiter.md`.
+    After #111 merged, #112 conflicted in `scripts/check-orca-nudge-controls.sh`
+    only; follow-up `tab5@integrity` (task `task_f248faa5f88c`) merges main
+    and places the new mutants into the shards.
 L42. **Shard `check-orca-nudge-controls.sh` before the next mutant batch.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #111 merged `16dcd7c` (operator's "Merge after
+    #111"). `check-orca-nudge-controls.sh --shard I/N`; one `orca-nudge` job
+    → three parallel jobs. Hosted: 7m12s-7m58s (72-80% of the 10-min bound)
+    → 3m01s / 2m39s / 2m41s on ee22cbb; all 170 mutants keep exact MISS
+    sets; new controls fail if a shard job is dropped, merged or disabled.
+    Head ee22cbb = Handoff `Head:`, CI 11/11 green; main had gained only
+    this file since the base. `roles` parked, branch deleted, tab closed
+    (absent from `terminal list`). CI-only change: no plugin bump. 2 P3s
+    filed in `memory/tasks.d/2026-10-31-ci-roles-shard-nudge-controls.md`.
     severity: P2
     owner: roles (`tab22@roles`, same answer: task `task_2a01e7309411`,
       dispatch `ctx_cbc5fb1545b3`)
