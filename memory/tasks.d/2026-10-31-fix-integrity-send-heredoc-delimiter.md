@@ -9,4 +9,4 @@
 - [ ] P3 — operator, after merge and the two hops: a live session that loaded the 1.43.0 rule 1 block gets every send refused (`the heredoc holds a message after its fields…`, exit 4, alert) until it restarts. In that session the old heredoc can still break out, because that happens in the shell before the script runs. L30 item 3.
 - [ ] P3 — `scripts/check-orca-nudge-controls.sh` — no mutant drops `-f` alone, and none drops `-O` (that needs a file of another user). A mutant `[ -z "$cepa_send_rest" ]` (whitespace no longer ignored) survives: no case puts a line of spaces after the empty line (pr-test-analyzer).
 - [ ] P3 — `scripts/check-orca-nudge.sh` FIELDS — the `MF()` files are made when the case list is built, not when each case runs. That is readable but not wrong: build them in the runner (silent-failure-hunter).
-- [ ] P3 — `memory/tasks.d/2026-10-02-punch-list.md` L41 — close it on merge (coord@main is the only writer).
+- [x] P3 — `memory/tasks.d/2026-10-02-punch-list.md` L41 — close it on merge (coord@main is the only writer). Closed 2026-11-01 by triage: L41 CLOSED (PR #112).

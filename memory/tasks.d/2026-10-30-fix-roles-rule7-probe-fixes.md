@@ -20,7 +20,7 @@ Canonical findings: `todos/review-2026-10-30-192000.md` (findings 3-7, 9, 10, 14
 - [ ] P3 — Measure whether a send to the preamble's handle reaches the Run mailbox (else no prompt and no nudge) — §12b rule 1 (finding 7).
 - [ ] P3 — Rule 7 restatement guard is one literal; also forbid `terminal send` and `--enter` in rule 7 (`terminal send` is now forbidden; `--enter` is not) — `scripts/check-orca-turn-endings.sh` (finding 9).
 - [ ] P3 — The idle-session rationale is unpinned; leave unless it drifts — `scripts/check-orca-turn-endings.sh` (finding 10).
-- [ ] P3 — coord@main: update punch-list L25/L27 text at merge — `memory/tasks.d/2026-10-02-punch-list.md` (finding 14).
+- [x] P3 — coord@main: update punch-list L25/L27 text at merge — `memory/tasks.d/2026-10-02-punch-list.md` (finding 14). Closed 2026-11-01 by triage: L25 and L27 CLOSED.
 - [ ] P3 — #98 finding 13 (options-as-text vs `Decisions`) still unsettled in rule 7 — §12b rule 7 (finding 15).
 - [ ] P3 — Shards drift behind finding status flips; `/cepa:compound` a "flip the shard line with the finding" rule (finding 16).
 
