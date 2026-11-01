@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-nudge.sh. Each mutant is one substitution in
-# a temp copy of plugins/cepa/scripts/orca-nudge.sh, or of orca-send.sh
-# (SEND_MUTANTS). It must turn the check red
-# with EXACTLY the MISS cases named beside it, so each mutant shows which case
+# a temp copy of plugins/cepa/scripts/orca-nudge.sh, of orca-send.sh
+# (SEND_MUTANTS), of orca-health.sh (HEALTH_MUTANTS), or of the autonomy
+# skill's rule 1 block (SKILL_MUTANTS). It must turn the check red with
+# EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
@@ -15,22 +16,37 @@
 #
 # Each mutant runs only the half of the check that can see it
 # (CEPA_NUDGE_CHECK_LEGS): an orca-nudge.sh mutant runs the nudge legs, and an
-# orca-send.sh mutant runs the send legs. The send legs run the shipped nudge
+# orca-send.sh or skill mutant runs the send legs. The send legs run the shipped nudge
 # beside orca-send.sh, never argument 1, so a nudge mutant cannot change them;
 # the nudge legs never run orca-send.sh. The unmutated copy runs whole and as
-# both halves, and the halves must partition the whole run's cases. Cost, with
-# `time bash scripts/check-orca-nudge-controls.sh` on a 16-core box: 3m33s
-# when every mutant ran all 154 cases; see the PR #106 body for the time after
-# the split. On a 4-vCPU CI runner the old cost hit the job's 10-minute bound.
+# each part, and the parts must partition the whole run's cases.
+#
+# `--shard I/N` runs only mutants I, I+N, I+2N, ... of the one list that holds
+# every nudge, send, health and skill mutant in order (no argument means 1/1,
+# every mutant). Each shard still runs the unmutated copy and the partition control
+# first. CI runs shards 1/N to N/N as N parallel jobs (punch-list L42). Controls
+# here fail unless residual-integrity.yml runs each shard exactly once, one per
+# job, never disabled, and unless every shard of that N is non-empty; planted
+# workflow edits prove that check can fail. So a dropped job cannot silently
+# drop mutants. Cost history: 3m33s on a 16-core box when every mutant ran all
+# 154 cases; the PR #106 body has the time after the part split; after PR #110
+# the one hosted job took 7m24s-7m58s of its 10-minute bound (runs 41264491281,
+# 41265227855); the PR #111 body has the per-shard times.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
 # is complete.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
+shard=1/1
+if [[ $# -eq 2 && $1 == --shard ]]; then
+  shard=$2
+elif [[ $# -ne 0 ]]; then
+  echo "MISS usage: $0 [--shard I/N]"; exit 1
+fi
 
-python3 - <<'PY'
-import concurrent.futures, os, shutil, subprocess, tempfile
+CEPA_NUDGE_CONTROLS_SHARD=$shard python3 - <<'PY'
+import concurrent.futures, os, re, shutil, subprocess, tempfile
 
 SCRIPT = "plugins/cepa/scripts/orca-nudge.sh"
 CHECK = "scripts/check-orca-nudge.sh"
@@ -390,6 +406,39 @@ HEALTH_MUTANTS = [
     ('health-dir-relative', '[[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"\n', '', {'HEALTHREF relative alert directory'}),
     ('health-cli-any', '  orca-ide|orca-dev) ;;', '  orca-ide|orca-dev|bash) ;;', {'HEALTHREF cli not orca'}),
 ]
+# BLOCK (punch-list L41): mutants of SKILL.md's rule 1 block, run by the
+# send legs against the shipped scripts.
+SKILL_MUTANTS = [
+    ("block-message-in-heredoc", "     file: <file>\n     CEPA_FIELDS\n",
+     "     file: <file>\n\n     <subject, one line>\n     <body>\n     CEPA_FIELDS\n",
+     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+    ("block-no-file-field", "     session: <session>\n     file: <file>\n", "     session: <session>\n",
+     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+    ("block-unquoted-delimiter", "orca-send.sh\" <<'CEPA_FIELDS' || true", "orca-send.sh\" <<CEPA_FIELDS || true",
+     {'BLOCK hostile message is sent as text', 'BLOCK heredoc holds only field lines'}),
+]
+SEND = "plugins/cepa/scripts/orca-send.sh"
+HEALTH = "plugins/cepa/scripts/orca-health.sh"
+SKILL = "plugins/cepa/skills/autonomy/SKILL.md"
+WORKFLOW = ".github/workflows/residual-integrity.yml"
+src = open(SCRIPT, encoding="utf-8").read()
+send_src = open(SEND, encoding="utf-8").read()
+health_src = open(HEALTH, encoding="utf-8").read()
+skill_src = open(SKILL, encoding="utf-8").read()
+
+# Every mutant, in one list: (part, mutant). A shard runs every Nth one.
+ALL = ([("nudge", m) for m in MUTANTS] + [("send", m) for m in SEND_MUTANTS]
+       + [("health", m) for m in HEALTH_MUTANTS] + [("skill", m) for m in SKILL_MUTANTS])
+spec = os.environ.get("CEPA_NUDGE_CONTROLS_SHARD", "1/1")
+sm = re.fullmatch(r"([1-9][0-9]?)/([1-9][0-9]?)", spec)
+if not sm or int(sm.group(1)) > int(sm.group(2)):
+    print("MISS --shard is %r, want I/N with 1 <= I <= N" % spec)
+    raise SystemExit(1)
+SHARD, NSHARDS = int(sm.group(1)), int(sm.group(2))
+
+def shard_of(i, n):
+    return i % n + 1
+
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-ctl-")
 
@@ -398,6 +447,101 @@ def ok(msg):
 
 def miss(msg):
     global failed; failed += 1; print("MISS", msg)
+
+# Names must be unique: each result line, and each mutant's temp path, is
+# keyed by name. Shard membership comes from the list index, not the name.
+names = [m[0] for _, m in ALL]
+dup = sorted({n for n in names if names.count(n) > 1})
+if dup:
+    miss("mutant names are not unique: %r" % dup[:3])
+else:
+    ok("the %d mutant names are unique" % len(names))
+
+def shard_split(n):
+    """The mutant names each of shards 1..n runs, as a list of n lists."""
+    return [[name for i, name in enumerate(names) if shard_of(i, n) == s] for s in range(1, n + 1)]
+
+def wf_problems(wf):
+    """What is wrong with how the workflow text runs the shards; [] if sound.
+    Each `--shard I/N` run line must be the plain step form, in its own job,
+    with `if: always()` on the step, no job-level `if:`, and no
+    continue-on-error, and the lines must be 1/N..N/N, each once. Any other
+    non-comment line that names the controls script is a problem, so a block
+    scalar (`run: |`) or a quoted form fails closed instead of being skipped."""
+    probs, specs = [], []
+    body = wf.split("\njobs:\n", 1)[-1]
+    for job in re.split(r"(?m)^  (?=[A-Za-z0-9_-]+:[ \t]*$)", body)[1:]:
+        jname, lines = job.split(":", 1)[0], job.splitlines()
+        hits = []
+        for k, line in enumerate(lines):
+            if "check-orca-nudge-controls.sh" not in line or line.lstrip().startswith("#"):
+                continue
+            m = re.fullmatch(r"        run: bash scripts/check-orca-nudge-controls\.sh --shard (\S+)", line)
+            if not m:
+                probs.append("%s: unrecognized line %r" % (jname, line.strip()))
+                continue
+            hits.append(m.group(1))
+            step = k
+            while step > 0 and not lines[step].startswith("      - "):
+                step -= 1
+            if "        if: always()" not in lines[step:k]:
+                probs.append("%s: the --shard %s step has no `if: always()`" % (jname, m.group(1)))
+        if not hits:
+            continue
+        specs += hits
+        if len(hits) > 1:
+            probs.append("%s: runs %d shards in one job" % (jname, len(hits)))
+        if any(re.match(r"    if:", l) for l in lines):
+            probs.append("%s: job-level `if:`" % jname)
+        if any(re.match(r"\s+continue-on-error:", l) for l in lines):
+            probs.append("%s: continue-on-error" % jname)
+    want = ["%d/%d" % (i, len(specs)) for i in range(1, len(specs) + 1)]
+    if not specs or sorted(specs) != sorted(want):
+        probs.append("shards %r, want each of %r once" % (specs, want))
+    return probs, len(specs)
+
+# Without this, a deleted, disabled or merged CI job silently drops 1/N of the
+# mutants while every remaining job stays green.
+wf = open(WORKFLOW, encoding="utf-8").read()
+probs, want_n = wf_problems(wf)
+if probs:
+    miss("%s: %s" % (WORKFLOW, "; ".join(probs)))
+else:
+    ok("%s runs shards 1/%d to %d/%d, one per job, each once" % (WORKFLOW, want_n, want_n, want_n))
+# The shards of that N and of this run's N each partition the mutants, and no
+# shard is empty: an empty shard passes on its baseline alone.
+for n in sorted({want_n or 1, NSHARDS}):
+    parts = shard_split(n)
+    if sorted(sum(parts, [])) == sorted(names) and all(parts):
+        ok("shards 1/%d to %d/%d partition the %d mutants, none empty" % (n, n, n, len(names)))
+    else:
+        miss("shards of N=%d: sizes %r, %d of %d names covered"
+             % (n, [len(x) for x in parts], len(set(sum(parts, []))), len(names)))
+# Planted workflow edits, checked in process: each must make wf_problems red.
+J2, J3 = "\n  orca-nudge-2:\n", "\n  orca-nudge-3:\n"
+R3 = "        run: bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"
+WF_PLANTS = [
+    ("two shards in one job", J2, "\n"),
+    ("job-level if: false", J3, J3 + "    if: false\n"),
+    ("continue-on-error on a job", J3, J3 + "    continue-on-error: true\n"),
+    ("shard 3 job deleted", wf[wf.find(J3):] if J3 in wf else J3, "\n"),
+    ("shard 3 run line commented out", R3, "        # run: bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"),
+    ("shard 3 run line in a block scalar", R3,
+     "        run: |\n          bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"),
+    ("shard 3 run line with || true", R3, R3[:-1] + " || true\n"),
+    ("a quoted mention beside the shard 3 run line", R3,
+     R3 + "      - run: echo bash scripts/check-orca-nudge-controls.sh --shard 3/3\n"),
+    ("shard 2 step without if: always()",
+     "        if: always()\n        run: bash scripts/check-orca-nudge-controls.sh --shard 2/3\n",
+     "        run: bash scripts/check-orca-nudge-controls.sh --shard 2/3\n"),
+]
+for label, old, new in WF_PLANTS:
+    if wf.count(old) != 1:
+        miss("workflow plant %r: anchor found %d times, want 1" % (label, wf.count(old)))
+    elif wf_problems(wf.replace(old, new))[0]:
+        ok("workflow plant goes red: %s" % label)
+    else:
+        miss("workflow plant stays green: %s" % label)
 
 def check(args, legs="all"):
     r = subprocess.run(["bash", CHECK] + args, capture_output=True, text=True, timeout=300,
@@ -409,7 +553,8 @@ def check(args, legs="all"):
 def run(script, legs="all"):
     return check([script], legs)[:2]
 
-src = open(SCRIPT, encoding="utf-8").read()
+# Every shard runs the unmutated copy first: a red mutant proves nothing in a
+# job whose own baseline is not clean.
 clean = os.path.join(TMP, "clean.sh")
 open(clean, "w", encoding="utf-8").write(src)
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
@@ -428,102 +573,61 @@ else:
     miss("parts: rc %s/%s/%s, %d+%d+%d cases, %d not in any"
          % (nrc, src_, hrc, len(nudge), len(send), len(hlth), len(whole - nudge - send - hlth)))
 
-def run_mutant(m):
+def run_mutant(part, m):
+    try:
+        return run_part(part, m)
+    except (subprocess.SubprocessError, OSError) as e:
+        return -1, {"exception %s" % type(e).__name__}
+
+def run_part(part, m):
+    # Each part writes under its own directory, so names only need to be
+    # unique within a part for the paths to be distinct.
     name, old, new, want = m
-    if src.count(old) != 1:
-        return m, None, None
-    path = os.path.join(TMP, name + ".sh")
-    open(path, "w", encoding="utf-8").write(src.replace(old, new))
-    return (m,) + run(path, "nudge")
-
-# Each check run makes its own temp dir, so the runs share nothing.
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_mutant, MUTANTS))
-for (name, old, new, want), rc, got in results:
-    if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, src.count(old))); continue
-    if rc == 1 and got == want:
-        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
-    else:
-        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
-
-SEND = "plugins/cepa/scripts/orca-send.sh"
-send_src = open(SEND, encoding="utf-8").read()
-
-def run_send_mutant(m):
-    name, old, new, want = m
-    if send_src.count(old) != 1:
-        return m, None, None
-    d = os.path.join(TMP, "send-" + name)
-    os.mkdir(d)
-    open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
-    shutil.copy(SCRIPT, d)
-    return (m,) + check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
-
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_send_mutant, SEND_MUTANTS))
-for (name, old, new, want), rc, got in results:
-    if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, send_src.count(old))); continue
-    if rc == 1 and got == want:
-        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
-    else:
-        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
-
-# BLOCK (punch-list L41): mutants of SKILL.md's rule 1 block, run by the
-# send half against the shipped scripts.
-SKILL = "plugins/cepa/skills/autonomy/SKILL.md"
-skill_src = open(SKILL, encoding="utf-8").read()
-SKILL_MUTANTS = [
-    ("block-message-in-heredoc", "     file: <file>\n     CEPA_FIELDS\n",
-     "     file: <file>\n\n     <subject, one line>\n     <body>\n     CEPA_FIELDS\n",
-     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
-    ("block-no-file-field", "     session: <session>\n     file: <file>\n", "     session: <session>\n",
-     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
-    ("block-unquoted-delimiter", "orca-send.sh\" <<'CEPA_FIELDS' || true", "orca-send.sh\" <<CEPA_FIELDS || true",
-     {'BLOCK hostile message is sent as text', 'BLOCK heredoc holds only field lines'}),
-]
-
-def run_skill_mutant(m):
-    name, old, new, want = m
-    if skill_src.count(old) != 1:
-        return m, None, None
-    path = os.path.join(TMP, "skill-" + name + ".md")
-    open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
-    return (m,) + check([SCRIPT, SEND, "plugins/cepa/scripts/orca-health.sh", path], "send")[:2]
-
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_skill_mutant, SKILL_MUTANTS))
-for (name, old, new, want), rc, got in results:
-    if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, skill_src.count(old))); continue
-    if rc == 1 and got == want:
-        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
-    else:
-        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
-
-HEALTH = "plugins/cepa/scripts/orca-health.sh"
-health_src = open(HEALTH, encoding="utf-8").read()
-
-def run_health_mutant(m):
-    name, old, new, want = m
+    base = os.path.join(TMP, part)
+    os.makedirs(base, exist_ok=True)
+    if part == "nudge":
+        if src.count(old) != 1:
+            return None, src.count(old)
+        path = os.path.join(base, name + ".sh")
+        open(path, "w", encoding="utf-8").write(src.replace(old, new))
+        return run(path, "nudge")
+    if part == "send":
+        # The send legs run the shipped nudge beside orca-send.sh.
+        if send_src.count(old) != 1:
+            return None, send_src.count(old)
+        d = os.path.join(base, name)
+        os.mkdir(d)
+        open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
+        shutil.copy(SCRIPT, d)
+        return check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
+    if part == "skill":
+        # The send legs read the rule 1 block from argument 4.
+        if skill_src.count(old) != 1:
+            return None, skill_src.count(old)
+        path = os.path.join(base, name + ".md")
+        open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
+        return check([SCRIPT, SEND, HEALTH, path], "send")[:2]
     if health_src.count(old) != 1:
-        return m, None, None
-    path = os.path.join(TMP, "health-" + name + ".sh")
+        return None, health_src.count(old)
+    path = os.path.join(base, name + ".sh")
     open(path, "w", encoding="utf-8").write(health_src.replace(old, new))
-    return (m,) + check([SCRIPT, SEND, path], "health")[:2]
+    return check([SCRIPT, SEND, path], "health")[:2]
 
+# Each check run makes its own temp dir, so the runs share nothing. One pool
+# for all three parts, so no part waits on another part's slowest mutant.
+mine = [pm for i, pm in enumerate(ALL) if shard_of(i, NSHARDS) == SHARD]
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_health_mutant, HEALTH_MUTANTS))
-for (name, old, new, want), rc, got in results:
+    results = list(pool.map(lambda pm: run_mutant(*pm), mine))
+for (part, (name, old, new, want)), (rc, got) in zip(mine, results):
     if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, health_src.count(old))); continue
+        miss("%s: anchor found %d times, want 1" % (name, got)); continue
     if rc == 1 and got == want:
         ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
     else:
         miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
 
 shutil.rmtree(TMP, ignore_errors=True)
-print("-- %d/%d controls passed --" % (passed, passed + failed))
+print("-- shard %d/%d: %d of %d mutants; %d/%d controls passed --"
+      % (SHARD, NSHARDS, len(mine), len(ALL), passed, passed + failed))
 raise SystemExit(1 if failed else 0)
 PY
