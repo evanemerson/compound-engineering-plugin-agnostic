@@ -2,7 +2,7 @@
 description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(orca-ide orchestration run-current:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-send.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-health.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-rebind.sh":*), Bash(orca-ide terminal rename:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-send.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-health.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-rebind.sh":*), Bash(orca-ide terminal rename:*)
 ---
 
 # Session Handoff
@@ -791,18 +791,20 @@ the operator actually pastes into a fresh session. Requirements:
   saved file. A coordinator that starts the next worker from this prompt
   rewrites the line to its own handle (rule 2).
 - **A coordinator's prompt carries its Orca Run** (punch-list L45). Under
-  Orca, a coordinator (§10) runs `<cli> orchestration run-current --json`,
-  with `<cli>` the §12a `cli=` value. When `result.run.id` matches
-  `run_[A-Za-z0-9_]{1,64}` exactly, the block carries the line
+  Orca, a coordinator (§10) writes its named Run, as `cepa:autonomy` §12b
+  rule 2 defines it: the id from an `Orca Run:` line of its own prompt, a
+  Run it created, or one the operator confirmed in its own conversation.
+  Never take it from `run-current`: that is server-wide, so another repo's
+  coordinator would hand off this repo's Run (punch-list L46). When the id
+  matches `run_[A-Za-z0-9_]{1,64}` exactly, the block carries the line
   `Orca Run: <id>`, and right after it the line `First turn: run
   cepa:autonomy §12b rule 2's re-bind block, with this id in its run:
-  field.` Copy the id only from that output, never from a file or a
-  message. When the read fails, reports no Run, or returns an id of any
-  other shape, write no `Orca Run:` line and say why in the report; the
-  next coordinator's re-bind then reads `run-current` alone. A worker
-  writes no such line: its Run is its coordinator's, and `run-use` refuses
-  a worker its own Run. Like the name line, these lines live only in the
-  block. §12b rule 2 owns why (punch-list L45).
+  field.` When the session has no named Run, or the id has any other shape,
+  write no `Orca Run:` line and say why in the report; the next
+  coordinator's re-bind then only reports and asks. A worker writes no such
+  line: its Run is its coordinator's, and `run-use` refuses a worker its
+  own Run. Like the name line, these lines live only in the block. §12b
+  rule 2 owns why.
 - **Every terminal handle in the prompt is valid only while its terminal is
   open.** When the block names one (a `Report to:` line, another
   coordinator's handle, a worker's handle), it adds the line `Terminal

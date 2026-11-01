@@ -153,43 +153,41 @@
 #              line asks the operator to tell the target. STORE also pins the
 #              `to_handle` fallback: a stored message with none is the
 #              target's.
-#   HEALTH   — (unbound, punch-list L45) a bound Run whose
-#              `coordinator_handle` is a valid handle that is not
+#   HEALTH   — (unbound, punch-list L45, L46) the Run is the one named as
+#              argument 2 and read with run-show; with none named, no Run is
+#              read (run-current is server-wide and never read). A named Run
+#              whose `coordinator_handle` is a valid handle that is not
 #              ORCA_TERMINAL_HANDLE raises `unbound:<run>:<hour>`; one bound
 #              here, an acked key, or a holder of another shape raises none,
-#              and the key is ackable.
+#              and the key is ackable. A run-show of another Run, or of none,
+#              is unreadable. HEALTHREF: a named Run outside
+#              `run_[A-Za-z0-9_]`, or a third argument, is refused.
 #   REBIND   — orca-rebind.sh (§12b rule 2, punch-list L45, L46), from
-#              argument 5, in the health legs. The call sequence is pinned: a
-#              Run bound here makes one run-current call; a dead holder gets
-#              run-current, run-show, terminal list, run-show (the recheck),
-#              run-use, run-current, run-show. A Run that moved before the
-#              recheck asks with no run-use. The holder is run-show's, not
-#              run-current's (a holder that moved here is ok; one that moved
-#              to a live terminal asks). A cli path is refused unless it
-#              equals ORCA_CLI_COMMAND, and then it re-binds. A `run:` id that run-current does not report asks
-#              after run-show unless a `confirm:` line names it (L46, #113
-#              finding 12); confirm never lifts the live check. A holder
-#              still in terminal list, a truncated or short list, a failed
-#              list, and a `run:` id that differs from run-current's each exit
-#              1 with no run-use. A re-read that does not name this terminal
-#              exits 3, even after run-use exit 0, and so does a run-show
-#              re-read whose consumer_generation is not exactly one above the
-#              first (L46, #113 finding 11: two racing re-binders cannot both
-#              print done; when this terminal holds the Run at another
-#              generation the line says so), names another terminal or Run,
-#              fails, or has no Run. A
-#              run-show with no integer generation fails before run-use. A
-#              run-use that failed but took effect counts. Reads retry once on
-#              the vsock error; run-use does not. REBINDREF: arguments, a
-#              missing or bad cli, a run id outside `run_[A-Za-z0-9_]` (a flag
-#              included), a confirm that is not equal to run, an unknown or
-#              repeated field, a non-field line, a line after the fields, and a
-#              missing or bad ORCA_TERMINAL_HANDLE are refused with exit 4
-#              before any call.
+#              argument 5, in the health legs. run-current is server-wide, so
+#              with no `run:` field the script only reports (no Run, or one
+#              bound here, is ok; one bound elsewhere asks) and never calls
+#              run-use. With `run:`, run-current must report the same Run or a
+#              `confirm:` line must name it, else it asks; then run-show,
+#              terminal list, run-show (the recheck), run-use, run-show. The
+#              holder is run-show's. A live, unknown or partial holder, a
+#              failed list, and a Run that moved before run-use each ask with
+#              no run-use; confirm never lifts the live check. It counts only
+#              when the final run-show names this terminal one generation
+#              higher (#113 finding 11); a jump, another terminal or Run, a
+#              failed or shapeless re-read each fail with exit 3, with their
+#              own lines. A run-use that failed but took effect counts. Reads
+#              retry once on the vsock error; run-use does not. REBINDREF:
+#              arguments, a missing or bad cli (a path unless equal to
+#              ORCA_CLI_COMMAND), a run id outside `run_[A-Za-z0-9_]`, a
+#              confirm that is not equal to run, an unknown or repeated
+#              field, a non-field line, a line after the fields, and a missing
+#              or bad ORCA_TERMINAL_HANDLE are refused with exit 4 before any
+#              call.
 #   RULE2BLOCK — punch-list L46 (#113 finding 10): §12b rule 2's re-bind block,
 #              read from SKILL.md and run against the stub. Its heredoc holds
 #              exactly the cli, run and confirm field lines. Filled with no
-#              run line it re-binds; with a run line it asks; with run and
+#              run line it never takes run-current's Run; with a run line it
+#              re-binds, or asks when run-current does not agree; with run and
 #              confirm it re-binds; shell text in the run line runs nothing;
 #              with orca-rebind.sh absent it prints the skipped line.
 #   HEALTHBLOCK — punch-list L46: §12b rule 8's health block. Each heredoc
@@ -266,12 +264,7 @@ case "$1 $2" in
   "terminal send") printf '%s' "$STUB_SEND"; exit "$STUB_SEND_RC" ;;
   "orchestration send"|"orchestration reply") printf '%s' "${STUB_OSEND-}"; exit "${STUB_OSEND_RC:-0}" ;;
   "orchestration inbox") printf '%s' "${STUB_INBOX-}"; exit "${STUB_INBOX_RC:-0}" ;;
-  "orchestration run-current")
-    # STUB_RUNCUR2, when set, answers every call after the first (the REBIND
-    # leg's re-read after run-use).
-    read -r n <"$STUB_LOG.rc"; n=$((n + 1)); echo "$n" >"$STUB_LOG.rc"
-    if [ "$n" -gt 1 ] && [ -n "${STUB_RUNCUR2+x}" ]; then printf '%s' "$STUB_RUNCUR2"; exit "${STUB_RUNCUR2_RC:-0}"; fi
-    printf '%s' "${STUB_RUNCUR-}"; exit "${STUB_RUNCUR_RC:-0}" ;;
+  "orchestration run-current") printf '%s' "${STUB_RUNCUR-}"; exit "${STUB_RUNCUR_RC:-0}" ;;
   "orchestration run-use") printf '%s' "${STUB_RUNUSE-}"; exit "${STUB_RUNUSE_RC:-0}" ;;
   "orchestration run-show")
     # STUB_RUNSHOW2, when set, answers every call after the first
@@ -1324,7 +1317,7 @@ if LEGS in ("all", "health"):
     HOK = "ORCA health: ok — Run %s checked" % RUN
     HSUM1 = ["ORCA health: 1 alert — ask the operator (§12b rule 8)",
              "Ending first line: Needed from you: check the Orca alerts below"]
-    HCALLS = [["orchestration", "run-current", "--json"], ["orchestration", "worker-list", "--run", RUN, "--json"],
+    HCALLS = [["orchestration", "run-show", "--id", RUN, "--json"], ["orchestration", "worker-list", "--run", RUN, "--json"],
               ["orchestration", "worker-show", "--dispatch", D1, "--json"],
               ["orchestration", "inbox", "--limit", "200", "--json"]]
 
@@ -1346,13 +1339,15 @@ if LEGS in ("all", "health"):
         os.mkdir(sdir)
         for d, j in (shows if shows is not None else {D1: hshow()}).items():
             open(os.path.join(sdir, d + ".json"), "w").write(j)
-        env = {"CEPA_ORCA_ALERT_DIR": HDIR, "STUB_RUNCUR": runcur, "STUB_WSHOWDIR": sdir,
+        # L46: the Run is the one the session names (argument 2), read with
+        # run-show; run-current is server-wide and never read.
+        env = {"CEPA_ORCA_ALERT_DIR": HDIR, "STUB_RUNSHOW": runcur, "STUB_WSHOWDIR": sdir,
                "STUB_WLIST": wlist if wlist is not None else hwl((D1, "in_progress"), (D2, "succeeded")),
                "STUB_INBOX": inbox_json if inbox_json is not None else hinbox()}
         if me:
             env["ORCA_TERMINAL_HANDLE"] = me
         env.update(env_extra or {})
-        got_rc, out, calls = run(args or ["orca-ide"], script=HEALTH_SCRIPT, env_extra=env, cwd=cwd)
+        got_rc, out, calls = run(args or ["orca-ide", RUN], script=HEALTH_SCRIPT, env_extra=env, cwd=cwd)
         if os.path.isdir(HDIR):
             os.chmod(HDIR, 0o700)
         why = []
@@ -1367,9 +1362,9 @@ if LEGS in ("all", "health"):
 
     # Quiet: one live worker, fresh heartbeat; a settled one is never read.
     health("HEALTH quiet Run is ok", 0, [HOK], calls_want=HCALLS)
-    health("HEALTH no bound Run reads no workers", 0,
-           ["ORCA health: ok — no bound Run; alert files and questions checked"], runcur=HNORUN,
-           calls_want=[HCALLS[0], HCALLS[3]])
+    health("HEALTH no named Run reads no Run", 0,
+           ["ORCA health: ok — no Run named; alert files and own questions checked"], args=["orca-ide"],
+           calls_want=[HCALLS[3]])
     health("HEALTH unverifiable is not an alert", 0, [HOK], shows={D1: hshow(verdict="unverifiable", cats=("unverifiable",))})
     # Alert files.
     def afile(repo="hrepo", wt="wt1", kind="send_failed", reason='Orca did not return "ok": true (run_required)',
@@ -1468,11 +1463,14 @@ if LEGS in ("all", "health"):
     def unread(what):
         return ["ORCA alert: orca-unreadable:%s:%d — Orca %s failed or was not readable, so this Run's health is unknown"
                 % (what, HOUR, what.replace("-", " "))] + HSUM1
-    health("HEALTH run-current fails", 1, unread("run-current"), env_extra={"STUB_RUNCUR_RC": "1"})
-    health("HEALTH run-current not ok", 1, unread("run-current"), runcur=json.dumps({"ok": False}))
-    health("HEALTH run-current bad run id", 1, unread("run-current"),
+    health("HEALTH run-show fails", 1, unread("run-show"), env_extra={"STUB_RUNSHOW_RC": "1"})
+    health("HEALTH run-show names another Run", 1, unread("run-show"),
+           runcur=json.dumps({"ok": True, "result": {"run": {"id": "run_other"}}}))
+    health("HEALTH run-show with no Run", 1, unread("run-show"), runcur=HNORUN)
+    health("HEALTH run-show not ok", 1, unread("run-show"), runcur=json.dumps({"ok": False}))
+    health("HEALTH run-show bad run id", 1, unread("run-show"),
            runcur=json.dumps({"ok": True, "result": {"run": {"id": "abc"}}}))
-    health("HEALTH run-current with no run field", 1, unread("run-current"), runcur=json.dumps({"ok": True, "result": {}}))
+    health("HEALTH run-show with no run field", 1, unread("run-show"), runcur=json.dumps({"ok": True, "result": {}}))
     health("HEALTH worker-list not ok", 1, unread("worker-list"), wlist=json.dumps({"ok": False}))
     health("HEALTH worker-list with no workers field", 1, unread("worker-list"), wlist=json.dumps({"ok": True, "result": {}}))
     health("HEALTH worker-list row with no projection", 1, unread("worker-list"),
@@ -1514,7 +1512,7 @@ if LEGS in ("all", "health"):
                    ["ORCA health: 2 alerts — ask the operator (§12b rule 8)", HSUM1[1]],
                    env_extra={"STUB_WLIST_RC": "124"})
     n = [c[:2] for c in calls]
-    good = n == [["orchestration", "run-current"], ["orchestration", "worker-list"]]
+    good = n == [["orchestration", "run-show"], ["orchestration", "worker-list"]]
     (ok if good else miss)("HEALTH no call after a timeout" if good else "HEALTH no call after a timeout: %r" % n)
     calls = health("HEALTH worker-list vsock once", 0, [HOK], env_extra={
         "STUB_ERR_VERB": "orchestration worker-list", "STUB_ERR_TIMES": "1", "STUB_ERR": VSOCK})
@@ -1557,12 +1555,15 @@ if LEGS in ("all", "health"):
             ("HEALTHREF ack with no key", ["orca-ide", "ack"], None),
             ("HEALTHREF bad verb", ["orca-ide", "clear", "x"], None),
             ("HEALTHREF cli not orca", ["bash"], "!the cli does not name an Orca CLI"),
-            ("HEALTHREF cli shell text", ["orca-ide;id"], "!the cli is not a plain command name")]:
-        text = ("usage: orca-health.sh <cli> [ack <key>...]" if why is None else
+            ("HEALTHREF cli shell text", ["orca-ide;id"], "!the cli is not a plain command name"),
+            ("HEALTHREF run with shell text", ["orca-ide", "run_x;id"], "!the run is not run_ followed by [A-Za-z0-9_]"),
+            ("HEALTHREF run with a dash", ["orca-ide", "run_x-y"], "!the run is not run_ followed by [A-Za-z0-9_]"),
+            ("HEALTHREF run and another argument", ["orca-ide", RUN, "x"], None)]:
+        text = ("usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..." if why is None else
                 why[1:] if why.startswith("!") else "not an alert key: " + why)
         health(name, 4, ["ORCA health refused: " + text], args=args, calls_want=[])
     rc, out, calls = run([], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": HDIR})
-    good = rc == 4 and out == ["ORCA health refused: usage: orca-health.sh <cli> [ack <key>...]"] and calls == []
+    good = rc == 4 and out == ["ORCA health refused: usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."] and calls == []
     (ok if good else miss)("HEALTHREF no args" if good else "HEALTHREF no args: rc=%s out=%r" % (rc, out))
     rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": "rel/dir"}, cwd=TMP)
     good = rc == 4 and out == ["ORCA health refused: the alert directory is not an absolute path"] and calls == []
@@ -1570,10 +1571,11 @@ if LEGS in ("all", "health"):
                            "HEALTHREF relative alert directory: rc=%s out=%r" % (rc, out))
 
     # REBIND — orca-rebind.sh (§12b rule 2, punch-list L45, L46). It takes no
-    # arguments; `cli:`, an optional `run:` and an optional `confirm:` come on
-    # stdin. It runs run-use only when the Run names another terminal that is
-    # absent from terminal list, and counts only when run-current then names
-    # this terminal and run-show shows consumer_generation one higher.
+    # arguments; `cli:`, `run:` and `confirm:` come on stdin. run-current is
+    # server-wide (L46), so with no `run:` it only reports and asks; with
+    # `run:` it takes the Run only when run-current agrees or `confirm:` names
+    # it, the holder is gone, and the Run did not move; it counts only when
+    # run-show then shows this terminal one generation higher.
     RB_RUN = "run_5682a0ed1455"
     DEAD = "term_07815dfe-0000-0000-0000-000000000000"
     def rrun(rid, holder, gen=2):
@@ -1589,19 +1591,19 @@ if LEGS in ("all", "health"):
     RUSE = ["orchestration", "run-use", "--id", RB_RUN, "--json"]
     RSHOW = ["orchestration", "run-show", "--id", RB_RUN, "--json"]
     TLIST = ["terminal", "list", "--json"]
-    FULL = [RCUR, RSHOW, TLIST, RSHOW, RUSE, RCUR, RSHOW]
+    FULL = [RCUR, RSHOW, TLIST, RSHOW, RUSE, RSHOW]
+    TO_LIST = [RCUR, RSHOW, TLIST]
+    NAMED = "cli: orca-ide\nrun: %s\n" % RB_RUN
     ASKEND = "Ending first line: Needed from you: "
-    FAILEND = ASKEND + ("check which terminal holds the Run (orchestration run-current), close it if it is dead, "
-                        "then ask this session to run the re-bind again")
-    def rebind(name, rc, want, stdin="cli: orca-ide\n", cur=None, after=None, show=None, show2=None, tl=None, me=H,
+    FAILEND = ASKEND + ("check which terminal holds the Run (orchestration run-show --id <run>), close it if it is "
+                        "dead, then ask this session to run the re-bind again")
+    def rebind(name, rc, want, stdin=NAMED, cur=None, show=None, show2=None, tl=None, me=H,
                env_extra=None, calls_want=None, args=(), script=None):
         env = {"STUB_RUNCUR": cur if cur is not None else rrun(RB_RUN, DEAD),
                "STUB_RUNSHOW": show if show is not None else rrun(RB_RUN, DEAD),
                "STUB_RUNSHOW2": show2 if show2 is not None else rrun(RB_RUN, H, 3),
                "STUB_TLIST": tl if tl is not None else tlist(H, OTHER),
                "STUB_RUNUSE": json.dumps({"ok": True, "result": {}}), "STUB_RUNSHOW_N": "2"}
-        if after is not None:
-            env["STUB_RUNCUR2"] = after
         if me:
             env["ORCA_TERMINAL_HANDLE"] = me
         env.update(env_extra or {})
@@ -1619,149 +1621,129 @@ if LEGS in ("all", "health"):
         return got_rc, out, calls
     DONE = "ORCA rebind: done — %s moved from %s to this terminal" % (RB_RUN, DEAD)
     BOUND = "ORCA rebind: ok — %s is bound to this terminal" % RB_RUN
-    rebind("REBIND dead holder is re-bound", 0, [DONE], after=rrun(RB_RUN, H), calls_want=FULL)
-    rebind("REBIND hand-off run id re-binds", 0, [DONE], stdin="run: %s\ncli: orca-ide\n" % RB_RUN,
-           after=rrun(RB_RUN, H), calls_want=FULL)
-    rebind("REBIND already bound does nothing", 0, [BOUND], cur=rrun(RB_RUN, H), calls_want=[RCUR])
-    rebind("REBIND no Run and no field", 0,
-           ["ORCA rebind: ok — no Run to re-bind (run-current reports none and no run field was given)"],
-           cur=NORUN, calls_want=[RCUR])
-    # L46 (#113 finding 12): a Run named only by `run:` is never taken without
-    # the operator's `confirm:`, because Orca records no repo or worktree.
-    OWNASK = ["ORCA rebind: ask — run-current reports no Run for this terminal, and Orca records no repo or worktree "
-              "for %s, so whether this session coordinates it is unproven; nothing was changed" % RB_RUN,
-              ASKEND + "say whether this session coordinates %s (then it runs the re-bind again with a confirm: %s line)"
-              % (RB_RUN, RB_RUN)]
-    rebind("REBIND run-only Run asks for ownership", 1, OWNASK, stdin="cli: orca-ide\nrun: %s\n" % RB_RUN,
-           cur=NORUN, calls_want=[RCUR, RSHOW])
-    rebind("REBIND confirmed run-only Run re-binds", 0, [DONE],
-           stdin="cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN), cur=NORUN, after=rrun(RB_RUN, H),
+    def ownask(cur_txt, rid=RB_RUN):
+        return ["ORCA rebind: ask — run-current reports %s, not %s, and Orca records no repo or worktree for a Run, so "
+                "whether this session coordinates %s is unproven; nothing was changed" % (cur_txt, rid, rid),
+                ASKEND + "say whether this session coordinates %s (then it runs the re-bind again with a confirm: %s "
+                "line)" % (rid, rid)]
+    def norunask(rid=RB_RUN, holder=DEAD):
+        return ["ORCA rebind: ask — this session named no Run; run-current reports %s, held by %s, but run-current is "
+                "server-wide, so it may be another repo's Run; nothing was changed" % (rid, holder),
+                ASKEND + "say whether this session coordinates %s (then it runs the re-bind again with run: %s and "
+                "confirm: %s lines)" % (rid, rid, rid)]
+    rebind("REBIND dead holder is re-bound", 0, [DONE], calls_want=FULL)
+    rebind("REBIND run-show names this terminal", 0, [BOUND], show=rrun(RB_RUN, H), calls_want=[RCUR, RSHOW])
+    # L46: no run field — report only, never run-use (run-current is server-wide).
+    rebind("REBIND no run field and no current Run", 0,
+           ["ORCA rebind: ok — no Run named and run-current reports none"], stdin="cli: orca-ide\n", cur=NORUN,
+           calls_want=[RCUR])
+    rebind("REBIND no run field and current Run bound here", 0, [BOUND], stdin="cli: orca-ide\n",
+           cur=rrun(RB_RUN, H), calls_want=[RCUR])
+    rebind("REBIND no run field never takes run-current's Run", 1, norunask(), stdin="cli: orca-ide\n",
+           calls_want=[RCUR])
+    rebind("REBIND no run field reports a dashed Run id", 1, norunask("run_ab-12", OTHER), stdin="cli: orca-ide\n",
+           cur=rrun("run_ab-12", OTHER), calls_want=[RCUR])
+    rebind("REBIND empty run field is no Run", 1, norunask(), stdin="cli: orca-ide\nrun:\n", calls_want=[RCUR])
+    # L46: a named Run is taken only when run-current agrees or confirm names it.
+    rebind("REBIND named Run that run-current does not report asks", 1, ownask("run_other"),
+           cur=rrun("run_other", OTHER), calls_want=[RCUR])
+    rebind("REBIND named Run with no current Run asks", 1, ownask("no Run"), cur=NORUN, calls_want=[RCUR])
+    rebind("REBIND bound here with another run field asks", 1, ownask(RB_RUN, "run_other"),
+           cur=rrun(RB_RUN, H), stdin="cli: orca-ide\nrun: run_other\n", calls_want=[RCUR])
+    rebind("REBIND confirmed named Run re-binds", 0, [DONE],
+           stdin="cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN), cur=rrun("run_other", OTHER),
            calls_want=FULL)
     rebind("REBIND confirm does not lift the live check", 1,
            ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, DEAD),
             ASKEND + "say whether terminal %s or this one coordinates %s" % (DEAD, RB_RUN)],
            stdin="cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN), cur=NORUN, tl=tlist(H, DEAD),
-           calls_want=[RCUR, RSHOW, TLIST])
-    rebind("REBIND run-show names this terminal", 0, [BOUND], stdin="cli: orca-ide\nrun: %s\n" % RB_RUN, cur=NORUN,
-           show=rrun(RB_RUN, H), calls_want=[RCUR, RSHOW])
+           calls_want=TO_LIST)
     rebind("REBIND run-show of another Run fails", 3, ["ORCA rebind failed: run-show did not return %s" % RB_RUN, FAILEND],
-           stdin="cli: orca-ide\nrun: %s\n" % RB_RUN, cur=NORUN, show=rrun("run_other", DEAD), calls_want=[RCUR, RSHOW])
+           show=rrun("run_other", DEAD), calls_want=[RCUR, RSHOW])
     SHOWSHAPE = ["ORCA rebind failed: run-show returned a shape this reader does not know", FAILEND]
     rebind("REBIND run-show without a generation fails", 3, SHOWSHAPE,
            show=json.dumps({"ok": True, "result": {"run": {"id": RB_RUN, "coordinator_handle": DEAD}}}),
            calls_want=[RCUR, RSHOW])
-    rebind("REBIND run-show boolean generation fails", 3, SHOWSHAPE, show=rrun(RB_RUN, DEAD, True),
+    rebind("REBIND run-show boolean generation fails", 3, SHOWSHAPE, show=rrun(RB_RUN, DEAD, True), calls_want=[RCUR, RSHOW])
+    rebind("REBIND negative generation fails", 3, SHOWSHAPE, show=rrun(RB_RUN, DEAD, -1), calls_want=[RCUR, RSHOW])
+    rebind("REBIND huge generation fails", 3, SHOWSHAPE, show=rrun(RB_RUN, DEAD, 10 ** 9), calls_want=[RCUR, RSHOW])
+    rebind("REBIND run-show fails", 3, ["ORCA rebind failed: run-show for %s failed" % RB_RUN, FAILEND],
+           env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR, RSHOW])
+    LIVE = ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, DEAD),
+            ASKEND + "say whether terminal %s or this one coordinates %s" % (DEAD, RB_RUN)]
+    rebind("REBIND live holder is never taken", 1, LIVE, tl=tlist(H, DEAD), calls_want=TO_LIST)
+    # The holder is run-show's, not run-current's (adversarial review of #116).
+    rebind("REBIND holder moved to a live terminal between reads asks", 1,
+           ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, OTHER),
+            ASKEND + "say whether terminal %s or this one coordinates %s" % (OTHER, RB_RUN)],
+           show=rrun(RB_RUN, OTHER), tl=tlist(H, OTHER), calls_want=TO_LIST)
+    rebind("REBIND holder moved here between reads is ok", 0, [BOUND], cur=rrun(RB_RUN, DEAD), show=rrun(RB_RUN, H),
            calls_want=[RCUR, RSHOW])
-    rebind("REBIND live holder is never taken", 1,
-           ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, DEAD),
-            ASKEND + "say whether terminal %s or this one coordinates %s" % (DEAD, RB_RUN)],
-           tl=tlist(H, DEAD), calls_want=[RCUR, RSHOW, TLIST])
     PARTIAL = ["ORCA rebind: ask — terminal list returned a partial or unknown shape, so whether %s is still open "
                "is unknown; nothing was changed" % DEAD, ASKEND + "check whether terminal %s is still open" % DEAD]
-    TO_LIST = [RCUR, RSHOW, TLIST]
     rebind("REBIND truncated terminal list asks", 1, PARTIAL, tl=tlist(H, trunc=True), calls_want=TO_LIST)
     rebind("REBIND short terminal list asks", 1, PARTIAL, tl=tlist(H, total=5), calls_want=TO_LIST)
     rebind("REBIND omitted host asks", 1, PARTIAL, tl=tlist(H, omitted=("paired-1",)), calls_want=TO_LIST)
     rebind("REBIND list with no host scope asks", 1, PARTIAL,
            tl=json.dumps({"ok": True, "result": {"terminals": [{"handle": H}], "totalCount": 1, "truncated": False}}),
            calls_want=TO_LIST)
-    TO_RECUR = [RCUR, RSHOW, TLIST, RSHOW, RUSE, RCUR]
-    rebind("REBIND other Run bound here after run-use fails", 3,
-           ["ORCA rebind failed: after run-use (exit 0), run-current reports run_other %s, not %s bound to this terminal"
-            % (H, RB_RUN), FAILEND], after=rrun("run_other", H), calls_want=TO_RECUR)
-    rebind("REBIND a dashed Run id from Orca is re-bound", 0,
-           ["ORCA rebind: done — run_ab-12 moved from %s to this terminal" % DEAD], cur=rrun("run_ab-12", DEAD),
-           show=rrun("run_ab-12", DEAD), show2=rrun("run_ab-12", H, 3), after=rrun("run_ab-12", H),
-           calls_want=[RCUR, ["orchestration", "run-show", "--id", "run_ab-12", "--json"], TLIST,
-                       ["orchestration", "run-show", "--id", "run_ab-12", "--json"],
-                       ["orchestration", "run-use", "--id", "run_ab-12", "--json"], RCUR,
-                       ["orchestration", "run-show", "--id", "run_ab-12", "--json"]])
     rebind("REBIND terminal list not ok asks", 1, PARTIAL, tl=json.dumps({"ok": False}), calls_want=TO_LIST)
     rebind("REBIND terminal list fails asks", 1,
            ["ORCA rebind: ask — terminal list failed, so whether %s is still open is unknown; nothing was changed" % DEAD,
             ASKEND + "check whether terminal %s is still open" % DEAD], env_extra={"STUB_TLIST_RC": "1"},
            calls_want=TO_LIST)
-    rebind("REBIND differing Runs ask", 1,
-           ["ORCA rebind: ask — this terminal's Run is %s, the hand-off names run_other; nothing was changed" % RB_RUN,
-            ASKEND + "say which Run this coordinator owns, %s or run_other" % RB_RUN],
-           stdin="cli: orca-ide\nrun: run_other\n", calls_want=[RCUR])
-    rebind("REBIND mismatch after run-use fails", 3,
-           ["ORCA rebind failed: after run-use (exit 0), run-current reports %s %s, not %s bound to this terminal"
-            % (RB_RUN, DEAD, RB_RUN), FAILEND], after=rrun(RB_RUN, DEAD), calls_want=TO_RECUR)
-    rebind("REBIND no Run after run-use fails", 3,
-           ["ORCA rebind failed: after run-use (exit 0), run-current reports no Run, not %s bound to this terminal" % RB_RUN,
-            FAILEND], after=NORUN, calls_want=TO_RECUR)
-    # L46 (#113 finding 11): `done` only when the generation rose by exactly 1,
-    # so two re-binders that raced cannot both print it.
-    def genfail(got):
-        return ["ORCA rebind failed: after run-use (exit 0), run-show reports %s, not %s %s 3 (consumer_generation one "
-                "above 2): another session may have re-bound %s at the same moment" % (got, RB_RUN, H, RB_RUN), FAILEND]
-    def genheld(g):
-        return ["ORCA rebind failed: after run-use (exit 0), this terminal holds %s, but consumer_generation is %d, "
-                "not 3: another session may have re-bound it at the same moment (and may have printed done), or Orca "
-                "raised the generation for another reason" % (RB_RUN, g), FAILEND]
-    rebind("REBIND generation rose by two fails", 3, genheld(4), after=rrun(RB_RUN, H),
-           show2=rrun(RB_RUN, H, 4), calls_want=FULL)
-    rebind("REBIND generation unchanged fails", 3, genheld(2), after=rrun(RB_RUN, H),
-           show2=rrun(RB_RUN, H, 2), calls_want=FULL)
-    rebind("REBIND run-show re-read of another Run fails", 3, genfail("run_other %s 3" % H), after=rrun(RB_RUN, H),
-           show2=rrun("run_other", H, 3), calls_want=FULL)
-    # PR #116 review: the recheck right before run-use. A Run that moved while
-    # terminal list ran (here: re-bound by a live OTHER) is never taken.
+    # PR #116 review: the recheck right before run-use.
     rebind("REBIND Run moved before run-use asks", 1,
            ["ORCA rebind: ask — %s moved while this session checked it (run-show now reports %s %s 3, was %s %s 2); "
             "nothing was changed" % (RB_RUN, RB_RUN, OTHER, RB_RUN, DEAD),
             ASKEND + "say whether this session should still coordinate %s (then it runs the re-bind again)" % RB_RUN],
-           show2=rrun(RB_RUN, OTHER, 3), env_extra={"STUB_RUNSHOW_N": "1"}, calls_want=[RCUR, RSHOW, TLIST, RSHOW])
+           show2=rrun(RB_RUN, OTHER, 3), env_extra={"STUB_RUNSHOW_N": "1"}, calls_want=TO_LIST + [RSHOW])
     rebind("REBIND failed recheck fails", 3,
            ["ORCA rebind failed: run-show for %s failed on the recheck before run-use; nothing was changed" % RB_RUN,
-            FAILEND], env_extra={"STUB_RUNSHOW_N": "1", "STUB_RUNSHOW2_RC": "1"}, calls_want=[RCUR, RSHOW, TLIST, RSHOW])
-    # The holder is run-show's, not run-current's: it may have moved between
-    # the two reads (adversarial review of #116, P3-A).
-    rebind("REBIND holder moved here between reads is ok", 0, [BOUND], show=rrun(RB_RUN, H),
-           calls_want=[RCUR, RSHOW])
-    rebind("REBIND holder moved to a live terminal between reads asks", 1,
-           ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, OTHER),
-            ASKEND + "say whether terminal %s or this one coordinates %s" % (OTHER, RB_RUN)],
-           show=rrun(RB_RUN, OTHER), tl=tlist(H, OTHER), calls_want=[RCUR, RSHOW, TLIST])
-    rebind("REBIND bound here with another run field asks", 1,
-           ["ORCA rebind: ask — this terminal's Run is %s, the hand-off names run_other; nothing was changed" % RB_RUN,
-            ASKEND + "say which Run this coordinator owns, %s or run_other" % RB_RUN],
-           cur=rrun(RB_RUN, H), stdin="cli: orca-ide\nrun: run_other\n", calls_want=[RCUR])
-    rebind("REBIND negative generation fails", 3, SHOWSHAPE, show=rrun(RB_RUN, DEAD, -1), calls_want=[RCUR, RSHOW])
-    rebind("REBIND huge generation fails", 3, SHOWSHAPE, show=rrun(RB_RUN, DEAD, 10 ** 9), calls_want=[RCUR, RSHOW])
-    rebind("REBIND cli path equal to ORCA_CLI_COMMAND re-binds", 0, [DONE],
-           stdin="cli: %s\n" % os.path.join(BIN, "orca-ide"), after=rrun(RB_RUN, H),
-           env_extra={"ORCA_CLI_COMMAND": os.path.join(BIN, "orca-ide")}, calls_want=FULL)
+            FAILEND], env_extra={"STUB_RUNSHOW_N": "1", "STUB_RUNSHOW2_RC": "1"}, calls_want=TO_LIST + [RSHOW])
+    # L46 (#113 finding 11): done only when run-show shows this terminal one
+    # generation higher; run-current is never the proof (it is server-wide).
+    def genfail(got):
+        return ["ORCA rebind failed: after run-use (exit 0), run-show reports %s, not %s %s 3 (consumer_generation one "
+                "above 2): another session may have re-bound %s at the same moment" % (got, RB_RUN, H, RB_RUN), FAILEND]
+    def genheld(g, use=0):
+        return ["ORCA rebind failed: after run-use (exit %d), this terminal holds %s, but consumer_generation is %d, "
+                "not 3: another session may have re-bound it at the same moment (and may have printed done), or Orca "
+                "raised the generation for another reason" % (use, RB_RUN, g), FAILEND]
+    rebind("REBIND generation rose by two fails", 3, genheld(4), show2=rrun(RB_RUN, H, 4), calls_want=FULL)
+    rebind("REBIND generation unchanged fails", 3, genheld(2), show2=rrun(RB_RUN, H, 2), calls_want=FULL)
     rebind("REBIND run-show re-read names another terminal fails", 3, genfail("%s %s 3" % (RB_RUN, OTHER)),
-           after=rrun(RB_RUN, H), show2=rrun(RB_RUN, OTHER, 3), calls_want=FULL)
+           show2=rrun(RB_RUN, OTHER, 3), calls_want=FULL)
+    rebind("REBIND run-show re-read of another Run fails", 3, genfail("run_other %s 3" % H),
+           show2=rrun("run_other", H, 3), calls_want=FULL)
     rebind("REBIND failed run-show re-read fails", 3,
            ["ORCA rebind failed: run-use ran (exit 0) but the re-read of run-show failed, so whether one re-bind or two "
-            "moved the Run is unproven", FAILEND], after=rrun(RB_RUN, H), env_extra={"STUB_RUNSHOW2_RC": "1"},
+            "moved the Run is unproven", FAILEND], env_extra={"STUB_RUNSHOW2_RC": "1"},
            calls_want=FULL)
     rebind("REBIND run-show re-read bad shape fails", 3,
            ["ORCA rebind failed: run-use ran (exit 0) but run-show then returned a shape this reader does not know",
-            FAILEND], after=rrun(RB_RUN, H), show2=NORUN, calls_want=FULL)
-    rebind("REBIND failed run-use that took effect counts", 0, [DONE], after=rrun(RB_RUN, H),
-           env_extra={"STUB_RUNUSE_RC": "1"}, calls_want=FULL)
-    rebind("REBIND failed re-read fails", 3,
-           ["ORCA rebind failed: run-use ran (exit 1) but the re-read of run-current failed, so the binding is unproven",
-            FAILEND], after="", env_extra={"STUB_RUNUSE_RC": "1", "STUB_RUNCUR2_RC": "1"}, calls_want=TO_RECUR)
+            FAILEND], show2=NORUN, calls_want=FULL)
+    rebind("REBIND failed run-use that took effect counts", 0, [DONE], env_extra={"STUB_RUNUSE_RC": "1"},
+           calls_want=FULL)
     rebind("REBIND run-current fails", 3, ["ORCA rebind failed: run-current failed", FAILEND],
            env_extra={"STUB_RUNCUR_RC": "1"}, calls_want=[RCUR])
     rebind("REBIND run-current bad shape fails", 3,
            ["ORCA rebind failed: run-current returned a shape this reader does not know", FAILEND],
            cur=rrun(RB_RUN, "term_x; id"), calls_want=[RCUR])
-    rebind("REBIND run-current vsock once", 0, [DONE], after=rrun(RB_RUN, H),
+    rebind("REBIND run-current vsock once", 0, [DONE],
            env_extra={"STUB_ERR_VERB": "orchestration run-current", "STUB_ERR_TIMES": "1", "STUB_ERR": VSOCK},
            calls_want=[RCUR] + FULL)
     rebind("REBIND run-use is not retried on vsock", 3,
-           ["ORCA rebind failed: after run-use (exit 1), run-current reports %s %s, not %s bound to this terminal"
-            % (RB_RUN, DEAD, RB_RUN), FAILEND], after=rrun(RB_RUN, DEAD),
+           ["ORCA rebind failed: after run-use (exit 1), run-show reports %s %s 2, not %s %s 3 (consumer_generation "
+            "one above 2): another session may have re-bound %s at the same moment" % (RB_RUN, DEAD, RB_RUN, H, RB_RUN),
+            FAILEND], show2=rrun(RB_RUN, DEAD, 2),
            env_extra={"STUB_ERR_VERB": "orchestration run-use", "STUB_ERR_TIMES": "1", "STUB_ERR": VSOCK},
-           calls_want=TO_RECUR)
+           calls_want=FULL)
+    rebind("REBIND cli path equal to ORCA_CLI_COMMAND re-binds", 0, [DONE],
+           stdin="cli: %s\nrun: %s\n" % (os.path.join(BIN, "orca-ide"), RB_RUN),
+           env_extra={"ORCA_CLI_COMMAND": os.path.join(BIN, "orca-ide")}, calls_want=FULL)
     for name, stdin, why, kw in [
-            ("REBINDREF argument", "cli: orca-ide\n", "orca-rebind.sh takes no arguments; its fields go on stdin",
+            ("REBINDREF argument", NAMED, "orca-rebind.sh takes no arguments; its fields go on stdin",
              {"args": ["run_x"]}),
             ("REBINDREF no cli", "run: %s\n" % RB_RUN, "the cli field is missing", {}),
             ("REBINDREF cli shell text", "cli: orca-ide;id\n", "the cli is not a plain command name", {}),
@@ -1792,8 +1774,6 @@ if LEGS in ("all", "health"):
              {"me": "term_x"})]:
         rebind(name, 4, ["ORCA rebind refused: " + why], stdin=stdin, calls_want=[], **kw)
     rebind("REBIND CR and trailing spaces are dropped", 0, [DONE], stdin="cli: orca-ide  \r\nrun: %s\r\n\n" % RB_RUN,
-           after=rrun(RB_RUN, H), calls_want=FULL)
-    rebind("REBIND empty run field is no Run", 0, [DONE], stdin="cli: orca-ide\nrun:\n", after=rrun(RB_RUN, H),
            calls_want=FULL)
 
     # --- The autonomy skill's rule 2 and 8 blocks (L46), read from
@@ -1856,12 +1836,13 @@ if LEGS in ("all", "health"):
         return t
     rb_plug = plugdir("plug-rebind", {"orca-rebind.sh": REBIND_SCRIPT})
     RB_ENV = {"CEPA_PLUGIN_ROOT": rb_plug, "ORCA_TERMINAL_HANDLE": H, "STUB_RUNCUR": rrun(RB_RUN, DEAD),
-              "STUB_RUNCUR2": rrun(RB_RUN, H), "STUB_RUNSHOW": rrun(RB_RUN, DEAD), "STUB_RUNSHOW2": rrun(RB_RUN, H, 3),
+              "STUB_RUNSHOW": rrun(RB_RUN, DEAD), "STUB_RUNSHOW2": rrun(RB_RUN, H, 3),
               "STUB_TLIST": tlist(H, OTHER), "STUB_RUNUSE": json.dumps({"ok": True, "result": {}}),
               "STUB_RUNSHOW_N": "2"}
-    run_block("RULE2BLOCK without a run line re-binds the current Run", fill2(), RB_ENV, 0, [DONE], FULL)
-    run_block("RULE2BLOCK with a run line asks before a run-only Run", fill2(RB_RUN), dict(RB_ENV, STUB_RUNCUR=NORUN),
-              0, OWNASK, [RCUR, RSHOW])
+    run_block("RULE2BLOCK without a run line never takes run-current's Run", fill2(), RB_ENV, 0, norunask(), [RCUR])
+    run_block("RULE2BLOCK with a run line re-binds the named Run", fill2(RB_RUN), RB_ENV, 0, [DONE], FULL)
+    run_block("RULE2BLOCK with a run line asks when run-current does not agree", fill2(RB_RUN),
+              dict(RB_ENV, STUB_RUNCUR=NORUN), 0, ownask("no Run"), [RCUR])
     run_block("RULE2BLOCK with run and confirm lines re-binds", fill2(RB_RUN, RB_RUN), dict(RB_ENV, STUB_RUNCUR=NORUN),
               0, [DONE], FULL)
     run_block("RULE2BLOCK shell text in the run line runs nothing", fill2("run_x$(touch %s)" % MARK), RB_ENV, 0,
@@ -1877,8 +1858,11 @@ if LEGS in ("all", "health"):
     # mutant is killed by what the block does, never by the selector.
     b8 = skill_block('cepa_health_args=$(cat')
     hl_plug = plugdir("plug-health", {"orca-health.sh": HEALTH_SCRIPT})
-    def fill8(*lines):
-        return (b8 or "").replace("<cli>", "\n".join(lines))
+    def fill8(*lines, run_v=None):
+        # The Run line is filled with run_v, or left out as a session with no
+        # named Run leaves it.
+        t = _re2.sub(r"\n[ \t]*<the session's named Run[^\n]*", "" if run_v is None else "\n" + run_v, b8 or "")
+        return t.replace("<cli>", "\n".join(lines))
     HL_ENV = {"CEPA_PLUGIN_ROOT": hl_plug, "CEPA_ORCA_ALERT_DIR": os.path.join(TMP, "hb-alerts")}
     run_block("HEALTHBLOCK cli with a command substitution runs nothing", fill8("orca-ide$(touch %s)" % MARK), HL_ENV,
               0, ["ORCA health refused: the cli is not a plain command name"], [])
@@ -1887,6 +1871,8 @@ if LEGS in ("all", "health"):
     run_block("HEALTHBLOCK ack form passes each key as one argument", fill8("orca-ide", "ack", "x $(touch %s)" % MARK),
               HL_ENV, 0, ["ORCA health refused: not an alert key: " +
                           _re2.sub(r"[^A-Za-z0-9_.:-]", "?", ("x $(touch %s)" % MARK)[:80])], [])
+    run_block("HEALTHBLOCK passes the named Run as its own argument", fill8("orca-ide", run_v="run_x$(touch %s)" % MARK),
+              HL_ENV, 0, ["ORCA health refused: the run is not run_ followed by [A-Za-z0-9_]"], [])
     run_block("HEALTHBLOCK with the script absent is skipped", fill8("orca-ide"),
               dict(HL_ENV, CEPA_PLUGIN_ROOT=plugdir("plug-nohealth", {})), 0,
               ["ORCA health skipped: orca-health.sh not found (set CEPA_PLUGIN_ROOT)"], [])

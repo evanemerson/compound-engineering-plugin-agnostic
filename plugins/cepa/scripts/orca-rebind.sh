@@ -10,53 +10,61 @@
 # `ask` went to a terminal that no longer existed. `run-use --id <run>` moved
 # it to the new terminal (`consumer_generation` 2 -> 3).
 #
+# `run-current` IS SERVER-WIDE (coord@main, Orca 1.4.245, 2026-11-01, read
+# only): `orca-ide orchestration run-current --json` returned the same Run
+# from /tmp, from the cepa checkout, and with ORCA_TERMINAL_HANDLE unset. It
+# names no checkout and no terminal, so every repo's coordinator sees the
+# same "current" Run. This script therefore never takes a Run because
+# `run-current` reports it, and never uses it as proof of a binding
+# (punch-list L46, operator's choice in #116).
+#
 # Usage: orca-rebind.sh  <stdin      (it takes no arguments)
 #   stdin is FIELD lines only, inside the session's quoted heredoc
 #   (`<<'CEPA_FIELDS'`), so no value is ever inside a quoted shell string:
 #     cli: <cli>     §12a's printed `cli=` value, checked as orca-send.sh
 #                    checks it.
-#     run: <run id>  optional: the Run id a hand-off carried (`/cepa:handoff`).
-#                    `run_` then [A-Za-z0-9_] only. Without it, the Run is
-#                    the one `run-current` reports for this terminal.
+#     run: <run id>  the Run this session named: its prompt's `Orca Run:`
+#                    line (`/cepa:handoff`), or one the operator confirmed.
+#                    `run_` then [A-Za-z0-9_] only. Without it nothing is
+#                    re-bound.
 #     confirm: <run id>  optional, and only beside an equal `run:`: the
 #                    operator said this session coordinates that Run, after
-#                    an ownership `ask` (step 3). It lifts that ask only; the
+#                    an ownership `ask`. It lifts that ask only; the
 #                    live-holder check still runs.
 #   A field line is `<name>: <value>`, each name at most once. An empty line
 #   ends the fields; only empty lines may follow. Any other line is refused.
 #
 # What it does, in order:
-#   1. `run-current`. When it reports a Run bound to ORCA_TERMINAL_HANDLE (and
-#      it is the `run:` Run, when one is given), there is nothing to do.
-#   2. A `run:` Run that differs from the `run-current` Run is never re-bound:
-#      which one this coordinator owns is the operator's call.
-#   3. `run-show --id <run>` gives the holder and `consumer_generation`.
-#      A `run:` Run that `run-current` does not report is the hand-off's
-#      claim alone, and Orca records no repo or worktree for a Run to check
-#      it against (run-show measured below), so it is never taken without a
-#      `confirm:` line: it asks (punch-list L46, #113 finding 12).
+#   1. `run-current`. With no `run:` field, it only reports: a Run bound here
+#      is `ok`, none is `ok`, and a Run bound elsewhere asks whether it is
+#      this session's (it may be another repo's). It never calls `run-use`.
+#   2. With `run:`, `run-current` must report that same Run, or a
+#      `confirm:` line must name it; otherwise it asks (#113 finding 12:
+#      `run-show` has no repo or worktree field either, measured below).
+#   3. `run-show --id <run>` gives the holder and `consumer_generation`. A
+#      Run held by this terminal is `ok`.
 #   4. The holder must be absent from `terminal list`. A Run held by a live
 #      terminal is never taken: that is a live coordinator, and `run-use`
 #      would take its Run away. Then `run-show` once more, right before
 #      `run-use`: the holder and generation must still be step 3's, or it
 #      asks. A session that re-bound the Run during the `terminal list` call
 #      is then not taken (PR #116 review).
-#   5. `run-use --id <run>`, then `run-current` and `run-show` again. It
-#      counts only when `run-current` reports that Run with
-#      `coordinator_handle` = this terminal, AND `run-show` reports this
-#      terminal with `consumer_generation` exactly one above step 3's. Two
-#      sessions that re-bind at once cannot both see the same generation
-#      bound to themselves, so at most one prints `done` (#113 finding 11).
-#      The re-reads run even when `run-use` failed, so a `run-use` whose
-#      output was lost (the WSL interop error) but that took effect counts.
+#   5. `run-use --id <run>`, then `run-show` again. It counts only when
+#      `run-show` reports this terminal with `consumer_generation` exactly
+#      one above step 3's. Two sessions that re-bind at once cannot both see
+#      the same generation bound to themselves, so at most one prints `done`
+#      (#113 finding 11). The re-read runs even when `run-use` failed, so a
+#      `run-use` whose output was lost (the WSL interop error) but that took
+#      effect counts.
 #
 # Prints one summary line, and on exit 1 or 3 a second line,
 # `Ending first line: Needed from you: …`. Exit codes:
-#   0  `ORCA rebind: ok — …` (already bound, or no Run) or
+#   0  `ORCA rebind: ok — …` (already bound, or nothing named) or
 #      `ORCA rebind: done — <run> moved from <old> to this terminal`.
-#   1  `ORCA rebind: ask — …`: the Runs differ, a `run:`-only Run has no
-#      `confirm:`, the holder is live, or the holder could not be checked.
-#      Nothing was changed.
+#   1  `ORCA rebind: ask — …`: no `run:` while run-current reports a Run
+#      bound elsewhere, a `run:` Run that run-current does not report and no
+#      `confirm:` names, a live holder, a holder that could not be checked,
+#      or a Run that moved before `run-use`. Nothing was changed.
 #   3  `ORCA rebind failed: …`: an Orca read failed, `run-use` did not move
 #      the Run, or the generation did not rise by exactly 1. A mismatch after
 #      `run-use` is reported here, never ignored.
@@ -100,8 +108,8 @@
 #   - A `run-use` the 15-second bound killed may still take effect on the
 #     server after the re-read: the script prints `failed` and a rerun
 #     prints `ok`.
-#   - Worst case about 225 seconds (each of six reads 2 x 17, run-use 17):
-#     run the block with a tool timeout of at least 5 minutes.
+#   - Worst case about 190 seconds (each of five reads 2 x 17, run-use 17):
+#     run the block with a tool timeout of at least 4 minutes.
 #   - It does not wait for or prove Orca's prompts reach the new terminal;
 #     it proves the Run's record names it.
 set -u
@@ -114,7 +122,7 @@ ask() {
 }
 failed() {
   echo "ORCA rebind failed: $1"
-  echo "Ending first line: Needed from you: check which terminal holds the Run (orchestration run-current), close it if it is dead, then ask this session to run the re-bind again"
+  echo "Ending first line: Needed from you: check which terminal holds the Run (orchestration run-show --id <run>), close it if it is dead, then ask this session to run the re-bind again"
   exit 3
 }
 
@@ -210,21 +218,28 @@ cepa_rb_cur=$(cepa_rb_read_run "$cepa_rb_tmp/cur.json") || failed "run-current r
 cepa_rb_cur_id=${cepa_rb_cur% *} cepa_rb_cur_h=${cepa_rb_cur#* }
 [ -n "$cepa_rb_cur" ] || cepa_rb_cur_id= cepa_rb_cur_h=
 
-if [ -n "$cepa_rb_cur_id" ] && [ -n "$cepa_rb_want" ] && [ "$cepa_rb_cur_id" != "$cepa_rb_want" ]; then
-  ask "this terminal's Run is $cepa_rb_cur_id, the hand-off names $cepa_rb_want; nothing was changed" \
-    "say which Run this coordinator owns, $cepa_rb_cur_id or $cepa_rb_want"
+# No Run named: report only. run-current is server-wide, so its Run may be
+# another repo's; it is never taken on that evidence.
+if [ -z "$cepa_rb_want" ]; then
+  if [ -z "$cepa_rb_cur_id" ]; then
+    echo "ORCA rebind: ok — no Run named and run-current reports none"
+    exit 0
+  fi
+  if [ "$cepa_rb_cur_h" = "$cepa_rb_me" ]; then
+    echo "ORCA rebind: ok — $cepa_rb_cur_id is bound to this terminal"
+    exit 0
+  fi
+  ask "this session named no Run; run-current reports $cepa_rb_cur_id, held by $cepa_rb_cur_h, but run-current is server-wide, so it may be another repo's Run; nothing was changed" \
+    "say whether this session coordinates $cepa_rb_cur_id (then it runs the re-bind again with run: $cepa_rb_cur_id and confirm: $cepa_rb_cur_id lines)"
 fi
-if [ -n "$cepa_rb_cur_id" ] && [ "$cepa_rb_cur_h" = "$cepa_rb_me" ]; then
-  echo "ORCA rebind: ok — $cepa_rb_cur_id is bound to this terminal"
-  exit 0
+cepa_rb_run=$cepa_rb_want
+# A named Run is taken only when run-current agrees, or the operator
+# confirmed it (#113 finding 12; run-show has no repo or worktree field).
+if [ "$cepa_rb_cur_id" != "$cepa_rb_run" ] && [ "$cepa_rb_confirm" != "$cepa_rb_run" ]; then
+  ask "run-current reports ${cepa_rb_cur_id:-no Run}, not $cepa_rb_run, and Orca records no repo or worktree for a Run, so whether this session coordinates $cepa_rb_run is unproven; nothing was changed" \
+    "say whether this session coordinates $cepa_rb_run (then it runs the re-bind again with a confirm: $cepa_rb_run line)"
 fi
-cepa_rb_run=${cepa_rb_cur_id:-$cepa_rb_want}
-if [ -z "$cepa_rb_run" ]; then
-  echo "ORCA rebind: ok — no Run to re-bind (run-current reports none and no run field was given)"
-  exit 0
-fi
-# The holder and the generation, read fresh: `run-current` is not measured
-# to carry the generation, and the holder may have moved since step 1.
+# The named Run's holder and generation, from run-show (exact by id).
 cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json \
   || failed "run-show for $cepa_rb_run failed"
 cepa_rb_shown=$(cepa_rb_read_run "$cepa_rb_tmp/show.json" gen) \
@@ -235,13 +250,6 @@ if [ "$cepa_rb_old" = "$cepa_rb_me" ]; then
   echo "ORCA rebind: ok — $cepa_rb_run is bound to this terminal"
   exit 0
 fi
-# A Run that run-current does not report is named only by the hand-off, and
-# Orca records no repo or worktree to check it against (#113 finding 12).
-if [ -z "$cepa_rb_cur_id" ] && [ "$cepa_rb_confirm" != "$cepa_rb_run" ]; then
-  ask "run-current reports no Run for this terminal, and Orca records no repo or worktree for $cepa_rb_run, so whether this session coordinates it is unproven; nothing was changed" \
-    "say whether this session coordinates $cepa_rb_run (then it runs the re-bind again with a confirm: $cepa_rb_run line)"
-fi
-
 # The holder must be gone. Its absence from `terminal list` is the proof
 # (a closed terminal is proven by its absence, never by `"ok": true`).
 cepa_rb_orca "$cepa_rb_tmp/terms.json" 1 terminal list --json \
@@ -280,12 +288,8 @@ fi
 
 cepa_rb_use=0
 cepa_rb_orca "$cepa_rb_tmp/use.json" 0 orchestration run-use --id "$cepa_rb_run" --json || cepa_rb_use=$?
-cepa_rb_orca "$cepa_rb_tmp/after.json" 1 orchestration run-current --json \
-  || failed "run-use ran (exit $cepa_rb_use) but the re-read of run-current failed, so the binding is unproven"
-cepa_rb_after=$(cepa_rb_read_run "$cepa_rb_tmp/after.json") \
-  || failed "run-use ran (exit $cepa_rb_use) but run-current then returned a shape this reader does not know"
-[ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ] \
-  || failed "after run-use (exit $cepa_rb_use), run-current reports ${cepa_rb_after:-no Run}, not $cepa_rb_run bound to this terminal"
+# The proof is run-show alone: run-current is server-wide, so it cannot
+# say which terminal this binding is for.
 cepa_rb_orca "$cepa_rb_tmp/after-show.json" 1 orchestration run-show --id "$cepa_rb_run" --json \
   || failed "run-use ran (exit $cepa_rb_use) but the re-read of run-show failed, so whether one re-bind or two moved the Run is unproven"
 cepa_rb_gen_after=$(cepa_rb_read_run "$cepa_rb_tmp/after-show.json" gen) \

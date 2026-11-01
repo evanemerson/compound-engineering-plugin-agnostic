@@ -4,9 +4,17 @@
 # and what the session does with an alert; this script owns WHAT counts as one.
 # It reads; it never sends, nudges, stops or releases anything.
 #
-# Usage: orca-health.sh <cli>                 report alerts
+# Usage: orca-health.sh <cli> [<run>]         report alerts
 #        orca-health.sh <cli> ack <key>...    mark alerts as shown to the operator
 #   <cli>  §12a's printed `cli=` value, checked as orca-send.sh checks it.
+#   <run>  optional: the Run this session named (§12b rule 2's `run:`
+#          source), `run_` then [A-Za-z0-9_]. Without it, no Run is checked.
+#          It is never taken from `run-current`, which is server-wide: on
+#          Orca 1.4.245 (coord@main, 2026-11-01, read only)
+#          `orca-ide orchestration run-current --json` returned the same Run
+#          from /tmp, from the cepa checkout and with ORCA_TERMINAL_HANDLE
+#          unset, so every repo's coordinator would check one repo's Run
+#          (punch-list L46).
 #   <key>  the text between `ORCA alert: ` and ` — ` on an alert line.
 #
 # Prints one `ORCA alert: <key> — <text>` line per alert not yet acked, then a
@@ -48,7 +56,7 @@
 #                        default). Orca shows it as attention `input`.
 #   awaited:<msg>        a `question` this session sent (from_handle is
 #                        ORCA_TERMINAL_HANDLE) with no reply after 30 minutes.
-#   unbound:<run>:<hour> `run-current` reports the bound Run with a
+#   unbound:<run>:<hour> `run-show` reports the named Run with a
 #                        `coordinator_handle` that is not ORCA_TERMINAL_HANDLE
 #                        (punch-list L45: after the 2026-11-01 reboot it named
 #                        the dead pre-reboot terminal, so Orca prompted a
@@ -93,8 +101,8 @@
 #     none (rule 8's limit), so an idle Run is still unwatched.
 #   - The alert files are on this machine. A send from another machine or
 #     another Orca host leaves no file here.
-#   - Its Run is the one `run-current` reports for this terminal. A session
-#     with no bound Run gets only the file, question and awaited alerts.
+#   - Its Run is the one the session named. A session that named none gets
+#     only the file and awaited alerts.
 #   - The inbox window is 200 rows, newest first (the whole store was 245 rows
 #     on 2026-10-31). An older question is not seen.
 #   - The bounds are fixed here, from one Run's history. A worker with a
@@ -114,7 +122,7 @@ cepa_h_dir=${CEPA_ORCA_ALERT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/orc
 
 refuse() { echo "ORCA health refused: $1"; exit 4; }
 
-[ $# -ge 1 ] || refuse "usage: orca-health.sh <cli> [ack <key>...]"
+[ $# -ge 1 ] || refuse "usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."
 case "$cepa_h_cli" in
   ''|-*|*[!A-Za-z0-9._/-]*) refuse "the cli is not a plain command name" ;;
   /*) [ "$cepa_h_cli" = "${ORCA_CLI_COMMAND:-}" ] || refuse "a cli path must equal ORCA_CLI_COMMAND" ;;
@@ -144,8 +152,13 @@ cepa_h_main=0
 # from another.
 cepa_h_acked="$cepa_h_dir/acked/$cepa_h_wt"
 
-if [ $# -ge 2 ]; then
-  [ "$2" = ack ] && [ $# -ge 3 ] || refuse "usage: orca-health.sh <cli> [ack <key>...]"
+cepa_h_want=
+if [ $# -ge 2 ] && [ "$2" != ack ]; then
+  [ $# -eq 2 ] || refuse "usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."
+  [[ $2 =~ ^run_[A-Za-z0-9_]{1,64}$ ]] || refuse "the run is not run_ followed by [A-Za-z0-9_]"
+  cepa_h_want=$2
+elif [ $# -ge 2 ]; then
+  [ $# -ge 3 ] || refuse "usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."
   shift 2
   for k in "$@"; do
     [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|(exited|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
@@ -199,22 +212,22 @@ cepa_h_orca() {
 
 # Each read writes its result to a file, or a `.fail` marker beside it. The
 # two small readers exit non-zero on any shape they do not know, so a changed
-# Orca reads as unreadable, never as an empty Run.
+# Orca reads as unreadable, never as an empty Run. The named Run is read by
+# id; it must be there and be that Run.
 cepa_h_run=
-if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-current --json; then
-  cepa_h_run=$(python3 -I -c '
-import json, re, sys
+if [ -n "$cepa_h_want" ]; then
+  if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-show --id "$cepa_h_want" --json; then
+    cepa_h_run=$(python3 -I -c '
+import json, sys
 d = json.load(open(sys.argv[1]))
 r = d["result"]["run"] if d.get("ok") is True else sys.exit(1)
-if r is None:
-    sys.exit(0)
-i = r["id"]
-if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):
+if not isinstance(r, dict) or r["id"] != sys.argv[2]:
     sys.exit(1)
-print(i)
-' "$cepa_h_tmp/run.json" 2>/dev/null) || { cepa_h_run=; : >"$cepa_h_tmp/run.fail"; }
-else
-  : >"$cepa_h_tmp/run.fail"
+print(r["id"])
+' "$cepa_h_tmp/run.json" "$cepa_h_want" 2>/dev/null) || { cepa_h_run=; : >"$cepa_h_tmp/run.fail"; }
+  else
+    : >"$cepa_h_tmp/run.fail"
+  fi
 fi
 mkdir -p "$cepa_h_tmp/show"
 if [ -n "$cepa_h_run" ]; then
@@ -396,7 +409,7 @@ if other:
 
 # 2. The bound Run's live dispatches.
 if os.path.exists(os.path.join(tmp, "run.fail")):
-    unreadable("run-current")
+    unreadable("run-show")
 if run and me:
     # L45: the Run's record names the terminal Orca prompts. A restarted
     # coordinator's Run still names the dead one until it re-binds.
@@ -506,7 +519,7 @@ if seen:
     print("ORCA health: %d alert%s — ask the operator (§12b rule 8)%s" % (len(seen), "" if len(seen) == 1 else "s", tail))
     print("Ending first line: Needed from you: check the Orca alerts below")
     sys.exit(1)
-print("ORCA health: ok — %s%s" % ("Run %s checked" % run if run else "no bound Run; alert files and questions checked", tail))
+print("ORCA health: ok — %s%s" % ("Run %s checked" % run if run else "no Run named; alert files and own questions checked", tail))
 PY
 cepa_h_rc=$?
 # Any other exit is the reader's own failure: an alert, never a quiet pass.
