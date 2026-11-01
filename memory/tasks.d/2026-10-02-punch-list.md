@@ -1429,7 +1429,10 @@ L43. **Orca chat UI shows an old message below new ones, so live output moves up
 L45. **A restarted coordinator does not re-bind its Run, so Orca prompts a dead terminal.**
     status: pending
     severity: P1
-    owner: unassigned (a cepa fix; next worker in `roles` or `integrity`)
+    owner: roles (`tab23@roles`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "Fix L45 first": task `task_37b4876306f2`,
+      dispatch `ctx_c7311cef9512`, branch `fix/roles/run-rebind-on-restart`).
+      Other repos' sessions wait until this merges and both plugin hops run.
     Measured 2026-11-01 by coord@main after the reboot: `run-current` showed
     `run_5682a0ed1455` with `coordinator_handle` = the dead pre-reboot
     terminal `term_07815dfe…`. `orchestration run-use --id
