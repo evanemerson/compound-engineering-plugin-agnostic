@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-turn-endings.sh. Each mutant is one
-# substitution (or one ordered pair, the two-anchor form) in a temp copy of
-# the shipped skill file or of one command file. It must turn the check red
-# with EXACTLY the MISS lines named beside it: a mutant that also trips
-# another leg proves nothing about the leg meant to catch it, and an exact set
-# shows each leg kills a mutant no other leg kills.
+# substitution (or an ordered list of substitutions, the two-anchor form) in
+# a temp copy of the shipped skill file or of one command file. It must turn
+# the check red with EXACTLY the MISS lines named beside it: a mutant that
+# also trips another leg proves nothing about the leg meant to catch it, and
+# an exact set shows each leg kills a mutant no other leg kills.
 # A mutant with an empty set must stay green: it plants a form the check must
 # not flag. Two exceptions: rule-head-gone loses rule 7's whole text, and
 # peek-head-gone loses rule 8's, so each asserts only that every MISS is a
@@ -32,7 +32,8 @@ CHECK = "scripts/check-orca-turn-endings.sh"
 CITE = "**Under Orca**, end the run per `cepa:autonomy` §12b rule 7."
 # (name, file, old, new, exact MISS set) — file is "skill" or a command file.
 # A two-anchor mutant passes a list of (old, new) pairs as `old` and None as
-# `new`: each anchor must occur once, and the pairs apply in order.
+# `new`. The pairs apply in order, and each anchor must occur exactly once in
+# the text the earlier pairs left.
 MUTANTS = [
     ("rule-head-gone", "skill", "7. **How a turn ends under Orca.**", "7. **How a turn ends.**",
      # Without its head, rule 7's text is not found, so every phrase misses too.
