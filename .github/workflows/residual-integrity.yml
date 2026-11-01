@@ -42,12 +42,12 @@ permissions:
   contents: read
 
 jobs:
-  # Three jobs, not one (punch-list L31). One job ran every step in series
-  # and took 7m42s-8m58s of its 10-minute bound on main by 2026-10-31
-  # (`gh run list --branch main --workflow residual-integrity.yml`); a
+  # Separate jobs, not one (punch-list L31; L42 split orca-nudge again). One
+  # job ran every step in series and took 7m42s-8m58s of its 10-minute bound
+  # on main by 2026-10-31 (`gh run list --branch main --workflow residual-integrity.yml`); a
   # cancelled job reads as a red check on every PR. The jobs run in parallel,
   # each under its own bound. The `check` job's comments below on step order
-  # and on the bound apply to all three: in each job a checker runs before its
+  # and on the bound apply to every job: in each job a checker runs before its
   # controls, and every step keeps the `if: always()` it had. Per-job times are
   # hosted step times from run 41210093858 (`gh run view <id> --json jobs`).
   # A new step goes in the job whose subject it shares; when a job nears half
@@ -170,12 +170,15 @@ jobs:
         if: always()
         run: bash scripts/check-orca-turn-endings-controls.sh
 
+  # The nudge controls run as three shards, one job each (punch-list L42).
+  # One job ran them all and took 7m24s-7m58s of its 10-minute bound after
+  # PR #110 (runs 41264491281 and 41265227855, `gh run view <id> --json jobs`).
+  # Each shard runs every third mutant; the controls fail unless this file
+  # runs each of shards 1/3 to 3/3 exactly once, so keep all three run: lines
+  # literal. When a shard nears half its bound, raise N here (add a job, and
+  # change every --shard I/N) rather than raise the bound.
   orca-nudge:
-    # Orca nudge, send and health. Almost all of the time is the controls:
-    # 2m47s on PR #106; PR #109 added the health part (its controls took
-    # 3m10s locally on 4 cores); L38 (#19/#21/#22) took it to 4m12s on 4
-    # pinned cores. Each mutant runs only the part of the check
-    # that can see it; before that split this job hit its 10-minute bound.
+    # The nudge check, then controls shard 1/3.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -191,6 +194,26 @@ jobs:
       - name: Check Orca nudge
         if: always()
         run: bash scripts/check-orca-nudge.sh
-      - name: Check Orca nudge controls
+      - name: Check Orca nudge controls (shard 1/3)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh
+        run: bash scripts/check-orca-nudge-controls.sh --shard 1/3
+
+  orca-nudge-2:
+    # Controls shard 2/3. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 2/3)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 2/3
+
+  orca-nudge-3:
+    # Controls shard 3/3. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 3/3)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 3/3

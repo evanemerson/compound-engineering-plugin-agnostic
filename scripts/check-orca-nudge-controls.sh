@@ -18,19 +18,32 @@
 # orca-send.sh mutant runs the send legs. The send legs run the shipped nudge
 # beside orca-send.sh, never argument 1, so a nudge mutant cannot change them;
 # the nudge legs never run orca-send.sh. The unmutated copy runs whole and as
-# both halves, and the halves must partition the whole run's cases. Cost, with
-# `time bash scripts/check-orca-nudge-controls.sh` on a 16-core box: 3m33s
-# when every mutant ran all 154 cases; see the PR #106 body for the time after
-# the split. On a 4-vCPU CI runner the old cost hit the job's 10-minute bound.
+# each part, and the parts must partition the whole run's cases.
+#
+# `--shard I/N` runs only mutants I, I+N, I+2N, ... of the one list that holds
+# every nudge, send and health mutant in order (no argument means 1/1, every
+# mutant). Each shard still runs the unmutated copy and the partition control
+# first. CI runs shards 1/N to N/N as N parallel jobs (punch-list L42), and a
+# control here fails unless residual-integrity.yml runs each of them exactly
+# once, so a dropped job cannot silently drop mutants. Cost history: 3m33s on
+# a 16-core box when every mutant ran all 154 cases; the PR #106 body has the
+# time after the part split; PR #110 took the one hosted job to 7m24s of its
+# 10-minute bound; the PR that added `--shard` has the per-shard times.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
 # is complete.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
+shard=1/1
+if [[ $# -eq 2 && $1 == --shard ]]; then
+  shard=$2
+elif [[ $# -ne 0 ]]; then
+  echo "MISS usage: $0 [--shard I/N]"; exit 1
+fi
 
-python3 - <<'PY'
-import concurrent.futures, os, shutil, subprocess, tempfile
+CEPA_NUDGE_CONTROLS_SHARD=$shard python3 - <<'PY'
+import concurrent.futures, os, re, shutil, subprocess, tempfile
 
 SCRIPT = "plugins/cepa/scripts/orca-nudge.sh"
 CHECK = "scripts/check-orca-nudge.sh"
@@ -362,6 +375,26 @@ HEALTH_MUTANTS = [
     ('health-dir-relative', '[[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"\n', '', {'HEALTHREF relative alert directory'}),
     ('health-cli-any', '  orca-ide|orca-dev) ;;', '  orca-ide|orca-dev|bash) ;;', {'HEALTHREF cli not orca'}),
 ]
+SEND = "plugins/cepa/scripts/orca-send.sh"
+HEALTH = "plugins/cepa/scripts/orca-health.sh"
+WORKFLOW = ".github/workflows/residual-integrity.yml"
+src = open(SCRIPT, encoding="utf-8").read()
+send_src = open(SEND, encoding="utf-8").read()
+health_src = open(HEALTH, encoding="utf-8").read()
+
+# Every mutant, in one list: (part, mutant). A shard runs every Nth one.
+ALL = ([("nudge", m) for m in MUTANTS] + [("send", m) for m in SEND_MUTANTS]
+       + [("health", m) for m in HEALTH_MUTANTS])
+spec = os.environ.get("CEPA_NUDGE_CONTROLS_SHARD", "1/1")
+sm = re.fullmatch(r"([1-9][0-9]?)/([1-9][0-9]?)", spec)
+if not sm or int(sm.group(1)) > int(sm.group(2)):
+    print("MISS --shard is %r, want I/N with 1 <= I <= N" % spec)
+    raise SystemExit(1)
+SHARD, NSHARDS = int(sm.group(1)), int(sm.group(2))
+
+def shard_of(i, n):
+    return i % n + 1
+
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-ctl-")
 
@@ -370,6 +403,26 @@ def ok(msg):
 
 def miss(msg):
     global failed; failed += 1; print("MISS", msg)
+
+# The shards split the mutants: each name is unique, so each runs in exactly
+# one shard, and the workflow runs every shard of one N exactly once. Without
+# the second half, a deleted or renamed CI job silently drops 1/N of the
+# mutants and every remaining job stays green.
+names = [m[0] for _, m in ALL]
+dup = sorted({n for n in names if names.count(n) > 1})
+if dup:
+    miss("mutant names are not unique: %r" % dup[:3])
+else:
+    ok("the %d mutant names are unique, so each runs in exactly one of N shards" % len(names))
+wf = open(WORKFLOW, encoding="utf-8").read()
+runs = re.findall(r"^\s*run: bash scripts/check-orca-nudge-controls\.sh(.*)$", wf, re.M)
+specs = [r.strip() for r in runs]
+want_n = len(specs)
+want = ["--shard %d/%d" % (i, want_n) for i in range(1, want_n + 1)]
+if want_n and sorted(specs) == sorted(want):
+    ok("%s runs the controls as shards 1/%d to %d/%d, each once" % (WORKFLOW, want_n, want_n, want_n))
+else:
+    miss("%s runs the controls with %r, want each of %r once" % (WORKFLOW, specs, want))
 
 def check(args, legs="all"):
     r = subprocess.run(["bash", CHECK] + args, capture_output=True, text=True, timeout=300,
@@ -381,7 +434,8 @@ def check(args, legs="all"):
 def run(script, legs="all"):
     return check([script], legs)[:2]
 
-src = open(SCRIPT, encoding="utf-8").read()
+# Every shard runs the unmutated copy first: a red mutant proves nothing in a
+# job whose own baseline is not clean.
 clean = os.path.join(TMP, "clean.sh")
 open(clean, "w", encoding="utf-8").write(src)
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
@@ -400,70 +454,44 @@ else:
     miss("parts: rc %s/%s/%s, %d+%d+%d cases, %d not in any"
          % (nrc, src_, hrc, len(nudge), len(send), len(hlth), len(whole - nudge - send - hlth)))
 
-def run_mutant(m):
+def run_mutant(part, m):
     name, old, new, want = m
-    if src.count(old) != 1:
-        return m, None, None
-    path = os.path.join(TMP, name + ".sh")
-    open(path, "w", encoding="utf-8").write(src.replace(old, new))
-    return (m,) + run(path, "nudge")
-
-# Each check run makes its own temp dir, so the runs share nothing.
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_mutant, MUTANTS))
-for (name, old, new, want), rc, got in results:
-    if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, src.count(old))); continue
-    if rc == 1 and got == want:
-        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
-    else:
-        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
-
-SEND = "plugins/cepa/scripts/orca-send.sh"
-send_src = open(SEND, encoding="utf-8").read()
-
-def run_send_mutant(m):
-    name, old, new, want = m
-    if send_src.count(old) != 1:
-        return m, None, None
-    d = os.path.join(TMP, "send-" + name)
-    os.mkdir(d)
-    open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
-    shutil.copy(SCRIPT, d)
-    return (m,) + check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
-
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_send_mutant, SEND_MUTANTS))
-for (name, old, new, want), rc, got in results:
-    if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, send_src.count(old))); continue
-    if rc == 1 and got == want:
-        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
-    else:
-        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
-
-HEALTH = "plugins/cepa/scripts/orca-health.sh"
-health_src = open(HEALTH, encoding="utf-8").read()
-
-def run_health_mutant(m):
-    name, old, new, want = m
+    if part == "nudge":
+        if src.count(old) != 1:
+            return None, src.count(old)
+        path = os.path.join(TMP, name + ".sh")
+        open(path, "w", encoding="utf-8").write(src.replace(old, new))
+        return run(path, "nudge")
+    if part == "send":
+        # The send legs run the shipped nudge beside orca-send.sh.
+        if send_src.count(old) != 1:
+            return None, send_src.count(old)
+        d = os.path.join(TMP, "send-" + name)
+        os.mkdir(d)
+        open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
+        shutil.copy(SCRIPT, d)
+        return check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
     if health_src.count(old) != 1:
-        return m, None, None
+        return None, health_src.count(old)
     path = os.path.join(TMP, "health-" + name + ".sh")
     open(path, "w", encoding="utf-8").write(health_src.replace(old, new))
-    return (m,) + check([SCRIPT, SEND, path], "health")[:2]
+    return check([SCRIPT, SEND, path], "health")[:2]
 
+# Each check run makes its own temp dir, so the runs share nothing. One pool
+# for all three parts, so no part waits on another part's slowest mutant.
+mine = [pm for i, pm in enumerate(ALL) if shard_of(i, NSHARDS) == SHARD]
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-    results = list(pool.map(run_health_mutant, HEALTH_MUTANTS))
-for (name, old, new, want), rc, got in results:
+    results = list(pool.map(lambda pm: run_mutant(*pm), mine))
+for (part, (name, old, new, want)), (rc, got) in zip(mine, results):
     if rc is None:
-        miss("%s: anchor found %d times, want 1" % (name, health_src.count(old))); continue
+        miss("%s: anchor found %d times, want 1" % (name, got)); continue
     if rc == 1 and got == want:
         ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
     else:
         miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
 
 shutil.rmtree(TMP, ignore_errors=True)
-print("-- %d/%d controls passed --" % (passed, passed + failed))
+print("-- shard %d/%d: %d of %d mutants; %d/%d controls passed --"
+      % (SHARD, NSHARDS, len(mine), len(ALL), passed, passed + failed))
 raise SystemExit(1 if failed else 0)
 PY
