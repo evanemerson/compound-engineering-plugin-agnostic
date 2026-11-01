@@ -1490,14 +1490,18 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
     review 23 findings / 17 applied). Re-opened on the branch by two
     coord@main messages: msg_5f9c440d11a0 (merge main after #117, re-bump)
     and msg_50d5f27fc0ad (scope fix, operator's AskUserQuestion "Fix in
-    #116 first"). Measured by coord@main, read only, Orca 1.4.245:
-    `orca-ide orchestration run-current --json` returns run_5682a0ed1455
-    from /tmp, from this checkout, and with ORCA_TERMINAL_HANDLE unset — it
-    is SERVER-WIDE. So 1.45.0's re-bind would let the first coordinator of
-    any repo take cepa's Run after a reboot (only the live-holder check
-    stops it today), and orca-health.sh in other repos reads cepa's Run.
-    Fix in #116: take only a Run the session's own prompt names (`run:`) or
-    a `confirm:` names; health checks only a named Run.
+    #116 first"). CORRECTION (same day): coord@main's "server-wide"
+    claim was WRONG — its three probes all ran in its own pane and varied
+    only cwd and ORCA_TERMINAL_HANDLE, which Orca does not use to name the
+    caller. tab25 measured from another pane: `run-current --json` returns
+    `"run": null`, and `--from` with an invented handle returns
+    `stable_pane_required`. run-current is PER PANE. (A restored tab keeps
+    its pane, which is why L45 saw the old dead handle.) Decision relayed to
+    tab25 as option 1 (reply msg_7993bc7c8736): a Run held elsewhere is
+    never re-bound without a matching `run:` or `confirm:`; a run-current
+    Run held by this terminal counts as named; rule 2 keeps the run-create
+    id as the named Run. Lesson: a probe that varies inputs the system does
+    not read proves nothing about scope (repo CLAUDE.md, absence claims).
     severity: P2
     owner: roles (`tab25@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "One worker for the 4 P2s": task
