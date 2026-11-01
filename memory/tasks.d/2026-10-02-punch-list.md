@@ -1337,7 +1337,9 @@ L40. **Run the health check while every coordinator is idle (Orca automation).**
 L41. **A body line that is exactly `CEPA_BODY` ends the send heredoc early.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab4@integrity`, dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "L42 + L41 now": Run `run_5682a0ed1455`,
+      task `task_8c98da002128`, dispatch `ctx_906a7a441d05`; merges after L42)
     PR #110 review finding #3 (deferred; operator chose a follow-up item,
     2026-10-31). The send block is a quoted heredoc ending at `CEPA_BODY`.
     A message line that is exactly `CEPA_BODY` closes it, and the lines
@@ -1349,7 +1351,8 @@ L41. **A body line that is exactly `CEPA_BODY` ends the send heredoc early.**
 L42. **Shard `check-orca-nudge-controls.sh` before the next mutant batch.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: roles (`tab22@roles`, same answer: task `task_2a01e7309411`,
+      dispatch `ctx_cbc5fb1545b3`)
     After #110 the hosted `orca-nudge` job takes 7m24s of its 10-minute
     bound (main was 4-5m). #106 already split each mutant to the half of the
     check that can see it; the next step is two jobs (the L31 pattern), each
