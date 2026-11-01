@@ -34,9 +34,12 @@
 #                           is `cepa-send-<name>.txt`, a regular file this
 #                           user owns, outside the current repo. The session
 #                           writes it with its file-write tool right before
-#                           the run. The script removes it as soon as it has
-#                           read it, before any other check, so each file
-#                           serves one run and a stale one is never re-sent.
+#                           the run, under a name used once (§12b rule 1:
+#                           the session's name and a count). The fields are
+#                           read first, then the path is checked; a path that
+#                           fails is refused and kept. A path that passes is
+#                           read and removed before any value is checked, so
+#                           each file serves one run and is never re-sent.
 #   A field line is `<name>: <value>`, one per line, each name at most once,
 #   in any order. Trailing spaces and a CR are dropped from a value. Any
 #   other line is refused, so a block that lost a field name is never read.
@@ -268,21 +271,40 @@ done
 { cepa_send_rest=$(cat); } 2>/dev/null
 [ -z "${cepa_send_rest//[[:space:]]/}" ] \
   || refuse "the heredoc holds a message after its fields; the message goes in the file the file: field names"
-# THE MESSAGE FILE (punch-list L41). Read, then removed, before any other
-# check: each file serves one run, so a refused run is rerun with a file
-# written again, and a stale file is never sent.
+# THE MESSAGE FILE (punch-list L41). The fields above are read first. Then
+# the path is checked; a path that fails is refused and its file is kept.
+# A path that passes is read and removed before any check of the values, so
+# each file serves one run and a stale file is never sent. (PR #112 review.)
 [[ $cepa_send_seen == *" file "* ]] || refuse "the file field is missing"
 cepa_send_file=${cepa_send_f_file-}
-[[ $cepa_send_file =~ ^(/[A-Za-z0-9._@+-]+)*/cepa-send-[A-Za-z0-9._-]{1,64}\.txt$ \
+[[ $cepa_send_file =~ ^(/[A-Za-z0-9._@+-]+)*/cepa-send-[A-Za-z0-9._@-]{1,64}\.txt$ \
    && $cepa_send_file != */./* && $cepa_send_file != */../* ]] \
   || refuse "the message file is not an absolute path to a cepa-send-<name>.txt file"
 [ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O "$cepa_send_file" ] \
   || refuse "the message file is not a regular file this user owns"
+# Never inside this checkout, nor inside the main checkout that holds it
+# (a linked worktree sits under the main one's .claude/worktrees). The check
+# runs on the path as given AND on its physical path (the directory with
+# every symlink resolved), so a symlinked directory cannot lead into a repo
+# by another name. A symlinked /tmp (macOS) is fine: only where it leads
+# counts. git's own paths are physical.
+cepa_send_dir=$(cd -P -- "${cepa_send_file%/*}/" 2>/dev/null && pwd -P) || cepa_send_dir=
+[ -n "$cepa_send_dir" ] || refuse "the message file's directory could not be resolved"
+cepa_send_phys=${cepa_send_dir%/}/${cepa_send_file##*/}
 cepa_send_top=$(git rev-parse --show-toplevel 2>/dev/null) || cepa_send_top=
-[ -z "$cepa_send_top" ] || [[ $cepa_send_file != "$cepa_send_top"/* ]] \
-  || refuse "the message file is inside the repo"
-{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null && rm -f -- "$cepa_send_file" \
-  && [ ! -e "$cepa_send_file" ] || refuse "the message file could not be read and removed"
+cepa_send_main=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || cepa_send_main=
+case "$cepa_send_main" in /*/.git) cepa_send_main=${cepa_send_main%/.git} ;; *) cepa_send_main= ;; esac
+for cepa_send_k in "$cepa_send_top" "$cepa_send_main"; do
+  [ -z "$cepa_send_k" ] || [[ $cepa_send_file != "$cepa_send_k"/* && $cepa_send_phys != "$cepa_send_k"/* ]] \
+    || refuse "the message file is inside the repo"
+done
+# Removed even when the read fails, so a file never outlives the run that
+# passed its path checks.
+{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null
+cepa_send_read=$?
+rm -f -- "$cepa_send_file" 2>/dev/null
+[ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"
+[ "$cepa_send_read" = 0 ] || refuse "the message file could not be read"
 cepa_send_cli=${cepa_send_f_cli-} cepa_send_target=${cepa_send_f_target-} cepa_send_type=${cepa_send_f_type-}
 cepa_send_task=${cepa_send_f_task-}
 if [ -n "${cepa_send_f_session-}" ]; then

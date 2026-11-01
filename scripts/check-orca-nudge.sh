@@ -116,12 +116,18 @@
 #              order, with a CR, trailing spaces or trailing empty lines, send
 #              the same argv; a CR after the subject is dropped too.
 #   FILE     — punch-list L41: the message file. A missing field, a path that
-#              is relative, has a `..` part or a space, or is not named
+#              is relative, has a `.` or `..` part or a space, or is not named
 #              cepa-send-<name>.txt, a file that does not exist, a directory,
-#              a symlink, and a file inside the current repo are each refused
-#              before any call, and a refused file is never removed. A file
-#              that passes is removed after a stored send and after a refused
-#              one.
+#              a symlink, and a file inside the current repo (directly,
+#              through a symlinked directory, or in the main checkout seen
+#              from a linked worktree) are each refused before any call, and
+#              a refused path's file (or link) is kept. A file that passes is
+#              removed after a stored send and after a refused one, and also
+#              when it cannot be read; one that cannot be removed is refused.
+#              A file name with the session's name (`@`) sends; a message
+#              that is only a subject is refused, never sent as its body.
+#              The unreadable and unremovable cases need a non-root user.
+#              `-O` is not exercised: that needs a file of another user.
 #   BLOCK    — punch-list L41: §12b rule 1's block, read from SKILL.md. Its
 #              heredoc holds only `<name>: <placeholder>` lines, `file:`
 #              among them; filled in and run against the stub, a message whose
@@ -956,14 +962,55 @@ if LEGS in ("all", "send"):
     os.mkdir(os.path.join(MSGDIR, "cepa-send-dir.txt"))
     file_case("FILE a directory", os.path.join(MSGDIR, "cepa-send-dir.txt"), FREG)
     p = msg_file(STDIN, "real-target.txt")
-    os.symlink(p, os.path.join(MSGDIR, "cepa-send-link.txt"))
-    file_case("FILE a symlink", os.path.join(MSGDIR, "cepa-send-link.txt"), FREG, keep=p)
+    link = os.path.join(MSGDIR, "cepa-send-link.txt")
+    os.symlink(p, link)
+    file_case("FILE a symlink", link, FREG, keep=p)
+    (ok if os.path.lexists(link) else miss)("FILE a symlink keeps the link" if os.path.lexists(link) else
+                                            "FILE a symlink keeps the link: it was removed")
+    p = msg_file(STDIN, "cepa-send-dot.txt")
+    file_case("FILE dot part", os.path.join(MSGDIR, ".", "cepa-send-dot.txt"), FBAD, keep=p)
     REPO_DIR = os.path.join(TMP, "a-repo")
     os.mkdir(REPO_DIR)
     subprocess.run(["git", "init", "-q", REPO_DIR], check=True)
     p = os.path.join(REPO_DIR, "cepa-send-in.txt")
     open(p, "w").write(STDIN)
     file_case("FILE inside the repo", p, "the message file is inside the repo", keep=p, cwd=REPO_DIR)
+    # PR #112 review: a symlinked directory that leads into the repo, and the
+    # main checkout seen from a linked worktree, are inside it too.
+    os.symlink(REPO_DIR, os.path.join(TMP, "repo-link"))
+    file_case("FILE via a symlinked directory", os.path.join(TMP, "repo-link", "cepa-send-in.txt"),
+              "the message file is inside the repo", keep=p, cwd=REPO_DIR)
+    git_id = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    WT_DIR = os.path.join(REPO_DIR, ".claude", "worktrees", "w1")
+    subprocess.run(["git", "-C", REPO_DIR] + git_id + ["commit", "-q", "--allow-empty", "-m", "x"], check=True)
+    subprocess.run(["git", "-C", REPO_DIR, "worktree", "add", "-q", "--detach", WT_DIR], check=True,
+                   capture_output=True)
+    file_case("FILE in the main checkout from a worktree", p, "the message file is inside the repo", keep=p, cwd=WT_DIR)
+    # The session's name in the file name, as rule 1 asks.
+    store("FILE session name in the file name sends", 0, [STORED], mode="no-nudge",
+          raw=([], field_lines(["orca-ide", H, "question", "no-nudge"])
+               + "file: %s\n" % msg_file(STDIN, "cepa-send-tab4@integrity-1.txt")))
+    # A subject with no body line is refused, never sent with the subject as
+    # its body.
+    store("FILE subject only", 4, [SR + "the body is empty", PASTE], stdin=SUBJ + "\n", called=False)
+    store("FILE subject only, no newline", 4, [SR + "the body is empty", PASTE], stdin=SUBJ, called=False)
+    if os.geteuid() != 0:
+        p = msg_file(STDIN, "cepa-send-unreadable.txt")
+        os.chmod(p, 0o000)
+        store("FILE unreadable", 4, [SR + "the message file could not be read", PASTE],
+              raw=([], F + "file: %s\n" % p), called=False)
+        (ok if not os.path.exists(p) else miss)("FILE unreadable is still removed" if not os.path.exists(p) else
+                                                "FILE unreadable is still removed: it is there")
+        rod = os.path.join(TMP, "ro-dir")
+        os.mkdir(rod)
+        p = os.path.join(rod, "cepa-send-ro.txt")
+        open(p, "w").write(STDIN)
+        os.chmod(rod, 0o555)
+        store("FILE unremovable", 4, [SR + "the message file could not be removed", PASTE],
+              raw=([], F + "file: %s\n" % p), called=False)
+        os.chmod(rod, 0o755)
+    else:
+        miss("FILE unreadable: runs as root, so a mode-000 file stays readable")
     # One file, one run: removed after a stored send and after a refused one.
     for name, kw in [("FILE removed after a stored send", dict(rc=0, want=[STORED], mode="no-nudge")),
                      ("FILE removed after a refused send", dict(

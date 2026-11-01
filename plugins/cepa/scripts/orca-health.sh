@@ -273,7 +273,7 @@ REASONS = [re.compile(x) for x in (
     r"the heredoc holds a message after its fields; the message goes in the file the file: field names",
     r"the message file is not an absolute path to a cepa-send-<name>\.txt file",
     r"the message file is not a regular file this user owns", r"the message file is inside the repo",
-    r"the message file could not be read and removed",
+    r"the message file could not be (read|removed)", r"the message file's directory could not be resolved",
     r"the session name holds a character outside \[A-Za-z0-9\._@-\]",
     r"a worker_done takes outcome and task fields, not nudge",
     r"only a worker_done takes outcome and task fields",

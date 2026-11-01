@@ -197,7 +197,8 @@ REPORT3_HAS = ["**A worker with no preamble sends its report, never only prints 
 # L33 review, L41: a body line equal to the heredoc delimiter ended it early,
 # so the message now goes in a file and the heredoc holds field lines only.
 NUDGE_HAS += ["**The message goes in a file, never in the heredoc.**",
-              "The script reads the file and removes it before any other check, so a file serves one run"]
+              "A path that passes is read and removed before any value is checked",
+              "`cepa-send-<session>-<n>.txt`", "**Every field value is one line.**"]
 # L38 (#19, #21): no value is a quoted argument; the fields go on stdin, and
 # the optional session name reaches the ending line.
 NUDGE_HAS += ["**No value is spliced into a shell string.** The script takes no arguments.",

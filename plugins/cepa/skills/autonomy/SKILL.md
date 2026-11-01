@@ -1646,22 +1646,33 @@ limits.
      refuses any other line, so a block that lost a field name is never read.
    - **The message goes in a file, never in the heredoc.** Before each run
      of the block, write the message with the file-write tool (Write) to a
-     new file named `cepa-send-<name>.txt` in the session's scratchpad or
-     temp directory, never in the repo: the subject on line 1, the body on
-     every line after it. Put that file's absolute path in the `file:` field.
-     The script reads the file and removes it before any other check, so a
-     file serves one run: write it again before you run the block again,
-     even after a refusal. Why (punch-list L41, PR #110 review finding #3):
-     up to cepa 1.43.0 the message sat in the heredoc, and a message line
-     that was exactly the delimiter ended it, so every line after it ran as
-     a shell command. Bodies carry relayed repo content, and only prose
-     guarded that. A file never passes through the shell, so no line of it
-     can end anything, and each field line starts `<name>: `, so none can
-     equal `CEPA_FIELDS`. A message put after the fields is refused. The
-     script refuses a path that is not absolute, is not named
-     `cepa-send-<name>.txt` (`<name>` in `[A-Za-z0-9._-]`), is not a regular
-     file this user owns (a symlink is refused), or is inside the current
-     repo; none of those is removed.
+     NEW file, `cepa-send-<session>-<n>.txt`: `<session>` is this session's
+     §10a name (`tab4@integrity`), and `<n>` counts this session's sends
+     (1, 2, 3, …), so no two sessions and no two runs share a name, and Write
+     never overwrites. Put it in the session's scratchpad directory when it
+     has one, else the system temp directory, never in a repo. Line 1 is the
+     subject and every line after it the body; a `reply` (rule 7) has no
+     subject, so its whole file is the answer. Put the file's absolute path
+     in the `file:` field. The script reads the fields first, then checks
+     the path. A path that fails is refused and its file is kept. A path
+     that passes is read and removed before any value is checked, so a
+     refused run needs a new file (the next `<n>`) before the block runs
+     again. Why (punch-list L41, PR #110 review finding #3): up to cepa 1.43.0
+     the message sat in the heredoc, and a message line that was exactly the
+     delimiter ended it, so every line after it ran as a shell command.
+     Bodies carry relayed repo content, and only prose guarded that. A file
+     never passes through the shell, so no line of it can end anything. A
+     message put after the fields is refused. The script refuses a path that
+     is not absolute, is not named `cepa-send-<name>.txt` (`<name>` in
+     `[A-Za-z0-9._@-]`), is not a regular file this user owns (a symlink is
+     refused), or lies inside this checkout or its main checkout, symlinks
+     resolved.
+   - **Every field value is one line.** Each field line starts `<name>: `, so
+     none can equal `CEPA_FIELDS`, but a value that holds a line break would
+     start a new line of its own. Never substitute such a value: print the
+     block for pasting with `Orca send skipped: <field> is not one line —
+     paste below`. The values are handles, ids, a name and a path, so this
+     is the rare case.
    - **A send succeeded** only when the script prints
      `Orca send stored: <message id> for <recipient>`. It prints that only
      when Orca returned `"ok": true` with a `result.message.id` shaped

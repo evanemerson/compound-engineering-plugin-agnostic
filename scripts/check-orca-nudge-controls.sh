@@ -240,7 +240,8 @@ SEND_MUTANTS = [
     ('send-target-loose', '^(term_[0-9a-f-]{36}|run:', '(term_[0-9a-f-]{36}|run:',
      {'SENDREF target with text before the handle'}),
     ('send-empty-body-ok', '[ -n "${cepa_send_body//[[:space:]]/}" ] || refuse "the body is empty"\n', '',
-     {'REPLYREF empty body', 'SENDREF empty body', 'SESSION reply names it'}),
+     {'FILE subject only', 'FILE subject only, no newline', 'REPLYREF empty body', 'SENDREF empty body',
+      'SESSION reply names it'}),
     # ALERT (punch-list L34): exit 4 and 5 each write one checked alert file.
     ('alert-not-on-fail', 'cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }', 'cepa_send_ending; exit 5; }',
      {'ALERT failed send writes one file', 'ALERT relative directory is not used', 'ALERT unmakeable directory is reported', 'ALERT worker_done failure names its dispatch'}),
@@ -257,17 +258,22 @@ SEND_MUTANTS = [
     ('alert-mkdir-unchecked', 'mkdir -p "$dir" 2>/dev/null || { echo', 'mkdir -p "$dir" 2>/dev/null; true || { echo',
      {'ALERT unmakeable directory is reported'}),
     # FILE (punch-list L41): the message is in a file, read once and removed.
-    ('file-not-removed', '{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null && rm -f -- "$cepa_send_file" \\\n  && [ ! -e "$cepa_send_file" ] || refuse',
-     '{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null || refuse',
-     {'FILE removed after a stored send', 'FILE removed after a refused send', 'BLOCK hostile message is sent as text'}),
+    ('file-not-removed', 'rm -f -- "$cepa_send_file" 2>/dev/null\n[ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"\n', '',
+     {'FILE removed after a refused send', 'FILE unremovable', 'BLOCK hostile message is sent as text', 'FILE removed after a stored send', 'FILE unreadable is still removed'}),
     ('file-symlink-allowed', '[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O', '[ -f "$cepa_send_file" ] && [ -O',
-     {'FILE a symlink'}),
-    ('file-any-name', '/cepa-send-[A-Za-z0-9._-]{1,64}\\.txt$', '/[A-Za-z0-9._-]{1,64}$',
+     {'FILE a symlink', 'FILE a symlink keeps the link'}),
+    ('file-any-name', '/cepa-send-[A-Za-z0-9._@-]{1,64}\\.txt$', '/[A-Za-z0-9._@-]{1,64}$',
      {'FILE another name', 'FILE another name keeps the file'}),
     ('file-dotdot-allowed', ' && $cepa_send_file != */../* ]]', ' ]]',
      {'FILE dot-dot part', 'FILE dot-dot part keeps the file'}),
-    ('file-in-repo-allowed', '[[ $cepa_send_file != "$cepa_send_top"/* ]]', 'true',
-     {'FILE inside the repo', 'FILE inside the repo keeps the file'}),
+    ('file-in-repo-allowed', '    || refuse "the message file is inside the repo"', '    || true',
+     {'FILE in the main checkout from a worktree', 'FILE via a symlinked directory', 'FILE via a symlinked directory keeps the file', 'FILE inside the repo', 'FILE in the main checkout from a worktree keeps the file', 'FILE inside the repo keeps the file'}),
+    ('file-physical-unchecked', ' && $cepa_send_phys != "$cepa_send_k"/* ]]', ' ]]', {'FILE in the main checkout from a worktree', 'FILE via a symlinked directory', 'FILE in the main checkout from a worktree keeps the file', 'FILE via a symlinked directory keeps the file'}),
+    ('file-main-unchecked', 'for cepa_send_k in "$cepa_send_top" "$cepa_send_main"; do', 'for cepa_send_k in "$cepa_send_top"; do', {'FILE in the main checkout from a worktree', 'FILE in the main checkout from a worktree keeps the file'}),
+    ('file-dot-allowed', ' && $cepa_send_file != */./* && ', ' && ', {'FILE dot part keeps the file', 'FILE dot part'}),
+    ('file-unanchored', '=~ ^(/[A-Za-z0-9._@+-]+)*/cepa-send-', '=~ (/[A-Za-z0-9._@+-]+)*/cepa-send-', {'FILE space in the path', 'FILE relative path'}),
+    ('file-read-unchecked', '[ "$cepa_send_read" = 0 ] || refuse "the message file could not be read"\n', '', {'FILE unreadable'}),
+    ('file-single-line-body', "  [[ $cepa_send_msg != *$'\\n'* ]] || cepa_send_body=${cepa_send_msg#*$'\\n'}", "  cepa_send_body=${cepa_send_msg#*$'\\n'}", {'FILE subject only', 'FILE subject only, no newline'}),
     ('file-field-optional', '[[ $cepa_send_seen == *" file "* ]] || refuse "the file field is missing"\n', '',
      {'FILE field missing'}),
     ('heredoc-message-allowed', '[ -z "${cepa_send_rest//[[:space:]]/}" ] \\\n', 'true \\\n',
@@ -337,9 +343,10 @@ SEND_MUTANTS = [
      # Every refusal before the target is copied (the heredoc and file
      # checks, L41) then names "the target session".
      {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused', 'FIELDS name given twice',
-      'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot-dot part',
-      'FILE field missing', 'FILE inside the repo', 'FILE relative path', 'FILE space in the path',
-      'SENDREF target newline'}),
+      'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot part',
+      'FILE dot-dot part', 'FILE field missing', 'FILE in the main checkout from a worktree', 'FILE inside the repo',
+      'FILE relative path', 'FILE space in the path', 'FILE unreadable', 'FILE unremovable',
+      'FILE via a symlinked directory', 'SENDREF target newline'}),
     ('subject-cr-kept', "  cepa_send_subject=${cepa_send_subject%$'\\r'}\n", '',
      {'FIELDS any order sends the same argv'}),
 ]
@@ -473,6 +480,8 @@ SKILL_MUTANTS = [
      {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
     ("block-no-file-field", "     session: <session>\n     file: <file>\n", "     session: <session>\n",
      {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+    ("block-unquoted-delimiter", "orca-send.sh\" <<'CEPA_FIELDS' || true", "orca-send.sh\" <<CEPA_FIELDS || true",
+     {'BLOCK hostile message is sent as text', 'BLOCK heredoc holds only field lines'}),
 ]
 
 def run_skill_mutant(m):

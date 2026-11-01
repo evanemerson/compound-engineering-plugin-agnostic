@@ -9,5 +9,5 @@ Canonical findings: `todos/review-2026-10-30-161650.md` (findings 2, 6, 11, 13, 
 - [ ] P3 — The orca-ide prefix grants cannot admit §12a's compound probe; every run of the five citing commands now runs §12a and may prompt; keep, drop, or add an admissible probe helper — five command frontmatters (finding 11).
 - [ ] P3 — Operator kind forbids options as text; §10d's `Decisions` lists them; say which holds — §12b rule 7 vs §10d (finding 13).
 - [ ] P3 — Global `~/.claude/CLAUDE.md` still requires `## Next steps`; tracked by L24, coord@main edits it after the probe (finding 14).
-- [ ] P3 — Verify whether rule 1's `CEPA_BODY` heredoc has rule 6's terminator break-out; if so apply the same guard — §12b rule 1 (finding 19).
+- [x] CLOSED in PR #112 (L41, 1.44.0; rule 1 now reads the message from a file, and rule 6 does not have the hazard) — P3 — Verify whether rule 1's `CEPA_BODY` heredoc has rule 6's terminator break-out; if so apply the same guard — §12b rule 1 (finding 19).
 - [ ] P3 — POINTER is counted inside fences; apply CITES' `unfenced()` to §6 — `scripts/check-orca-turn-endings.sh` (finding 21).
