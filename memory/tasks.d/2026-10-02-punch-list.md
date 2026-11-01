@@ -1623,6 +1623,21 @@ L54. **Two reviews in the same second write one findings file; the second overwr
     `todos/review-*.md` must accept the new name. Source line:
     `memory/tasks.d/2026-11-01-chore-integrity-l48-cleanup-batch.md` line 11.
 
+L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.**
+    status: pending
+    severity: P2
+    owner: coord@main (plan + plan-review); build waits for operator approval
+      AND for #116 (L46), which edits §12b rule 2
+    Hand-off from artist360-docs coord@main, 2026-11-01 (pasted by the
+    operator). Plan (local, docs/ is gitignored):
+    `docs/plans/2026-11-01-orca-lane-lifecycle.md`. Facts re-measured from
+    help/reads (Orca 1.4.245): `worktree create --name/--setup run`,
+    `worktree set --display-name`, `worktree rm --run-hooks` (archive hooks
+    are skipped without it; rm also deletes the lane's checked-out branch).
+    Out of date: §12b rule 2 ("setup hook is not the stack init"), rule 6
+    sidebar row, no removal rule, global CLAUDE.md "New lane". The global
+    CLAUDE.md edit is drafted for the operator, never applied by cepa.
+
 ---
 
 ## How this list is used
