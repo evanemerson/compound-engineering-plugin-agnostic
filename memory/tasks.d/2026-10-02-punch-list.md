@@ -1684,6 +1684,15 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     Mitigations to weigh: `orca-ide worktree set --unread --comment` (the sidebar
     unread dot, documented "to ask for a person's attention"); Claude Code's
     push notification; a report to Orca with the probe log.
+    Operator screenshots, same moment (2026-11-01 ~17:15 CST): dpc-pro
+    coord@main had an AskUserQuestion open ("Deploy", "Enter to select");
+    the dashboard read "2 total" (compound-engineering, artist360-docs, both
+    WORKING) and listed dpc-pro in NO column. `worktree ps` at 17:52: the
+    dpc-pro agent row `done`, tool None, updated 17 min earlier (the question
+    had been answered by then); `--agent-wait` and `terminal show` give
+    `agentWait: null` for every row, so Orca's terminal-screen wait check
+    did not fire either. `worktree ps` lists 15 agent rows; the dashboard
+    shows 2, so it filters rows by a rule not in any help text.
 
 ---
 
