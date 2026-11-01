@@ -1488,7 +1488,9 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
     status: pending
     severity: P2
     owner: roles (`tab25@roles`, dispatched via Orca 2026-11-01 on the
-      operator's AskUserQuestion "One worker for the 4 P2s")
+      operator's AskUserQuestion "One worker for the 4 P2s": task
+      `task_5bd477f61f8b`, dispatch `ctx_a418f891de98`, branch
+      `fix/roles/rename-rebind-hardening`)
     1. Rule 6 rename block runs `<cli>` unchecked and unquoted
        (`memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md` line 11,
        security-sentinel: `orca-ide;touch${IFS}/tmp/x` runs the touch).
