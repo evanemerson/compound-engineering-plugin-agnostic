@@ -1257,7 +1257,21 @@ L37. **Session names: rule 6 does not stick, and the naming scheme itself is in 
        the operator's file), with a gate if one fits.
 
 L38. **Send block: move its 4 arguments onto stdin, and name the session in the ending line.**
-    status: pending
+    status: completed
+    CLOSED 2026-10-31 — PR #110 merged `512a1b3` (v1.43.0) on the operator's
+    AskUserQuestion "Merge, file 2 follow-ups". `orca-send.sh` takes no
+    arguments: cli/target/type/nudge (or outcome/task) are field lines on
+    the quoted heredoc, plus an optional `session:` named in every ending
+    line (#19, #21); gate cases + mutants for the send branches (#22). Head
+    7c92e58 = Handoff `Head:`, CI 9/9 green, main had gained only this file
+    since the PR's base. `roles` parked, branch deleted, tab closed (absent
+    from `terminal list`); hops 1.42.0 → 1.43.0, freshness rc=0. Global
+    `~/.claude/CLAUDE.md` line 97 now names the `orca-send.sh` block
+    (`type: worker_done`) (backup `~/.claude/CLAUDE.md.bak-2026-10-31-l38`).
+    BREAKING for live sessions: a session that loaded the old rule 1 block
+    has its sends refused (exit 4, loud, alert) until it restarts — another
+    reason for L30 item 3. 4 deferred review findings in the branch's
+    residual shard; two became L41 and L42.
     severity: P3
     owner: roles (`tab21@roles`, dispatched via Orca 2026-10-31 on the
       operator's AskUserQuestion "L38 on a new Run": NEW Run
@@ -1320,6 +1334,27 @@ L40. **Run the health check while every coordinator is idle (Orca automation).**
     Also measured: orca-health's "inbox window full" warning is global, not
     per Run (`orchestration inbox` lists the newest 200 rows across all
     recipients), so a fresh Run does not clear it.
+L41. **A body line that is exactly `CEPA_BODY` ends the send heredoc early.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    PR #110 review finding #3 (deferred; operator chose a follow-up item,
+    2026-10-31). The send block is a quoted heredoc ending at `CEPA_BODY`.
+    A message line that is exactly `CEPA_BODY` closes it, and the lines
+    after it run as shell commands. Rule 1 tells the session to indent such
+    a line, but nothing enforces it. Options from the worker: a per-send
+    random delimiter, or a `file:` field that reads the body from a file.
+    Changes the block again: ship it with a restart note like #110's.
+
+L42. **Shard `check-orca-nudge-controls.sh` before the next mutant batch.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    After #110 the hosted `orca-nudge` job takes 7m24s of its 10-minute
+    bound (main was 4-5m). #106 already split each mutant to the half of the
+    check that can see it; the next step is two jobs (the L31 pattern), each
+    with headroom. Measure per-part times first and state them.
+
 ---
 
 ## How this list is used
