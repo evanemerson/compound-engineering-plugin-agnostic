@@ -1870,10 +1870,13 @@ limits.
      land on its own branch, which it creates first (§10b), and it stays
      read-only (§10f) until the worker settles. It never creates a worktree:
      a child's branch would carry another `<wt>`, which it does not own (§10c).
-   - **A main coordinator uses a new child worktree** (`new-child`): the main
-     checkout hosts no workers (§10). Orca's setup hook is not the repo's own
-     stack init; the coordinator runs that init, or names it as the worker's
-     first step in the spec.
+   - **A main coordinator starts a worker into a parked lane**:
+     `worker-start --worktree path:<lane>`, where the lane was made once
+     with the lane block below and is reused (the main checkout hosts no
+     workers, §10; a lane keeps its warm state). `new-child` is allowed only
+     for a one-off lane: its first branch is Orca's `<prefix>/<name>`, and
+     under a `start-immediately` setup policy its worker runs beside an
+     unfinished setup.
    - **One live worker per checkout.** Before a `current` start, list the
      Run's workers and confirm none is live in this checkout, the worker that
      just sent a hand-off included (rule 1).
@@ -1884,10 +1887,78 @@ limits.
      after the worktree**, not the directory after a branch. That first
      branch has no `/<wt>/<desc>` shape, so it is never the work branch: rule 3
      makes the worker leave it before its first write. Pass `--name <wt>`, with
-     `<wt>` a valid §10a worktree name. Where Orca puts the directory is not
-     stated in its help; the worker re-measures `<wt>` (§10a), and a mismatch is
-     §10a's stop. The main coordinator deletes Orca's default branch when it
-     parks the lane, after `git log origin/<trunk>..<branch>` shows no commit.
+     `<wt>` a valid §10a worktree name. Orca puts the directory at
+     `~/orca/workspaces/<repo>/<name>` (measured in L55's probe, Orca
+     1.4.245); the worker re-measures `<wt>` (§10a), and a mismatch is
+     §10a's stop.
+   - **Lanes: create, name and remove them with `orca-lane.sh`.** This rule
+     owns the lane lifecycle; rule 6 and `~/.claude/CLAUDE.md` cite it.
+     - **Who and when.** Only the main coordinator creates or removes a lane
+       (a worker never does, §10e; a worktree coordinator never creates one,
+       above). It removes a lane only when the operator asks: a lane keeps
+       its warm state.
+     - **Orca's setup is the setup.** `create` runs the repo's `orca.yaml`
+       `setup:` under the repo's own setup policy, and nobody runs it again.
+       Orca reads that `setup:` from the new lane's own checkout (the base
+       ref), so it must be committed on `<base>`. A repo whose stack init is
+       not in `orca.yaml` names it in its own CLAUDE.md, and the main
+       coordinator runs it once, in the lane, after `create`. **Orca reports
+       no setup result** (a setup that exits 1 still reads `"ok": true`), so
+       the coordinator reads the lane's `Setup` tab before it starts a
+       worker there.
+     - **Removal always runs the archive hook** (`worktree rm --run-hooks`),
+       which Orca reads from the main checkout's working-tree `orca.yaml`.
+       A failed hook removes nothing; never pass
+       `--allow-failed-archive-hook` without the operator's yes, because a
+       failed teardown can leave a stack or volumes behind. The script
+       lists the ignored files it deletes (the operator's decision,
+       2026-11-01), and refuses a lane with changes, a live agent, or a
+       commit no origin ref has: the HEAD reflog test is §11b's (owned
+       there).
+     - **The location is Orca's.** `<wt>` stays the directory basename
+       (§10a); `create` stops when Orca's path does not end in `<wt>`.
+       Existing lanes under `.claude/worktrees/` are not moved; `name`
+       gives them a fixed sidebar name.
+     - **Orca absent** (§12a does not print `ORCA: present`): `git worktree
+       add .claude/worktrees/<wt> --detach origin/<base>`, run the repo's
+       setup by hand, and file a residual to run `name` once Orca is back.
+       That and `review.md`'s temporary weekly-review worktree (made and
+       removed in one run) are the only plain-git worktrees cepa makes.
+     - **Run this block** from the main checkout, with `<cli>` the §12a
+       `cli=` value, `<action>` one of `create`, `name` or `rm`, `<wt>` the
+       lane (create and rm), and `<base>` the trunk branch (create only).
+       Leave out the lines an action does not take: `name` takes none, `rm`
+       no `base:`. Each value is one line; a value that holds a line break
+       is never substituted (`ORCA lane skipped: a field value is not one
+       line`). Run it with a tool timeout of 10 minutes (`rm` waits for the
+       archive hook).
+       ```bash
+       unset CEPA_ROOT
+       for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+                "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+                "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+                "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+         [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+       done
+       if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-lane.sh" ]; then
+         echo "ORCA lane skipped: orca-lane.sh not found (set CEPA_PLUGIN_ROOT)"
+       else
+         bash "$CEPA_ROOT/scripts/orca-lane.sh" <<'CEPA_FIELDS' || true
+       cli: <cli>
+       action: <action>
+       lane: <wt; leave this line out for name>
+       base: <base; create only, else leave this line out>
+       CEPA_FIELDS
+       fi
+       ```
+       The result is the block's lines that start `ORCA lane`. `created`,
+       `named` and `removed` need nothing more. `not created` and `kept`
+       (a guard refused, or an Orca read was not complete) and `failed`
+       (an Orca write failed or was not proved; a lane is never removed to
+       undo a failed create) end the turn as rule 7's **The operator**
+       kind, with the script's `Ending first line: ` text as its first
+       line. `refused` or `skipped` means the script did not run. The
+       script's header owns its checks, the U1 measurements and its limits.
    - **Separately from placement: a coordinator re-binds its Run on its first
      turn.** A Run remembers
      the terminal that bound it, and Orca prompts that terminal for every
@@ -2053,7 +2124,7 @@ limits.
    | Tab strip | Orca's custom tab title | `terminal rename` (this rule) | operator read it after a rename |
    | Agent Dashboard card | Claude Code's session name, else its topic title | Claude Code itself; `/rename` replaces it | operator read it after `/rename` |
    | `terminal show` / `terminal list` `title` | the program's own title (OSC escape) | Claude Code's name or topic; a shell's prompt | CLI output before and after a rename |
-   | Worktree sidebar | the worktree's display name | `worker-start --display-name` / `--name`, for a NEW worktree only | `worktree list --json` and `--help`; not read in the UI |
+   | Worktree sidebar | the worktree's display name | `worker-start --display-name` / `worktree create --name` for a NEW worktree; `worktree set --display-name` for an existing one (both through rule 2's `orca-lane.sh`: `create`, `name`) | `worktree list --json`, `--help`, and L55's probe (`displayNameMode: "fixed"`); not read in the UI |
 
    So the operator reads identity on the tab and activity on the card.
    - **When.** Each session names its own tab once per command, right after
