@@ -222,3 +222,21 @@ jobs:
       - name: Check Orca nudge controls (shard 3/3)
         if: always()
         run: bash scripts/check-orca-nudge-controls.sh --shard 3/3
+
+  orca-lane:
+    # The lane lifecycle (autonomy section 12b rule 2) runs only through
+    # plugins/cepa/scripts/orca-lane.sh, which creates, names and removes a
+    # lane through Orca and proves each by a complete read. The check runs it
+    # in throwaway git repos against a stub CLI and never reaches a real
+    # Orca; the controls mutate it. About 40 seconds locally. Headers own the
+    # legs and limits. Static commands, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca lane
+        if: always()
+        run: bash scripts/check-orca-lane.sh
+      - name: Check Orca lane controls
+        if: always()
+        run: bash scripts/check-orca-lane-controls.sh
