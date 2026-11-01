@@ -117,7 +117,7 @@ SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
 SCOPE_LACKS = "is printed as before."
-NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-send.sh" "<cli>" "<target>" "<type>" "<nudge>" <<\'CEPA_BODY\' || true'
+NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-send.sh" <<\'CEPA_BODY\' || true'
 NUDGE_HAS = ["**Send, then nudge.**",
              "after a send succeeds to a target that is not a Run coordinator",
              "A Run coordinator is a target taken from a live Orca preamble, or a `run:` or `dispatch:` address.",
@@ -195,6 +195,11 @@ REPORT3_HAS = ["**A worker with no preamble sends its report, never only prints 
                "a `result.lifecycle` that names this dispatch and task with the action the outcome asks for (`completed` or `failed`)"]
 # L33 review: a body line equal to the heredoc delimiter ends it early.
 NUDGE_HAS.append("indent by one space any line of the subject or body that is exactly `CEPA_BODY`")
+# L38 (#19, #21): no value is a quoted argument; the fields go on stdin, and
+# the optional session name reaches the ending line.
+NUDGE_HAS += ["**No value is spliced into a shell string.** The script takes no arguments.",
+              "then one empty line, then the subject on one line and the body on every line after it.",
+              "The script then names `<session> (<target>)` in each `Ending first line: ` about the target"]
 # command file -> (the heading of its final-report step, its citations of
 # rules 1, 2 or 8). Each citation is there exactly once outside fences, and
 # inside that step. check-orca-detection.sh pins the rule 3 half.

@@ -94,8 +94,11 @@ MUTANTS = [
      {"RULE: rule 7 holds then applies rule 1's nudge (the block's `nudge` mode)."}),
     ("rule-delivery-no-nudge", "skill", "(rule 1's target rules, then its nudge)", "(rule 1's target rules)",
      {"RULE: rule 7 holds `orchestration send` (rule 1's target rules, then its nudge) to any other (rule 1's \"Only a sent nudge completes the delivery\" says when a send counts)."}),
-    ("nudge-call-gone", "skill", 'orca-send.sh" "<cli>" "<target>"', 'orca-send.sh" "<target>"',
+    # L38 (#19): a value put back on the command line drops the pinned call.
+    ("nudge-call-gone", "skill", 'orca-send.sh" <<\'CEPA_BODY\' || true', 'orca-send.sh" "<cli>" <<\'CEPA_BODY\' || true',
      {"NUDGE: rule 1 holds the nudge script call exactly once"}),
+    ("send-fields-unpinned", "skill", "**No value is spliced into a shell string.**", "**Values may be spliced.**",
+     {"NUDGE: rule 1 holds **No value is spliced into a shell string.** The script takes no arguments."}),
     # The fixed text must never carry message content.
     ("nudge-content-spliced", "skill", "`You have 1 orchestration message. Run",
      "`<subject>. You have 1 orchestration message. Run",

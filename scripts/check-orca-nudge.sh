@@ -97,12 +97,37 @@
 #              lifecycle prints `not proven stored`, never `no message
 #              stored`. WDREF: a bad target, task id or outcome, or a missing
 #              task id, is refused before any call.
-#   SENDREF  — orca-send.sh's argument checks: a bad cli, target, type
-#              (heartbeat included), mode, subject or body
-#              (empty, starting with `--`, over 28,000 bytes): exit 4, prints
-#              `Orca send refused`, and the stub is never called. For the plain
-#              send types its ending line names the target only when the
-#              target passed its check.
+#   SENDREF  — orca-send.sh's value checks: a bad cli (a flag, shell text,
+#              bare `orca` on Linux, a path that is not ORCA_CLI_COMMAND, a
+#              relative path, a name not on PATH), target, type (heartbeat
+#              included), nudge mode, subject or body (empty, starting with
+#              `--`, over 28,000 bytes): exit 4, prints `Orca send refused`,
+#              and the stub is never called. For the plain send types its
+#              ending line names the target only when the target passed its
+#              check. A cli path equal to ORCA_CLI_COMMAND sends.
+#   FIELDS   — punch-list L38 (#19): orca-send.sh takes no arguments; every
+#              value is a `<name>: <value>` line on stdin, then an empty line,
+#              then the message. Arguments, no empty line, a line that is not
+#              a field, an unknown name, a name given twice, a missing cli,
+#              target, type or nudge, nudge on a worker_done, and outcome or
+#              task on a send are each refused before any call. Fields in any
+#              order, with a CR or trailing spaces, send the same argv.
+#   SESSION  — punch-list L38 (#21): an optional `session:` field. Each ending
+#              line about the target then names `<session> (<handle>)` (a
+#              refused, failed or nudge-skipped send, the nudge's own line
+#              included), `<session>` alone when the target failed its check,
+#              and `<session>, the session that asked …` / `<session>, the Run
+#              coordinator` for a reply and a worker_done. An empty value is
+#              no name; a name outside [A-Za-z0-9._@-], or one starting `-`,
+#              is refused.
+#   GUARD    — L36 #22: on a PATH of only the tools orca-send.sh uses, a
+#              missing `timeout` or `python3`, or a `mktemp -d` that fails,
+#              exits 5 with its own reason and no call; the full set sends.
+#   NUDGEFILE — L36 #22: with no orca-nudge.sh beside orca-send.sh, or one
+#              that will not start, the send stands, exit 1, and the ending
+#              line asks the operator to tell the target. STORE also pins the
+#              `to_handle` fallback: a stored message with none is the
+#              target's.
 #
 # STATED LIMITS — a green run does not mean:
 #   - Orca's real output has this shape. The stub replays the shape measured on
@@ -517,7 +542,9 @@ if LEGS in ("all", "send"):
     def osend(mid=MID, to=H, ok=True, warnings=True, message=True, **extra):
         r = {}
         if message:
-            r["message"] = {"id": mid, "to_handle": to, "subject": SUBJ}
+            r["message"] = {"id": mid, "subject": SUBJ}
+            if to is not None:
+                r["message"]["to_handle"] = to
         if warnings:
             r["warnings"] = WARN
         return json.dumps(dict({"id": "9232524a-511a-4305-ba28-37e1d28617d5", "ok": ok, "result": r}, **extra))
@@ -527,6 +554,17 @@ if LEGS in ("all", "send"):
         return json.dumps({"id": "b9da5171", "ok": ok, "result": {
             "messages": [{"id": "msg_000000000001", "to_handle": OTHER}] + list(rows), "count": len(rows) + 1}})
 
+    # L38 (#19): orca-send.sh takes no arguments. Its values are field lines
+    # on stdin, then an empty line, then the message. field_lines() writes a case's
+    # values in that form, in the order the old positional call had them.
+    def field_lines(argv, session=None):
+        names = ("cli", "target", "type", "outcome", "task") if argv[2:3] == ["worker_done"] \
+            else ("cli", "target", "type", "nudge", "task")
+        lines = ["%s: %s" % kv for kv in zip(names, argv)]
+        if session is not None:
+            lines.append("session: " + session)
+        return "\n".join(lines) + "\n\n"
+
     STORED = "Orca send stored: %s for %s" % (MID, H)
     NOSTORE = "Orca send failed: no message stored — "
     UNPROVEN = "Orca send failed: not proven stored — "
@@ -534,12 +572,15 @@ if LEGS in ("all", "send"):
     PASTE_ANY = END + "Needed from you: paste the block below into the target session"
 
     def store(name, rc, want, mode="nudge", typ="question", target=H, osend_json=None, osend_rc=0,
-              inbox_json=None, inbox_rc=0, stdin=STDIN, argv=None, called=True, env_extra=None, **kw):
+              inbox_json=None, inbox_rc=0, stdin=STDIN, argv=None, called=True, env_extra=None, session=None,
+              raw=None, script=None, **kw):
         env = {"STUB_OSEND": osend_json if osend_json is not None else osend(), "STUB_OSEND_RC": str(osend_rc),
                "STUB_INBOX": inbox_json if inbox_json is not None else inbox(), "STUB_INBOX_RC": str(inbox_rc)}
         env.update(env_extra or {})
         args = argv if argv is not None else ["orca-ide", target, typ, mode]
-        got_rc, out, calls = run(args, script=SEND_SCRIPT, stdin=stdin, env_extra=env, **kw)
+        # raw=(args, stdin) runs the script exactly so: the FIELDS cases.
+        args, stdin = raw if raw is not None else ([], field_lines(args, session) + stdin)
+        got_rc, out, calls = run(args, script=script or SEND_SCRIPT, stdin=stdin, env_extra=env, **kw)
         # The alert file's line is the ALERT leg's to check.
         out = [l for l in out if not l.startswith(("Orca alert recorded: ", "Orca alert not recorded: "))]
         why = []
@@ -772,7 +813,7 @@ if LEGS in ("all", "send"):
     for name, args, why in [
             ("WDREF target not a dispatch", ["orca-ide", H, "worker_done", "succeeded", TID],
              "a worker_done target is not dispatch:ctx_<id>"),
-            ("WDREF no task id", WARGS[:4], "worker_done takes <outcome> <task id> after the type"),
+            ("WDREF no task id", WARGS[:4], "the task field is missing"),
             ("WDREF bad task id", WARGS[:4] + ["task_x;rm"], "the task id is not task_<id>"),
             ("WDREF bad outcome", WARGS[:3] + ["done", TID], "the worker_done outcome is not succeeded or failed")]:
         store(name, 4, ["Orca send refused: " + why, PASTE_RC], argv=args, called=False)
@@ -780,8 +821,7 @@ if LEGS in ("all", "send"):
     # --- SENDREF ---
     SR = "Orca send refused: "
     for name, args, stdin, why, end in [
-            ("SENDREF arg count", ["orca-ide", H, "status"], STDIN,
-             "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>", PASTE),
+            ("SENDREF no nudge field", ["orca-ide", H, "status"], STDIN, "the nudge field is missing", PASTE),
             ("SENDREF cli not orca", ["bash", H, "status", "nudge"], STDIN, "the cli does not name an Orca CLI", PASTE),
             ("SENDREF cli shell text", ["orca-ide;id", H, "status", "nudge"], STDIN,
              "the cli is not a plain command name", PASTE),
@@ -790,16 +830,25 @@ if LEGS in ("all", "send"):
             ("SENDREF target flag", ["orca-ide", "--interrupt", "status", "no-nudge"], STDIN,
              "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
             ("SENDREF target newline", ["orca-ide", H + "\n" + H, "status", "nudge"], STDIN,
+             "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
+            ("SENDREF target with text before the handle", ["orca-ide", "x;" + H, "status", "nudge"], STDIN,
              "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
             ("SENDREF type heartbeat", ["orca-ide", H, "heartbeat", "nudge"], STDIN,
              "the type is not status, question, handoff, escalation, merge_ready, reply or worker_done", PASTE),
-            ("SENDREF five args for a send", ["orca-ide", H, "status", "nudge", "task_abcdef"], STDIN,
-             "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>", PASTE),
+            ("SENDREF task field on a send", ["orca-ide", H, "status", "nudge", "task_abcdef"], STDIN,
+             "only a worker_done takes outcome and task fields", PASTE),
             ("SENDREF nudge a run address", ["orca-ide", "run:run_abc", "status", "nudge"], STDIN,
              "only a term_ handle is nudged", END + "Needed from you: paste the block below into run:run_abc"),
             ("SENDREF bad mode", ["orca-ide", H, "status", "yes"], STDIN,
-             "the fourth argument is not nudge or no-nudge", PASTE),
-            ("SENDREF no stdin", ["orca-ide", H, "status", "nudge"], "", "stdin has no subject line", PASTE),
+             "the nudge field is not nudge or no-nudge", PASTE),
+            # L36 #22: the send's own cli checks, each with its own reason.
+            ("SENDREF cli flag", ["-orca-ide", H, "status", "nudge"], STDIN, "the cli is not a plain command name", PASTE),
+            ("SENDREF cli bare orca", ["orca", H, "status", "nudge"], STDIN, "bare orca on Linux is the screen reader", PASTE),
+            ("SENDREF cli path not ORCA_CLI_COMMAND", [os.path.join(BIN, "orca-ide"), H, "status", "nudge"], STDIN,
+             "a cli path must equal ORCA_CLI_COMMAND", PASTE),
+            ("SENDREF cli relative path", ["bin/orca-ide", H, "status", "nudge"], STDIN,
+             "a cli path must be absolute and equal ORCA_CLI_COMMAND", PASTE),
+            ("SENDREF no subject", ["orca-ide", H, "status", "nudge"], "", "stdin has no subject line", PASTE),
             ("SENDREF empty subject", ["orca-ide", H, "status", "nudge"], "  \nbody\n", "the subject is empty", PASTE),
             ("SENDREF empty body", ["orca-ide", H, "status", "nudge"], SUBJ + "\n \n", "the body is empty", PASTE),
             ("SENDREF subject starts --", ["orca-ide", H, "status", "nudge"], "--json\nbody\n",
@@ -811,6 +860,112 @@ if LEGS in ("all", "send"):
         store(name, 4, [SR + why, end], argv=args, stdin=stdin, called=False)
     # At the cap exactly: sent.
     store("STORE at the size cap", 0, [STORED], mode="no-nudge", stdin="s\n" + "x" * 27999 + "\n")
+    store("SENDREF cli path equal to ORCA_CLI_COMMAND sends", 0, [STORED],
+          argv=[os.path.join(BIN, "orca-ide"), H, "question", "no-nudge"],
+          env_extra={"ORCA_CLI_COMMAND": os.path.join(BIN, "orca-ide")})
+
+    # --- FIELDS (punch-list L38, #19): the values come as field lines on
+    # stdin, then an empty line, then the message. Each malformed shape is
+    # refused before any Orca call; order, a CR and trailing spaces are not.
+    F = field_lines(["orca-ide", H, "status", "nudge"])
+    for name, raw, why, end in [
+            ("FIELDS arguments are refused", (["orca-ide", H, "status", "nudge"], STDIN),
+             "orca-send.sh takes no arguments; its fields go on stdin", PASTE_ANY),
+            ("FIELDS no empty line", ([], F.rstrip("\n") + "\n"), "stdin has no empty line after its fields", PASTE_ANY),
+            ("FIELDS message without fields", ([], STDIN),
+             "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
+            ("FIELDS no space after the colon", ([], F.replace("cli: ", "cli:") + STDIN),
+             "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
+            ("FIELDS unknown name", ([], "to: x\n" + F + STDIN),
+             "a field name is not cli, target, type, nudge, outcome, task or session", PASTE_ANY),
+            ("FIELDS name given twice", ([], F.replace("\n\n", "\ntarget: %s\n\n" % H) + STDIN),
+             "the target field is given twice", PASTE_ANY),
+            ("FIELDS no cli", ([], F.replace("cli: orca-ide\n", "") + STDIN), "the cli field is missing", PASTE),
+            ("FIELDS no target", ([], F.replace("target: %s\n" % H, "") + STDIN), "the target field is missing", PASTE_ANY),
+            ("FIELDS no type", ([], F.replace("type: status\n", "") + STDIN), "the type field is missing", PASTE),
+            ("FIELDS nudge on a worker_done", ([], field_lines(WARGS).replace("\n\n", "\nnudge: no-nudge\n\n") + STDIN),
+             "a worker_done takes outcome and task fields, not nudge", PASTE_RC),
+            ("FIELDS outcome on a send", ([], F.replace("\n\n", "\noutcome: succeeded\n\n") + STDIN),
+             "only a worker_done takes outcome and task fields", PASTE)]:
+        store(name, 4, [SR + why, end], raw=raw, called=False)
+    calls = store("FIELDS any order, CR and trailing spaces", 0, [STORED], raw=([], (
+        "nudge: no-nudge  \r\ntype: question\r\ntarget: %s \ncli: orca-ide\r\n\r\n" % H) + STDIN))
+    oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
+    (ok if oc == [OSEND_ARGV] else miss)("FIELDS any order sends the same argv" if oc == [OSEND_ARGV] else
+                                          "FIELDS any order sends the same argv: %r" % oc)
+
+    # --- SESSION (punch-list L38, #21): an optional session name, printed
+    # beside the handle in every ending line about the target.
+    S = "coord@main"
+    SH = "%s (%s)" % (S, H)
+    PASTE_S = END + "Needed from you: paste the block below into "
+    TELL_S = END + "Needed from you: tell %s to check its Orca inbox" % SH
+    store("SESSION refused send names it", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE_S + SH],
+          mode="yes", session=S, called=False)
+    store("SESSION failed send names it", 5, [NOSTORE + "the send exited 1 and printed nothing", PASTE_S + SH],
+          osend_json="", osend_rc=1, session=S)
+    store("SESSION bad target names the session alone", 4,
+          [SR + "the target is not a term_ handle, run: or dispatch: address", PASTE_S + S],
+          target="coord@main", mode="no-nudge", session=S, called=False)
+    store("SESSION nudge skip names it", 1, [STORED, SK + "the target is waiting", TELL_S],
+          ps_json=ps(row("waiting")), session=S)
+    store("SESSION nudge sent", 0, [STORED, "Orca nudge sent to " + H], session=S)
+    store("SESSION reply names it", 4, [SR + "the body is empty", PASTE_S + S + ", the session that asked " + QID],
+          argv=RARGS, stdin=" \n", session=S, called=False)
+    store("SESSION worker_done names it", 4, [SR + "the task id is not task_<id>", PASTE_S + S + ", the Run coordinator"],
+          argv=WARGS[:4] + ["task_x;rm"], session=S, called=False)
+    store("SESSION empty value is no name", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE],
+          mode="yes", session="", called=False)
+    for name, bad in [("SESSION bad name refused", "coord@main $(id)"), ("SESSION name starting with - refused", "-x")]:
+        store(name, 4, [SR + "the session name holds a character outside [A-Za-z0-9._@-]", PASTE],
+              session=bad, called=False)
+
+    # --- GUARD (L36 #22): the checks before the first Orca call. Each case
+    # runs on a PATH of only the tools the script uses, less one.
+    def toolbin(tag, drop=(), stubs=None):
+        d = os.path.join(TMP, "tools-" + tag)
+        os.mkdir(d)
+        for t in ("bash", "cat", "dirname", "git", "mkdir", "mktemp", "mv", "python3", "rm", "timeout", "tr",
+                  "uname", "wc"):
+            if t not in drop:
+                os.symlink(shutil.which(t), os.path.join(d, t))
+        for t in ("orca-ide", "date", "sleep"):
+            if t not in drop:
+                os.symlink(os.path.join(BIN, t), os.path.join(d, t))
+        for t, body in (stubs or {}).items():
+            open(os.path.join(d, t), "w").write(body)
+            os.chmod(os.path.join(d, t), 0o755)
+        return d
+
+    store("GUARD every tool present sends", 0, [STORED], mode="no-nudge", path=toolbin("all"))
+    store("SENDREF cli not on PATH", 4, [SR + "orca-ide is not on PATH", PASTE], path=toolbin("no-cli", ("orca-ide",)),
+          called=False)
+    store("GUARD no timeout", 5, [NOSTORE + "no timeout command to bound the Orca calls", PASTE],
+          path=toolbin("no-timeout", ("timeout",)), called=False)
+    store("GUARD no python3", 5, [NOSTORE + "no python3 to read the Orca output", PASTE],
+          path=toolbin("no-python3", ("python3",)), called=False)
+    store("GUARD mktemp fails", 5, [NOSTORE + "mktemp failed", PASTE], called=False, path=toolbin(
+        "mktemp-fails", ("mktemp",), {"mktemp": '#!%s\n[ "${1-}" = -d ] && exit 1\nexec %s "$@"\n'
+                                      % (shutil.which("bash"), shutil.which("mktemp"))}))
+
+    # --- FALLBACK (L36 #22): a stored message with no to_handle is the target's.
+    store("STORE no to_handle falls back to the target", 0, [STORED, "Orca nudge sent to " + H],
+          osend_json=osend(to=None))
+
+    # --- NUDGEFILE (L36 #22): the send stands when the nudge cannot run.
+    def lone(tag, nudge_body=None):
+        d = os.path.join(TMP, "send-" + tag)
+        os.mkdir(d)
+        shutil.copy(SEND_SCRIPT, os.path.join(d, "orca-send.sh"))
+        if nudge_body is not None:
+            open(os.path.join(d, "orca-nudge.sh"), "w").write(nudge_body)
+        return os.path.join(d, "orca-send.sh")
+    LONE = lone("no-nudge")
+    store("NUDGEFILE missing", 1, [STORED, SK + "orca-nudge.sh not found beside orca-send.sh", END_H], script=LONE)
+    store("NUDGEFILE missing names the session", 1, [STORED, SK + "orca-nudge.sh not found beside orca-send.sh", TELL_S],
+          script=LONE, session=S)
+    store("NUDGEFILE would not start", 1, [STORED, SK + "orca-nudge.sh would not start (exit 9)", END_H],
+          script=lone("bad-nudge", "exit 9\n"))
 
     # --- ALERT (orca-send.sh's alert file, punch-list L34) ---
     # Exit 4 and 5 each write one alert file that orca-health.sh reads; any
@@ -824,7 +979,7 @@ if LEGS in ("all", "send"):
         args = kw.pop("argv", None) or ["orca-ide", kw.pop("target", H), kw.pop("typ", "question"), kw.pop("mode", "nudge")]
         env.update({"STUB_OSEND": kw.pop("osend_json", osend()), "STUB_OSEND_RC": str(kw.pop("osend_rc", 0)),
                     "STUB_INBOX": kw.pop("inbox_json", inbox())})
-        got_rc, out, calls = run(args, script=SEND_SCRIPT, stdin=kw.pop("stdin", STDIN), env_extra=env, **kw)
+        got_rc, out, calls = run([], script=SEND_SCRIPT, stdin=field_lines(args) + kw.pop("stdin", STDIN), env_extra=env, **kw)
         files = sorted(os.listdir(ALERTS)) if os.path.isdir(ALERTS) else []
         why = []
         if got_rc != rc:
@@ -853,7 +1008,7 @@ if LEGS in ("all", "send"):
                ("send_unproven", H, H, "question", "the reply names no valid recipient"),
                osend_json=osend(to="term_x; rm"))
     alert_case("ALERT refused send writes one file", 4,
-               ("send_refused", H, H, "question", "the fourth argument is not nudge or no-nudge"), mode="yes")
+               ("send_refused", H, H, "question", "the nudge field is not nudge or no-nudge"), mode="yes")
     alert_case("ALERT unchecked values are replaced", 4,
                ("send_refused", "unknown", "invalid", "status", "the target is not a term_ handle, run: or dispatch: address"),
                me="term_x; rm", target="coord@main $(id)", typ="status", mode="no-nudge")
@@ -868,8 +1023,8 @@ if LEGS in ("all", "send"):
         env = {"CEPA_ORCA_ALERT_DIR": adir, "STUB_OSEND": "", "STUB_OSEND_RC": "1", "STUB_INBOX": inbox()}
         # From the temp dir: a mutant that uses a relative directory writes
         # there, never into the repo.
-        got_rc, out, calls = run(["orca-ide", H, "question", "nudge"], script=SEND_SCRIPT, stdin=STDIN, env_extra=env,
-                                 cwd=TMP)
+        got_rc, out, calls = run([], script=SEND_SCRIPT, stdin=field_lines(["orca-ide", H, "question", "nudge"]) + STDIN,
+                                 env_extra=env, cwd=TMP)
         good = got_rc == 5 and out[-2:-1] == ["Orca alert not recorded: " + why_line] and out[-1].startswith(END)
         (ok if good else miss)(name if good else "%s: rc=%s out=%r" % (name, got_rc, out))
 
@@ -998,7 +1153,11 @@ if LEGS in ("all", "health"):
     else:
         miss("HEALTH unreadable alert directory: runs as root, so a mode-000 directory stays readable")
     # Every literal reason orca-send.sh writes is one the reader shows.
-    lits = sorted(set(__import__('re').findall(r'(?:refuse|fail|unproven) "([^"$]+)"', open(SEND_SCRIPT).read())))
+    lits = __import__('re').findall(r'(?:refuse|fail|unproven) "([^"]+)"', open(SEND_SCRIPT).read())
+    # L38: "the $cepa_send_k field is …" is written for each field name.
+    lits = sorted(set([l.replace("$cepa_send_k", k) for l in lits if "$cepa_send_k" in l
+                       for k in ("cli", "target", "type", "nudge", "outcome", "task", "session")]
+                      + [l for l in lits if "$" not in l]))
     files = {"%d-R%04d.alert" % (NOW - 60, i): afile(reason=r) for i, r in enumerate(lits)}
     rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, cwd=HWT, env_extra={
         "CEPA_ORCA_ALERT_DIR": HDIR, "STUB_RUNCUR": HNORUN, "STUB_INBOX": hinbox(), "ORCA_TERMINAL_HANDLE": H}) \
