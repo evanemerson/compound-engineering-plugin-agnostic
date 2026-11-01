@@ -8,10 +8,11 @@
 #
 # Usage: orca-send.sh  <stdin      (it takes no arguments)
 #   Every value comes on stdin, inside the session's quoted heredoc
-#   (`<<'CEPA_BODY'`), so no value is ever inside a quoted shell string
+#   (`<<'CEPA_FIELDS'`), so no value is ever inside a quoted shell string
 #   (punch-list L38, review finding #19: the four values used to be quoted
 #   arguments, which bash parsed before the script could check them).
-#   stdin is FIELD lines, then one empty line, then the message:
+#   stdin is FIELD lines only. The message is in a file (`file:`), never in
+#   the heredoc (punch-list L41, below):
 #     cli: <cli>            §12a's printed `cli=` value, checked as
 #                           orca-nudge.sh checks it.
 #     target: <target>      a `term_` handle, or a `run:<id>` / `dispatch:<id>`
@@ -29,10 +30,23 @@
 #                           writes it (`coord@main`, `tab3@roles`). The ending
 #                           line then names that session beside the handle
 #                           (review finding #21). An empty value is no name.
+#     file: <path>          the message file: an absolute path whose last part
+#                           is `cepa-send-<name>.txt`, a regular file this
+#                           user owns, outside the current repo. The session
+#                           writes it with its file-write tool right before
+#                           the run, under a name used once (§12b rule 1:
+#                           the session's name and a count). The fields are
+#                           read first, then the path is checked; a path that
+#                           fails is refused and kept. A path that passes is
+#                           read and removed before any value is checked, so
+#                           each file serves one run and is never re-sent.
 #   A field line is `<name>: <value>`, one per line, each name at most once,
 #   in any order. Trailing spaces and a CR are dropped from a value. Any
-#   other line before the empty line is refused, so a message that forgot
-#   its fields is never sent with its first line read as a field.
+#   other line is refused, so a block that lost a field name is never read.
+#   An empty line ends the fields; after it only empty lines may follow. A
+#   block from before 1.44.0 (fields, an empty line, then the message) is
+#   refused on its message line, loudly (exit 4), as #110 refused the
+#   positional block: the session restarts to load the new rule 1.
 #   reply (§12b rule 7, punch-list L35): <target> is the question's message
 #             id. The message is the answer body only, with no subject line.
 #             With `nudge`, the script nudges the handle Orca addressed the
@@ -45,12 +59,20 @@
 #             `result.lifecycle` with that dispatch and task and the action
 #             the outcome asks for (`succeeded` → `completed`, `failed` →
 #             `failed`). It is never nudged.
-#   message   after the empty line: line 1 is the subject; every line after
-#             it is the body. No character of the heredoc is expanded. The one
-#             exception is a line that is exactly `CEPA_BODY`: it ends the
-#             heredoc, and the lines after it run as shell commands. §12b rule
-#             1 makes the session indent such a line; this script never sees
-#             it. Trailing newlines of the body are dropped.
+#   message   the file's text: line 1 is the subject; every line after it is
+#             the body. Trailing newlines of the body are dropped.
+#             WHY A FILE (punch-list L41, PR #110 review finding #3). Up to
+#             1.43.0 the message sat in the heredoc after the fields. A
+#             message line that was exactly the delimiter ended the heredoc,
+#             and the lines after it ran as shell commands; bodies carry
+#             relayed repo content, so that was an injection path guarded only
+#             by prose ("indent such a line"). A per-send delimiter the
+#             session invents was weighed and not taken: a model repeats its
+#             "random" token, and the likely body that holds the delimiter is
+#             a quoted copy of an earlier block, which carries that same
+#             token. The file never passes through the shell, so no line of
+#             it can end anything. The heredoc keeps only field lines: each
+#             starts `<name>: `, so none can equal `CEPA_FIELDS`.
 #
 # Prints one result line, then the nudge's lines when it runs. Exit codes:
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
@@ -214,25 +236,25 @@ fail() { echo "Orca send failed: no message stored — $1"; cepa_send_alert send
 unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_alert send_unproven "$1"; cepa_send_ending; exit 5; }
 
 [ $# -eq 0 ] || refuse "orca-send.sh takes no arguments; its fields go on stdin"
-# THE FIELDS: `<name>: <value>` lines up to the first empty line. Each value
-# is read by `read -r` from the heredoc, so bash never parses it as code.
-# No field comes from the environment: only a line on stdin sets one.
+# THE FIELDS: `<name>: <value>` lines up to an empty line or the end of
+# stdin. Each value is read by `read -r` from the heredoc, so bash never
+# parses it as code. No field comes from the environment: only a line on
+# stdin sets one.
 unset cepa_send_f_cli cepa_send_f_target cepa_send_f_type cepa_send_f_nudge cepa_send_f_outcome \
-  cepa_send_f_task cepa_send_f_session
+  cepa_send_f_task cepa_send_f_session cepa_send_f_file
 cepa_send_seen=" "
-while :; do
-  IFS= read -r cepa_send_line || refuse "stdin has no empty line after its fields"
+while IFS= read -r cepa_send_line || [ -n "$cepa_send_line" ]; do
   cepa_send_line=${cepa_send_line%$'\r'}
   [ -n "$cepa_send_line" ] || break
   # `session:` with no space is an empty value, as `session: ` is: editors
   # and models drop trailing spaces (PR #110 review).
   [[ $cepa_send_line =~ ^([a-z]+):(\ (.*))?$ ]] \
-    || refuse "a line before the empty line is not a <name>: <value> field"
+    || refuse "a heredoc line is not a <name>: <value> field"
   cepa_send_k=${BASH_REMATCH[1]} cepa_send_v=${BASH_REMATCH[3]}
   cepa_send_v=${cepa_send_v%"${cepa_send_v##*[![:space:]]}"}
   case "$cepa_send_k" in
-    cli|target|type|nudge|outcome|task|session) ;;
-    *) refuse "a field name is not cli, target, type, nudge, outcome, task or session" ;;
+    cli|target|type|nudge|outcome|task|session|file) ;;
+    *) refuse "a field name is not cli, target, type, nudge, outcome, task, session or file" ;;
   esac
   [[ $cepa_send_seen != *" $cepa_send_k "* ]] || refuse "the $cepa_send_k field is given twice"
   cepa_send_seen+="$cepa_send_k "
@@ -244,6 +266,45 @@ while :; do
     type) cepa_send_type=$cepa_send_v ;;
   esac
 done
+# Only empty lines may follow the fields. A message here is a block from
+# before 1.44.0, or a message put in the wrong place: refused, never sent.
+{ cepa_send_rest=$(cat); } 2>/dev/null
+[ -z "${cepa_send_rest//[[:space:]]/}" ] \
+  || refuse "the heredoc holds a message after its fields; the message goes in the file the file: field names"
+# THE MESSAGE FILE (punch-list L41). The fields above are read first. Then
+# the path is checked; a path that fails is refused and its file is kept.
+# A path that passes is read and removed before any check of the values, so
+# each file serves one run and a stale file is never sent. (PR #112 review.)
+[[ $cepa_send_seen == *" file "* ]] || refuse "the file field is missing"
+cepa_send_file=${cepa_send_f_file-}
+[[ $cepa_send_file =~ ^(/[A-Za-z0-9._@+-]+)*/cepa-send-[A-Za-z0-9._@-]{1,64}\.txt$ \
+   && $cepa_send_file != */./* && $cepa_send_file != */../* ]] \
+  || refuse "the message file is not an absolute path to a cepa-send-<name>.txt file"
+[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O "$cepa_send_file" ] \
+  || refuse "the message file is not a regular file this user owns"
+# Never inside this checkout, nor inside the main checkout that holds it
+# (a linked worktree sits under the main one's .claude/worktrees). The check
+# runs on the path as given AND on its physical path (the directory with
+# every symlink resolved), so a symlinked directory cannot lead into a repo
+# by another name. A symlinked /tmp (macOS) is fine: only where it leads
+# counts. git's own paths are physical.
+cepa_send_dir=$(cd -P -- "${cepa_send_file%/*}/" 2>/dev/null && pwd -P) || cepa_send_dir=
+[ -n "$cepa_send_dir" ] || refuse "the message file's directory could not be resolved"
+cepa_send_phys=${cepa_send_dir%/}/${cepa_send_file##*/}
+cepa_send_top=$(git rev-parse --show-toplevel 2>/dev/null) || cepa_send_top=
+cepa_send_main=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || cepa_send_main=
+case "$cepa_send_main" in /*/.git) cepa_send_main=${cepa_send_main%/.git} ;; *) cepa_send_main= ;; esac
+for cepa_send_k in "$cepa_send_top" "$cepa_send_main"; do
+  [ -z "$cepa_send_k" ] || [[ $cepa_send_file != "$cepa_send_k"/* && $cepa_send_phys != "$cepa_send_k"/* ]] \
+    || refuse "the message file is inside the repo"
+done
+# Removed even when the read fails, so a file never outlives the run that
+# passed its path checks.
+{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null
+cepa_send_read=$?
+rm -f -- "$cepa_send_file" 2>/dev/null
+[ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"
+[ "$cepa_send_read" = 0 ] || refuse "the message file could not be read"
 cepa_send_cli=${cepa_send_f_cli-} cepa_send_target=${cepa_send_f_target-} cepa_send_type=${cepa_send_f_type-}
 cepa_send_task=${cepa_send_f_task-}
 if [ -n "${cepa_send_f_session-}" ]; then
@@ -300,16 +361,16 @@ case "$cepa_send_mode" in
 esac
 command -v "$cepa_send_cli" >/dev/null 2>&1 || refuse "$cepa_send_cli is not on PATH"
 
-# The subject is the line after the empty line, the body the rest. The braces
-# keep bash's NUL-byte warning off the output.
-# A reply has no subject: all of the message is its body.
+# The subject is the file's first line, the body the rest. A reply has no
+# subject: all of the file is its body.
 if [ "$cepa_send_type" = reply ]; then
-  cepa_send_subject=
+  cepa_send_subject= cepa_send_body=$cepa_send_msg
 else
-  IFS= read -r cepa_send_subject || [ -n "${cepa_send_subject:-}" ] || refuse "stdin has no subject line"
+  cepa_send_subject=${cepa_send_msg%%$'\n'*}
   cepa_send_subject=${cepa_send_subject%$'\r'}
+  cepa_send_body=
+  [[ $cepa_send_msg != *$'\n'* ]] || cepa_send_body=${cepa_send_msg#*$'\n'}
 fi
-{ cepa_send_body=$(cat); } 2>/dev/null
 if [ "$cepa_send_type" != reply ]; then
   [ -n "${cepa_send_subject//[[:space:]]/}" ] || refuse "the subject is empty"
   [[ $cepa_send_subject != --* ]] || refuse "the subject starts with --, which Orca reads as a flag"

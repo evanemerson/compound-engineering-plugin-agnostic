@@ -95,7 +95,7 @@ MUTANTS = [
     ("rule-delivery-no-nudge", "skill", "(rule 1's target rules, then its nudge)", "(rule 1's target rules)",
      {"RULE: rule 7 holds `orchestration send` (rule 1's target rules, then its nudge) to any other (rule 1's \"Only a sent nudge completes the delivery\" says when a send counts)."}),
     # L38 (#19): a value put back on the command line drops the pinned call.
-    ("nudge-call-gone", "skill", 'orca-send.sh" <<\'CEPA_BODY\' || true', 'orca-send.sh" "<cli>" <<\'CEPA_BODY\' || true',
+    ("nudge-call-gone", "skill", 'orca-send.sh" <<\'CEPA_FIELDS\' || true', 'orca-send.sh" "<cli>" <<\'CEPA_FIELDS\' || true',
      {"NUDGE: rule 1 holds the nudge script call exactly once"}),
     ("send-fields-unpinned", "skill", "**No value is spliced into a shell string.**", "**Values may be spliced.**",
      {"NUDGE: rule 1 holds **No value is spliced into a shell string.** The script takes no arguments."}),
@@ -253,6 +253,9 @@ MUTANTS += [
      {"GRANTS: review.md grants Bash(orca-ide orchestration send:*)"}),
     ("grant-gone-nudge-triage", "triage.md", ', Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)', "",
      {'GRANTS: triage.md grants Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)'}),
+    # L41: rule 1's message file needs the Write tool.
+    ("grant-gone-write-triage", "triage.md", "allowed-tools: Edit, Write, ", "allowed-tools: Edit, ",
+     {"GRANTS: triage.md grants Write (rule 1's message file)"}),
     # #100 finding 5: the raw grant admits any text, terminal and --interrupt.
     ("grant-raw-terminal-send-handoff", "handoff.md", "Bash(orca-ide terminal rename:*)",
      "Bash(orca-ide terminal rename:*), Bash(orca-ide terminal send:*)",

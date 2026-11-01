@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-nudge.sh. Each mutant is one substitution in
 # a temp copy of plugins/cepa/scripts/orca-nudge.sh, of orca-send.sh
-# (SEND_MUTANTS), or of orca-health.sh (HEALTH_MUTANTS). It must turn the
-# check red
-# with EXACTLY the MISS cases named beside it, so each mutant shows which case
+# (SEND_MUTANTS), of orca-health.sh (HEALTH_MUTANTS), or of the autonomy
+# skill's rule 1 block (SKILL_MUTANTS). It must turn the check red with
+# EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
 # nothing. A mutant whose anchor text is gone is a MISS, never a skip: the
 # shipped script changed shape and these mutants need re-reading.
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF,
-# FIELDS, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF) has at least one
+# FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel.
 #
 # Each mutant runs only the half of the check that can see it
 # (CEPA_NUDGE_CHECK_LEGS): an orca-nudge.sh mutant runs the nudge legs, and an
-# orca-send.sh mutant runs the send legs. The send legs run the shipped nudge
+# orca-send.sh or skill mutant runs the send legs. The send legs run the shipped nudge
 # beside orca-send.sh, never argument 1, so a nudge mutant cannot change them;
 # the nudge legs never run orca-send.sh. The unmutated copy runs whole and as
 # each part, and the parts must partition the whole run's cases.
 #
 # `--shard I/N` runs only mutants I, I+N, I+2N, ... of the one list that holds
-# every nudge, send and health mutant in order (no argument means 1/1, every
-# mutant). Each shard still runs the unmutated copy and the partition control
+# every nudge, send, health and skill mutant in order (no argument means 1/1,
+# every mutant). Each shard still runs the unmutated copy and the partition control
 # first. CI runs shards 1/N to N/N as N parallel jobs (punch-list L42). Controls
 # here fail unless residual-integrity.yml runs each shard exactly once, one per
 # job, never disabled, and unless every shard of that N is non-empty; planted
@@ -208,7 +208,7 @@ SEND_MUTANTS = [
      {'SENDREF nudge a run address'}),
     # L36 #20: every send carries a request id, so its vsock retry replays.
     ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
-     {'FIELDS any order sends the same argv', 'STORE argv and order', 'STORE retry reuses the request id'}),
+     {'BLOCK hostile message is sent as text', 'FIELDS any order sends the same argv', 'STORE argv and order', 'STORE retry reuses the request id'}),
     # reply mode (punch-list L35)
     ('reply-thread-unchecked', 'if m.get("thread_id") != target:', 'if False:',
      {'REPLY not threaded on the question'}),
@@ -256,7 +256,8 @@ SEND_MUTANTS = [
     ('send-target-loose', '^(term_[0-9a-f-]{36}|run:', '(term_[0-9a-f-]{36}|run:',
      {'SENDREF target with text before the handle'}),
     ('send-empty-body-ok', '[ -n "${cepa_send_body//[[:space:]]/}" ] || refuse "the body is empty"\n', '',
-     {'REPLYREF empty body', 'SENDREF empty body', 'SESSION reply names it'}),
+     {'FILE subject only', 'FILE subject only, no newline', 'REPLYREF empty body', 'SENDREF empty body',
+      'SESSION reply names it'}),
     # ALERT (punch-list L34): exit 4 and 5 each write one checked alert file.
     ('alert-not-on-fail', 'cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }', 'cepa_send_ending; exit 5; }',
      {'ALERT failed send writes one file', 'ALERT relative directory is not used', 'ALERT unmakeable directory is reported', 'ALERT worker_done failure names its dispatch'}),
@@ -272,12 +273,33 @@ SEND_MUTANTS = [
      {'ALERT relative directory is not used'}),
     ('alert-mkdir-unchecked', 'mkdir -p "$dir" 2>/dev/null || { echo', 'mkdir -p "$dir" 2>/dev/null; true || { echo',
      {'ALERT unmakeable directory is reported'}),
+    # FILE (punch-list L41): the message is in a file, read once and removed.
+    ('file-not-removed', 'rm -f -- "$cepa_send_file" 2>/dev/null\n[ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"\n', '',
+     {'FILE removed after a refused send', 'FILE unremovable', 'BLOCK hostile message is sent as text', 'FILE removed after a stored send', 'FILE unreadable is still removed'}),
+    ('file-symlink-allowed', '[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O', '[ -f "$cepa_send_file" ] && [ -O',
+     {'FILE a symlink', 'FILE a symlink keeps the link'}),
+    ('file-any-name', '/cepa-send-[A-Za-z0-9._@-]{1,64}\\.txt$', '/[A-Za-z0-9._@-]{1,64}$',
+     {'FILE another name', 'FILE another name keeps the file'}),
+    ('file-dotdot-allowed', ' && $cepa_send_file != */../* ]]', ' ]]',
+     {'FILE dot-dot part', 'FILE dot-dot part keeps the file'}),
+    ('file-in-repo-allowed', '    || refuse "the message file is inside the repo"', '    || true',
+     {'FILE in the main checkout from a worktree', 'FILE via a symlinked directory', 'FILE via a symlinked directory keeps the file', 'FILE inside the repo', 'FILE in the main checkout from a worktree keeps the file', 'FILE inside the repo keeps the file'}),
+    ('file-physical-unchecked', ' && $cepa_send_phys != "$cepa_send_k"/* ]]', ' ]]', {'FILE in the main checkout from a worktree', 'FILE via a symlinked directory', 'FILE in the main checkout from a worktree keeps the file', 'FILE via a symlinked directory keeps the file'}),
+    ('file-main-unchecked', 'for cepa_send_k in "$cepa_send_top" "$cepa_send_main"; do', 'for cepa_send_k in "$cepa_send_top"; do', {'FILE in the main checkout from a worktree', 'FILE in the main checkout from a worktree keeps the file'}),
+    ('file-dot-allowed', ' && $cepa_send_file != */./* && ', ' && ', {'FILE dot part keeps the file', 'FILE dot part'}),
+    ('file-unanchored', '=~ ^(/[A-Za-z0-9._@+-]+)*/cepa-send-', '=~ (/[A-Za-z0-9._@+-]+)*/cepa-send-', {'FILE space in the path', 'FILE relative path'}),
+    ('file-read-unchecked', '[ "$cepa_send_read" = 0 ] || refuse "the message file could not be read"\n', '', {'FILE unreadable'}),
+    ('file-single-line-body', "  [[ $cepa_send_msg != *$'\\n'* ]] || cepa_send_body=${cepa_send_msg#*$'\\n'}", "  cepa_send_body=${cepa_send_msg#*$'\\n'}", {'FILE subject only', 'FILE subject only, no newline'}),
+    ('file-field-optional', '[[ $cepa_send_seen == *" file "* ]] || refuse "the file field is missing"\n', '',
+     {'FILE field missing'}),
+    ('heredoc-message-allowed', '[ -z "${cepa_send_rest//[[:space:]]/}" ] \\\n', 'true \\\n',
+     {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused'}),
     # FIELDS (punch-list L38, #19): the values are field lines on stdin.
     ('fields-args-allowed', '[ $# -eq 0 ] || refuse', 'true || refuse',
      {'FIELDS arguments are refused'}),
     ('fields-twice-allowed', '[[ $cepa_send_seen != *" $cepa_send_k "* ]] || refuse', 'true || refuse',
      {'FIELDS name given twice'}),
-    ('fields-any-name', '    cli|target|type|nudge|outcome|task|session) ;;', '    cli|target|type|nudge|outcome|task|session|to) ;;',
+    ('fields-any-name', '    cli|target|type|nudge|outcome|task|session|file) ;;', '    cli|target|type|nudge|outcome|task|session|file|to) ;;',
      {'FIELDS unknown name'}),
     ('fields-cr-kept', "  cepa_send_line=${cepa_send_line%$'\\r'}\n", '',
      {'FIELDS any order, CR and trailing spaces', 'FIELDS any order sends the same argv'}),
@@ -334,7 +356,13 @@ SEND_MUTANTS = [
     ('fields-from-env', 'unset cepa_send_f_cli', ': cepa_send_f_cli',
      {'SESSION from the environment is ignored'}),
     ('fields-target-late', '    target) cepa_send_target=$cepa_send_v ;;\n', '',
-     {'FIELDS name given twice', 'FIELDS no empty line', 'SENDREF target newline'}),
+     # Every refusal before the target is copied (the heredoc and file
+     # checks, L41) then names "the target session".
+     {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused', 'FIELDS name given twice',
+      'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot part',
+      'FILE dot-dot part', 'FILE field missing', 'FILE in the main checkout from a worktree', 'FILE inside the repo',
+      'FILE relative path', 'FILE space in the path', 'FILE unreadable', 'FILE unremovable',
+      'FILE via a symlinked directory', 'SENDREF target newline'}),
     ('subject-cr-kept', "  cepa_send_subject=${cepa_send_subject%$'\\r'}\n", '',
      {'FIELDS any order sends the same argv'}),
 ]
@@ -378,16 +406,29 @@ HEALTH_MUTANTS = [
     ('health-dir-relative', '[[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"\n', '', {'HEALTHREF relative alert directory'}),
     ('health-cli-any', '  orca-ide|orca-dev) ;;', '  orca-ide|orca-dev|bash) ;;', {'HEALTHREF cli not orca'}),
 ]
+# BLOCK (punch-list L41): mutants of SKILL.md's rule 1 block, run by the
+# send legs against the shipped scripts.
+SKILL_MUTANTS = [
+    ("block-message-in-heredoc", "     file: <file>\n     CEPA_FIELDS\n",
+     "     file: <file>\n\n     <subject, one line>\n     <body>\n     CEPA_FIELDS\n",
+     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+    ("block-no-file-field", "     session: <session>\n     file: <file>\n", "     session: <session>\n",
+     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+    ("block-unquoted-delimiter", "orca-send.sh\" <<'CEPA_FIELDS' || true", "orca-send.sh\" <<CEPA_FIELDS || true",
+     {'BLOCK hostile message is sent as text', 'BLOCK heredoc holds only field lines'}),
+]
 SEND = "plugins/cepa/scripts/orca-send.sh"
 HEALTH = "plugins/cepa/scripts/orca-health.sh"
+SKILL = "plugins/cepa/skills/autonomy/SKILL.md"
 WORKFLOW = ".github/workflows/residual-integrity.yml"
 src = open(SCRIPT, encoding="utf-8").read()
 send_src = open(SEND, encoding="utf-8").read()
 health_src = open(HEALTH, encoding="utf-8").read()
+skill_src = open(SKILL, encoding="utf-8").read()
 
 # Every mutant, in one list: (part, mutant). A shard runs every Nth one.
 ALL = ([("nudge", m) for m in MUTANTS] + [("send", m) for m in SEND_MUTANTS]
-       + [("health", m) for m in HEALTH_MUTANTS])
+       + [("health", m) for m in HEALTH_MUTANTS] + [("skill", m) for m in SKILL_MUTANTS])
 spec = os.environ.get("CEPA_NUDGE_CONTROLS_SHARD", "1/1")
 sm = re.fullmatch(r"([1-9][0-9]?)/([1-9][0-9]?)", spec)
 if not sm or int(sm.group(1)) > int(sm.group(2)):
@@ -559,6 +600,13 @@ def run_part(part, m):
         open(os.path.join(d, "orca-send.sh"), "w", encoding="utf-8").write(send_src.replace(old, new))
         shutil.copy(SCRIPT, d)
         return check([SCRIPT, os.path.join(d, "orca-send.sh")], "send")[:2]
+    if part == "skill":
+        # The send legs read the rule 1 block from argument 4.
+        if skill_src.count(old) != 1:
+            return None, skill_src.count(old)
+        path = os.path.join(base, name + ".md")
+        open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
+        return check([SCRIPT, SEND, HEALTH, path], "send")[:2]
     if health_src.count(old) != 1:
         return None, health_src.count(old)
     path = os.path.join(base, name + ".sh")

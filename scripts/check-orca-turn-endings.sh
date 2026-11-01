@@ -42,7 +42,8 @@
 #   GRANTS   — each command in SITES declares allowed-tools, unless it is in
 #              NO_ALLOWED_TOOLS (the pipeline-command exception), and grants
 #              each grant in GRANTS: the 12a and 12b verbs every rule 7 site
-#              can emit, and the rule 1 nudge's script. No site grants
+#              can emit, the rule 1 nudge's script, and Write (rule 1's
+#              message file, L41). No site grants
 #              `terminal send` under any CLI spelling (NO_GRANT): it admits any
 #              text, any terminal and `--interrupt`. 12a's allowed-tools stated limit holds for
 #              all of them.
@@ -117,7 +118,7 @@ SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
 SCOPE_LACKS = "is printed as before."
-NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-send.sh" <<\'CEPA_BODY\' || true'
+NUDGE_LINE = 'bash "$CEPA_ROOT/scripts/orca-send.sh" <<\'CEPA_FIELDS\' || true'
 NUDGE_HAS = ["**Send, then nudge.**",
              "after a send succeeds to a target that is not a Run coordinator",
              "A Run coordinator is a target taken from a live Orca preamble, or a `run:` or `dispatch:` address.",
@@ -193,12 +194,15 @@ REPORT3_HAS = ["**A worker with no preamble sends its report, never only prints 
                # L35: worker_done runs through rule 1's block in its worker_done mode.
                "**It sends `worker_done` with rule 1's block**, not with the preamble's command line",
                "a `result.lifecycle` that names this dispatch and task with the action the outcome asks for (`completed` or `failed`)"]
-# L33 review: a body line equal to the heredoc delimiter ends it early.
-NUDGE_HAS.append("indent by one space any line of the subject or body that is exactly `CEPA_BODY`")
+# L33 review, L41: a body line equal to the heredoc delimiter ended it early,
+# so the message now goes in a file and the heredoc holds field lines only.
+NUDGE_HAS += ["**The message goes in a file, never in the heredoc.**",
+              "A path that passes is read and removed before any value is checked",
+              "`cepa-send-<session>-<n>.txt`", "**Every field value is one line.**"]
 # L38 (#19, #21): no value is a quoted argument; the fields go on stdin, and
 # the optional session name reaches the ending line.
 NUDGE_HAS += ["**No value is spliced into a shell string.** The script takes no arguments.",
-              "then one empty line, then the subject on one line and the body on every line after it.",
+              "as field lines only (`cli:`, `target:`, `type:`, `nudge:`, `file:`, and the optional `session:`)",
               "The script then names `<session> (<target>)` in each `Ending first line: ` about the target"]
 # command file -> (the heading of its final-report step, its citations of
 # rules 1, 2 or 8). Each citation is there exactly once outside fences, and
@@ -378,6 +382,9 @@ for n, head in SITES.items():
     for g in GRANTS:
         check("Bash(%s:*)" % g in tl.group(1), "GRANTS: %s grants Bash(%s:*)" % (n, g))
     check(not NO_GRANT.search(tl.group(1)), "GRANTS: %s grants no raw terminal send" % n)
+    # L41: rule 1's message goes in a file the session writes before the block.
+    check(re.search(r"(^|,)\s*Write\s*(,|$)", tl.group(1)) is not None,
+          "GRANTS: %s grants Write (rule 1's message file)" % n)
 
 print("-- %d/%d checks passed --" % (passed, passed + failed))
 sys.exit(1 if failed else 0)

@@ -1638,19 +1638,41 @@ limits.
      sends.
    - **No value is spliced into a shell string.** The script takes no
      arguments. Every value goes on its stdin inside the block's quoted
-     heredoc (`<<'CEPA_BODY'`): first the field lines (`cli:`, `target:`,
-     `type:`, `nudge:`, and the optional `session:`), one per line as
-     `<name>: <value>`, then one empty line, then the subject on one line and
-     the body on every line after it. Why: the four values used to be quoted
-     arguments on the command line, which bash parses before the script can
-     check them (punch-list L38, review finding #19). The script checks each
-     field and refuses any other line before the empty line, so a message
-     that lost its fields is never sent with its first line read as one.
-     No character in the heredoc is expanded, with one exception: a line that is
-     exactly `CEPA_BODY` ends the heredoc, and every line after it runs as a
-     shell command. So before the block runs, indent by one space any line
-     of the subject or body that is exactly `CEPA_BODY` (a quoted copy of
-     this block is the likely case).
+     heredoc (`<<'CEPA_FIELDS'`), as field lines only (`cli:`, `target:`,
+     `type:`, `nudge:`, `file:`, and the optional `session:`), one per line
+     as `<name>: <value>`. Why: the four values used to be quoted arguments
+     on the command line, which bash parses before the script can check them
+     (punch-list L38, review finding #19). The script checks each field and
+     refuses any other line, so a block that lost a field name is never read.
+   - **The message goes in a file, never in the heredoc.** Before each run
+     of the block, write the message with the file-write tool (Write) to a
+     NEW file, `cepa-send-<session>-<n>.txt`: `<session>` is this session's
+     §10a name (`tab4@integrity`), and `<n>` counts this session's sends
+     (1, 2, 3, …), so no two sessions and no two runs share a name, and Write
+     never overwrites. Put it in the session's scratchpad directory when it
+     has one, else the system temp directory, never in a repo. Line 1 is the
+     subject and every line after it the body; a `reply` (rule 7) has no
+     subject, so its whole file is the answer. Put the file's absolute path
+     in the `file:` field. The script reads the fields first, then checks
+     the path. A path that fails is refused and its file is kept. A path
+     that passes is read and removed before any value is checked, so a
+     refused run needs a new file (the next `<n>`) before the block runs
+     again. Why (punch-list L41, PR #110 review finding #3): up to cepa 1.43.0
+     the message sat in the heredoc, and a message line that was exactly the
+     delimiter ended it, so every line after it ran as a shell command.
+     Bodies carry relayed repo content, and only prose guarded that. A file
+     never passes through the shell, so no line of it can end anything. A
+     message put after the fields is refused. The script refuses a path that
+     is not absolute, is not named `cepa-send-<name>.txt` (`<name>` in
+     `[A-Za-z0-9._@-]`), is not a regular file this user owns (a symlink is
+     refused), or lies inside this checkout or its main checkout, symlinks
+     resolved.
+   - **Every field value is one line.** Each field line starts `<name>: `, so
+     none can equal `CEPA_FIELDS`, but a value that holds a line break would
+     start a new line of its own. Never substitute such a value: print the
+     block for pasting with `Orca send skipped: <field> is not one line —
+     paste below`. The values are handles, ids, a name and a path, so this
+     is the rare case.
    - **A send succeeded** only when the script prints
      `Orca send stored: <message id> for <recipient>`. It prints that only
      when Orca returned `"ok": true` with a `result.message.id` shaped
@@ -1764,20 +1786,19 @@ limits.
        echo "Orca send skipped: orca-send.sh not found (set CEPA_PLUGIN_ROOT) — paste below"
        echo "Ending first line: Needed from you: paste the block below into the target session"
      else
-       bash "$CEPA_ROOT/scripts/orca-send.sh" <<'CEPA_BODY' || true
+       bash "$CEPA_ROOT/scripts/orca-send.sh" <<'CEPA_FIELDS' || true
      cli: <cli>
      target: <target>
      type: <type>
      nudge: <nudge>
      session: <session>
-
-     <subject, one line>
-     <body>
-     CEPA_BODY
+     file: <file>
+     CEPA_FIELDS
      fi
      ```
 
-     `<cli>` is §12a's printed `cli=` value. `<type>` is `question` for a
+     `<file>` is the absolute path of the message file written just before
+     the block (above). `<cli>` is §12a's printed `cli=` value. `<type>` is `question` for a
      decision (rule 7), `handoff` for a hand-off
      or a rule 3 report from a worker with no preamble, `reply` for an answer
      to a question (rule 7), `worker_done` for a dispatched worker's final
@@ -1803,9 +1824,10 @@ limits.
      unless it reads `done`.
 
      **Stated limit.** The commands grant only the block's script call,
-     `bash "$CEPA_ROOT/scripts/orca-send.sh"`. As with §12a, where the
-     permission layer refuses the whole block, nothing is sent: print the
-     block for pasting. The flags inside the script are from `terminal show`,
+     `bash "$CEPA_ROOT/scripts/orca-send.sh"`, and the Write tool for its
+     message file. As with §12a, where the permission layer refuses the whole
+     block, or refuses the write of the message file, nothing is sent: print
+     the block for pasting. The flags inside the script are from `terminal show`,
      `worktree ps` and `terminal send --help` (2026-10-30); its header owns
      the measured pane mapping and its limits, and
      `scripts/check-orca-nudge.sh` tests both scripts against a stub CLI.
@@ -1875,8 +1897,8 @@ limits.
    `<target>` is `dispatch:<Dispatch ID>`, `<type>` is `worker_done`, and
    the `nudge:` line is replaced by two field lines, `outcome:
    <succeeded|failed>` and `task: <Task ID>`, both IDs from the preamble, and
-   `session:` names the coordinator when the worker knows its name. After
-   the empty line, the heredoc holds the subject line, then the body. It
+   `session:` names the coordinator when the worker knows its name. The
+   message file (rule 1's `file:`) holds the subject line, then the body. It
    counts only when the script prints
    `Orca send stored`: Orca returned `"ok": true`, a `msg_…` id, and a
    `result.lifecycle` that names this dispatch and task with the action the
@@ -2047,7 +2069,11 @@ limits.
      through a quoted heredoc, so no character in it is evaluated, and the
      title goes to the CLI as one quoted argument. A name, a repo or a
      handle outside its character set is skipped with the reason, never
-     repaired.
+     repaired. Rule 1's delimiter hazard (punch-list L41) needs a second line
+     after the one that ends the heredoc, so it does not reach this block: a
+     one-line value that is exactly `CEPA_NAME` or `CEPA_TERM` leaves only
+     that delimiter line to run, which fails as an unknown command, and the
+     empty value is skipped.
    - **Failure is not fatal.** A skipped or failed rename prints its line,
      goes in the run's report beside the `ORCA:` line, and the run goes on.
      The rename is bounded at 3 seconds plus a 0.5-second kill, as 12a's
@@ -2114,7 +2140,7 @@ limits.
        prompts no one either. **The replier sends it with rule 1's block:**
        `<target>` is the question's message id (`msg_…`), `<type>` is
        `reply`, `<nudge>` is `nudge`, `<session>` is the asker's name when
-       known, and after the empty line the heredoc holds the answer only,
+       known, and the message file (rule 1's `file:`) holds the answer only,
        with no subject line. It counts only when the script prints
        `Orca send stored`: the stored message is threaded on that question
        and the re-read found it. The script nudges the handle Orca addressed
