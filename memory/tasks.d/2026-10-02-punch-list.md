@@ -1661,6 +1661,30 @@ L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mu
     the block they mutated was no longer found, not because the leg caught
     the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
 
+L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees it.**
+    status: pending
+    severity: P1
+    owner: coord@main (measuring)
+    Operator report, 2026-11-01: after a couple of hours away, coord@main tabs
+    show an open AskUserQuestion (merge approvals etc.) that is NOT listed under
+    NEEDS YOU on the Agent Dashboard. The question asked here earlier never
+    reached coord@main's context (re-pasted later).
+    Measured by coord@main (read only): Orca's Claude hooks in
+    `~/.claude/settings.json` cover PreToolUse, PostToolUse(+Failure),
+    PermissionRequest, Elicitation(+Result), Stop, StopFailure, SessionStart/End,
+    UserPromptSubmit, Subagent/Teammate events and PostCompact — NO Notification
+    hook. `~/.orca/agent-hooks/claude-hook.sh` only forwards each event with
+    curl `--connect-timeout 0.5 --max-time 1.5`, so a slow or failed post (the
+    WSL interop error seen 2026-11-01) loses that event silently; the event to
+    state mapping lives in the Orca app. Unverified hypotheses: (a) a lost
+    PreToolUse(AskUserQuestion) post; (b) a later event (a background task or
+    subagent finishing, an Orca nudge) moves the row off `waiting`; (c) a time
+    or restart reset inside Orca. Live probe started: a logger records this
+    session's row every 30 s while an AskUserQuestion stays open.
+    Mitigations to weigh: `orca-ide worktree set --unread --comment` (the sidebar
+    unread dot, documented "to ask for a person's attention"); Claude Code's
+    push notification; a report to Orca with the probe log.
+
 ---
 
 ## How this list is used
