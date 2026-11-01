@@ -216,14 +216,19 @@ unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_alert 
 [ $# -eq 0 ] || refuse "orca-send.sh takes no arguments; its fields go on stdin"
 # THE FIELDS: `<name>: <value>` lines up to the first empty line. Each value
 # is read by `read -r` from the heredoc, so bash never parses it as code.
+# No field comes from the environment: only a line on stdin sets one.
+unset cepa_send_f_cli cepa_send_f_target cepa_send_f_type cepa_send_f_nudge cepa_send_f_outcome \
+  cepa_send_f_task cepa_send_f_session
 cepa_send_seen=" "
 while :; do
   IFS= read -r cepa_send_line || refuse "stdin has no empty line after its fields"
   cepa_send_line=${cepa_send_line%$'\r'}
   [ -n "$cepa_send_line" ] || break
-  [[ $cepa_send_line =~ ^([a-z]+):\ (.*)$ ]] \
+  # `session:` with no space is an empty value, as `session: ` is: editors
+  # and models drop trailing spaces (PR #110 review).
+  [[ $cepa_send_line =~ ^([a-z]+):(\ (.*))?$ ]] \
     || refuse "a line before the empty line is not a <name>: <value> field"
-  cepa_send_k=${BASH_REMATCH[1]} cepa_send_v=${BASH_REMATCH[2]}
+  cepa_send_k=${BASH_REMATCH[1]} cepa_send_v=${BASH_REMATCH[3]}
   cepa_send_v=${cepa_send_v%"${cepa_send_v##*[![:space:]]}"}
   case "$cepa_send_k" in
     cli|target|type|nudge|outcome|task|session) ;;
@@ -232,6 +237,12 @@ while :; do
   [[ $cepa_send_seen != *" $cepa_send_k "* ]] || refuse "the $cepa_send_k field is given twice"
   cepa_send_seen+="$cepa_send_k "
   printf -v "cepa_send_f_$cepa_send_k" '%s' "$cepa_send_v"
+  # A later bad line still names the target and type already read; the
+  # ending prints the target only when it passes its check.
+  case "$cepa_send_k" in
+    target) cepa_send_target=$cepa_send_v ;;
+    type) cepa_send_type=$cepa_send_v ;;
+  esac
 done
 cepa_send_cli=${cepa_send_f_cli-} cepa_send_target=${cepa_send_f_target-} cepa_send_type=${cepa_send_f_type-}
 cepa_send_task=${cepa_send_f_task-}
@@ -296,6 +307,7 @@ if [ "$cepa_send_type" = reply ]; then
   cepa_send_subject=
 else
   IFS= read -r cepa_send_subject || [ -n "${cepa_send_subject:-}" ] || refuse "stdin has no subject line"
+  cepa_send_subject=${cepa_send_subject%$'\r'}
 fi
 { cepa_send_body=$(cat); } 2>/dev/null
 if [ "$cepa_send_type" != reply ]; then
@@ -484,6 +496,13 @@ cepa_send_tell="Ending first line: Needed from you: tell $cepa_send_target to ch
     || cepa_send_line="Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   printf '%s\n' "$cepa_send_line"
 done <<<"$cepa_send_nout"
+# A nudge that printed nothing gave the session no line to end on: it may
+# have died on a syntax error or `set -u` (PR #110 review). Not delivered.
+if [ "$cepa_send_nrc" -le 3 ] && [ -z "$cepa_send_nout" ]; then
+  echo "Orca nudge skipped: orca-nudge.sh exited $cepa_send_nrc and printed nothing"
+  echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
+  exit 1
+fi
 if [ "$cepa_send_nrc" -gt 3 ]; then
   echo "Orca nudge skipped: orca-nudge.sh would not start (exit $cepa_send_nrc)"
   echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"

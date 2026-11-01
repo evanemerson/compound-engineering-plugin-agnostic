@@ -1783,7 +1783,7 @@ limits.
      to a question (rule 7), `worker_done` for a dispatched worker's final
      report (rule 3), else `status`. `<session>` is the target's §10a name
      (`coord@main`, `tab3@roles`) when the session knows it, else leave the
-     value empty (`session: `) or drop the line; never guess one. The script
+     value empty (`session:`) or drop the line; never guess one. The script
      then names `<session> (<target>)` in each `Ending first line: ` about
      the target, so the operator reads a session, not only a handle
      (punch-list L38, review finding #21). A name outside `[A-Za-z0-9._@-]`

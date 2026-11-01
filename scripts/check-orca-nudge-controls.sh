@@ -309,7 +309,18 @@ SEND_MUTANTS = [
     ('nudge-wont-start-ignored', 'if [ "$cepa_send_nrc" -gt 3 ]; then', 'if false; then',
      {'NUDGEFILE would not start'}),
     ('nudge-blank-line', '[ -z "$cepa_send_nout" ] || while', 'while',
-     {'NUDGEFILE would not start'}),
+     {'NUDGEFILE printed nothing, exit 0', 'NUDGEFILE printed nothing, exit 2', 'NUDGEFILE would not start'}),
+    # PR #110 review fixes.
+    ('nudge-silent-ok', 'if [ "$cepa_send_nrc" -le 3 ] && [ -z "$cepa_send_nout" ]; then', 'if false; then',
+     {'NUDGEFILE printed nothing, exit 0', 'NUDGEFILE printed nothing, exit 2'}),
+    ('session-bare-refused', '^([a-z]+):(\\ (.*))?$', '^([a-z]+):\\ ((.*))$',
+     {'SESSION bare field is no name'}),
+    ('fields-from-env', 'unset cepa_send_f_cli', ': cepa_send_f_cli',
+     {'SESSION from the environment is ignored'}),
+    ('fields-target-late', '    target) cepa_send_target=$cepa_send_v ;;\n', '',
+     {'FIELDS name given twice', 'FIELDS no empty line', 'SENDREF target newline'}),
+    ('subject-cr-kept', "  cepa_send_subject=${cepa_send_subject%$'\\r'}\n", '',
+     {'FIELDS any order sends the same argv'}),
 ]
 # orca-health.sh mutants (punch-list L34). Each runs only the health half,
 # with the shipped nudge and send scripts as arguments 1 and 2.

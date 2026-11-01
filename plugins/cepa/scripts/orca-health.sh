@@ -273,6 +273,11 @@ REASONS = [re.compile(x) for x in (
     r"the session name holds a character outside \[A-Za-z0-9\._@-\]",
     r"a worker_done takes outcome and task fields, not nudge",
     r"only a worker_done takes outcome and task fields",
+    # Written by orca-send.sh before 1.43.0 (positional arguments); kept for
+    # one release so an alert file from a session still on the old block is
+    # shown, not read as an unrecognised reason (PR #110 review).
+    r"usage: orca-send\.sh .{1,120}", r"worker_done takes <outcome> <task id> after the type",
+    r"the fourth argument is not nudge or no-nudge",
     r"the target is not a term_ handle, run: or dispatch: address", r"a reply's target is not a msg_ message id",
     r"a worker_done target is not dispatch:ctx_<id>",
     r"the task id is not task_<id>", r"the worker_done outcome is not succeeded or failed",

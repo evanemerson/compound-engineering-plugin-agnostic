@@ -111,20 +111,23 @@
 #              a field, an unknown name, a name given twice, a missing cli,
 #              target, type or nudge, nudge on a worker_done, and outcome or
 #              task on a send are each refused before any call. Fields in any
-#              order, with a CR or trailing spaces, send the same argv.
+#              order, with a CR or trailing spaces, send the same argv; a CR
+#              after the subject is dropped too.
 #   SESSION  — punch-list L38 (#21): an optional `session:` field. Each ending
 #              line about the target then names `<session> (<handle>)` (a
 #              refused, failed or nudge-skipped send, the nudge's own line
 #              included), `<session>` alone when the target failed its check,
 #              and `<session>, the session that asked …` / `<session>, the Run
-#              coordinator` for a reply and a worker_done. An empty value is
-#              no name; a name outside [A-Za-z0-9._@-], or one starting `-`,
-#              is refused.
+#              coordinator` for a reply and a worker_done. An empty value
+#              (`session: ` or `session:`) is no name, and an exported
+#              cepa_send_f_session is ignored; a name outside
+#              [A-Za-z0-9._@-], or one starting `-`, is refused.
 #   GUARD    — L36 #22: on a PATH of only the tools orca-send.sh uses, a
 #              missing `timeout` or `python3`, or a `mktemp -d` that fails,
 #              exits 5 with its own reason and no call; the full set sends.
 #   NUDGEFILE — L36 #22: with no orca-nudge.sh beside orca-send.sh, or one
-#              that will not start, the send stands, exit 1, and the ending
+#              that will not start, or one that prints nothing (exit 0-3), the
+#              send stands, exit 1, and the ending
 #              line asks the operator to tell the target. STORE also pins the
 #              `to_handle` fallback: a stored message with none is the
 #              target's.
@@ -830,7 +833,7 @@ if LEGS in ("all", "send"):
             ("SENDREF target flag", ["orca-ide", "--interrupt", "status", "no-nudge"], STDIN,
              "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
             ("SENDREF target newline", ["orca-ide", H + "\n" + H, "status", "nudge"], STDIN,
-             "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
+             "a line before the empty line is not a <name>: <value> field", PASTE),
             ("SENDREF target with text before the handle", ["orca-ide", "x;" + H, "status", "nudge"], STDIN,
              "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
             ("SENDREF type heartbeat", ["orca-ide", H, "heartbeat", "nudge"], STDIN,
@@ -871,7 +874,7 @@ if LEGS in ("all", "send"):
     for name, raw, why, end in [
             ("FIELDS arguments are refused", (["orca-ide", H, "status", "nudge"], STDIN),
              "orca-send.sh takes no arguments; its fields go on stdin", PASTE_ANY),
-            ("FIELDS no empty line", ([], F.rstrip("\n") + "\n"), "stdin has no empty line after its fields", PASTE_ANY),
+            ("FIELDS no empty line", ([], F.rstrip("\n") + "\n"), "stdin has no empty line after its fields", PASTE),
             ("FIELDS message without fields", ([], STDIN),
              "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
             ("FIELDS no space after the colon", ([], F.replace("cli: ", "cli:") + STDIN),
@@ -879,7 +882,7 @@ if LEGS in ("all", "send"):
             ("FIELDS unknown name", ([], "to: x\n" + F + STDIN),
              "a field name is not cli, target, type, nudge, outcome, task or session", PASTE_ANY),
             ("FIELDS name given twice", ([], F.replace("\n\n", "\ntarget: %s\n\n" % H) + STDIN),
-             "the target field is given twice", PASTE_ANY),
+             "the target field is given twice", PASTE),
             ("FIELDS no cli", ([], F.replace("cli: orca-ide\n", "") + STDIN), "the cli field is missing", PASTE),
             ("FIELDS no target", ([], F.replace("target: %s\n" % H, "") + STDIN), "the target field is missing", PASTE_ANY),
             ("FIELDS no type", ([], F.replace("type: status\n", "") + STDIN), "the type field is missing", PASTE),
@@ -889,7 +892,7 @@ if LEGS in ("all", "send"):
              "only a worker_done takes outcome and task fields", PASTE)]:
         store(name, 4, [SR + why, end], raw=raw, called=False)
     calls = store("FIELDS any order, CR and trailing spaces", 0, [STORED], raw=([], (
-        "nudge: no-nudge  \r\ntype: question\r\ntarget: %s \ncli: orca-ide\r\n\r\n" % H) + STDIN))
+        "nudge: no-nudge  \r\ntype: question\r\ntarget: %s \ncli: orca-ide\r\n\r\n" % H) + SUBJ + "\r\n" + BODY + "\n"))
     oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
     (ok if oc == [OSEND_ARGV] else miss)("FIELDS any order sends the same argv" if oc == [OSEND_ARGV] else
                                           "FIELDS any order sends the same argv: %r" % oc)
@@ -916,6 +919,12 @@ if LEGS in ("all", "send"):
           argv=WARGS[:4] + ["task_x;rm"], session=S, called=False)
     store("SESSION empty value is no name", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE],
           mode="yes", session="", called=False)
+    # PR #110 review: `session:` with no space is an empty value too, and a
+    # field never comes from the environment.
+    store("SESSION bare field is no name", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE],
+          raw=([], F.replace("nudge: nudge\n", "nudge: yes\nsession:\n") + STDIN), called=False)
+    store("SESSION from the environment is ignored", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE],
+          mode="yes", env_extra={"cepa_send_f_session": "ghost@x"}, called=False)
     for name, bad in [("SESSION bad name refused", "coord@main $(id)"), ("SESSION name starting with - refused", "-x")]:
         store(name, 4, [SR + "the session name holds a character outside [A-Za-z0-9._@-]", PASTE],
               session=bad, called=False)
@@ -966,6 +975,12 @@ if LEGS in ("all", "send"):
           script=LONE, session=S)
     store("NUDGEFILE would not start", 1, [STORED, SK + "orca-nudge.sh would not start (exit 9)", END_H],
           script=lone("bad-nudge", "exit 9\n"))
+    # PR #110 review: a nudge that printed nothing (a syntax error, `set -u`)
+    # is not a delivery, whatever its exit code.
+    for code in (0, 2):
+        store("NUDGEFILE printed nothing, exit %d" % code, 1,
+              [STORED, SK + "orca-nudge.sh exited %d and printed nothing" % code, END_H],
+              script=lone("silent-nudge-%d" % code, "exit %d\n" % code))
 
     # --- ALERT (orca-send.sh's alert file, punch-list L34) ---
     # Exit 4 and 5 each write one alert file that orca-health.sh reads; any
