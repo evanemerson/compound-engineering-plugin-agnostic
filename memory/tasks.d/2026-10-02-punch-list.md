@@ -1321,7 +1321,10 @@ L39. **`check-anchor-counts-controls.sh:222` uses `printf | grep -q` (SIGPIPE fl
 L40. **Run the health check while every coordinator is idle (Orca automation).**
     status: pending
     severity: P2
-    owner: unassigned (L34 merged; needs operator approval before any automation)
+    owner: roles (`tab24@roles`, design only: brainstorm with the operator in
+      its tab, operator's request 2026-11-01; task `task_22ff60b22cce`,
+      dispatch `ctx_1d6b60999200`, branch `docs/roles/l40-watcher-design`).
+      No automation is created until the operator approves a build.
     From L34 (PR #109, residual P2; operator chose to file it, 2026-10-31).
     `orca-health.sh` runs only when a coordinator takes a turn (beside its
     rule 8 peek). When every coordinator is idle, a failed send or a hung
