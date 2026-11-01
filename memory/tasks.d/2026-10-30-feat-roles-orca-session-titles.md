@@ -5,7 +5,7 @@
 Canonical findings: `todos/review-2026-10-30-125030.md` (findings 12, 13, 15, 16).
 
 - [ ] P3 — A missing `timeout`, `python3` or CLI prints a misleading rename failure reason; §12a gates all three first — `plugins/cepa/skills/autonomy/SKILL.md` §12b rule 6 (finding 12).
-- [ ] P3 — `title-rename-hangs` and `env-stale-hangs` share a 1.2 s bound that may flake on a loaded runner — `scripts/check-orca-detection.sh` (finding 13).
+- [x] P3 — `title-rename-hangs` and `env-stale-hangs` share a 1.2 s bound that may flake on a loaded runner — `scripts/check-orca-detection.sh` (finding 13). Closed 2026-11-01 (L49): no change (L48 D2).
 - [ ] P3 — PR #94 findings 21 (one merged failure reason) and 24 (no hostile `json.py` fixture) apply to the rule 6 block too; fix both blocks together — `plugins/cepa/skills/autonomy/SKILL.md` §12a and §12b rule 6 (finding 15).
 - [x] P3 — Controls run time roughly doubled; record the hosted duration if above about 4 minutes — `.github/workflows/residual-integrity.yml` (finding 16). Closed 2026-10-31 by PR #104: the L31 split put the detection controls in their own job (3m25s hosted) and records the time there.
 

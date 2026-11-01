@@ -530,10 +530,10 @@ merge_shards() {  # <dir> <shard count> <registered ids, space-separated> <HEAD 
       incomplete=$((incomplete + 1)); k=$((k + 1)); continue
     fi
 
-    hdr=$(printf '%s\n' "$recs" | sed -n 's/^H //p' | head -1)
-    plan=$(printf '%s\n' "$recs" | sed -n 's/^P //p' | head -1)
+    hdr=$(sed -n '/^H /{s///p;q;}' <<<"$recs")
+    plan=$(sed -n '/^P /{s///p;q;}' <<<"$recs")
     done_rec=$(printf '%s\n' "$recs" | sed -n 's/^D //p' | tail -1)
-    why=$(printf '%s\n' "$recs" | sed -n 's/^F //p' | head -1 | merge_sanitize)
+    why=$(sed -n '/^F /{s///p;q;}' <<<"$recs" | merge_sanitize)
 
     # Results about a tree other than the one being judged are not evidence
     # about it. The shard prints a short SHA; prefix-match the full one.
