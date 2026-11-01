@@ -192,6 +192,10 @@ MUTANTS = [
     ("nudge-command-in-rule-7", "skill", "`nudge` mode). When the\n       send succeeded, and its nudge when the block ran one",
      "`nudge` mode). It may use `<cli> terminal send`. When the\n       send succeeded, and its nudge when the block ran one",
      {"NUDGE: rule 7 cites the nudge and holds no copy of it"}),
+    # review-2026-10-30-192000 #9: a restatement in other words, by its flag.
+    ("nudge-enter-in-rule-7", "skill", "`nudge` mode). When the\n       send succeeded, and its nudge when the block ran one",
+     "`nudge` mode). It presses Enter with `--enter`. When the\n       send succeeded, and its nudge when the block ran one",
+     {"NUDGE: rule 7 cites the nudge and holds no copy of it"}),
     # #100 finding 4: the answer comes back by reply, which has no prompt.
     ("rule-reply-not-scripted", "skill", " **The replier sends it with rule 1's block:**", " The replier sends it by hand:",
      {"RULE: rule 7 holds **The replier sends it with rule 1's block:** `<target>` is the question's message id (`msg_…`), `<type>` is `reply`, `<nudge>` is `nudge`"}),
@@ -206,7 +210,13 @@ MUTANTS = [
      "\n7. **How a turn ends under Orca.** (copy)\n\nA name line inside an Orca preamble",
      {"RULE: 12b holds 7. **How a turn ends under Orca.** exactly once"}),
     ("pointer-gone", "skill", "**Under Orca (§12a present), §12b rule 7 replaces this tail.**", "",
-     {"POINTER: section 6 holds **Under Orca (§12a present), §12b rule 7 replaces this tail.** once"}),
+     {"POINTER: section 6 holds **Under Orca (§12a present), §12b rule 7 replaces this tail.** once outside fences"}),
+    # review-2026-10-30-161650 #21: a pointer moved into a fence is not the rule.
+    # Same MISS line as pointer-gone, but only this control guards unfenced()
+    # in POINTER: drop it from the leg and pointer-gone still passes.
+    ("pointer-fenced", "skill", "\n**Under Orca (§12a present), §12b rule 7 replaces this tail.**\n",
+     "\n```\n**Under Orca (§12a present), §12b rule 7 replaces this tail.**\n```\n",
+     {"POINTER: section 6 holds **Under Orca (§12a present), §12b rule 7 replaces this tail.** once outside fences"}),
     ("scope-reverted", "skill", "only a block with no\n     reachable target is printed for pasting.",
      "a block addressed to the operator is printed as before.",
      {"SCOPE: rule 1 holds only a block with no reachable target is printed for pasting.",
@@ -254,8 +264,10 @@ MUTANTS += [
     # end a turn (rule 7), so it is the wrong step.
     ("cite-moved-review", "review.md", "\n\n**Under Orca**, end the run per",
      "\n\n## Headless return\n\n**Under Orca**, end the run per", cites("review.md")),
-    # The real move (#99 finding 2): out of Step 6, into the headless `## Modes`
-    # section. Two edits, so it uses the two-anchor form.
+    # The real move (finding 2 of todos/review-2026-10-30-181500.md, PR #99):
+    # out of Step 6, into the headless `## Modes` section. The earlier
+    # cite-moved-review is only a proxy for it. Two edits, so it uses the
+    # two-anchor form.
     ("cite-moved-review-modes", "review.md",
      [("\n\n**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.\n", "\n"),
       ("\n## Modes\n\n", "\n## Modes\n\n**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.\n\n")],

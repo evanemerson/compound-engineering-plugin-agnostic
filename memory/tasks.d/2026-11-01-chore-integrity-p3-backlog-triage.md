@@ -4,9 +4,9 @@
 
 Canonical findings: `todos/review-2026-11-01-203000.md` (findings 4, 5, 6).
 
-- [ ] P3 — "#99 finding 2" in the cite-moved-review-modes comment names no findings file — `scripts/check-orca-turn-endings-controls.sh` (finding 4).
+- [x] P3 — "#99 finding 2" in the cite-moved-review-modes comment names no findings file — `scripts/check-orca-turn-endings-controls.sh` (finding 4). Closed 2026-11-01 (L49): fixed.
 - [ ] P3 — review-2026-07-12 findings 5-12 closed on the file's own `resolution:` line; spot-check 5 and 8 against the brain provider, or accept — `todos/review-2026-07-12-115234.md` (finding 5).
-- [ ] P3 — The PR #99 section header names only finding 1 as applied — `memory/tasks.d/2026-10-30-fix-roles-rule7-probe-fixes.md` line 6 (finding 6).
+- [x] P3 — The PR #99 section header names only finding 1 as applied — `memory/tasks.d/2026-10-30-fix-roles-rule7-probe-fixes.md` line 6 (finding 6). Closed 2026-11-01 (L49): fixed.
 
 ## Triage result — items that need the operator (2026-11-01)
 

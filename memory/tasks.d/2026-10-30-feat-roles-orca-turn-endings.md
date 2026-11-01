@@ -10,4 +10,4 @@ Canonical findings: `todos/review-2026-10-30-161650.md` (findings 2, 6, 11, 13, 
 - [ ] P3 — Operator kind forbids options as text; §10d's `Decisions` lists them; say which holds — §12b rule 7 vs §10d (finding 13).
 - [x] P3 — Global `~/.claude/CLAUDE.md` still requires `## Next steps`; tracked by L24, coord@main edits it after the probe (finding 14). Closed 2026-11-01 by triage: the global file now says `## Next steps` is outside Orca only.
 - [x] CLOSED in PR #112 (L41, 1.44.0; rule 1 now reads the message from a file, and rule 6 does not have the hazard) — P3 — Verify whether rule 1's `CEPA_BODY` heredoc has rule 6's terminator break-out; if so apply the same guard — §12b rule 1 (finding 19).
-- [ ] P3 — POINTER is counted inside fences; apply CITES' `unfenced()` to §6 — `scripts/check-orca-turn-endings.sh` (finding 21).
+- [x] P3 — POINTER is counted inside fences; apply CITES' `unfenced()` to §6 — `scripts/check-orca-turn-endings.sh` (finding 21). Closed 2026-11-01 (L49): fixed, control `pointer-fenced`.
