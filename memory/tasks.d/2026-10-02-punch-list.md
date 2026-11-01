@@ -1485,7 +1485,16 @@ L44. **WISHLIST: make Orca's chat UI work more like the Claude Code VS Code chat
     operator names the 3-5 elements that matter most.
 
 L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #116 merged `822dfc6` (1.46.0), on the operator's
+    AskUserQuestion "Merge when green". Head b262bbf = Handoff `Head:`, CI
+    10/10 green, branch current with main. roles parked, branch deleted,
+    tab25 closed (absent from `terminal list`); both hops run, freshness
+    rc=0 (loaded copy contains 822dfc6). Final design: run-current is per
+    pane; a Run another terminal holds is re-bound only with a matching
+    `run:` (or `confirm:`); this pane's own Run / run-create id / `Orca Run:`
+    is the named Run. Review rounds: 23 (17 applied) + 12 (7 applied, 3
+    moot); deferred in `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
     2026-11-01: tab25 reported done on PR #116 (fe32bbc, 1.46.0, CI 10/10,
     review 23 findings / 17 applied). Re-opened on the branch by two
     coord@main messages: msg_5f9c440d11a0 (merge main after #117, re-bump)
@@ -1641,6 +1650,14 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
     Out of date: §12b rule 2 ("setup hook is not the stack init"), rule 6
     sidebar row, no removal rule, global CLAUDE.md "New lane". The global
     CLAUDE.md edit is drafted for the operator, never applied by cepa.
+
+L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mutant edits.**
+    status: pending
+    severity: P3
+    owner: unassigned (via `/cepa:compound`, with L51)
+    From tab25@roles (L46): three of its mutants first went red only because
+    the block they mutated was no longer found, not because the leg caught
+    the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
 
 ---
 
