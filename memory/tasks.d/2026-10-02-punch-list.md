@@ -1545,7 +1545,14 @@ L48. **Triage the open P3 backlog (recent shards and older open todos).**
     applied; the rest comes back as one decision table for the operator.
 
 L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4 and 6.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #117 merged `882a7b2` (1.45.1), on the operator's
+    AskUserQuestion "Merge when green". Head bd68adf = Handoff `Head:`, CI
+    10/10 green; main had gained only this file since the base. integrity
+    parked, branch deleted, tab7 closed (absent from `terminal list`); both
+    hops run, freshness rc=0 (loaded copy contains 882a7b2). Review: 5 P3,
+    4 applied, 1 deferred (no control pins first-match `q`). Shard:
+    `memory/tasks.d/2026-11-01-chore-integrity-l48-cleanup-batch.md`.
     severity: P3
     owner: integrity (`tab7@integrity`, dispatched via Orca 2026-11-01:
       task `task_bb4fd07dec6c`, dispatch `ctx_eaaae10c4e7c`, branch
@@ -1585,6 +1592,20 @@ L53. **`orca-health.sh` hardening batch (L48 D4) — after L47.**
     owner: unassigned (one worker after L47 merges)
     review-2026-10-31-214500 #21 #23 #24 #29 #31 #32, review-2026-10-31-230000
     #7. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+
+L54. **Two reviews in the same second write one findings file; the second overwrites the first.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From L49 (tab7@integrity, operator chose to file it 2026-11-01).
+    Findings files are named `todos/review-YYYY-MM-DD-HHMMSS.md`. PR #108
+    (`8d71f58`) replaced PR #107's `todos/review-2026-10-31-213000.md`
+    (`cd40fdb`), so PR #107's 13 findings exist only in git history. This
+    is the shared-sink rule (repo CLAUDE.md "Shared sinks are sharded or
+    serialized"): the path needs a per-run component (branch slug or PR
+    number) composed with autonomy §5 `slug(x)`, and every reader of
+    `todos/review-*.md` must accept the new name. Source line:
+    `memory/tasks.d/2026-11-01-chore-integrity-l48-cleanup-batch.md` line 11.
 
 ---
 
