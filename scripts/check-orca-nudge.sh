@@ -9,8 +9,9 @@
 # a fake clock, so the 120-second wait costs no real time. The script reads no
 # env var for its clock or its bound; only the PATH is changed.
 #
-# Usage: check-orca-nudge.sh [orca-nudge.sh [orca-send.sh]]
-#   The optional paths replace the shipped scripts. Only
+# Usage: check-orca-nudge.sh [orca-nudge.sh [orca-send.sh [orca-health.sh [SKILL.md]]]]
+#   The optional paths replace the shipped scripts (and the autonomy skill
+#   whose rule 1 block the BLOCK leg runs). Only
 #   check-orca-nudge-controls.sh sets them, to run this check against a mutant.
 #   orca-send.sh runs the orca-nudge.sh in its own directory, so a mutant send
 #   script needs a copy of the shipped nudge beside it.
@@ -105,14 +106,27 @@
 #              and the stub is never called. For the plain send types its
 #              ending line names the target only when the target passed its
 #              check. A cli path equal to ORCA_CLI_COMMAND sends.
-#   FIELDS   — punch-list L38 (#19): orca-send.sh takes no arguments; every
-#              value is a `<name>: <value>` line on stdin, then an empty line,
-#              then the message. Arguments, no empty line, a line that is not
-#              a field, an unknown name, a name given twice, a missing cli,
-#              target, type or nudge, nudge on a worker_done, and outcome or
-#              task on a send are each refused before any call. Fields in any
-#              order, with a CR or trailing spaces, send the same argv; a CR
-#              after the subject is dropped too.
+#   FIELDS   — punch-list L38 (#19), L41: orca-send.sh takes no arguments;
+#              every value is a `<name>: <value>` line on stdin, and the
+#              message is in the file `file:` names. Arguments, a line that is
+#              not a field, an unknown name, a name given twice, a missing
+#              cli, target, type or nudge, nudge on a worker_done, outcome or
+#              task on a send, and a message after the fields (a 1.43.0 block
+#              included) are each refused before any call. Fields in any
+#              order, with a CR, trailing spaces or trailing empty lines, send
+#              the same argv; a CR after the subject is dropped too.
+#   FILE     — punch-list L41: the message file. A missing field, a path that
+#              is relative, has a `..` part or a space, or is not named
+#              cepa-send-<name>.txt, a file that does not exist, a directory,
+#              a symlink, and a file inside the current repo are each refused
+#              before any call, and a refused file is never removed. A file
+#              that passes is removed after a stored send and after a refused
+#              one.
+#   BLOCK    — punch-list L41: §12b rule 1's block, read from SKILL.md. Its
+#              heredoc holds only `<name>: <placeholder>` lines, `file:`
+#              among them; filled in and run against the stub, a message whose
+#              lines equal both delimiters, followed by shell text, is sent
+#              byte for byte as the body, runs nothing, and its file is gone.
 #   SESSION  — punch-list L38 (#21): an optional `session:` field. Each ending
 #              line about the target then names `<session> (<handle>)` (a
 #              refused, failed or nudge-skipped send, the nudge's own line
@@ -143,12 +157,14 @@ cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
 CEPA_NUDGE_SCRIPT="${1:-plugins/cepa/scripts/orca-nudge.sh}" \
 CEPA_SEND_SCRIPT="${2:-plugins/cepa/scripts/orca-send.sh}" \
-CEPA_HEALTH_SCRIPT="${3:-plugins/cepa/scripts/orca-health.sh}" python3 - <<'PY'
+CEPA_HEALTH_SCRIPT="${3:-plugins/cepa/scripts/orca-health.sh}" \
+CEPA_SKILL_FILE="${4:-plugins/cepa/skills/autonomy/SKILL.md}" python3 - <<'PY'
 import json, os, shutil, subprocess, sys, tempfile
 
 SCRIPT = os.path.abspath(os.environ["CEPA_NUDGE_SCRIPT"])
 SEND_SCRIPT = os.path.abspath(os.environ["CEPA_SEND_SCRIPT"])
 HEALTH_SCRIPT = os.path.abspath(os.environ["CEPA_HEALTH_SCRIPT"])
+SKILL_FILE = os.path.abspath(os.environ["CEPA_SKILL_FILE"])
 LEGS = os.environ.get("CEPA_NUDGE_CHECK_LEGS", "all")
 if LEGS not in ("all", "nudge", "send", "health"):
     print("MISS CEPA_NUDGE_CHECK_LEGS is %r, want nudge, send or health" % LEGS)
@@ -526,6 +542,7 @@ if LEGS in ("all", "send"):
     SUBJ = "tab9@wt: L1 done"
     BODY = 'line 1\n"quoted" $HOME `x` \\ end\n\n- last'
     STDIN = SUBJ + "\n" + BODY + "\n"
+    HEREDOC_MSG = "the heredoc holds a message after its fields; the message goes in the file the file: field names"
     OSEND_ARGV = ["orchestration", "send", "--to", H, "--type", "question", "--subject", SUBJ,
                   "--body", BODY, "--retry-request", "<uuid>", "--json"]
     UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -558,15 +575,30 @@ if LEGS in ("all", "send"):
             "messages": [{"id": "msg_000000000001", "to_handle": OTHER}] + list(rows), "count": len(rows) + 1}})
 
     # L38 (#19): orca-send.sh takes no arguments. Its values are field lines
-    # on stdin, then an empty line, then the message. field_lines() writes a case's
-    # values in that form, in the order the old positional call had them.
-    def field_lines(argv, session=None):
+    # on stdin. L41: the message is in a file the `file:` field names, never
+    # in the heredoc. field_lines() writes a case's values in that form, in
+    # the order the old positional call had them; with msg, it writes the
+    # message to a fresh cepa-send-<n>.txt and adds its `file:` line.
+    MSGDIR = os.path.join(TMP, "msgs")
+    os.mkdir(MSGDIR)
+    NMSG = [0]
+
+    def msg_file(msg, name=None):
+        NMSG[0] += 1
+        path = os.path.join(MSGDIR, name or "cepa-send-%d.txt" % NMSG[0])
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(msg)
+        return path
+
+    def field_lines(argv, session=None, msg=None):
         names = ("cli", "target", "type", "outcome", "task") if argv[2:3] == ["worker_done"] \
             else ("cli", "target", "type", "nudge", "task")
         lines = ["%s: %s" % kv for kv in zip(names, argv)]
         if session is not None:
             lines.append("session: " + session)
-        return "\n".join(lines) + "\n\n"
+        if msg is not None:
+            lines.append("file: " + msg_file(msg))
+        return "\n".join(lines) + "\n"
 
     STORED = "Orca send stored: %s for %s" % (MID, H)
     NOSTORE = "Orca send failed: no message stored — "
@@ -582,7 +614,7 @@ if LEGS in ("all", "send"):
         env.update(env_extra or {})
         args = argv if argv is not None else ["orca-ide", target, typ, mode]
         # raw=(args, stdin) runs the script exactly so: the FIELDS cases.
-        args, stdin = raw if raw is not None else ([], field_lines(args, session) + stdin)
+        args, stdin = raw if raw is not None else ([], field_lines(args, session, stdin))
         got_rc, out, calls = run(args, script=script or SEND_SCRIPT, stdin=stdin, env_extra=env, **kw)
         # The alert file's line is the ALERT leg's to check.
         out = [l for l in out if not l.startswith(("Orca alert recorded: ", "Orca alert not recorded: "))]
@@ -833,7 +865,7 @@ if LEGS in ("all", "send"):
             ("SENDREF target flag", ["orca-ide", "--interrupt", "status", "no-nudge"], STDIN,
              "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
             ("SENDREF target newline", ["orca-ide", H + "\n" + H, "status", "nudge"], STDIN,
-             "a line before the empty line is not a <name>: <value> field", PASTE),
+             "a heredoc line is not a <name>: <value> field", PASTE),
             ("SENDREF target with text before the handle", ["orca-ide", "x;" + H, "status", "nudge"], STDIN,
              "the target is not a term_ handle, run: or dispatch: address", PASTE_ANY),
             ("SENDREF type heartbeat", ["orca-ide", H, "heartbeat", "nudge"], STDIN,
@@ -851,7 +883,7 @@ if LEGS in ("all", "send"):
              "a cli path must equal ORCA_CLI_COMMAND", PASTE),
             ("SENDREF cli relative path", ["bin/orca-ide", H, "status", "nudge"], STDIN,
              "a cli path must be absolute and equal ORCA_CLI_COMMAND", PASTE),
-            ("SENDREF no subject", ["orca-ide", H, "status", "nudge"], "", "stdin has no subject line", PASTE),
+            ("SENDREF empty message file", ["orca-ide", H, "status", "nudge"], "", "the subject is empty", PASTE),
             ("SENDREF empty subject", ["orca-ide", H, "status", "nudge"], "  \nbody\n", "the subject is empty", PASTE),
             ("SENDREF empty body", ["orca-ide", H, "status", "nudge"], SUBJ + "\n \n", "the body is empty", PASTE),
             ("SENDREF subject starts --", ["orca-ide", H, "status", "nudge"], "--json\nbody\n",
@@ -867,35 +899,133 @@ if LEGS in ("all", "send"):
           argv=[os.path.join(BIN, "orca-ide"), H, "question", "no-nudge"],
           env_extra={"ORCA_CLI_COMMAND": os.path.join(BIN, "orca-ide")})
 
-    # --- FIELDS (punch-list L38, #19): the values come as field lines on
-    # stdin, then an empty line, then the message. Each malformed shape is
-    # refused before any Orca call; order, a CR and trailing spaces are not.
+    # --- FIELDS (punch-list L38, #19; L41): the values come as field lines
+    # on stdin, and the message is in the file the `file:` field names. Each
+    # malformed shape is refused before any Orca call; order, a CR, trailing
+    # spaces and trailing empty lines are not.
     F = field_lines(["orca-ide", H, "status", "nudge"])
+    MF = lambda: "file: %s\n" % msg_file(STDIN)
     for name, raw, why, end in [
-            ("FIELDS arguments are refused", (["orca-ide", H, "status", "nudge"], STDIN),
+            ("FIELDS arguments are refused", (["orca-ide", H, "status", "nudge"], F + MF()),
              "orca-send.sh takes no arguments; its fields go on stdin", PASTE_ANY),
-            ("FIELDS no empty line", ([], F.rstrip("\n") + "\n"), "stdin has no empty line after its fields", PASTE),
             ("FIELDS message without fields", ([], STDIN),
-             "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
-            ("FIELDS no space after the colon", ([], F.replace("cli: ", "cli:") + STDIN),
-             "a line before the empty line is not a <name>: <value> field", PASTE_ANY),
-            ("FIELDS unknown name", ([], "to: x\n" + F + STDIN),
-             "a field name is not cli, target, type, nudge, outcome, task or session", PASTE_ANY),
-            ("FIELDS name given twice", ([], F.replace("\n\n", "\ntarget: %s\n\n" % H) + STDIN),
-             "the target field is given twice", PASTE),
-            ("FIELDS no cli", ([], F.replace("cli: orca-ide\n", "") + STDIN), "the cli field is missing", PASTE),
-            ("FIELDS no target", ([], F.replace("target: %s\n" % H, "") + STDIN), "the target field is missing", PASTE_ANY),
-            ("FIELDS no type", ([], F.replace("type: status\n", "") + STDIN), "the type field is missing", PASTE),
-            ("FIELDS nudge on a worker_done", ([], field_lines(WARGS).replace("\n\n", "\nnudge: no-nudge\n\n") + STDIN),
+             "a heredoc line is not a <name>: <value> field", PASTE_ANY),
+            ("FIELDS no space after the colon", ([], F.replace("cli: ", "cli:") + MF()),
+             "a heredoc line is not a <name>: <value> field", PASTE_ANY),
+            ("FIELDS unknown name", ([], "to: x\n" + F + MF()),
+             "a field name is not cli, target, type, nudge, outcome, task, session or file", PASTE_ANY),
+            ("FIELDS name given twice", ([], F + "target: %s\n" % H + MF()), "the target field is given twice", PASTE),
+            ("FIELDS no cli", ([], F.replace("cli: orca-ide\n", "") + MF()), "the cli field is missing", PASTE),
+            ("FIELDS no target", ([], F.replace("target: %s\n" % H, "") + MF()), "the target field is missing", PASTE_ANY),
+            ("FIELDS no type", ([], F.replace("type: status\n", "") + MF()), "the type field is missing", PASTE),
+            ("FIELDS nudge on a worker_done", ([], field_lines(WARGS) + "nudge: no-nudge\n" + MF()),
              "a worker_done takes outcome and task fields, not nudge", PASTE_RC),
-            ("FIELDS outcome on a send", ([], F.replace("\n\n", "\noutcome: succeeded\n\n") + STDIN),
-             "only a worker_done takes outcome and task fields", PASTE)]:
+            ("FIELDS outcome on a send", ([], F + "outcome: succeeded\n" + MF()),
+             "only a worker_done takes outcome and task fields", PASTE),
+            # L41: a block from before 1.44.0 (fields, an empty line, then the
+            # message) is refused loudly, and so is a message after the fields
+            # of a new block.
+            ("FIELDS 1.43.0 block is refused", ([], F + "\n" + STDIN), HEREDOC_MSG, PASTE),
+            ("FIELDS message after a file field is refused", ([], F + MF() + "\n" + STDIN), HEREDOC_MSG, PASTE)]:
         store(name, 4, [SR + why, end], raw=raw, called=False)
     calls = store("FIELDS any order, CR and trailing spaces", 0, [STORED], raw=([], (
-        "nudge: no-nudge  \r\ntype: question\r\ntarget: %s \ncli: orca-ide\r\n\r\n" % H) + SUBJ + "\r\n" + BODY + "\n"))
+        "nudge: no-nudge  \r\ntype: question\r\ntarget: %s \nfile: %s \r\ncli: orca-ide\r\n\r\n\n"
+        % (H, msg_file(SUBJ + "\r\n" + BODY + "\n")))))
     oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
     (ok if oc == [OSEND_ARGV] else miss)("FIELDS any order sends the same argv" if oc == [OSEND_ARGV] else
                                           "FIELDS any order sends the same argv: %r" % oc)
+
+    # --- FILE (punch-list L41): the message file. Its path is checked before
+    # it is opened; a file that passes is read and removed before any other
+    # check, so it serves one run. A file that fails is never removed.
+    def file_case(name, path, why, keep=None, **kw):
+        store(name, 4, [SR + why, PASTE], raw=([], F + "file: %s\n" % path), called=False, **kw)
+        if keep is not None:
+            (ok if os.path.exists(keep) else miss)("%s keeps the file" % name if os.path.exists(keep) else
+                                                   "%s keeps the file: %s was removed" % (name, keep))
+    store("FILE field missing", 4, [SR + "the file field is missing", PASTE], raw=([], F), called=False)
+    FBAD = "the message file is not an absolute path to a cepa-send-<name>.txt file"
+    p = msg_file(STDIN, "notes.txt")
+    file_case("FILE another name", p, FBAD, keep=p)
+    file_case("FILE relative path", "msgs/cepa-send-r.txt", FBAD)
+    p = msg_file(STDIN, "cepa-send-dd.txt")
+    file_case("FILE dot-dot part", os.path.join(MSGDIR, "..", "msgs", "cepa-send-dd.txt"), FBAD, keep=p)
+    file_case("FILE space in the path", os.path.join(MSGDIR, "a b", "cepa-send-s.txt"), FBAD)
+    FREG = "the message file is not a regular file this user owns"
+    file_case("FILE does not exist", os.path.join(MSGDIR, "cepa-send-none.txt"), FREG)
+    os.mkdir(os.path.join(MSGDIR, "cepa-send-dir.txt"))
+    file_case("FILE a directory", os.path.join(MSGDIR, "cepa-send-dir.txt"), FREG)
+    p = msg_file(STDIN, "real-target.txt")
+    os.symlink(p, os.path.join(MSGDIR, "cepa-send-link.txt"))
+    file_case("FILE a symlink", os.path.join(MSGDIR, "cepa-send-link.txt"), FREG, keep=p)
+    REPO_DIR = os.path.join(TMP, "a-repo")
+    os.mkdir(REPO_DIR)
+    subprocess.run(["git", "init", "-q", REPO_DIR], check=True)
+    p = os.path.join(REPO_DIR, "cepa-send-in.txt")
+    open(p, "w").write(STDIN)
+    file_case("FILE inside the repo", p, "the message file is inside the repo", keep=p, cwd=REPO_DIR)
+    # One file, one run: removed after a stored send and after a refused one.
+    for name, kw in [("FILE removed after a stored send", dict(rc=0, want=[STORED], mode="no-nudge")),
+                     ("FILE removed after a refused send", dict(
+                         rc=4, want=[SR + "the nudge field is not nudge or no-nudge", PASTE], mode="yes", called=False))]:
+        before = NMSG[0]
+        rc_, want = kw.pop("rc"), kw.pop("want")
+        store(name, rc_, want, **kw)
+        p = os.path.join(MSGDIR, "cepa-send-%d.txt" % (before + 1))
+        (ok if NMSG[0] == before + 1 and not os.path.exists(p) else miss)(
+            "%s: file gone" % name if not os.path.exists(p) else "%s: file gone: %s is still there" % (name, p))
+
+    # --- BLOCK (punch-list L41): §12b rule 1's own block, read from SKILL.md
+    # and run. Its heredoc holds only field lines, and a message line equal to
+    # either delimiter, followed by shell text, is sent as text: nothing runs.
+    import textwrap
+    skill = open(SKILL_FILE, encoding="utf-8").read()
+    blocks = [textwrap.dedent(b) for b in _re.findall(r"```bash\n(.*?)\n[ \t]*```", skill, _re.S)
+              if 'scripts/orca-send.sh" <<' in b]
+    hm = _re.search(r"<<'([A-Z_]+)' \|\| true\n(.*?)\n\1\n", blocks[0], _re.S) if len(blocks) == 1 else None
+    hlines = hm.group(2).split("\n") if hm else []
+    good = bool(hlines) and all(_re.fullmatch(r"[a-z]+: <[a-z]+>", l) for l in hlines) \
+        and "file: <file>" in hlines
+    (ok if good else miss)("BLOCK heredoc holds only field lines" if good else
+                           "BLOCK heredoc holds only field lines: %d blocks, lines %r" % (len(blocks), hlines[:8]))
+    if hm:
+        plug = os.path.join(TMP, "plug")
+        os.makedirs(os.path.join(plug, "scripts"))
+        for src_, dst in ((SEND_SCRIPT, "orca-send.sh"), (os.path.join(os.path.dirname(SEND_SCRIPT), "orca-nudge.sh"),
+                          "orca-nudge.sh"), ("plugins/cepa/scripts/resolve-plugin-root.sh", "resolve-plugin-root.sh")):
+            shutil.copy(src_, os.path.join(plug, "scripts", dst))
+        open(os.path.join(plug, "scripts", "brain-client.sh"), "w").write("#!/bin/sh\nexit 0\n")
+        os.chmod(os.path.join(plug, "scripts", "brain-client.sh"), 0o755)
+        mark = os.path.join(TMP, "block-ran")
+        hbody = ("line 1\nCEPA_FIELDS\ntouch %s\nCEPA_BODY\ntouch %s\nEOF\n$(touch %s)\n`touch %s`"
+                 % ((mark,) * 4))
+        hfile = msg_file(SUBJ + "\n" + hbody + "\n")
+        filled = blocks[0]
+        for k, v in (("<cli>", "orca-ide"), ("<target>", H), ("<type>", "status"), ("<nudge>", "no-nudge"),
+                     ("<session>", "coord@main"), ("<file>", hfile)):
+            filled = filled.replace(k, v)
+        bpath = os.path.join(TMP, "block.sh")
+        open(bpath, "w").write(filled)
+        os.makedirs(os.path.join(TMP, "home"), exist_ok=True)
+        rc_, out, calls = run([], script=bpath, env_extra={
+            "CEPA_PLUGIN_ROOT": plug, "CLAUDE_PLUGIN_ROOT": "", "CEPA_DEV": "", "HOME": os.path.join(TMP, "home"),
+            "STUB_OSEND": osend(), "STUB_OSEND_RC": "0", "STUB_INBOX": inbox()})
+        oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
+        want = [["orchestration", "send", "--to", H, "--type", "status", "--subject", SUBJ, "--body", hbody,
+                 "--retry-request", "<uuid>", "--json"]]
+        why = []
+        if rc_ != 0 or out != [STORED]:
+            why.append("rc=%s out=%r" % (rc_, out[:4]))
+        if oc != want:
+            why.append("send argv %r" % [[a[:80] for a in c] for c in oc])
+        if os.path.exists(mark):
+            why.append("a message line ran as a shell command")
+        if os.path.exists(hfile):
+            why.append("the message file was not removed")
+        (miss if why else ok)("BLOCK hostile message is sent as text: " + "; ".join(why) if why else
+                              "BLOCK hostile message is sent as text")
+    else:
+        miss("BLOCK hostile message is sent as text: no block to run")
 
     # --- SESSION (punch-list L38, #21): an optional session name, printed
     # beside the handle in every ending line about the target.
@@ -922,7 +1052,7 @@ if LEGS in ("all", "send"):
     # PR #110 review: `session:` with no space is an empty value too, and a
     # field never comes from the environment.
     store("SESSION bare field is no name", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE],
-          raw=([], F.replace("nudge: nudge\n", "nudge: yes\nsession:\n") + STDIN), called=False)
+          raw=([], F.replace("nudge: nudge\n", "nudge: yes\nsession:\n") + MF()), called=False)
     store("SESSION from the environment is ignored", 4, [SR + "the nudge field is not nudge or no-nudge", PASTE],
           mode="yes", env_extra={"cepa_send_f_session": "ghost@x"}, called=False)
     for name, bad in [("SESSION bad name refused", "coord@main $(id)"), ("SESSION name starting with - refused", "-x")]:
@@ -994,7 +1124,7 @@ if LEGS in ("all", "send"):
         args = kw.pop("argv", None) or ["orca-ide", kw.pop("target", H), kw.pop("typ", "question"), kw.pop("mode", "nudge")]
         env.update({"STUB_OSEND": kw.pop("osend_json", osend()), "STUB_OSEND_RC": str(kw.pop("osend_rc", 0)),
                     "STUB_INBOX": kw.pop("inbox_json", inbox())})
-        got_rc, out, calls = run([], script=SEND_SCRIPT, stdin=field_lines(args) + kw.pop("stdin", STDIN), env_extra=env, **kw)
+        got_rc, out, calls = run([], script=SEND_SCRIPT, stdin=field_lines(args, msg=kw.pop("stdin", STDIN)), env_extra=env, **kw)
         files = sorted(os.listdir(ALERTS)) if os.path.isdir(ALERTS) else []
         why = []
         if got_rc != rc:
@@ -1038,7 +1168,7 @@ if LEGS in ("all", "send"):
         env = {"CEPA_ORCA_ALERT_DIR": adir, "STUB_OSEND": "", "STUB_OSEND_RC": "1", "STUB_INBOX": inbox()}
         # From the temp dir: a mutant that uses a relative directory writes
         # there, never into the repo.
-        got_rc, out, calls = run([], script=SEND_SCRIPT, stdin=field_lines(["orca-ide", H, "question", "nudge"]) + STDIN,
+        got_rc, out, calls = run([], script=SEND_SCRIPT, stdin=field_lines(["orca-ide", H, "question", "nudge"], msg=STDIN),
                                  env_extra=env, cwd=TMP)
         good = got_rc == 5 and out[-2:-1] == ["Orca alert not recorded: " + why_line] and out[-1].startswith(END)
         (ok if good else miss)(name if good else "%s: rc=%s out=%r" % (name, got_rc, out))
@@ -1171,7 +1301,7 @@ if LEGS in ("all", "health"):
     lits = __import__('re').findall(r'(?:refuse|fail|unproven) "([^"]+)"', open(SEND_SCRIPT).read())
     # L38: "the $cepa_send_k field is …" is written for each field name.
     lits = sorted(set([l.replace("$cepa_send_k", k) for l in lits if "$cepa_send_k" in l
-                       for k in ("cli", "target", "type", "nudge", "outcome", "task", "session")]
+                       for k in ("cli", "target", "type", "nudge", "outcome", "task", "session", "file")]
                       + [l for l in lits if "$" not in l]))
     files = {"%d-R%04d.alert" % (NOW - 60, i): afile(reason=r) for i, r in enumerate(lits)}
     rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, cwd=HWT, env_extra={

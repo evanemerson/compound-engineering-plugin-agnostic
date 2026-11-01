@@ -260,16 +260,20 @@ MID = r"msg_[0-9a-f]{6,32}"
 # another process cannot put words into the operator question.
 REASONS = [re.compile(x) for x in (
     r"the (subject|body) is empty", r"the (subject|body) starts with --, which Orca reads as a flag",
-    r"stdin has no subject line", r"the message size could not be measured",
+    r"the message size could not be measured",
     r"subject and body are \d{1,9} bytes; the limit is 28000 \(WSL command-line limit\)",
     r"the cli is not a plain command name", r"the cli does not name an Orca CLI",
     r"a cli path must (be absolute and )?equal ORCA_CLI_COMMAND", r"bare orca on Linux is the screen reader",
     r"[A-Za-z0-9._/-]{1,200} is not on PATH",
     r"orca-send\.sh takes no arguments; its fields go on stdin",
-    r"stdin has no empty line after its fields",
-    r"a line before the empty line is not a <name>: <value> field",
-    r"a field name is not cli, target, type, nudge, outcome, task or session",
-    r"the (cli|target|type|nudge|outcome|task|session) field is (given twice|missing)",
+    r"a heredoc line is not a <name>: <value> field",
+    r"a field name is not cli, target, type, nudge, outcome, task, session or file",
+    r"the (cli|target|type|nudge|outcome|task|session|file) field is (given twice|missing)",
+    # 1.44.0 (punch-list L41): the message is in a file, never in the heredoc.
+    r"the heredoc holds a message after its fields; the message goes in the file the file: field names",
+    r"the message file is not an absolute path to a cepa-send-<name>\.txt file",
+    r"the message file is not a regular file this user owns", r"the message file is inside the repo",
+    r"the message file could not be read and removed",
     r"the session name holds a character outside \[A-Za-z0-9\._@-\]",
     r"a worker_done takes outcome and task fields, not nudge",
     r"only a worker_done takes outcome and task fields",
@@ -278,6 +282,9 @@ REASONS = [re.compile(x) for x in (
     # shown, not read as an unrecognised reason (PR #110 review).
     r"usage: orca-send\.sh .{1,120}", r"worker_done takes <outcome> <task id> after the type",
     r"the fourth argument is not nudge or no-nudge",
+    # Written before 1.44.0 (the message in the heredoc); kept for one release.
+    r"a field name is not cli, target, type, nudge, outcome, task or session", r"stdin has no subject line",
+    r"stdin has no empty line after its fields", r"a line before the empty line is not a <name>: <value> field",
     r"the target is not a term_ handle, run: or dispatch: address", r"a reply's target is not a msg_ message id",
     r"a worker_done target is not dispatch:ctx_<id>",
     r"the task id is not task_<id>", r"the worker_done outcome is not succeeded or failed",

@@ -9,7 +9,7 @@
 # shipped script changed shape and these mutants need re-reading.
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF,
-# FIELDS, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF) has at least one
+# FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel.
 #
@@ -192,7 +192,7 @@ SEND_MUTANTS = [
      {'SENDREF nudge a run address'}),
     # L36 #20: every send carries a request id, so its vsock retry replays.
     ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
-     {'FIELDS any order sends the same argv', 'STORE argv and order', 'STORE retry reuses the request id'}),
+     {'BLOCK hostile message is sent as text', 'FIELDS any order sends the same argv', 'STORE argv and order', 'STORE retry reuses the request id'}),
     # reply mode (punch-list L35)
     ('reply-thread-unchecked', 'if m.get("thread_id") != target:', 'if False:',
      {'REPLY not threaded on the question'}),
@@ -256,12 +256,28 @@ SEND_MUTANTS = [
      {'ALERT relative directory is not used'}),
     ('alert-mkdir-unchecked', 'mkdir -p "$dir" 2>/dev/null || { echo', 'mkdir -p "$dir" 2>/dev/null; true || { echo',
      {'ALERT unmakeable directory is reported'}),
+    # FILE (punch-list L41): the message is in a file, read once and removed.
+    ('file-not-removed', '{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null && rm -f -- "$cepa_send_file" \\\n  && [ ! -e "$cepa_send_file" ] || refuse',
+     '{ cepa_send_msg=$(cat -- "$cepa_send_file"); } 2>/dev/null || refuse',
+     {'FILE removed after a stored send', 'FILE removed after a refused send', 'BLOCK hostile message is sent as text'}),
+    ('file-symlink-allowed', '[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O', '[ -f "$cepa_send_file" ] && [ -O',
+     {'FILE a symlink'}),
+    ('file-any-name', '/cepa-send-[A-Za-z0-9._-]{1,64}\\.txt$', '/[A-Za-z0-9._-]{1,64}$',
+     {'FILE another name', 'FILE another name keeps the file'}),
+    ('file-dotdot-allowed', ' && $cepa_send_file != */../* ]]', ' ]]',
+     {'FILE dot-dot part', 'FILE dot-dot part keeps the file'}),
+    ('file-in-repo-allowed', '[[ $cepa_send_file != "$cepa_send_top"/* ]]', 'true',
+     {'FILE inside the repo', 'FILE inside the repo keeps the file'}),
+    ('file-field-optional', '[[ $cepa_send_seen == *" file "* ]] || refuse "the file field is missing"\n', '',
+     {'FILE field missing'}),
+    ('heredoc-message-allowed', '[ -z "${cepa_send_rest//[[:space:]]/}" ] \\\n', 'true \\\n',
+     {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused'}),
     # FIELDS (punch-list L38, #19): the values are field lines on stdin.
     ('fields-args-allowed', '[ $# -eq 0 ] || refuse', 'true || refuse',
      {'FIELDS arguments are refused'}),
     ('fields-twice-allowed', '[[ $cepa_send_seen != *" $cepa_send_k "* ]] || refuse', 'true || refuse',
      {'FIELDS name given twice'}),
-    ('fields-any-name', '    cli|target|type|nudge|outcome|task|session) ;;', '    cli|target|type|nudge|outcome|task|session|to) ;;',
+    ('fields-any-name', '    cli|target|type|nudge|outcome|task|session|file) ;;', '    cli|target|type|nudge|outcome|task|session|file|to) ;;',
      {'FIELDS unknown name'}),
     ('fields-cr-kept', "  cepa_send_line=${cepa_send_line%$'\\r'}\n", '',
      {'FIELDS any order, CR and trailing spaces', 'FIELDS any order sends the same argv'}),
@@ -318,7 +334,12 @@ SEND_MUTANTS = [
     ('fields-from-env', 'unset cepa_send_f_cli', ': cepa_send_f_cli',
      {'SESSION from the environment is ignored'}),
     ('fields-target-late', '    target) cepa_send_target=$cepa_send_v ;;\n', '',
-     {'FIELDS name given twice', 'FIELDS no empty line', 'SENDREF target newline'}),
+     # Every refusal before the target is copied (the heredoc and file
+     # checks, L41) then names "the target session".
+     {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused', 'FIELDS name given twice',
+      'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot-dot part',
+      'FILE field missing', 'FILE inside the repo', 'FILE relative path', 'FILE space in the path',
+      'SENDREF target newline'}),
     ('subject-cr-kept', "  cepa_send_subject=${cepa_send_subject%$'\\r'}\n", '',
      {'FIELDS any order sends the same argv'}),
 ]
@@ -437,6 +458,36 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
 for (name, old, new, want), rc, got in results:
     if rc is None:
         miss("%s: anchor found %d times, want 1" % (name, send_src.count(old))); continue
+    if rc == 1 and got == want:
+        ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
+    else:
+        miss("%s: rc=%s, MISS set %r" % (name, rc, sorted(got)))
+
+# BLOCK (punch-list L41): mutants of SKILL.md's rule 1 block, run by the
+# send half against the shipped scripts.
+SKILL = "plugins/cepa/skills/autonomy/SKILL.md"
+skill_src = open(SKILL, encoding="utf-8").read()
+SKILL_MUTANTS = [
+    ("block-message-in-heredoc", "     file: <file>\n     CEPA_FIELDS\n",
+     "     file: <file>\n\n     <subject, one line>\n     <body>\n     CEPA_FIELDS\n",
+     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+    ("block-no-file-field", "     session: <session>\n     file: <file>\n", "     session: <session>\n",
+     {"BLOCK heredoc holds only field lines", "BLOCK hostile message is sent as text"}),
+]
+
+def run_skill_mutant(m):
+    name, old, new, want = m
+    if skill_src.count(old) != 1:
+        return m, None, None
+    path = os.path.join(TMP, "skill-" + name + ".md")
+    open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
+    return (m,) + check([SCRIPT, SEND, "plugins/cepa/scripts/orca-health.sh", path], "send")[:2]
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    results = list(pool.map(run_skill_mutant, SKILL_MUTANTS))
+for (name, old, new, want), rc, got in results:
+    if rc is None:
+        miss("%s: anchor found %d times, want 1" % (name, skill_src.count(old))); continue
     if rc == 1 and got == want:
         ok("%s goes red on %s" % (name, ", ".join(sorted(want))))
     else:
