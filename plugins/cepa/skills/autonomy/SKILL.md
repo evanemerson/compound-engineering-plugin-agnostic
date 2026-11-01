@@ -2363,8 +2363,8 @@ limits.
        bash "$CEPA_ROOT/scripts/orca-health.sh" "${cepa_health_argv[@]}" || true
      fi
      ```
-     `<cli>` is the §12a `cli=` value. The block reads its arguments one
-     per line from the quoted heredoc and passes each as one quoted word, so
+     The `<cli>` line takes §12a's printed `cli=` value. The block reads its
+     arguments one per line from the quoted heredoc and passes each as one quoted word, so
      no character in them is evaluated (punch-list L46: `"<cli>"` on the
      command line still ran `$(…)`); the script checks each one. The `ack`
      form puts the line `ack` under the `<cli>` line, then each key on its
