@@ -895,7 +895,10 @@ L28. **Rule 7 hardening from the L26 re-probe.**
 
 
 L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-31).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 with L30: RC1/RC5 by #102, RC2/RC3 by 1.37.2+ and rule
+    7, RC4 by the reboot (see L30 item 3). The first live loop after the
+    restart is the test; a gap it finds is a NEW item, not a reopen.
     severity: P1
     owner: coord@main (diagnosis); fix items below
     Operator report with 8 screenshots: artist360 coord@main sent
@@ -941,7 +944,13 @@ L29. **Orca-cepa delivery gaps seen in live sessions (operator report, 2026-10-3
     the half-typed-draft risk accepted in L28; a nudge there would submit it.
 
 L30. **Close RC1 and RC5: every worker reports back; awaiting sessions peek.**
-    status: pending
+    status: completed
+    Item 3 DONE 2026-11-01: the operator rebooted the machine, which ended
+    every session started before cepa 1.44.0, and ran `/cepa:handoff` in
+    every repo first. Measured after the reboot by coord@main:
+    `orca-ide terminal list` showed 1 terminal (this one); `worktree ps`
+    showed every other agent row `done` with 0 live terminals. New sessions
+    load cepa 1.44.0 (freshness rc=0), Claude Code 2.1.316, Orca 1.4.245.
     Items 1-2 DONE 2026-10-31 — PR #102 (`5b71315`), v1.38.0, merged on the
     operator's AskUserQuestion approval: worker-start default, `Report to:`
     line 2 for any other worker (the Handoff block is sent, never only
@@ -1412,6 +1421,32 @@ L43. **Orca chat UI shows an old message below new ones, so live output moves up
     worktree rows still show deleted branch names
     (`fix/integrity/sigpipe-grep`, `refactor/roles/send-block-stdin`) for
     worktrees that are parked detached.
+    Also seen 2026-11-01 (record only): before the reboot the Agent
+    Dashboard showed "0 total" while `worktree ps` listed 13 Claude agents.
+    After the reboot `worktree ps` still lists 11 agent rows `done` with 0
+    live terminals (ghost rows from ended sessions).
+
+L45. **A restarted coordinator does not re-bind its Run, so Orca prompts a dead terminal.**
+    status: pending
+    severity: P1
+    owner: unassigned (a cepa fix; next worker in `roles` or `integrity`)
+    Measured 2026-11-01 by coord@main after the reboot: `run-current` showed
+    `run_5682a0ed1455` with `coordinator_handle` = the dead pre-reboot
+    terminal `term_07815dfe…`. `orchestration run-use --id
+    run_5682a0ed1455` moved it to the new terminal `term_cccc2ae8…`
+    (`consumer_generation` 2 → 3). Until then, Orca's prompt for a
+    `worker_done` or `ask` goes to a terminal that no longer exists.
+    Probe: `grep -rn -iE 'run-use|run-current' plugins/cepa/` matches only
+    `orca-health.sh` (it reads `run-current`); no command or §12b rule tells
+    a coordinator to run `run-use`, and `/cepa:handoff` does not carry the
+    Run id. This repo's own handoff had the step only because its author
+    wrote it by hand.
+    Same class: every terminal handle written in a handoff (`Report to:`,
+    another coordinator's handle) is dead after a restart.
+    Fix shape: §12b rule 2 (or 8) — a coordinator that has a Run runs
+    `run-use` on its first turn and checks `coordinator_handle` equals
+    `ORCA_TERMINAL_HANDLE`; `/cepa:handoff` emits the Run id and that step,
+    and marks any handle it prints as valid only until the terminal closes.
 
 L44. **WISHLIST: make Orca's chat UI work more like the Claude Code VS Code chat UI.**
     status: deferred
