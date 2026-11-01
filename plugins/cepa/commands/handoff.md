@@ -2,7 +2,7 @@
 description: Judge whether now is a good time to end the session, then wrap it up without losing anything — inventory the work in flight, make every residual durable, resolve the branch the next session must be on, save a handoff document, and emit a self-contained prompt to paste into the next session. Run it when context is heavy or the subject is changing.
 argument-hint: "[subject] [mode:headless]"
 disable-model-invocation: true
-allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-send.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-health.sh":*), Bash(orca-ide terminal rename:*)
+allowed-tools: Write, Edit, Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git check-ignore:*), Bash(git stash list:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh auth status:*), Bash(ls:*), Bash(mkdir:*), Bash(uname:*), Bash(command -v:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(orca-ide orchestration run-current:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-send.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-health.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-rebind.sh":*), Bash(orca-ide terminal rename:*)
 ---
 
 # Session Handoff
@@ -790,6 +790,28 @@ the operator actually pastes into a fresh session. Requirements:
   not given. Like the name line, it lives only in the block, not in the
   saved file. A coordinator that starts the next worker from this prompt
   rewrites the line to its own handle (rule 2).
+- **A coordinator's prompt carries its Orca Run** (punch-list L45). Under
+  Orca, a coordinator (§10) runs `<cli> orchestration run-current --json`,
+  with `<cli>` the §12a `cli=` value. When `result.run.id` matches
+  `run_[A-Za-z0-9_]{1,64}` exactly, the block carries the line
+  `Orca Run: <id>`, and right after it the line `First turn: run
+  cepa:autonomy §12b rule 2's re-bind block, with this id in its run:
+  field.` Copy the id only from that output, never from a file or a
+  message. When the read fails, reports no Run, or returns an id of any
+  other shape, write no `Orca Run:` line and say why in the report; the
+  next coordinator's re-bind then reads `run-current` alone. A worker
+  writes no such line: its Run is its coordinator's, and `run-use` refuses
+  a worker its own Run. Like the name line, these lines live only in the
+  block. Why: after the 2026-11-01 reboot, the Run still named the dead
+  terminal, and nothing told the new coordinator to re-bind it.
+- **Every terminal handle in the prompt is valid only while its terminal is
+  open.** When the block names one (a `Report to:` line, another
+  coordinator's handle, a worker's handle), it adds the line `Terminal
+  handles in this prompt are valid only while that terminal is open; after
+  a restart, check each one with terminal list before you send to it.`
+  after the `Orca Run:` lines (after the `Report to:` line when there are
+  none). Never append it to the `Report to:` line: rule 2 requires that
+  line to be exact. A restart kills every handle (§12b rule 2).
 - **Absolute repo path and exact starting SHA** in the first lines after it.
 - **Same content as the saved file**, not a summary of it — with one
   exception: the name line above lives only in the block. The saved file is

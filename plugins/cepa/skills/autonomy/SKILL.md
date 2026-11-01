@@ -1850,6 +1850,55 @@ limits.
    with the guide's model flag, at a tier §9 sanctions. Then it names the
    worker's tab (rule 6) with the handle `worker-start` returned. Placement follows cepa,
    not Orca's default:
+   - **A coordinator re-binds its Run on its first turn.** A Run remembers
+     the terminal that bound it, and Orca prompts that terminal for every
+     `worker_done` and `ask`. A restart (a reboot, a closed tab, a new
+     session from a `/cepa:handoff` prompt) leaves the Run naming a dead
+     terminal. So on its first turn under Orca, a coordinator runs the block
+     below, before rule 8's first health check. When its prompt carries an
+     `Orca Run:` line (`/cepa:handoff` writes one), it puts that id in the
+     `run:` field; otherwise it leaves the `run:` line out. It runs the block
+     again whenever rule 8's health check prints an `unbound` alert. The
+     script, `plugins/cepa/scripts/orca-rebind.sh`, reads `run-current`,
+     runs `run-use` only when the Run names another terminal and that
+     terminal is absent from `terminal list`, and then re-reads
+     `run-current`. It counts only when the re-read names this terminal
+     (`ORCA_TERMINAL_HANDLE`). The script's header owns the order of its
+     checks and its limits. Never run `run-use` by hand for this. Why
+     (punch-list L45, 2026-11-01): after a reboot, `run-current` showed Run
+     `run_5682a0ed1455` bound to the dead pre-reboot terminal, so Orca
+     prompted nothing that was alive until coord@main ran `run-use` by hand.
+     ```bash
+     unset CEPA_ROOT
+     for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+              "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+       [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+     done
+     if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-rebind.sh" ]; then
+       echo "ORCA rebind skipped: orca-rebind.sh not found (set CEPA_PLUGIN_ROOT)"
+     else
+       bash "$CEPA_ROOT/scripts/orca-rebind.sh" <<'CEPA_FIELDS' || true
+     cli: <cli>
+     run: <the Orca Run: id from the prompt; leave this line out when there is none>
+     CEPA_FIELDS
+     fi
+     ```
+     `<cli>` is the §12a `cli=` value. The block's result is its first line.
+     `ORCA rebind: ok — …` and `ORCA rebind: done — …` need nothing more.
+     `ORCA rebind: ask — …` (two Runs differ, or the Run's terminal is still
+     open or could not be checked) and `ORCA rebind failed: …` (the re-read
+     does not name this terminal) change nothing that is not proven; the turn
+     ends as rule 7's **The operator** kind, with the script's
+     `Ending first line: ` text as its first line. A mismatch is reported,
+     never ignored. `ORCA rebind refused: …` or `… skipped: …` means the
+     re-bind did not run: the body says so.
+     **A terminal handle is valid only while its terminal is open.** The same
+     restart kills every handle a prompt or file names: a `Report to:` line
+     (above), another coordinator's handle, a worker's handle. A session
+     re-measures such a handle (`terminal list`) before it sends to it after
+     a restart, and a handle that is absent is no target (rule 1).
    - **Any other start carries a `Report to:` line.** When a coordinator
      starts a worker any other way (`agent launch`, a pasted prompt), line 1
      of the worker's prompt is its name and line 2 is exactly
@@ -2208,7 +2257,9 @@ limits.
      sees, and the measurements behind them (punch-list L34): in short, a
      send that `orca-send.sh` refused or could not prove stored (rule 1), a
      worker of the bound Run that exited, waits on a human, went quiet or ran
-     too long, a question left unanswered, and an Orca read that failed.
+     too long, a question left unanswered, a bound Run that names another
+     terminal (`unbound`: run rule 2's re-bind block), and an Orca read that
+     failed.
      **When it prints an `ORCA alert:` line, the turn ends as rule 7's
      **The operator** kind.** This is a stated exception to that kind's
      "alone can make" test: only the operator can look at another session.

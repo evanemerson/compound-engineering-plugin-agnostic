@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-nudge.sh. Each mutant is one substitution in
 # a temp copy of plugins/cepa/scripts/orca-nudge.sh, of orca-send.sh
-# (SEND_MUTANTS), of orca-health.sh (HEALTH_MUTANTS), or of the autonomy
-# skill's rule 1 block (SKILL_MUTANTS). It must turn the check red with
+# (SEND_MUTANTS), of orca-health.sh (HEALTH_MUTANTS), of orca-rebind.sh
+# (REBIND_MUTANTS), or of the autonomy skill's rule 1 block (SKILL_MUTANTS). It must turn the check red with
 # EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
@@ -10,7 +10,7 @@
 # shipped script changed shape and these mutants need re-reading.
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF,
-# FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF) has at least one
+# FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF, REBIND, REBINDREF) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel.
 #
@@ -383,8 +383,8 @@ HEALTH_MUTANTS = [
     ('health-reason-unchecked', 'why = f["reason"] if any(r.fullmatch(f["reason"]) for r in REASONS) else "an unrecognised reason"', 'why = f["reason"]', {'HEALTH unknown reason is not shown'}),
     ('health-reason-list-short', '    r"no request id could be made", ', '    ', {'HEALTH every orca-send.sh reason is shown'}),
     ('health-follow-up-answers', ' and x.get("from_handle") != sender.get(t):', ':', {"HEALTH asker's own follow-up is not an answer"}),
-    ('health-acks-ignored', 'acked = set(listdir(acked_dir, "ack-dir"))', 'acked = set()', {'HEALTH acked unreadable is unknown, never ok', 'HEALTH unreadable alert directory', 'HEALTH acked key is not reported', 'HEALTH acked file is not reported'}),
-    ('health-acks-shared', 'cepa_h_acked="$cepa_h_dir/acked/$cepa_h_wt"', 'cepa_h_acked="$cepa_h_dir/acked"', {'HEALTH ack marks keys for this worktree only', 'HEALTH acked unreadable is unknown, never ok', "HEALTH another worktree's ack does not hide it", 'HEALTH acked key is not reported'}),
+    ('health-acks-ignored', 'acked = set(listdir(acked_dir, "ack-dir"))', 'acked = set()', {'HEALTH acked unreadable is unknown, never ok', 'HEALTH unreadable alert directory', 'HEALTH acked key is not reported', 'HEALTH acked file is not reported', 'HEALTH acked unbound is not reported'}),
+    ('health-acks-shared', 'cepa_h_acked="$cepa_h_dir/acked/$cepa_h_wt"', 'cepa_h_acked="$cepa_h_dir/acked"', {'HEALTH ack marks keys for this worktree only', 'HEALTH acked unreadable is unknown, never ok', "HEALTH another worktree's ack does not hide it", 'HEALTH acked key is not reported', 'HEALTH acked unbound is not reported'}),
     ('health-ack-missing-file-ok', '[[ $k == send-failed:* ]] && [ ! -f', '[[ $k == none ]] && [ ! -f', {'HEALTH ack of a missing alert file fails'}),
     ('health-ack-key-loose', 'send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\\.alert|', 'send-failed:[A-Za-z0-9_.-]{1,40}|', {'HEALTHREF ack temp file name'}),
     ('health-hidden-is-ok', 'if hidden and not seen:', 'if False:', {'HEALTH acked unreadable is unknown, never ok'}),
@@ -405,6 +405,35 @@ HEALTH_MUTANTS = [
     ('health-no-vsock-retry', '  for try in 1 2; do\n    t=$(date', '  for try in 1; do\n    t=$(date', {'HEALTH worker-list vsock once', 'HEALTH vsock retry runs worker-list twice'}),
     ('health-dir-relative', '[[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"\n', '', {'HEALTHREF relative alert directory'}),
     ('health-cli-any', '  orca-ide|orca-dev) ;;', '  orca-ide|orca-dev|bash) ;;', {'HEALTHREF cli not orca'}),
+    # L45: the unbound alert.
+    ('health-unbound-silent', 'holder != me and k not in acked:', 'False and k not in acked:', {'HEALTH unbound Run is reported'}),
+    ('health-unbound-holder-here', 'holder) and holder != me and k not in acked:', 'holder) and k not in acked:', {'HEALTH Run bound here is ok'}),
+    ('health-unbound-holder-unchecked', 'isinstance(holder, str) and re.fullmatch(r"term_[0-9a-f-]{36}", holder) and', 'isinstance(holder, str) and', {'HEALTH unbound needs a valid holder'}),
+    ('health-unbound-ack-ignored', 'holder != me and k not in acked:', 'holder != me:', {'HEALTH acked unbound is not reported'}),
+    ('health-unbound-key-refused', '|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}', '', {'HEALTH unbound ack prints the key'}),
+]
+# REBIND (punch-list L45): mutants of orca-rebind.sh, run by the health legs.
+REBIND_MUTANTS = [
+    ('rebind-no-live-check', 'case "$cepa_rb_live" in\n  gone) ;;', 'case gone in\n  gone) ;;',
+     {'REBIND live holder is never taken', 'REBIND truncated terminal list asks', 'REBIND short terminal list asks', 'REBIND terminal list not ok asks'}),
+    ('rebind-truncated-ignored', ' or r.get("truncated") is not False', '', {'REBIND truncated terminal list asks'}),
+    ('rebind-total-ignored', ' or r.get("totalCount") != len(t)', '', {'REBIND short terminal list asks'}),
+    ('rebind-no-reread-check', 'if [ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ]; then', 'if true; then',
+     {'REBIND mismatch after run-use fails', 'REBIND no Run after run-use fails', 'REBIND run-use is not retried on vsock'}),
+    ('rebind-differ-ignored', 'if [ -n "$cepa_rb_cur_id" ] && [ -n "$cepa_rb_want" ] && [ "$cepa_rb_cur_id" != "$cepa_rb_want" ]; then', 'if false; then',
+     {'REBIND differing Runs ask'}),
+    ('rebind-run-unchecked', '[ -z "$cepa_rb_want" ] || [[ $cepa_rb_want =~ ^run_[A-Za-z0-9_]{1,64}$ ]] \\', '[ -z "$cepa_rb_want" ] || true \\',
+     {'REBINDREF run with shell text', 'REBINDREF run with a dash', 'REBINDREF run with a flag'}),
+    ('rebind-me-unchecked', '[[ $cepa_rb_me =~ ^term_[0-9a-f-]{36}$ ]] || refuse', 'true || refuse',
+     {'REBINDREF no terminal handle', 'REBINDREF bad terminal handle'}),
+    ('rebind-run-use-retried', 'cepa_rb_orca "$cepa_rb_tmp/use.json" 0', 'cepa_rb_orca "$cepa_rb_tmp/use.json" 1', {'REBIND run-use is not retried on vsock'}),
+    ('rebind-no-vsock-retry', '  for try in 1 2; do\n    timeout', '  for try in 1; do\n    timeout', {'REBIND run-current vsock once'}),
+    ('rebind-extra-field', 'case "$cepa_rb_k" in cli|run) ;;', 'case "$cepa_rb_k" in cli|run|from) ;;', {'REBINDREF unknown field'}),
+    ('rebind-show-id-unchecked', '  [ "${cepa_rb_shown% *}" = "$cepa_rb_run" ] || failed "run-show did not return $cepa_rb_run"\n', '', {'REBIND run-show of another Run fails'}),
+    ('rebind-handle-unchecked', 'if not (isinstance(h, str) and re.fullmatch(r"term_[0-9a-f-]{36}", h)):\n    sys.exit(1)\n', '', {'REBIND run-current bad shape fails'}),
+    ('rebind-rest-ignored', '[ -z "${cepa_rb_rest//[[:space:]]/}" ] || refuse', 'true || refuse', {'REBINDREF line after fields'}),
+    ('rebind-no-run-show', 'if [ -z "$cepa_rb_old" ]; then', 'if false; then',
+     {'REBIND no current Run uses run-show', 'REBIND run-show names this terminal', 'REBIND run-show of another Run fails'}),
 ]
 # BLOCK (punch-list L41): mutants of SKILL.md's rule 1 block, run by the
 # send legs against the shipped scripts.
@@ -419,16 +448,19 @@ SKILL_MUTANTS = [
 ]
 SEND = "plugins/cepa/scripts/orca-send.sh"
 HEALTH = "plugins/cepa/scripts/orca-health.sh"
+REBIND = "plugins/cepa/scripts/orca-rebind.sh"
 SKILL = "plugins/cepa/skills/autonomy/SKILL.md"
 WORKFLOW = ".github/workflows/residual-integrity.yml"
 src = open(SCRIPT, encoding="utf-8").read()
 send_src = open(SEND, encoding="utf-8").read()
 health_src = open(HEALTH, encoding="utf-8").read()
 skill_src = open(SKILL, encoding="utf-8").read()
+rebind_src = open(REBIND, encoding="utf-8").read()
 
 # Every mutant, in one list: (part, mutant). A shard runs every Nth one.
 ALL = ([("nudge", m) for m in MUTANTS] + [("send", m) for m in SEND_MUTANTS]
-       + [("health", m) for m in HEALTH_MUTANTS] + [("skill", m) for m in SKILL_MUTANTS])
+       + [("health", m) for m in HEALTH_MUTANTS] + [("skill", m) for m in SKILL_MUTANTS]
+       + [("rebind", m) for m in REBIND_MUTANTS])
 spec = os.environ.get("CEPA_NUDGE_CONTROLS_SHARD", "1/1")
 sm = re.fullmatch(r"([1-9][0-9]?)/([1-9][0-9]?)", spec)
 if not sm or int(sm.group(1)) > int(sm.group(2)):
@@ -607,6 +639,13 @@ def run_part(part, m):
         path = os.path.join(base, name + ".md")
         open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
         return check([SCRIPT, SEND, HEALTH, path], "send")[:2]
+    if part == "rebind":
+        # The health legs run orca-rebind.sh from argument 5.
+        if rebind_src.count(old) != 1:
+            return None, rebind_src.count(old)
+        path = os.path.join(base, name + ".sh")
+        open(path, "w", encoding="utf-8").write(rebind_src.replace(old, new))
+        return check([SCRIPT, SEND, HEALTH, SKILL, path], "health")[:2]
     if health_src.count(old) != 1:
         return None, health_src.count(old)
     path = os.path.join(base, name + ".sh")

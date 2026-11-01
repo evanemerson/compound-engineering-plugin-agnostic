@@ -48,6 +48,14 @@
 #                        default). Orca shows it as attention `input`.
 #   awaited:<msg>        a `question` this session sent (from_handle is
 #                        ORCA_TERMINAL_HANDLE) with no reply after 30 minutes.
+#   unbound:<run>:<hour> `run-current` reports the bound Run with a
+#                        `coordinator_handle` that is not ORCA_TERMINAL_HANDLE
+#                        (punch-list L45: after the 2026-11-01 reboot it named
+#                        the dead pre-reboot terminal, so Orca prompted a
+#                        terminal that no longer existed). §12b rule 2's
+#                        re-bind block (orca-rebind.sh) fixes it. Keyed by the
+#                        UTC hour, so an ack silences it for that hour only.
+#                        Not raised when the field is absent.
 #   orca-unreadable:<what>:<hour>  an Orca call failed, timed out, was not
 #                        started (THE TIME BOUND, below), or returned a shape
 #                        this reader does not know; or the alert directory
@@ -140,7 +148,7 @@ if [ $# -ge 2 ]; then
   [ "$2" = ack ] && [ $# -ge 3 ] || refuse "usage: orca-health.sh <cli> [ack <key>...]"
   shift 2
   for k in "$@"; do
-    [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|(exited|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
+    [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|(exited|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
       || refuse "not an alert key: $(printf '%s' "${k:0:80}" | tr -c 'A-Za-z0-9_.:-' '?')"
   done
   mkdir -p "$cepa_h_acked" 2>/dev/null || { echo "ORCA ack failed: the ack directory could not be made"; exit 1; }
@@ -389,6 +397,15 @@ if other:
 # 2. The bound Run's live dispatches.
 if os.path.exists(os.path.join(tmp, "run.fail")):
     unreadable("run-current")
+if run and me:
+    # L45: the Run's record names the terminal Orca prompts. A restarted
+    # coordinator's Run still names the dead one until it re-binds.
+    rr = ((load("run.json") or {}).get("result") or {}).get("run") or {}
+    holder = rr.get("coordinator_handle") if isinstance(rr, dict) else None
+    k = "unbound:%s:%d" % (run, hour)
+    if isinstance(holder, str) and re.fullmatch(r"term_[0-9a-f-]{36}", holder) and holder != me and k not in acked:
+        alert(k, "Run %s is bound to %s, not this terminal, so Orca prompts that terminal; "
+                 "run the re-bind block (§12b rule 2)" % (run, holder))
 if run:
     if os.path.exists(os.path.join(tmp, "workers.fail")):
         unreadable("worker-list")
