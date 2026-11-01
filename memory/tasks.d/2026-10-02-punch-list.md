@@ -1499,6 +1499,29 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
        5-7): no gate runs the rule 2 re-bind block; two re-binders can both
        print `done`; a `run:`-only Run is taken with no ownership check.
 
+L47. **Too many send blocks are refused: 4 of the first sends after the reboot.**
+    status: pending
+    severity: P2
+    owner: unassigned — after L46 merges (same files: §12b rule 1, the
+      send script and `check-orca-nudge.sh`)
+    Measured 2026-11-01 by coord@main from the alert files in
+    `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
+    senders' terminals (Orca `terminal read`, read only). Sessions started on
+    cepa 1.45.0 had 4 refused sends in 8 minutes:
+    - helm `term_35229546…`: message file named `msg-takeover.txt`, not
+      `cepa-send-<name>.txt`.
+    - dpc-pro `term_ac4053b1…` (3): a wrong file name; a file the script had
+      already read and removed, so it was gone at the retry ("not a regular
+      file this user owns"); and `nudge: nudge` for a `dispatch:` target
+      ("only a term_ handle is nudged").
+    Each sender retried, got `Orca send stored`, and acked its alert. So the
+    guard worked: nothing was lost, and nothing ran. But each refusal costs a
+    turn and an alert. Fix candidates: a `run:`/`dispatch:` target with
+    `nudge` is sent as no-nudge, not refused (Orca already delivers it);
+    rule 1 shows the exact Write path for the message file; the refusal
+    message for a missing file says that the script removes a file once it
+    reads it, so a retry needs a new file. Keep the security checks.
+
 ---
 
 ## How this list is used
