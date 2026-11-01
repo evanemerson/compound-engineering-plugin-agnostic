@@ -1635,7 +1635,9 @@ L54. **Two reviews in the same second write one findings file; the second overwr
 L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.**
     status: pending
     severity: P2
-    owner: unassigned (build: next roles worker after #116 merges)
+    owner: roles (`tab26@roles`, dispatched via Orca 2026-11-01 after #116
+      merged: task `task_b9a11d589bc4`, dispatch `ctx_d674e9b36de7`, branch
+      `feat/roles/orca-lane-lifecycle`)
     APPROVED 2026-11-01 (operator AskUserQuestion "Approve as recommended";
     rm: "List them, then remove"). Plan review: 21 findings, 6 applied, 15
     judgment accepted as recommended — `todos/review-2026-11-01-135437.md`,
