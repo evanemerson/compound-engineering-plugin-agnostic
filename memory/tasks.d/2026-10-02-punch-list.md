@@ -1547,7 +1547,9 @@ L48. **Triage the open P3 backlog (recent shards and older open todos).**
 L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4 and 6.**
     status: pending
     severity: P3
-    owner: unassigned (next: integrity)
+    owner: integrity (`tab7@integrity`, dispatched via Orca 2026-11-01:
+      task `task_bb4fd07dec6c`, dispatch `ctx_eaaae10c4e7c`, branch
+      `chore/integrity/l48-cleanup-batch`)
     Operator accepted all of L48's recommendations, 2026-11-01. Items in
     `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`: D1 turn-endings checker (POINTER outside fences; `--enter` in rule
     7's guard — patch already tested by tab6); D2 close six findings with no
