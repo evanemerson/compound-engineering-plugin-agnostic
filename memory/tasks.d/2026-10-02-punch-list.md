@@ -1348,6 +1348,12 @@ L41. **A body line that is exactly `CEPA_BODY` ends the send heredoc early.**
     random delimiter, or a `file:` field that reads the body from a file.
     Changes the block again: ship it with a restart note like #110's.
 
+    2026-11-01 progress: tab4@integrity opened PR #112 (v1.44.0, head
+    c8df2c6): the message moves to a file the session writes with Write;
+    the heredoc (`CEPA_FIELDS`) holds field lines only; `orca-send.sh`
+    reads and removes the file; a 1.43.0-style block is refused (exit 4 +
+    alert). Operator chose "Merge after #111" (one restart for both); 4 P3s
+    stay filed in `memory/tasks.d/2026-10-31-fix-integrity-send-heredoc-delimiter.md`.
 L42. **Shard `check-orca-nudge-controls.sh` before the next mutant batch.**
     status: pending
     severity: P2
