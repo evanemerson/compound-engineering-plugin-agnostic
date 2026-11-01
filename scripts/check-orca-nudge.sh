@@ -11,8 +11,9 @@
 #
 # Usage: check-orca-nudge.sh [orca-nudge.sh [orca-send.sh [orca-health.sh [SKILL.md [orca-rebind.sh]]]]]
 #   The optional paths replace the shipped scripts (and the autonomy skill
-#   whose rule 1 block the BLOCK leg runs, and whose rule 2, 6 and 8 blocks
-#   the RULE2BLOCK, RENAMEBLOCK and HEALTHBLOCK legs run). Only
+#   whose rule 1 block the BLOCK leg runs, and whose rule 2 and 8 blocks the
+#   RULE2BLOCK and HEALTHBLOCK legs run; rule 6's rename block is
+#   check-orca-detection.sh's TITLE leg). Only
 #   check-orca-nudge-controls.sh sets them, to run this check against a mutant.
 #   orca-send.sh runs the orca-nudge.sh in its own directory, so a mutant send
 #   script needs a copy of the shipped nudge beside it.
@@ -185,11 +186,6 @@
 #              run line it re-binds; with a run line it asks; with run and
 #              confirm it re-binds; shell text in the run line runs nothing;
 #              with orca-rebind.sh absent it prints the skipped line.
-#   RENAMEBLOCK — punch-list L46: §12b rule 6's tab rename block. A checked
-#              cli renames with the pinned argv; a reply that is not ok
-#              fails; a cli with `;` or `$(…)`, one that is not an Orca CLI, a
-#              relative path, or a path other than ORCA_CLI_COMMAND is skipped
-#              with its reason and no call, and nothing it holds runs.
 #   HEALTHBLOCK — punch-list L46: §12b rule 8's health block. Each heredoc
 #              line reaches orca-health.sh as one argument: a cli with `$(…)`
 #              or spaces is refused, an ack key with shell text is refused,
@@ -277,7 +273,6 @@ case "$1 $2" in
     read -r n <"$STUB_LOG.rs"; n=$((n + 1)); echo "$n" >"$STUB_LOG.rs"
     if [ "$n" -gt 1 ] && [ -n "${STUB_RUNSHOW2+x}" ]; then printf '%s' "$STUB_RUNSHOW2"; exit "${STUB_RUNSHOW2_RC:-0}"; fi
     printf '%s' "${STUB_RUNSHOW-}"; exit "${STUB_RUNSHOW_RC:-0}" ;;
-  "terminal rename") printf '%s' "${STUB_RENAME-}"; exit "${STUB_RENAME_RC:-0}" ;;
   "terminal list") printf '%s' "${STUB_TLIST-}"; exit "${STUB_TLIST_RC:-0}" ;;
   "orchestration worker-list") printf '%s' "${STUB_WLIST-}"; exit "${STUB_WLIST_RC:-0}" ;;
   "orchestration worker-show") [ -f "$STUB_WSHOWDIR/$4.json" ] || exit 1; cat "$STUB_WSHOWDIR/$4.json" ;;
@@ -1755,7 +1750,7 @@ if LEGS in ("all", "health"):
     rebind("REBIND empty run field is no Run", 0, [DONE], stdin="cli: orca-ide\nrun:\n", after=rrun(RB_RUN, H),
            calls_want=FULL)
 
-    # --- The autonomy skill's own blocks that take `<cli>` (L46), read from
+    # --- The autonomy skill's rule 2 and 8 blocks (L46), read from
     # SKILL.md (argument 4), filled in and run against the stub. Each reads
     # its values from a quoted heredoc, so a value holding shell text runs
     # nothing; MARK must never appear.
@@ -1823,36 +1818,6 @@ if LEGS in ("all", "health"):
     run_block("RULE2BLOCK with the script absent is skipped", fill2(),
               dict(RB_ENV, CEPA_PLUGIN_ROOT=plugdir("plug-norebind", {})), 0,
               ["ORCA rebind skipped: orca-rebind.sh not found (set CEPA_PLUGIN_ROOT)"], [])
-
-    # RENAMEBLOCK — §12b rule 6's tab rename (L46 item 1: `<cli>` once ran
-    # unchecked and unquoted, so `orca-ide;touch${IFS}/tmp/x` ran the touch).
-    b6 = skill_block("terminal rename --terminal")
-    def fill6(cli, name="tab25@roles", term=H):
-        t = b6 or ""
-        for k, v in (("<cli>", cli), ("<session>@<wt>", name), ("<handle-or-self>", term)):
-            t = t.replace(k, v)
-        return t
-    TITLE = "%s · tab25@roles" % REPO
-    RENAME = [["terminal", "rename", "--terminal", H, "--title", TITLE, "--json"]]
-    RN_ENV = {"STUB_RENAME": json.dumps({"ok": True})}
-    run_block("RENAMEBLOCK renames with a checked cli", fill6("orca-ide"), RN_ENV, 0,
-              ['ORCA title: set "%s" on %s' % (TITLE, H)], RENAME)
-    run_block("RENAMEBLOCK a rename that is not ok fails", fill6("orca-ide"), {"STUB_RENAME": json.dumps({"ok": False})},
-              0, ['ORCA title: failed (orca-ide terminal rename did not return "ok": true)'], RENAME)
-    for name, cli, why in [
-            ("RENAMEBLOCK cli with a semicolon runs nothing", "orca-ide;touch${IFS}%s" % MARK,
-             "the cli is not a plain command name"),
-            ("RENAMEBLOCK cli with a command substitution runs nothing", "orca-ide$(touch %s)" % MARK,
-             "the cli is not a plain command name"),
-            ("RENAMEBLOCK cli that is not Orca is skipped", "bash", "the cli does not name an Orca CLI"),
-            ("RENAMEBLOCK relative cli path is skipped", "bin/orca-ide",
-             "a cli path must be absolute and equal ORCA_CLI_COMMAND"),
-            ("RENAMEBLOCK cli path other than ORCA_CLI_COMMAND is skipped", os.path.join(BIN, "orca-ide"),
-             "a cli path must equal ORCA_CLI_COMMAND")]:
-        run_block(name, fill6(cli), RN_ENV, 0, ["ORCA title: skipped (%s)" % why], [])
-    run_block("RENAMEBLOCK cli path equal to ORCA_CLI_COMMAND renames", fill6(os.path.join(BIN, "orca-ide")),
-              dict(RN_ENV, ORCA_CLI_COMMAND=os.path.join(BIN, "orca-ide")), 0,
-              ['ORCA title: set "%s" on %s' % (TITLE, H)], RENAME)
 
     # HEALTHBLOCK — §12b rule 8's health block: its arguments come one per
     # line from a quoted heredoc, each passed as one word (L46: `"<cli>"` on

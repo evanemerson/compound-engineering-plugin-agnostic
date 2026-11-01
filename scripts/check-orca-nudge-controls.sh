@@ -3,7 +3,7 @@
 # a temp copy of plugins/cepa/scripts/orca-nudge.sh, of orca-send.sh
 # (SEND_MUTANTS), of orca-health.sh (HEALTH_MUTANTS), of orca-rebind.sh
 # (REBIND_MUTANTS), or of the autonomy skill's rule 1 block (SKILL_MUTANTS) or its
-# rule 2, 6 and 8 blocks (SKILLH_MUTANTS, run by the health legs). It must turn the check red with
+# rule 2 and 8 blocks (SKILLH_MUTANTS, run by the health legs). It must turn the check red with
 # EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
@@ -12,7 +12,7 @@
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF,
 # FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF, REBIND, REBINDREF, RULE2BLOCK,
-# RENAMEBLOCK, HEALTHBLOCK) has at least one
+# HEALTHBLOCK) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel.
 #
@@ -450,9 +450,9 @@ REBIND_MUTANTS = [
     ('rebind-show-gen-unchecked', 'if type(g) is not int or not 0 <= g < 10 ** 9:\n    sys.exit(1)\n', '',
      {'REBIND run-show boolean generation fails'}),
 ]
-# RULE2BLOCK, RENAMEBLOCK, HEALTHBLOCK (punch-list L46): mutants of SKILL.md's
-# rule 2, rule 6 and rule 8 blocks, run by the health legs against the
-# shipped scripts.
+# RULE2BLOCK, HEALTHBLOCK (punch-list L46): mutants of SKILL.md's rule 2 and
+# rule 8 blocks, run by the health legs against the shipped scripts. Rule 6's
+# rename block is check-orca-detection-controls.sh's.
 SKILLH_MUTANTS = [
     ('rule2-unquoted-delimiter', 'orca-rebind.sh" <<\'CEPA_FIELDS\' || true', 'orca-rebind.sh" <<CEPA_FIELDS || true',
      {'RULE2BLOCK heredoc holds the cli, run and confirm field lines', 'RULE2BLOCK shell text in the run line runs nothing', 'RULE2BLOCK with a run line asks before a run-only Run', 'RULE2BLOCK with run and confirm lines re-binds', 'RULE2BLOCK without a run line re-binds the current Run'}),
@@ -460,14 +460,6 @@ SKILLH_MUTANTS = [
      'if [ -z "${CEPA_ROOT:-}" ]; then', {'RULE2BLOCK with the script absent is skipped'}),
     ('rule2-no-confirm-line', "     confirm: <the same id, only after the operator's answer below; else leave this line out>\n", '',
      {'RULE2BLOCK heredoc holds the cli, run and confirm field lines', 'RULE2BLOCK shell text in the run line runs nothing', 'RULE2BLOCK with a run line asks before a run-only Run', 'RULE2BLOCK with run and confirm lines re-binds', 'RULE2BLOCK without a run line re-binds the current Run'}),
-    ('rename-cli-heredoc-unquoted', "cepa_title_cli=$(cat <<'CEPA_CLI'", 'cepa_title_cli=$(cat <<CEPA_CLI',
-     {'RENAMEBLOCK cli with a command substitution runs nothing'}),
-    ('rename-no-plain-check', '       \'\'|-*|*[!A-Za-z0-9._/-]*) cepa_title_why="the cli is not a plain command name" ;;\n', '',
-     {'RENAMEBLOCK cli with a semicolon runs nothing', 'RENAMEBLOCK cli with a command substitution runs nothing'}),
-    ('rename-no-basename-check', '         *) cepa_title_why="the cli does not name an Orca CLI" ;;\n', '',
-     {'RENAMEBLOCK cli that is not Orca is skipped'}),
-    ('rename-path-unchecked', '/*) [ "$cepa_title_cli" = "${ORCA_CLI_COMMAND:-}" ] || cepa_title_why="a cli path must equal ORCA_CLI_COMMAND" ;;',
-     '/*) ;;', {'RENAMEBLOCK cli path other than ORCA_CLI_COMMAND is skipped'}),
     ('health-block-unquoted-heredoc', "cepa_health_args=$(cat <<'CEPA_ARGS'", 'cepa_health_args=$(cat <<CEPA_ARGS',
      {'HEALTHBLOCK cli with a command substitution runs nothing', 'HEALTHBLOCK ack form passes each key as one argument'}),
     ('health-block-argv-unquoted', '"${cepa_health_argv[@]}"', '${cepa_health_argv[@]}',
@@ -678,7 +670,7 @@ def run_part(part, m):
         open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
         return check([SCRIPT, SEND, HEALTH, path], "send")[:2]
     if part == "skillh":
-        # The health legs read the rule 2, 6 and 8 blocks from argument 4.
+        # The health legs read the rule 2 and 8 blocks from argument 4.
         if skill_src.count(old) != 1:
             return None, skill_src.count(old)
         path = os.path.join(base, name + ".md")
