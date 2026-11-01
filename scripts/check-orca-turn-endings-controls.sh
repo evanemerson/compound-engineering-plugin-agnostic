@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Controls for scripts/check-orca-turn-endings.sh. Each mutant is one
-# substitution in a temp copy of the shipped skill file or of one command file.
-# It must turn the check red with EXACTLY the MISS lines named beside it: a
-# mutant that also trips another leg proves nothing about the leg meant to
-# catch it, and an exact set shows each leg kills a mutant no other leg kills.
+# substitution (or one ordered pair, the two-anchor form) in a temp copy of
+# the shipped skill file or of one command file. It must turn the check red
+# with EXACTLY the MISS lines named beside it: a mutant that also trips
+# another leg proves nothing about the leg meant to catch it, and an exact set
+# shows each leg kills a mutant no other leg kills.
 # A mutant with an empty set must stay green: it plants a form the check must
 # not flag. Two exceptions: rule-head-gone loses rule 7's whole text, and
 # peek-head-gone loses rule 8's, so each asserts only that every MISS is a
@@ -15,9 +16,10 @@
 # Every leg has at least one mutant here. The check has no slow cases, so the
 # whole set runs in a few seconds.
 #
-# STATED LIMITS: a mutant is one substitution; two compensating edits are not
-# modeled. The controls prove each named case can fail, not that the case list
-# is complete.
+# STATED LIMITS: a mutant is one substitution, or one move written in the
+# two-anchor form; other multi-edit shapes, such as two compensating edits,
+# are not modeled. The controls prove each named case can fail, not that the
+# case list is complete.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
@@ -29,6 +31,8 @@ SITES = "plugins/cepa/commands"
 CHECK = "scripts/check-orca-turn-endings.sh"
 CITE = "**Under Orca**, end the run per `cepa:autonomy` §12b rule 7."
 # (name, file, old, new, exact MISS set) — file is "skill" or a command file.
+# A two-anchor mutant passes a list of (old, new) pairs as `old` and None as
+# `new`: each anchor must occur once, and the pairs apply in order.
 MUTANTS = [
     ("rule-head-gone", "skill", "7. **How a turn ends under Orca.**", "7. **How a turn ends.**",
      # Without its head, rule 7's text is not found, so every phrase misses too.
@@ -249,6 +253,12 @@ MUTANTS += [
     # end a turn (rule 7), so it is the wrong step.
     ("cite-moved-review", "review.md", "\n\n**Under Orca**, end the run per",
      "\n\n## Headless return\n\n**Under Orca**, end the run per", cites("review.md")),
+    # The real move (#99 finding 2): out of Step 6, into the headless `## Modes`
+    # section. Two edits, so it uses the two-anchor form.
+    ("cite-moved-review-modes", "review.md",
+     [("\n\n**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.\n", "\n"),
+      ("\n## Modes\n\n", "\n## Modes\n\n**Under Orca**, end the run per `cepa:autonomy` §12b rule 7.\n\n")],
+     None, cites("review.md")),
     ("grant-gone-review", "review.md", ", Bash(orca-ide orchestration send:*)", "",
      {"GRANTS: review.md grants Bash(orca-ide orchestration send:*)"}),
     ("grant-gone-nudge-triage", "triage.md", ', Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*)', "",
@@ -412,9 +422,14 @@ for name, f, old, new, want in MUTANTS:
     skill, sites = copy_tree(name)
     path = skill if f == "skill" else os.path.join(sites, f)
     s = open(path, encoding="utf-8").read()
-    if s.count(old) != 1:
-        miss("%s: anchor found %d times in %s, want 1" % (name, s.count(old), f)); continue
-    open(path, "w", encoding="utf-8").write(s.replace(old, new))
+    bad = None
+    for o, nw in (old if isinstance(old, list) else [(old, new)]):
+        if s.count(o) != 1:
+            bad = "%s: anchor found %d times in %s, want 1" % (name, s.count(o), f); break
+        s = s.replace(o, nw)
+    if bad:
+        miss(bad); continue
+    open(path, "w", encoding="utf-8").write(s)
     rc, got = run(skill, sites)
     if want is None:
         leg = "PEEK" if name == "peek-head-gone" else "RULE"
