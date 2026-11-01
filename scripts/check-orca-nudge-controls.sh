@@ -2,7 +2,8 @@
 # Controls for scripts/check-orca-nudge.sh. Each mutant is one substitution in
 # a temp copy of plugins/cepa/scripts/orca-nudge.sh, of orca-send.sh
 # (SEND_MUTANTS), of orca-health.sh (HEALTH_MUTANTS), of orca-rebind.sh
-# (REBIND_MUTANTS), or of the autonomy skill's rule 1 block (SKILL_MUTANTS). It must turn the check red with
+# (REBIND_MUTANTS), or of the autonomy skill's rule 1 block (SKILL_MUTANTS) or its
+# rule 2, 6 and 8 blocks (SKILLH_MUTANTS, run by the health legs). It must turn the check red with
 # EXACTLY the MISS cases named beside it, so each mutant shows which case
 # catches it and that no other case does.
 # The unmutated copy must run with no MISS line, or every red below proves
@@ -10,7 +11,8 @@
 # shipped script changed shape and these mutants need re-reading.
 #
 # Every leg of the check (SEND, STATE, WAIT, LOOKUP, REFUSE, FAIL, ENDING, RETRY, STORE, REPLY, WDONE, SENDREF,
-# FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF, REBIND, REBINDREF) has at least one
+# FIELDS, FILE, BLOCK, SESSION, GUARD, NUDGEFILE, ALERT, HEALTH, HEALTHREF, REBIND, REBINDREF, RULE2BLOCK,
+# RENAMEBLOCK, HEALTHBLOCK) has at least one
 # mutant here that only its cases kill. WAIT runs on a fake clock, and the
 # mutants run in parallel.
 #
@@ -416,28 +418,60 @@ HEALTH_MUTANTS = [
 # REBIND (punch-list L45): mutants of orca-rebind.sh, run by the health legs.
 REBIND_MUTANTS = [
     ('rebind-no-live-check', 'case "$cepa_rb_live" in\n  gone) ;;', 'case gone in\n  gone) ;;',
-     {'REBIND live holder is never taken', 'REBIND truncated terminal list asks', 'REBIND short terminal list asks', 'REBIND terminal list not ok asks', 'REBIND omitted host asks', 'REBIND list with no host scope asks'}),
+     {'REBIND live holder is never taken', 'REBIND confirm does not lift the live check', 'REBIND truncated terminal list asks', 'REBIND short terminal list asks', 'REBIND terminal list not ok asks', 'REBIND omitted host asks', 'REBIND list with no host scope asks'}),
     ('rebind-truncated-ignored', ' or r.get("truncated") is not False', '', {'REBIND truncated terminal list asks'}),
     ('rebind-total-ignored', ' or r.get("totalCount") != len(t)', '', {'REBIND short terminal list asks'}),
-    ('rebind-no-reread-check', 'if [ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ]; then', 'if true; then',
+    ('rebind-no-reread-check', '[ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ] \\\n  || failed', 'true \\\n  || failed',
      {'REBIND mismatch after run-use fails', 'REBIND no Run after run-use fails', 'REBIND run-use is not retried on vsock', 'REBIND other Run bound here after run-use fails'}),
     ('rebind-differ-ignored', 'if [ -n "$cepa_rb_cur_id" ] && [ -n "$cepa_rb_want" ] && [ "$cepa_rb_cur_id" != "$cepa_rb_want" ]; then', 'if false; then',
      {'REBIND differing Runs ask'}),
     ('rebind-run-unchecked', '[ -z "$cepa_rb_want" ] || [[ $cepa_rb_want =~ ^run_[A-Za-z0-9_]{1,64}$ ]] \\', '[ -z "$cepa_rb_want" ] || true \\',
-     {'REBINDREF run with shell text', 'REBINDREF run with a dash', 'REBINDREF run with a flag'}),
+     {'REBINDREF run with shell text', 'REBINDREF run with a dash', 'REBINDREF run with a flag', 'RULE2BLOCK shell text in the run line runs nothing'}),
     ('rebind-me-unchecked', '[[ $cepa_rb_me =~ ^term_[0-9a-f-]{36}$ ]] || refuse', 'true || refuse',
      {'REBINDREF no terminal handle', 'REBINDREF bad terminal handle'}),
     ('rebind-run-use-retried', 'cepa_rb_orca "$cepa_rb_tmp/use.json" 0', 'cepa_rb_orca "$cepa_rb_tmp/use.json" 1', {'REBIND run-use is not retried on vsock'}),
     ('rebind-no-vsock-retry', '  for try in 1 2; do\n    timeout', '  for try in 1; do\n    timeout', {'REBIND run-current vsock once'}),
-    ('rebind-extra-field', 'case "$cepa_rb_k" in cli|run) ;;', 'case "$cepa_rb_k" in cli|run|from) ;;', {'REBINDREF unknown field'}),
-    ('rebind-show-id-unchecked', '  [ "${cepa_rb_shown% *}" = "$cepa_rb_run" ] || failed "run-show did not return $cepa_rb_run"\n', '', {'REBIND run-show of another Run fails'}),
+    ('rebind-extra-field', 'case "$cepa_rb_k" in cli|run|confirm) ;;', 'case "$cepa_rb_k" in cli|run|confirm|from) ;;', {'REBINDREF unknown field'}),
+    ('rebind-show-id-unchecked', '[ "$cepa_rb_s_id" = "$cepa_rb_run" ] || failed "run-show did not return $cepa_rb_run"\n', '', {'REBIND run-show of another Run fails'}),
     ('rebind-handle-unchecked', 'if not (isinstance(h, str) and re.fullmatch(r"term_[0-9a-f-]{36}", h)):\n    sys.exit(1)\n', '', {'REBIND run-current bad shape fails'}),
     ('rebind-rest-ignored', '[ -z "${cepa_rb_rest//[[:space:]]/}" ] || refuse', 'true || refuse', {'REBINDREF line after fields'}),
     ('rebind-host-scope-ignored', 'if r["hostScope"]["omittedHostIds"] != []:\n    sys.exit(1)\n', '', {'REBIND omitted host asks', 'REBIND list with no host scope asks'}),
-    ('rebind-after-handle-only', 'if [ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ]; then', 'if [ "${cepa_rb_after#* }" = "$cepa_rb_me" ]; then', {'REBIND other Run bound here after run-use fails'}),
+    ('rebind-after-handle-only', '[ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ] \\', '[ "${cepa_rb_after#* }" = "$cepa_rb_me" ] \\', {'REBIND other Run bound here after run-use fails'}),
     ('rebind-dashed-id-refused', 'if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):', 'if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_]{1,64}", i)):', {'REBIND a dashed Run id from Orca is re-bound'}),
-    ('rebind-no-run-show', 'if [ -z "$cepa_rb_old" ]; then', 'if false; then',
-     {'REBIND no current Run uses run-show', 'REBIND run-show names this terminal', 'REBIND run-show of another Run fails'}),
+    ('rebind-show-bound-here-ignored', 'if [ "$cepa_rb_old" = "$cepa_rb_me" ]; then', 'if false; then',
+     {'REBIND run-show names this terminal'}),
+    # L46 (#113 findings 11, 12).
+    ('rebind-no-generation-check', 'if [ "$cepa_rb_gen_after" = "$cepa_rb_gen_want" ]; then', 'if true; then',
+     {'REBIND generation rose by two fails', 'REBIND generation unchanged fails', 'REBIND run-show re-read names another terminal fails'}),
+    ('rebind-no-ownership-ask', 'if [ -z "$cepa_rb_cur_id" ] && [ "$cepa_rb_confirm" != "$cepa_rb_run" ]; then', 'if false; then',
+     {'REBIND run-only Run asks for ownership', 'RULE2BLOCK with a run line asks before a run-only Run'}),
+    ('rebind-confirm-unchecked', '[ -z "$cepa_rb_confirm" ] || [ "$cepa_rb_confirm" = "$cepa_rb_want" ] \\', '[ -z "$cepa_rb_confirm" ] || true \\',
+     {'REBINDREF confirm without run', 'REBINDREF confirm of another Run'}),
+    ('rebind-show-gen-unchecked', 'if type(g) is not int or not 0 <= g < 10 ** 9:\n    sys.exit(1)\n', '',
+     {'REBIND run-show boolean generation fails'}),
+]
+# RULE2BLOCK, RENAMEBLOCK, HEALTHBLOCK (punch-list L46): mutants of SKILL.md's
+# rule 2, rule 6 and rule 8 blocks, run by the health legs against the
+# shipped scripts.
+SKILLH_MUTANTS = [
+    ('rule2-unquoted-delimiter', 'orca-rebind.sh" <<\'CEPA_FIELDS\' || true', 'orca-rebind.sh" <<CEPA_FIELDS || true',
+     {'RULE2BLOCK heredoc holds the cli, run and confirm field lines', 'RULE2BLOCK shell text in the run line runs nothing', 'RULE2BLOCK with a run line asks before a run-only Run', 'RULE2BLOCK with run and confirm lines re-binds', 'RULE2BLOCK without a run line re-binds the current Run'}),
+    ('rule2-no-script-check', 'if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-rebind.sh" ]; then',
+     'if [ -z "${CEPA_ROOT:-}" ]; then', {'RULE2BLOCK with the script absent is skipped'}),
+    ('rule2-no-confirm-line', "     confirm: <the same id, only after the operator's answer below; else leave this line out>\n", '',
+     {'RULE2BLOCK heredoc holds the cli, run and confirm field lines', 'RULE2BLOCK shell text in the run line runs nothing', 'RULE2BLOCK with a run line asks before a run-only Run', 'RULE2BLOCK with run and confirm lines re-binds', 'RULE2BLOCK without a run line re-binds the current Run'}),
+    ('rename-cli-heredoc-unquoted', "cepa_title_cli=$(cat <<'CEPA_CLI'", 'cepa_title_cli=$(cat <<CEPA_CLI',
+     {'RENAMEBLOCK cli with a command substitution runs nothing'}),
+    ('rename-no-plain-check', '       \'\'|-*|*[!A-Za-z0-9._/-]*) cepa_title_why="the cli is not a plain command name" ;;\n', '',
+     {'RENAMEBLOCK cli with a semicolon runs nothing', 'RENAMEBLOCK cli with a command substitution runs nothing'}),
+    ('rename-no-basename-check', '         *) cepa_title_why="the cli does not name an Orca CLI" ;;\n', '',
+     {'RENAMEBLOCK cli that is not Orca is skipped'}),
+    ('rename-path-unchecked', '/*) [ "$cepa_title_cli" = "${ORCA_CLI_COMMAND:-}" ] || cepa_title_why="a cli path must equal ORCA_CLI_COMMAND" ;;',
+     '/*) ;;', {'RENAMEBLOCK cli path other than ORCA_CLI_COMMAND is skipped'}),
+    ('health-block-unquoted-heredoc', "cepa_health_args=$(cat <<'CEPA_ARGS'", 'cepa_health_args=$(cat <<CEPA_ARGS',
+     {'HEALTHBLOCK cli with a command substitution runs nothing', 'HEALTHBLOCK ack form passes each key as one argument'}),
+    ('health-block-argv-unquoted', '"${cepa_health_argv[@]}"', '${cepa_health_argv[@]}',
+     {'HEALTHBLOCK a cli line with spaces stays one argument', 'HEALTHBLOCK ack form passes each key as one argument', 'HEALTHBLOCK cli with a command substitution runs nothing'}),
 ]
 # BLOCK (punch-list L41): mutants of SKILL.md's rule 1 block, run by the
 # send legs against the shipped scripts.
@@ -464,7 +498,7 @@ rebind_src = open(REBIND, encoding="utf-8").read()
 # Every mutant, in one list: (part, mutant). A shard runs every Nth one.
 ALL = ([("nudge", m) for m in MUTANTS] + [("send", m) for m in SEND_MUTANTS]
        + [("health", m) for m in HEALTH_MUTANTS] + [("skill", m) for m in SKILL_MUTANTS]
-       + [("rebind", m) for m in REBIND_MUTANTS])
+       + [("rebind", m) for m in REBIND_MUTANTS] + [("skillh", m) for m in SKILLH_MUTANTS])
 spec = os.environ.get("CEPA_NUDGE_CONTROLS_SHARD", "1/1")
 sm = re.fullmatch(r"([1-9][0-9]?)/([1-9][0-9]?)", spec)
 if not sm or int(sm.group(1)) > int(sm.group(2)):
@@ -643,6 +677,13 @@ def run_part(part, m):
         path = os.path.join(base, name + ".md")
         open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
         return check([SCRIPT, SEND, HEALTH, path], "send")[:2]
+    if part == "skillh":
+        # The health legs read the rule 2, 6 and 8 blocks from argument 4.
+        if skill_src.count(old) != 1:
+            return None, skill_src.count(old)
+        path = os.path.join(base, name + ".md")
+        open(path, "w", encoding="utf-8").write(skill_src.replace(old, new))
+        return check([SCRIPT, SEND, HEALTH, path], "health")[:2]
     if part == "rebind":
         # The health legs run orca-rebind.sh from argument 5.
         if rebind_src.count(old) != 1:
