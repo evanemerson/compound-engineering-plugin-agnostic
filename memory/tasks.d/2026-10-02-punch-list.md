@@ -1259,7 +1259,11 @@ L37. **Session names: rule 6 does not stick, and the naming scheme itself is in 
 L38. **Send block: move its 4 arguments onto stdin, and name the session in the ending line.**
     status: pending
     severity: P3
-    owner: unassigned (L34 merged; free to start)
+    owner: roles (`tab21@roles`, dispatched via Orca 2026-10-31 on the
+      operator's AskUserQuestion "L38 on a new Run": NEW Run
+      `run_5682a0ed1455` (the old Run `run_bf28fea0ea31` passed orca-health's
+      200-row inbox window), task `task_749799c20601`, dispatch
+      `ctx_930f0be28047`)
     L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), split
     out of L35 by tab17@roles because they change the interface of the send
     block every session runs; operator chose "new item" (AskUserQuestion
