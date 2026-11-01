@@ -15,7 +15,7 @@ audit").
   only. A script would make it the one checked form — plugins/cepa/skills/autonomy/SKILL.md §12b rule 8
 - P3 — Rule 4's `ask` result test (exit 0, `timedOut` false, `answer`
   non-null; resume on timeout) is prose only — plugins/cepa/skills/autonomy/SKILL.md §12b rule 4
-- P3 — L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), folded
+- CLOSED in PR #110 (L38, 1.43.0) — P3 — L36 findings #19 and #21 (`todos/review-2026-10-31-184500.md`), folded
   into L35 by coord@main and split back out: move `<cli>`/`<target>`/`<type>`/
   `<nudge>` off the block's quoted command line onto stdin (#19), and give the
   script an optional session name for its ending line (#21). Both change the

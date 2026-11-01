@@ -6,38 +6,56 @@
 # `"ok": true` with `result.message.id` shaped `msg_…`, AND a re-read of the
 # inbox finds that id. Nothing else counts: not exit 0, not an `"id"` field.
 #
-# Usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>  <stdin
-#        orca-send.sh <cli> <question msg id> reply <nudge|no-nudge>  <stdin
-#        orca-send.sh <cli> dispatch:ctx_<id> worker_done <succeeded|failed> task_<id>  <stdin
-#   <cli>     §12a's printed `cli=` value, checked as orca-nudge.sh checks it.
-#   <target>  a `term_` handle, or a `run:<id>` / `dispatch:<id>` address.
-#   <type>    status, question, handoff, escalation or merge_ready.
-#             Orca refuses `escalation` from a sender with no Dispatch.
-#             heartbeat is not sent here: the preamble's own command sends it.
-#   <nudge|no-nudge>  `nudge` for a target that is not a Run coordinator
-#             (only a `term_` handle); `no-nudge` for a Run coordinator.
+# Usage: orca-send.sh  <stdin      (it takes no arguments)
+#   Every value comes on stdin, inside the session's quoted heredoc
+#   (`<<'CEPA_BODY'`), so no value is ever inside a quoted shell string
+#   (punch-list L38, review finding #19: the four values used to be quoted
+#   arguments, which bash parsed before the script could check them).
+#   stdin is FIELD lines, then one empty line, then the message:
+#     cli: <cli>            §12a's printed `cli=` value, checked as
+#                           orca-nudge.sh checks it.
+#     target: <target>      a `term_` handle, or a `run:<id>` / `dispatch:<id>`
+#                           address; for a reply, the question's msg_ id.
+#     type: <type>          status, question, handoff, escalation, merge_ready,
+#                           reply or worker_done. Orca refuses `escalation`
+#                           from a sender with no Dispatch. heartbeat is not
+#                           sent here: the preamble's own command sends it.
+#     nudge: <nudge>        `nudge` for a target that is not a Run coordinator
+#                           (only a `term_` handle, or a reply); `no-nudge`
+#                           for a Run coordinator. Every type but worker_done.
+#     outcome: <outcome>    worker_done only: succeeded or failed.
+#     task: <task id>       worker_done only: the preamble's task_<id>.
+#     session: <name>       optional: the target's session name, as §10a
+#                           writes it (`coord@main`, `tab3@roles`). The ending
+#                           line then names that session beside the handle
+#                           (review finding #21). An empty value is no name.
+#   A field line is `<name>: <value>`, one per line, each name at most once,
+#   in any order. Trailing spaces and a CR are dropped from a value. Any
+#   other line before the empty line is refused, so a message that forgot
+#   its fields is never sent with its first line read as a field.
 #   reply (§12b rule 7, punch-list L35): <target> is the question's message
-#             id. stdin is the answer body only, with no subject line. With
-#             `nudge`, the script nudges the handle Orca addressed the reply to
-#             (the asker), never a handle the session names; a reply that Orca
-#             stored in a `run:` or `dispatch:` mailbox gets no nudge.
+#             id. The message is the answer body only, with no subject line.
+#             With `nudge`, the script nudges the handle Orca addressed the
+#             reply to (the asker), never a handle the session names; a reply
+#             that Orca stored in a `run:` or `dispatch:` mailbox gets no
+#             nudge.
 #   worker_done (§12b rule 3, punch-list L35): a dispatched worker's final
-#             report, with the preamble's Dispatch and Task IDs. It counts only
-#             when Orca also returns `result.lifecycle` with that dispatch and
-#             task and the action the outcome asks for (`succeeded` →
-#             `completed`, `failed` → `failed`). It is never nudged.
-#   stdin     line 1 is the subject; every line after it is the body. The
-#             session writes both inside a quoted heredoc (`<<'CEPA_BODY'`),
-#             so no character of either is expanded. The one exception is a
-#             line that is exactly `CEPA_BODY`: it ends the heredoc, and the
-#             lines after it run as shell commands. §12b rule 1 makes the
-#             session indent such a line; this script never sees it.
-#             Trailing newlines of the body are dropped.
+#             report, with the preamble's Dispatch (`target: dispatch:ctx_…`)
+#             and Task IDs. It counts only when Orca also returns
+#             `result.lifecycle` with that dispatch and task and the action
+#             the outcome asks for (`succeeded` → `completed`, `failed` →
+#             `failed`). It is never nudged.
+#   message   after the empty line: line 1 is the subject; every line after
+#             it is the body. No character of the heredoc is expanded. The one
+#             exception is a line that is exactly `CEPA_BODY`: it ends the
+#             heredoc, and the lines after it run as shell commands. §12b rule
+#             1 makes the session indent such a line; this script never sees
+#             it. Trailing newlines of the body are dropped.
 #
 # Prints one result line, then the nudge's lines when it runs. Exit codes:
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
-#      <reason>` (stored in a Run mailbox), or nothing more (no-nudge).
+#      <reason>` (stored in a Run mailbox), or nothing more (`no-nudge`).
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
@@ -58,7 +76,10 @@
 #   `Orca alert not recorded: <reason>`. Last, it prints:
 #   Ending first line: Needed from you: paste the block below into <target>
 #   <target> is printed only when it passes the target check; any other value
-#   prints `the target session`.
+#   prints `the target session`. With a `session:` field, the line names
+#   `<session> (<target>)`, or `<session>` alone when the target failed its
+#   check. Every `tell <handle> to check its Orca inbox` line for the target
+#   names `<session> (<handle>)` the same way, the nudge's own line included.
 #
 # WHY (punch-list L33, measured 2026-10-31 on Orca 1.4.245, WSL, probe
 # terminals in the `roles` worktree). A worker counted two sends as stored by
@@ -118,29 +139,31 @@
 #     (Orca 1.4.245). If Orca changes them, the send fails loudly here.
 set -u
 
-cepa_send_cli=${1-}
-cepa_send_target=${2-}
-cepa_send_type=${3-}
-cepa_send_mode=${4-}
-cepa_send_task=${5-}
-cepa_send_outcome=
+cepa_send_cli= cepa_send_target= cepa_send_type= cepa_send_mode= cepa_send_task=
+cepa_send_outcome= cepa_send_session=
 
 cepa_send_valid_target() {
   [[ $cepa_send_target =~ ^(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]]
 }
+# The target as the ending names it: `<session> (<address>)` when a session
+# name passed its check, else the address alone.
+cepa_send_who() {
+  if [ -n "$cepa_send_session" ]; then echo "$cepa_send_session ($1)"; else echo "$1"; fi
+}
 cepa_send_ending() {
+  local p="Ending first line: Needed from you: paste the block below into" s=$cepa_send_session
   if [ "$cepa_send_type" = reply ]; then
     if [[ $cepa_send_target =~ ^msg_[0-9a-f]{6,32}$ ]]; then
-      echo "Ending first line: Needed from you: paste the block below into the session that asked $cepa_send_target"
+      echo "$p ${s:+$s, }the session that asked $cepa_send_target"
     else
-      echo "Ending first line: Needed from you: paste the block below into the session that asked"
+      echo "$p ${s:-the session that asked}"
     fi
   elif [ "$cepa_send_type" = worker_done ]; then
-    echo "Ending first line: Needed from you: paste the block below into the Run coordinator"
+    echo "$p ${s:+$s, }the Run coordinator"
   elif cepa_send_valid_target; then
-    echo "Ending first line: Needed from you: paste the block below into $cepa_send_target"
+    echo "$p $(cepa_send_who "$cepa_send_target")"
   else
-    echo "Ending first line: Needed from you: paste the block below into the target session"
+    echo "$p ${s:-the target session}"
   fi
 }
 # THE ALERT (punch-list L34). Exit 4 and exit 5 print only into the sending
@@ -190,8 +213,59 @@ fail() { echo "Orca send failed: no message stored — $1"; cepa_send_alert send
 # message may be stored, so the line never says it stored nothing.
 unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_alert send_unproven "$1"; cepa_send_ending; exit 5; }
 
-[ $# -eq 4 ] || { [ $# -eq 5 ] && [ "$cepa_send_type" = worker_done ]; } \
-  || refuse "usage: orca-send.sh <cli> <target> <type> <nudge|no-nudge>, or <cli> dispatch:<id> worker_done <outcome> <task id>"
+[ $# -eq 0 ] || refuse "orca-send.sh takes no arguments; its fields go on stdin"
+# THE FIELDS: `<name>: <value>` lines up to the first empty line. Each value
+# is read by `read -r` from the heredoc, so bash never parses it as code.
+# No field comes from the environment: only a line on stdin sets one.
+unset cepa_send_f_cli cepa_send_f_target cepa_send_f_type cepa_send_f_nudge cepa_send_f_outcome \
+  cepa_send_f_task cepa_send_f_session
+cepa_send_seen=" "
+while :; do
+  IFS= read -r cepa_send_line || refuse "stdin has no empty line after its fields"
+  cepa_send_line=${cepa_send_line%$'\r'}
+  [ -n "$cepa_send_line" ] || break
+  # `session:` with no space is an empty value, as `session: ` is: editors
+  # and models drop trailing spaces (PR #110 review).
+  [[ $cepa_send_line =~ ^([a-z]+):(\ (.*))?$ ]] \
+    || refuse "a line before the empty line is not a <name>: <value> field"
+  cepa_send_k=${BASH_REMATCH[1]} cepa_send_v=${BASH_REMATCH[3]}
+  cepa_send_v=${cepa_send_v%"${cepa_send_v##*[![:space:]]}"}
+  case "$cepa_send_k" in
+    cli|target|type|nudge|outcome|task|session) ;;
+    *) refuse "a field name is not cli, target, type, nudge, outcome, task or session" ;;
+  esac
+  [[ $cepa_send_seen != *" $cepa_send_k "* ]] || refuse "the $cepa_send_k field is given twice"
+  cepa_send_seen+="$cepa_send_k "
+  printf -v "cepa_send_f_$cepa_send_k" '%s' "$cepa_send_v"
+  # A later bad line still names the target and type already read; the
+  # ending prints the target only when it passes its check.
+  case "$cepa_send_k" in
+    target) cepa_send_target=$cepa_send_v ;;
+    type) cepa_send_type=$cepa_send_v ;;
+  esac
+done
+cepa_send_cli=${cepa_send_f_cli-} cepa_send_target=${cepa_send_f_target-} cepa_send_type=${cepa_send_f_type-}
+cepa_send_task=${cepa_send_f_task-}
+if [ -n "${cepa_send_f_session-}" ]; then
+  [[ $cepa_send_f_session =~ ^[A-Za-z0-9._@][A-Za-z0-9._@-]{0,99}$ ]] \
+    || refuse "the session name holds a character outside [A-Za-z0-9._@-]"
+  cepa_send_session=$cepa_send_f_session
+fi
+for cepa_send_k in cli target type; do
+  [[ $cepa_send_seen == *" $cepa_send_k "* ]] || refuse "the $cepa_send_k field is missing"
+done
+if [ "$cepa_send_type" = worker_done ]; then
+  [[ $cepa_send_seen != *" nudge "* ]] || refuse "a worker_done takes outcome and task fields, not nudge"
+  for cepa_send_k in outcome task; do
+    [[ $cepa_send_seen == *" $cepa_send_k "* ]] || refuse "the $cepa_send_k field is missing"
+  done
+  cepa_send_mode=${cepa_send_f_outcome-}
+else
+  [[ $cepa_send_seen != *" outcome "* && $cepa_send_seen != *" task "* ]] \
+    || refuse "only a worker_done takes outcome and task fields"
+  [[ $cepa_send_seen == *" nudge "* ]] || refuse "the nudge field is missing"
+  cepa_send_mode=${cepa_send_f_nudge-}
+fi
 case "$cepa_send_cli" in
   ''|-*|*[!A-Za-z0-9._/-]*) refuse "the cli is not a plain command name" ;;
   /*) [ "$cepa_send_cli" = "${ORCA_CLI_COMMAND:-}" ] || refuse "a cli path must equal ORCA_CLI_COMMAND" ;;
@@ -209,7 +283,6 @@ case "$cepa_send_type" in
     [[ $cepa_send_target =~ ^msg_[0-9a-f]{6,32}$ ]] || refuse "a reply's target is not a msg_ message id" ;;
   worker_done)
     [[ $cepa_send_target =~ ^dispatch:ctx_[0-9a-f]{6,32}$ ]] || refuse "a worker_done target is not dispatch:ctx_<id>"
-    [ $# -eq 5 ] || refuse "worker_done takes <outcome> <task id> after the type"
     [[ $cepa_send_task =~ ^task_[0-9a-f]{6,32}$ ]] || refuse "the task id is not task_<id>"
     case "$cepa_send_mode" in
       succeeded) cepa_send_outcome=completed ;;
@@ -223,17 +296,18 @@ esac
 case "$cepa_send_mode" in
   no-nudge) ;;
   nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] || refuse "only a term_ handle is nudged" ;;
-  *) refuse "the fourth argument is not nudge or no-nudge" ;;
+  *) refuse "the nudge field is not nudge or no-nudge" ;;
 esac
 command -v "$cepa_send_cli" >/dev/null 2>&1 || refuse "$cepa_send_cli is not on PATH"
 
-# The subject is line 1 of stdin, the body the rest. The braces keep bash's
-# NUL-byte warning off the output.
-# A reply has no subject: all of stdin is its body.
+# The subject is the line after the empty line, the body the rest. The braces
+# keep bash's NUL-byte warning off the output.
+# A reply has no subject: all of the message is its body.
 if [ "$cepa_send_type" = reply ]; then
   cepa_send_subject=
 else
   IFS= read -r cepa_send_subject || [ -n "${cepa_send_subject:-}" ] || refuse "stdin has no subject line"
+  cepa_send_subject=${cepa_send_subject%$'\r'}
 fi
 { cepa_send_body=$(cat); } 2>/dev/null
 if [ "$cepa_send_type" != reply ]; then
@@ -407,16 +481,31 @@ fi
 cepa_send_nudge="$(dirname "$0")/orca-nudge.sh"
 if [ ! -f "$cepa_send_nudge" ]; then
   echo "Orca nudge skipped: orca-nudge.sh not found beside orca-send.sh"
-  echo "Ending first line: Needed from you: tell $cepa_send_target to check its Orca inbox"
+  echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   exit 1
 fi
 rm -rf "$cepa_send_tmp"
 trap - EXIT
-bash "$cepa_send_nudge" "$cepa_send_cli" "$cepa_send_target"
+# The nudge's lines are read back so its own `tell <handle>` line can name the
+# session too: only that exact line changes, and only with a session name.
+cepa_send_nout=$(bash "$cepa_send_nudge" "$cepa_send_cli" "$cepa_send_target")
 cepa_send_nrc=$?
+cepa_send_tell="Ending first line: Needed from you: tell $cepa_send_target to check its Orca inbox"
+[ -z "$cepa_send_nout" ] || while IFS= read -r cepa_send_line; do
+  [ "$cepa_send_line" != "$cepa_send_tell" ] \
+    || cepa_send_line="Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
+  printf '%s\n' "$cepa_send_line"
+done <<<"$cepa_send_nout"
+# A nudge that printed nothing gave the session no line to end on: it may
+# have died on a syntax error or `set -u` (PR #110 review). Not delivered.
+if [ "$cepa_send_nrc" -le 3 ] && [ -z "$cepa_send_nout" ]; then
+  echo "Orca nudge skipped: orca-nudge.sh exited $cepa_send_nrc and printed nothing"
+  echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
+  exit 1
+fi
 if [ "$cepa_send_nrc" -gt 3 ]; then
   echo "Orca nudge skipped: orca-nudge.sh would not start (exit $cepa_send_nrc)"
-  echo "Ending first line: Needed from you: tell $cepa_send_target to check its Orca inbox"
+  echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   exit 1
 fi
 exit "$cepa_send_nrc"

@@ -1636,10 +1636,17 @@ limits.
      a reply to a question (rule 7) run through the same block, each in its
      own mode. The worker preamble's own `heartbeat` and `ask` are not rule 1
      sends.
-   - **The subject and body are never spliced into a shell string.** They go
-     on the script's stdin inside the block's quoted heredoc
-     (`<<'CEPA_BODY'`): line 1 is the subject, every line after it the body.
-     No character of either is expanded, with one exception: a line that is
+   - **No value is spliced into a shell string.** The script takes no
+     arguments. Every value goes on its stdin inside the block's quoted
+     heredoc (`<<'CEPA_BODY'`): first the field lines (`cli:`, `target:`,
+     `type:`, `nudge:`, and the optional `session:`), one per line as
+     `<name>: <value>`, then one empty line, then the subject on one line and
+     the body on every line after it. Why: the four values used to be quoted
+     arguments on the command line, which bash parses before the script can
+     check them (punch-list L38, review finding #19). The script checks each
+     field and refuses any other line before the empty line, so a message
+     that lost its fields is never sent with its first line read as one.
+     No character in the heredoc is expanded, with one exception: a line that is
      exactly `CEPA_BODY` ends the heredoc, and every line after it runs as a
      shell command. So before the block runs, indent by one space any line
      of the subject or body that is exactly `CEPA_BODY` (a quoted copy of
@@ -1671,7 +1678,8 @@ limits.
      never before it. The L26 re-probe put the paste block first in four
      endings (C2, C3, C2b, C3b). After a refused or failed send, the script
      prints that line: `Ending first line: Needed from you: paste the block
-     below into <target>`. A block that printed no `Orca send stored` line,
+     below into <target>`, or `<session> (<target>)` when the block gave a
+     `session:` field. A block that printed no `Orca send stored` line,
      because a tool timeout killed it or it printed nothing, did not send:
      use that same first line. On a refused or failed send (exit 4 or 5) the
      script also writes one alert file outside the repo and prints
@@ -1723,8 +1731,8 @@ limits.
        `Needed from you: nothing`. A Run coordinator gets no nudge, so its send
        alone completes the delivery. Orca's prompt to it is best-effort, and
        its own rule 8 peek is the backstop.
-     - **Both scripts check their arguments.** `orca-send.sh` refuses a bad
-       argument with `Orca send refused: <reason>` before any Orca call. In
+     - **Both scripts check their values.** `orca-send.sh` refuses a bad
+       field with `Orca send refused: <reason>` before any Orca call. In
        `orca-nudge.sh`, a `<cli>` that is not a bare
        §12a name on PATH (or an absolute path equal to `ORCA_CLI_COMMAND`), or
        a target that is not a `term_` handle, prints
@@ -1754,19 +1762,32 @@ limits.
      done
      if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-send.sh" ]; then
        echo "Orca send skipped: orca-send.sh not found (set CEPA_PLUGIN_ROOT) — paste below"
-       echo "Ending first line: Needed from you: paste the block below into <target>"
+       echo "Ending first line: Needed from you: paste the block below into the target session"
      else
-       bash "$CEPA_ROOT/scripts/orca-send.sh" "<cli>" "<target>" "<type>" "<nudge>" <<'CEPA_BODY' || true
+       bash "$CEPA_ROOT/scripts/orca-send.sh" <<'CEPA_BODY' || true
+     cli: <cli>
+     target: <target>
+     type: <type>
+     nudge: <nudge>
+     session: <session>
+
      <subject, one line>
      <body>
      CEPA_BODY
      fi
      ```
 
-     `<type>` is `question` for a decision (rule 7), `handoff` for a hand-off
+     `<cli>` is §12a's printed `cli=` value. `<type>` is `question` for a
+     decision (rule 7), `handoff` for a hand-off
      or a rule 3 report from a worker with no preamble, `reply` for an answer
      to a question (rule 7), `worker_done` for a dispatched worker's final
-     report (rule 3), else `status`. The block always exits 0: its first
+     report (rule 3), else `status`. `<session>` is the target's §10a name
+     (`coord@main`, `tab3@roles`) when the session knows it, else leave the
+     value empty (`session:`) or drop the line; never guess one. The script
+     then names `<session> (<target>)` in each `Ending first line: ` about
+     the target, so the operator reads a session, not only a handle
+     (punch-list L38, review finding #21). A name outside `[A-Za-z0-9._@-]`
+     is refused, never repaired. The block always exits 0: its first
      printed line is the send's result, the nudge's line follows it, and a
      line that starts `Ending first line: `, when there is one, is the
      ending's first line. A skipped,
@@ -1852,9 +1873,11 @@ limits.
    is not a final report and never sends `worker_done`. **It sends
    `worker_done` with rule 1's block**, not with the preamble's command line:
    `<target>` is `dispatch:<Dispatch ID>`, `<type>` is `worker_done`, and
-   `"<nudge>"` is replaced by two arguments, `"<succeeded|failed>"
-   "<Task ID>"`, both IDs from the preamble. The heredoc holds the subject
-   line, then the body. It counts only when the script prints
+   the `nudge:` line is replaced by two field lines, `outcome:
+   <succeeded|failed>` and `task: <Task ID>`, both IDs from the preamble, and
+   `session:` names the coordinator when the worker knows its name. After
+   the empty line, the heredoc holds the subject line, then the body. It
+   counts only when the script prints
    `Orca send stored`: Orca returned `"ok": true`, a `msg_…` id, and a
    `result.lifecycle` that names this dispatch and task with the action the
    outcome asks for (`completed` or `failed`), and the re-read found the row
@@ -2090,7 +2113,8 @@ limits.
        operator's. The answer comes back by `orchestration reply`, which
        prompts no one either. **The replier sends it with rule 1's block:**
        `<target>` is the question's message id (`msg_…`), `<type>` is
-       `reply`, `<nudge>` is `nudge`, and the heredoc holds the answer only,
+       `reply`, `<nudge>` is `nudge`, `<session>` is the asker's name when
+       known, and after the empty line the heredoc holds the answer only,
        with no subject line. It counts only when the script prints
        `Orca send stored`: the stored message is threaded on that question
        and the re-read found it. The script nudges the handle Orca addressed

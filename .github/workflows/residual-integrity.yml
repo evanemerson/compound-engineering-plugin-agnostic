@@ -173,7 +173,8 @@ jobs:
   orca-nudge:
     # Orca nudge, send and health. Almost all of the time is the controls:
     # 2m47s on PR #106; PR #109 added the health part (its controls took
-    # 3m10s locally on 4 cores). Each mutant runs only the part of the check
+    # 3m10s locally on 4 cores); L38 (#19/#21/#22) took it to 4m12s on 4
+    # pinned cores. Each mutant runs only the part of the check
     # that can see it; before that split this job hit its 10-minute bound.
     runs-on: ubuntu-latest
     timeout-minutes: 10
