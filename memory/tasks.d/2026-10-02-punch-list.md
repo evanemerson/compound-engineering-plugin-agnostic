@@ -1307,6 +1307,19 @@ L40. **Run the health check while every coordinator is idle (Orca automation).**
     `--precheck` measurement first, and the operator's approval before any
     automation is created.
 
+    Seen 2026-10-31 21:07-21:09 CDT (input for L40's design): the retired
+    coord@main's `relay.py` (scratchpad of session c1f435ce, PID 1782286,
+    started 10:14 CDT on the operator's instruction) outlived its exited tab
+    and began draining and acking coord@main's NEW Run inbox, then re-sending
+    each message to coord@main as "Fwd (old coord@main)". It looped on its own
+    forwards (3 levels). Only heartbeats were affected (relay.log: 3 SENT, all
+    `alive`). Stopped with `kill` on the operator's AskUserQuestion "Stop it
+    now". Lesson: a background poller started by a session must stop when
+    that session's tab exits, and must never consume another session's
+    mailbox; any L40 automation needs both guards.
+    Also measured: orca-health's "inbox window full" warning is global, not
+    per Run (`orchestration inbox` lists the newest 200 rows across all
+    recipients), so a fresh Run does not clear it.
 ---
 
 ## How this list is used
