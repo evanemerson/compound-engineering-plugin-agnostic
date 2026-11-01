@@ -1387,6 +1387,46 @@ L42. **Shard `check-orca-nudge-controls.sh` before the next mutant batch.**
     check that can see it; the next step is two jobs (the L31 pattern), each
     with headroom. Measure per-part times first and state them.
 
+L43. **Orca chat UI shows an old message below new ones, so live output moves up.**
+    status: pending
+    severity: P2
+    owner: unassigned — an Orca app defect, not cepa code. The fix goes to
+      Orca's maintainers as a hand-off; this repo only records it.
+    Operator report, 2026-11-01 ~06:50 CST, with two screenshots
+    (`Screenshot 2026-11-01 065042.png` and `065113.png` in the operator's
+    Windows Pictures/Screenshots). "This has happened several times."
+    Seen: the same coord@main session in two views. The terminal (Claude Code
+    TUI) view is in order: the session ends with the pasted handoff, then
+    `Baked for 1m 34s · done 6:05 AM`. The chat UI view shows that handoff,
+    then BELOW it a user message from the PREVIOUS coord@main session (the
+    2026-10-31 L34 question, "when script … prints Orca send failed …"), then
+    `Worked for 1m 33s`. So an older message renders after a newer one, and
+    the live turn is pushed up off the bottom of the chat.
+    Not measured: how the chat UI builds its message list. Unverified
+    guess: it merges two sessions' transcripts for one tab, or orders by
+    something other than time. Next step: reproduce on a probe tab (resume
+    or replace a session in one tab, then compare the two views), then hand
+    the repro to Orca's maintainers.
+    Also seen in the same screenshots (record only): the sidebar still lists
+    the retired coord@main tab ("Needed from you: close this tab…"), and the
+    worktree rows still show deleted branch names
+    (`fix/integrity/sigpipe-grep`, `refactor/roles/send-block-stdin`) for
+    worktrees that are parked detached.
+
+L44. **WISHLIST: make Orca's chat UI work more like the Claude Code VS Code chat UI.**
+    status: deferred
+    severity: P3
+    owner: unassigned — after the coordinator/worker loop works end to end
+      (operator, 2026-11-01: "let's get everything working together first").
+    Operator, 2026-11-01: "i love that chatui. is it possible to take
+    elements of that and build them into orca's chatui?" Reference: the VS
+    Code extension `Anthropic.claude-code`.
+    Feasible only as design ideas: list the UX elements the operator values,
+    and propose them to Orca as feature requests. Do not copy the extension's
+    code or assets: it is Anthropic's, under its own license. Whether Orca
+    takes outside changes is not measured. First step when this opens: the
+    operator names the 3-5 elements that matter most.
+
 ---
 
 ## How this list is used
