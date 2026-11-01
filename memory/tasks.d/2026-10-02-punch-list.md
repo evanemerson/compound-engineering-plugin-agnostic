@@ -1319,7 +1319,12 @@ L39. **`check-anchor-counts-controls.sh:222` uses `printf | grep -q` (SIGPIPE fl
     for other `printf … | grep -q` sites (state the probe command).
 
 L40. **Run the health check while every coordinator is idle (Orca automation).**
-    status: pending
+    status: deferred
+    DEFERRED 2026-11-01 by the operator in tab24@roles ("ignore it for now.
+    defer it."). PR #114 merged `0a4adc7`: design, reasons, measured Orca
+    automation facts and the revisit trigger are in
+    `memory/tasks.d/2026-11-01-design-roles-orca-watcher.md`. roles parked,
+    branch deleted, tab24 closed (absent from `terminal list`).
     severity: P2
     owner: roles (`tab24@roles`, design only: brainstorm with the operator in
       its tab, operator's request 2026-11-01; task `task_22ff60b22cce`,
@@ -1478,6 +1483,19 @@ L44. **WISHLIST: make Orca's chat UI work more like the Claude Code VS Code chat
     code or assets: it is Anthropic's, under its own license. Whether Orca
     takes outside changes is not measured. First step when this opens: the
     operator names the 3-5 elements that matter most.
+
+L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
+    status: pending
+    severity: P2
+    owner: roles (`tab25@roles`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "One worker for the 4 P2s")
+    1. Rule 6 rename block runs `<cli>` unchecked and unquoted
+       (`memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md` line 11,
+       security-sentinel: `orca-ide;touch${IFS}/tmp/x` runs the touch).
+    2-4. #113 findings 10, 11, 12
+       (`memory/tasks.d/2026-11-01-fix-roles-run-rebind-on-restart.md` lines
+       5-7): no gate runs the rule 2 re-bind block; two re-binders can both
+       print `done`; a `run:`-only Run is taken with no ownership check.
 
 ---
 
