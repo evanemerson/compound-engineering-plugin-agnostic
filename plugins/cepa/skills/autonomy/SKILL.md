@@ -1877,10 +1877,12 @@ limits.
      for a one-off lane: its first branch is Orca's `<prefix>/<name>`, and
      under a `start-immediately` setup policy its worker runs beside an
      unfinished setup.
-   - **One live worker per checkout.** Before a `current` start, list the
-     Run's workers and confirm none is live in this checkout, the worker that
-     just sent a hand-off included (rule 1).
-   - **How Orca names a child worktree** (measured on Orca 1.4.244 from
+   - **One live worker per checkout.** Before any start into an existing
+     checkout (`current`, or `path:<lane>`), list the Run's workers and
+     confirm none is live in that checkout, the worker that just sent a
+     hand-off included (rule 1).
+   - **How Orca names a `new-child` worktree** (one-off lanes only; a lane
+     made with `create` below is parked with no branch) (measured on Orca 1.4.244 from
      `worktree create --help` and `worker-start --help`; no dry run exists and
      none was created): `--name` names the worktree, and the Git branch
      defaults to `<configured prefix>/<name>`. So Orca names the **branch
@@ -1910,11 +1912,14 @@ limits.
        which Orca reads from the main checkout's working-tree `orca.yaml`.
        A failed hook removes nothing; never pass
        `--allow-failed-archive-hook` without the operator's yes, because a
-       failed teardown can leave a stack or volumes behind. The script
+       failed teardown can leave a stack or volumes behind; the waiver is
+       the operator's own `worktree rm`, never the script's. The script
        lists the ignored files it deletes (the operator's decision,
-       2026-11-01), and refuses a lane with changes, a live agent, or a
-       commit no origin ref has: the HEAD reflog test is §11b's (owned
-       there).
+       2026-11-01), and refuses a lane with changes, a live agent, an
+       ambiguous name, or a commit no origin ref has after a `fetch
+       --prune`: the HEAD reflog test is §11b's (owned there). A reused
+       lane whose reflog still holds squash-merged commits of a deleted
+       branch is refused by that test; the operator decides.
      - **The location is Orca's.** `<wt>` stays the directory basename
        (§10a); `create` stops when Orca's path does not end in `<wt>`.
        Existing lanes under `.claude/worktrees/` are not moved; `name`
@@ -1923,16 +1928,20 @@ limits.
        add .claude/worktrees/<wt> --detach origin/<base>`, run the repo's
        setup by hand, and file a residual to run `name` once Orca is back.
        That and `review.md`'s temporary weekly-review worktree (made and
-       removed in one run) are the only plain-git worktrees cepa makes.
+       removed in one run) are the only plain-git lanes cepa makes (§11b's
+       dispatch worktrees are the harness's).
      - **Run this block** from the main checkout, with `<cli>` the §12a
        `cli=` value, `<action>` one of `create`, `name` or `rm`, `<wt>` the
        lane (create and rm), and `<base>` the trunk branch (create only).
        Leave out the lines an action does not take: `name` takes none, `rm`
-       no `base:`. Each value is one line; a value that holds a line break
-       is never substituted (`ORCA lane skipped: a field value is not one
-       line`). Run it with a tool timeout of 10 minutes (`rm` waits for the
-       archive hook).
+       no `base:`. Each value is one line: the session never substitutes a
+       value that holds a line break, and reports `ORCA lane skipped: a
+       field value is not one line` without running the block. `create`
+       parks the lane detached at the commit it was created on
+       (`origin/<base>` at that moment).
        ```bash
+       # Run with a tool timeout of 10 minutes: rm waits for the archive hook
+       # (the script's header states its worst case).
        unset CEPA_ROOT
        for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
                 "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
@@ -1951,7 +1960,9 @@ limits.
        CEPA_FIELDS
        fi
        ```
-       The result is the block's lines that start `ORCA lane`. `created`,
+       The block always exits 0. Its result is its `ORCA lane` lines and,
+       on `not created`, `kept` or `failed`, its `Ending first line: `
+       line. `created`,
        `named` and `removed` need nothing more. `not created` and `kept`
        (a guard refused, or an Orca read was not complete) and `failed`
        (an Orca write failed or was not proved; a lane is never removed to
@@ -2124,7 +2135,7 @@ limits.
    | Tab strip | Orca's custom tab title | `terminal rename` (this rule) | operator read it after a rename |
    | Agent Dashboard card | Claude Code's session name, else its topic title | Claude Code itself; `/rename` replaces it | operator read it after `/rename` |
    | `terminal show` / `terminal list` `title` | the program's own title (OSC escape) | Claude Code's name or topic; a shell's prompt | CLI output before and after a rename |
-   | Worktree sidebar | the worktree's display name | `worker-start --display-name` / `worktree create --name` for a NEW worktree; `worktree set --display-name` for an existing one (both through rule 2's `orca-lane.sh`: `create`, `name`) | `worktree list --json`, `--help`, and L55's probe (`displayNameMode: "fixed"`); not read in the UI |
+   | Worktree sidebar | the worktree's display name | `worker-start --display-name` / `worktree create --name` for a NEW worktree; `worktree set --display-name` for an existing one (the last two through rule 2's `orca-lane.sh`: `create`, `name`) | `worktree list --json`, `--help`, and L55's probe (`displayNameMode: "fixed"`); not read in the UI |
 
    So the operator reads identity on the tab and activity on the card.
    - **When.** Each session names its own tab once per command, right after

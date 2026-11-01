@@ -248,7 +248,7 @@ W = World("reads")
 W.lane("gamma", mode="automatic")
 # One lane per rm case, so a mutant that lets one removal through cannot
 # change what a later case sees.
-for m in ("listfail", "listpartial", "listomitted"):
+for m in ("listfail", "listpartial", "listomitted", "listcount"):
     expect("READS %s is UNKNOWN for name" % m, W.run(F(cli=CLI, action="name"), mode=m), rc=1,
            first="ORCA lane: no lane renamed", verbs_lack=[["worktree", "set"]])
     W.lane("g-" + m)
@@ -291,6 +291,10 @@ W.lane("eps", where="claude", register=False)
 expect("CREATE name taken in git only", W.run(F(cli=CLI, action="create", lane="eps", base="main")), rc=1,
        first="ORCA lane: not created — git worktree list already has a worktree named eps",
        verbs_lack=[["worktree", "create"]])
+pn = W.lane("plainbase")
+W.load(); W.st["wts"][-1]["name"] = "shown"; W.save()
+expect("CREATE name taken as a display name only", W.run(F(cli=CLI, action="create", lane="shown", base="main")), rc=1,
+       first="ORCA lane: not created — Orca already lists a worktree named shown", verbs_lack=[["worktree", "create"]])
 W.git("branch", "chore/zeta/park", "origin/main")
 expect("CREATE park branch exists", W.run(F(cli=CLI, action="create", lane="zeta", base="main")), rc=1,
        first="ORCA lane: not created — branch chore/zeta/park already exists", verbs_lack=[["worktree", "create"]])
@@ -326,6 +330,11 @@ want = [["worktree", "set", "--worktree", "id:" + W.wid(pa), "--display-name", "
 (ok if sets == want else miss)("NAME set by full id only" + ("" if sets == want else ": %r" % sets))
 expect("NAME second run is a no-op", W.run(F(cli=CLI, action="name")), rc=0, has=("named 0 lane(s); 2 already fixed",),
        verbs_lack=[["worktree", "set"]])
+W.lane("dup", mode="automatic")
+W.lane("other", mode="fixed")
+W.load(); W.st["wts"][-1]["name"] = "dup"; W.save()
+expect("NAME skips a name another lane shows", W.run(F(cli=CLI, action="name")), rc=0,
+       has=("another lane already shows the name dup",), lacks=("ORCA lane: named dup",))
 W.lane("beta", mode="automatic")
 expect("NAME set fails", W.run(F(cli=CLI, action="name"), mode="setfail"), rc=3, has=("ORCA lane failed: worktree set failed",))
 expect("NAME set that does not stick", W.run(F(cli=CLI, action="name"), mode="setnoop"), rc=3,
@@ -377,7 +386,7 @@ expect("RM live agent", W.run(F(cli=CLI, action="rm", lane="rho1"), env={"STUB_A
        first="ORCA lane: kept rho1 — 1 agent(s) on it", verbs_lack=[["worktree", "rm"]])
 p = W.lane("rho2")
 expect("RM archive hook fails", W.run(F(cli=CLI, action="rm", lane="rho2"), mode="hookfail"), rc=3,
-       first="ORCA lane failed: the archive hook failed (exit 1: Command failed with exit code 1.?[0m)")
+       first="ORCA lane failed: the archive hook failed (exit 1; its output is not relayed", lacks=("Command failed",))
 (ok if os.path.isdir(p) else miss)("RM archive hook failure keeps the lane")
 W.lane("rho3")
 expect("RM reply says removed but lane stays", W.run(F(cli=CLI, action="rm", lane="rho3"), mode="rmnoop"), rc=3,
@@ -385,6 +394,32 @@ expect("RM reply says removed but lane stays", W.run(F(cli=CLI, action="rm", lan
 W.lane("rho4")
 expect("RM re-list fails after rm", W.run(F(cli=CLI, action="rm", lane="rho4"), mode="listfail2"), rc=3,
        first="ORCA lane failed: removal not proved — the re-list")
+W.lane("rho5")
+expect("RM Orca drops the row but git keeps the worktree", W.run(F(cli=CLI, action="rm", lane="rho5"), mode="gitkeeps"), rc=3,
+       first="ORCA lane failed: removal not proved — " + os.path.join(W.ws, "repo", "rho5") + " is still in git worktree list")
+alien = os.path.join(W.ws, "repo", "alien")
+sh("git", "init", "-q", alien)
+W.load(); W.st["wts"].append({"repoId": RID, "path": alien, "name": "alien", "mode": "fixed", "main": False}); W.save()
+expect("RM row not in git worktree list", W.run(F(cli=CLI, action="rm", lane="alien")), rc=1,
+       first="ORCA lane: kept alien — " + alien + " is not in this repo's git worktree list", verbs_lack=[["worktree", "rm"]])
+W.lane("phi")
+W.load(); W.st["wts"][-1]["name"] = "other"; W.save()
+expect("RM fixed sidebar name differs", W.run(F(cli=CLI, action="rm", lane="phi")), rc=1,
+       first="ORCA lane: kept phi — the sidebar shows it as 'other'", verbs_lack=[["worktree", "rm"]])
+W.lane("chi")
+W.lane("chi-2")
+W.load(); W.st["wts"][-1]["name"] = "chi"; W.save()
+expect("RM another lane shows the name", W.run(F(cli=CLI, action="rm", lane="chi")), rc=1,
+       first="ORCA lane: kept chi — another lane (" + os.path.join(W.ws, "repo", "chi-2") + ") also shows the name chi",
+       verbs_lack=[["worktree", "rm"]])
+p = W.lane("psi", branch="feat/psi/work")
+W.git("push", "-q", "origin", "feat/psi/work")
+W.commit("pushed then deleted", cwd=p)
+W.git("push", "-q", "origin", "feat/psi/work", cwd=p)
+W.git("fetch", "-q", "origin")
+sh("git", "--git-dir", W.origin, "branch", "-q", "-D", "feat/psi/work")
+expect("RM stale origin ref does not vouch", W.run(F(cli=CLI, action="rm", lane="psi")), rc=1,
+       first="ORCA lane: kept psi — HEAD", has=("is on no origin ref",), verbs_lack=[["worktree", "rm"]])
 W.lane("sigma")
 W.lane("sigma", where="claude")
 expect("RM two lanes with one basename", W.run(F(cli=CLI, action="rm", lane="sigma")), rc=1,

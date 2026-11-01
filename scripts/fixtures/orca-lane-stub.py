@@ -5,6 +5,9 @@
 # worktrees, and logs every argv as one JSON line. Shapes follow the Orca
 # 1.4.245 replies measured in L55's U1 (paths as Windows UNC, ids
 # `<repoId>::<UNC path>`, rm's worktree_archive_hook_failed error).
+# The `worktree ps` shape (worktrees[].{worktreeId, agents}, hostScope,
+# totalCount, truncated) matches a real `worktree ps --limit 500 --json` read
+# during the L55 build, which the script's reader parsed.
 # Env: STUB_STATE (state file), STUB_LOG (argv log), STUB_MODE (comma list of
 # fault switches, read below). Never reaches a real Orca.
 import json, os, subprocess, sys
@@ -91,6 +94,8 @@ if verb == ["worktree", "list"]:
          "totalCount": len(rows), "truncated": False}
     if "listpartial" in MODE:
         r["truncated"] = True
+    if "listcount" in MODE:
+        r["totalCount"] = len(rows) + 1
     if "listomitted" in MODE:
         r["hostScope"]["omittedHostIds"] = ["ssh:x"]
     out({"id": "x", "ok": True, "result": r})
@@ -150,7 +155,8 @@ if verb == ["worktree", "rm"]:
         out({"id": "x", "ok": True, "result": {"removed": True}})
     br = branch(w["path"])
     repo = [r for r in st["repos"] if r["id"] == w["repoId"]][0]
-    git("-C", repo["path"], "worktree", "remove", "--force", w["path"])
+    if "gitkeeps" not in MODE:
+        git("-C", repo["path"], "worktree", "remove", "--force", w["path"])
     st["wts"].remove(w)
     if br and "keepbranch" not in MODE:
         tip = git("-C", repo["path"], "rev-parse", br).stdout.strip()

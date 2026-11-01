@@ -70,6 +70,19 @@ MUTANTS = [
     ("rm-force", '--worktree "id:$r_id" --run-hooks --json', '--worktree "id:$r_id" --run-hooks --force --json', None),
     ("rm-unproved", '[ "$w_id" != "$r_id" ] || failed', 'true || failed', None),
     ("rm-hook-ignored", "  removed|unknown) ;;", "  removed|unknown|worktree_archive_hook_failed*) ;;", None),
+    ("count-ok", 'if r.get("totalCount") != len(rows) or len(rows) >= LIMIT:', 'if len(rows) >= LIMIT:', None),
+    ("rm-git-proof-skipped", '  failed "removal not proved — $r_path is still in git worktree list"',
+     '  true "removal not proved — $r_path is still in git worktree list"', None),
+    ("rm-not-in-git-ok", '  kept "kept $cepa_ln_lane — $r_path is not in this repo\'s git worktree list"',
+     '  true "kept $cepa_ln_lane — $r_path is not in this repo\'s git worktree list"', None),
+    ("rm-sidebar-ok", '[ "$w_mode" != fixed ] || [ "$w_name" = "$cepa_ln_lane" ] \\', 'true \\', None),
+    ("rm-other-shows-ok", '  elif [ "$w_name" = "$cepa_ln_lane" ]; then', '  elif false; then', None),
+    ("rm-no-fetch", 'timeout -k 2 60 git fetch -q --prune origin', 'true timeout -k 2 60 git fetch -q --prune origin', None),
+    ("name-dup-ok", 'if grep -qxF -- "$w_base" <<<', 'if false && grep -qxF -- "$w_base" <<<', None),
+    ("create-displayname-ok", '[ "$w_base" != "$cepa_ln_lane" ] && [ "$w_name" != "$cepa_ln_lane" ] \\',
+     '[ "$w_base" != "$cepa_ln_lane" ] \\', None),
+    ("hook-output-relayed", 'print(code, x if type(x) is int else "?")',
+     'print(code, x if type(x) is int else "?", (data.get("output") or "")[:80])', None),
 ]
 SKILL_MUTANTS = [
     ("block-unquoted", "orca-lane.sh\" <<'CEPA_FIELDS' || true", "orca-lane.sh\" <<CEPA_FIELDS || true", None),
@@ -101,6 +114,16 @@ EXPECT = {
     "rm-hook-ignored": {"RM archive hook fails"},
     # Unquoted, the heredoc no longer matches the fill, so <cli> stays and
     # every BLOCK case that fills it goes red.
+    "count-ok": {"READS listcount is UNKNOWN for create", "READS listcount is UNKNOWN for name",
+                 "READS listcount is UNKNOWN for rm"},
+    "rm-git-proof-skipped": {"RM Orca drops the row but git keeps the worktree"},
+    "rm-not-in-git-ok": {"RM row not in git worktree list"},
+    "rm-sidebar-ok": {"RM fixed sidebar name differs"},
+    "rm-other-shows-ok": {"RM another lane shows the name"},
+    "rm-no-fetch": {"RM stale origin ref does not vouch"},
+    "name-dup-ok": {"NAME skips a name another lane shows"},
+    "create-displayname-ok": {"CREATE name taken as a display name only"},
+    "hook-output-relayed": {"RM archive hook fails"},
     "block-unquoted": {"BLOCK shell text in the lane runs nothing", "BLOCK runs name",
                        "BLOCK quoted heredoc holds cli, action, lane, base"},
 }
@@ -125,6 +148,10 @@ def run_check(script, skill):
     for l in r.stdout.splitlines():
         if l.startswith("MISS "):
             names.add(l[5:].split(": ", 1)[0].split(" | ", 1)[0])
+    # A check that crashed prints no summary: its partial MISS set proves
+    # nothing, so it is a case of its own (PR #118 review).
+    if not re.search(r"^-- \d+/\d+ checks passed --$", r.stdout, re.M) or "Traceback" in r.stderr:
+        names.add("CRASHED")
     return r.returncode, names
 
 

@@ -1,7 +1,7 @@
 # Residuals — L55 plan review (Orca lane lifecycle)
 
 Plan (local; `docs/` is gitignored): `docs/plans/2026-11-01-orca-lane-lifecycle.md`.
-Canonical findings: `todos/review-2026-11-01-135437.md` (21 findings; 6 applied to the plan, 15 judgment).
+Canonical findings: `todos/review-2026-11-01-135437.md` (21 findings; 6 applied to the plan, 15 judgment; the L55 build, PR #118, applied 14 of the 15, and #19 stays open below).
 Build waits for the operator's approval and for PR #116 (L46). These judgment items are decided at approval
 or at build; finding numbers match the findings file.
 
@@ -17,6 +17,6 @@ or at build; finding numbers match the findings file.
 - [x] DECIDED 2026-11-01 (operator: "Approve as recommended"; #4: "List them, then remove"; binds the L55 build) — P3 — #16 drop the optional repo: field — U2.
 - [x] DECIDED 2026-11-01 (operator: "Approve as recommended"; #4: "List them, then remove"; binds the L55 build) — P3 — #17 draft removal bullet should cite §12b rule 2, not restate guards — draft section.
 - [x] DECIDED 2026-11-01 (operator: "Approve as recommended"; #4: "List them, then remove"; binds the L55 build) — P3 — #18 --setup run vs inherit; U1 records the repo setup policy — D2.
-- [x] DECIDED 2026-11-01 (operator: "Approve as recommended"; #4: "List them, then remove"; binds the L55 build) — P3 — #19 artist360 probe create/rm via hand-off after merge — U5.
+- [ ] P3 — #19 artist360 probe create/rm via hand-off after merge — U5. Owner: cepa coord@main, after PR #118 merges and the plugin hops run; record the result against F6 before U6 goes to the operator. (Decided 2026-11-01 as recommended; still to do.)
 - [x] DECIDED 2026-11-01 (operator: "Approve as recommended"; #4: "List them, then remove"; binds the L55 build) — P3 — #20 U3 verification: no text keeps new-child as default — U3.
 - [x] DECIDED 2026-11-01 (operator: "Approve as recommended"; #4: "List them, then remove"; binds the L55 build) — P3 — #21 fold U4 into U3 — U4.
