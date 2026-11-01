@@ -37,7 +37,10 @@
 #      `confirm:` line: it asks (punch-list L46, #113 finding 12).
 #   4. The holder must be absent from `terminal list`. A Run held by a live
 #      terminal is never taken: that is a live coordinator, and `run-use`
-#      would take its Run away.
+#      would take its Run away. Then `run-show` once more, right before
+#      `run-use`: the holder and generation must still be step 3's, or it
+#      asks. A session that re-bound the Run during the `terminal list` call
+#      is then not taken (PR #116 review).
 #   5. `run-use --id <run>`, then `run-current` and `run-show` again. It
 #      counts only when `run-current` reports that Run with
 #      `coordinator_handle` = this terminal, AND `run-show` reports this
@@ -83,12 +86,22 @@
 #     terminal on a paired server that list does not cover reads as absent
 #     here; a host the list says it omitted reads as unknown (exit 1).
 #   - Two sessions that re-bind the same Run at the same moment: at most one
-#     prints `done`. Both can print `failed` (each saw the generation rise by
-#     2) while one of them holds the Run; the operator then says which one
-#     coordinates it. Orca exposes no compare-and-swap, so the later
-#     `run-use` still wins.
-#   - Worst case about 190 seconds (each of five reads 2 x 17, run-use 17):
-#     run the block with a tool timeout of at least 4 minutes.
+#     prints `done`. `done` is a fact about the re-read, not about later: a
+#     session whose `run-use` lands after it takes the Run, and prints
+#     `failed`, so one session can print `done` while the other holds the
+#     Run; both can also print `failed` while one holds it. The `failed`
+#     line says so, and the loser's next rule 8 health check raises
+#     `unbound`. The recheck before `run-use` narrows the window to one
+#     call; Orca exposes no compare-and-swap, so it cannot close it.
+#   - `consumer_generation` rising by exactly 1 per `run-use` was measured
+#     once (2 -> 3, L45). If Orca also raises it for other events, a lone
+#     re-bind prints `failed` with this terminal holding the Run; a rerun
+#     then prints `ok`. That fails closed.
+#   - A `run-use` the 15-second bound killed may still take effect on the
+#     server after the re-read: the script prints `failed` and a rerun
+#     prints `ok`.
+#   - Worst case about 225 seconds (each of six reads 2 x 17, run-use 17):
+#     run the block with a tool timeout of at least 5 minutes.
 #   - It does not wait for or prove Orca's prompts reach the new terminal;
 #     it proves the Run's record names it.
 set -u
@@ -254,6 +267,16 @@ case "$cepa_rb_live" in
   *) ask "terminal list returned a partial or unknown shape, so whether $cepa_rb_old is still open is unknown; nothing was changed" \
          "check whether terminal $cepa_rb_old is still open" ;;
 esac
+# The Run must not have moved while terminal list ran: another session that
+# re-bound it in that window is live now, and is never taken.
+cepa_rb_orca "$cepa_rb_tmp/recheck.json" 1 orchestration run-show --id "$cepa_rb_run" --json \
+  || failed "run-show for $cepa_rb_run failed on the recheck before run-use; nothing was changed"
+cepa_rb_recheck=$(cepa_rb_read_run "$cepa_rb_tmp/recheck.json" gen) \
+  || failed "run-show returned a shape this reader does not know on the recheck before run-use; nothing was changed"
+if [ "$cepa_rb_recheck" != "$cepa_rb_shown" ]; then
+  ask "$cepa_rb_run moved while this session checked it (run-show now reports $cepa_rb_recheck, was $cepa_rb_shown); nothing was changed" \
+    "say whether this session should still coordinate $cepa_rb_run (then it runs the re-bind again)"
+fi
 
 cepa_rb_use=0
 cepa_rb_orca "$cepa_rb_tmp/use.json" 0 orchestration run-use --id "$cepa_rb_run" --json || cepa_rb_use=$?
@@ -271,5 +294,9 @@ cepa_rb_gen_want="$cepa_rb_run $cepa_rb_me $((cepa_rb_gen + 1))"
 if [ "$cepa_rb_gen_after" = "$cepa_rb_gen_want" ]; then
   echo "ORCA rebind: done — $cepa_rb_run moved from $cepa_rb_old to this terminal"
   exit 0
+fi
+read -r cepa_rb_a_id cepa_rb_a_h cepa_rb_a_gen <<<"$cepa_rb_gen_after"
+if [ "$cepa_rb_a_id" = "$cepa_rb_run" ] && [ "$cepa_rb_a_h" = "$cepa_rb_me" ]; then
+  failed "after run-use (exit $cepa_rb_use), this terminal holds $cepa_rb_run, but consumer_generation is $cepa_rb_a_gen, not $((cepa_rb_gen + 1)): another session may have re-bound it at the same moment (and may have printed done), or Orca raised the generation for another reason"
 fi
 failed "after run-use (exit $cepa_rb_use), run-show reports $cepa_rb_gen_after, not $cepa_rb_gen_want (consumer_generation one above $cepa_rb_gen): another session may have re-bound $cepa_rb_run at the same moment"

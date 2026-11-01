@@ -73,7 +73,8 @@
 #              that no name was evaluated as shell. The cli cases (punch-list
 #              L46: the block once spliced `<cli>` unquoted, so shell text in
 #              it ran) put `;`, `$(…)`, a non-Orca name, a relative path, a
-#              path other than ORCA_CLI_COMMAND and a name not on PATH in the
+#              path other than ORCA_CLI_COMMAND (unset, or naming another
+#              path), bare `orca` on Linux, and a name not on PATH in the
 #              cli slot: each is skipped with its reason and nothing runs; a
 #              path equal to ORCA_CLI_COMMAND renames. A fixture repo that
 #              cannot be built is a MISS that stops the run.
@@ -418,7 +419,7 @@ def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="se
     sd, td, tmpd = (os.path.join(case, d) for d in ("stubs", "tools", "tmp"))
     for d in (sd, td, tmpd):
         os.makedirs(d)
-    for t in TOOLS + ["git", "printf"]:
+    for t in TOOLS + ["git", "printf", "uname"]:
         if t in fail_tools:
             stub(td, t, "exit 1"); continue
         real = shutil.which(t)
@@ -531,6 +532,11 @@ run_title("cli-relative-path", skipped("a cli path must be absolute and equal OR
 run_title("cli-path-not-env", skipped("a cli path must equal ORCA_CLI_COMMAND"), WT, cli="STUBS/orca-ide",
           env=TERM_ENV)
 run_title("cli-not-on-path", skipped("orca-dev is not on PATH"), WT, cli="orca-dev", env=TERM_ENV)
+# PR #116 review: bare orca on Linux (the screen reader), and a path when
+# ORCA_CLI_COMMAND names another one.
+run_title("cli-bare-orca", skipped("bare orca on Linux is the screen reader"), WT, cli="orca", env=TERM_ENV)
+run_title("cli-path-env-differs", skipped("a cli path must equal ORCA_CLI_COMMAND"), WT, cli="STUBS/orca-ide",
+          env=dict(TERM_ENV, ORCA_CLI_COMMAND="/usr/bin/other/orca-ide"))
 run_title("cli-path-is-env", 'ORCA title: set "%s" on term_self-1' % TITLE, WT,
           cli="STUBS/orca-ide", env=dict(TERM_ENV, ORCA_CLI_COMMAND="STUBS/orca-ide"),
           argv=rename_argv("term_self-1"))
