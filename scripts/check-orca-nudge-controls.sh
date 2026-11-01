@@ -400,15 +400,21 @@ HEALTH_MUTANTS = [
     ('health-hb-undated-ok', '        if hb is None and disp.get("lastHeartbeatAt") is not None:\n', '        if False:\n', {'HEALTH worker-show with a heartbeat time it cannot date'}),
     ('health-crash-exits-1', '    os._exit(3)', '    os._exit(1)', {'HEALTH a reader crash is an alert'}),
     ('health-alert-dir-silent', '    except OSError:\n        unreadable(what,', '    except OSError:\n        return []\n        unreadable(what,', {'HEALTH unreadable alert directory'}),
-    ('health-run-fail-silent', 'if os.path.exists(os.path.join(tmp, "run.fail")):\n    unreadable("run-show")\n', '', {'HEALTH run-show bad run id', 'HEALTH run-show fails', 'HEALTH run-show names another Run', 'HEALTH run-show not ok', 'HEALTH run-show with no Run', 'HEALTH run-show with no run field'}),
+    ('health-run-fail-silent', 'if os.path.exists(os.path.join(tmp, "run.fail")):\n    unreadable("run-current" if os.path.exists(os.path.join(tmp, "run.current")) else "run-show")\n', '', {'HEALTH run-show bad run id', 'HEALTH run-show fails', 'HEALTH run-show names another Run', 'HEALTH run-show not ok', 'HEALTH run-show with no Run', 'HEALTH run-show with no run field', 'HEALTH run-current fails with no Run named', 'HEALTH run-current bad holder with no Run named'}),
     ('health-inbox-fail-silent', 'if not isinstance(rows, list):\n    unreadable("inbox")\n', 'if not isinstance(rows, list):\n    pass\n', {'HEALTH a timed-out call stops the rest', 'HEALTH inbox fails', 'HEALTH inbox with no messages field'}),
     ('health-no-wedge-stop', 'then cepa_h_wedged=1; return 1; fi', 'then return 1; fi', {'HEALTH no call after a timeout', 'HEALTH a timed-out call stops the rest'}),
     ('health-no-vsock-retry', '  for try in 1 2; do\n    t=$(date', '  for try in 1; do\n    t=$(date', {'HEALTH worker-list vsock once', 'HEALTH vsock retry runs worker-list twice'}),
     ('health-dir-relative', '[[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"\n', '', {'HEALTHREF relative alert directory'}),
     ('health-cli-any', '  orca-ide|orca-dev) ;;', '  orca-ide|orca-dev|bash) ;;', {'HEALTHREF cli not orca'}),
+    # L46: with no Run named, only this pane's Run held here is checked.
+    ('health-run-arg-unchecked', '[[ $2 =~ ^run_[A-Za-z0-9_]{1,64}$ ]] || refuse', 'true || refuse', {'HEALTHBLOCK passes the named Run as its own argument', 'HEALTHREF run with a dash', 'HEALTHREF run with shell text'}),
+    ('health-want-gate-dropped', 'if [ -n "$cepa_h_want" ]; then', 'if true; then', {'HEALTH no Run named and none held here', 'HEALTH run-current bad holder with no Run named', 'HEALTH run-current fails with no Run named', "HEALTH this pane's Run held elsewhere is not checked", "HEALTH this pane's Run held here is checked"}),
+    ('health-adopts-any-holder', 'if h == sys.argv[2]:\n    print(i)', 'if True:\n    print(i)', {"HEALTH this pane's Run held elsewhere is not checked"}),
+    ('health-never-adopts', 'if h == sys.argv[2]:\n    print(i)', 'if False:\n    print(i)', {"HEALTH this pane's Run held here is checked"}),
+    ('health-current-label', 'unreadable("run-current" if os.path.exists(os.path.join(tmp, "run.current")) else "run-show")', 'unreadable("run-show")', {'HEALTH run-current bad holder with no Run named', 'HEALTH run-current fails with no Run named'}),
     # L45: the unbound alert.
     ('health-unbound-silent', 'holder != me and k not in acked:', 'False and k not in acked:', {'HEALTH unbound Run is reported'}),
-    ('health-unbound-holder-here', 'holder) and holder != me and k not in acked:', 'holder) and k not in acked:', {'HEALTH Run bound here is ok'}),
+    ('health-unbound-holder-here', 'holder) and holder != me and k not in acked:', 'holder) and k not in acked:', {'HEALTH Run bound here is ok', "HEALTH this pane's Run held here is checked"}),
     ('health-unbound-holder-unchecked', 'isinstance(holder, str) and re.fullmatch(r"term_[0-9a-f-]{36}", holder) and', 'isinstance(holder, str) and', {'HEALTH unbound needs a valid holder'}),
     ('health-unbound-ack-ignored', 'holder != me and k not in acked:', 'holder != me:', {'HEALTH acked unbound is not reported'}),
     ('health-unbound-me-unchecked', 'if run and me:\n    # L45', 'if run:\n    # L45', {"HEALTH unbound needs this terminal's handle"}),
@@ -442,7 +448,8 @@ REBIND_MUTANTS = [
     ('rebind-cli-relative-allowed', '  */*) refuse "a cli path must be absolute and equal ORCA_CLI_COMMAND" ;;\n', '', {'REBINDREF relative cli path'}),
     ('rebind-held-message-dropped', 'if [ "$cepa_rb_a_id" = "$cepa_rb_run" ] && [ "$cepa_rb_a_h" = "$cepa_rb_me" ]; then', 'if false; then', {'REBIND generation rose by two fails', 'REBIND generation unchanged fails'}),
     ('rebind-show-gen-unchecked', 'if type(g) is not int or not 0 <= g < 10 ** 9:\n    sys.exit(1)\n', '', {'REBIND huge generation fails', 'REBIND negative generation fails', 'REBIND run-show boolean generation fails'}),
-    # L46 (operator's choice in #116): run-current is server-wide.
+    # L46 (operator's choice in #116): a Run held elsewhere needs a run: line.
+    ('rebind-runcurrent-fail-ignored', '--json || failed "run-current failed"', '--json || true', {'REBIND run-current fails'}),
     ('rebind-norun-takes', 'if [ -z "$cepa_rb_want" ]; then', 'if false; then', {'REBIND empty run field is no Run', 'REBIND no run field and current Run bound here', 'REBIND no run field and no current Run', "REBIND no run field never takes run-current's Run", 'REBIND no run field reports a dashed Run id', "RULE2BLOCK without a run line never takes run-current's Run"}),
     ('rebind-norun-bound-here-ignored', '  if [ "$cepa_rb_cur_h" = "$cepa_rb_me" ]; then', '  if false; then', {'REBIND no run field and current Run bound here'}),
     ('rebind-no-agree-check', 'if [ "$cepa_rb_cur_id" != "$cepa_rb_run" ] && [ "$cepa_rb_confirm" != "$cepa_rb_run" ]; then', 'if false; then', {'REBIND bound here with another run field asks', 'REBIND named Run that run-current does not report asks', 'REBIND named Run with no current Run asks', 'RULE2BLOCK with a run line asks when run-current does not agree'}),

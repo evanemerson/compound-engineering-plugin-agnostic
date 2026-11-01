@@ -7,13 +7,15 @@
 # Usage: orca-health.sh <cli> [<run>]         report alerts
 #        orca-health.sh <cli> ack <key>...    mark alerts as shown to the operator
 #   <cli>  §12a's printed `cli=` value, checked as orca-send.sh checks it.
-#   <run>  optional: the Run this session named (§12b rule 2's `run:`
-#          source), `run_` then [A-Za-z0-9_]. Without it, no Run is checked.
-#          It is never taken from `run-current`, which is server-wide: on
-#          Orca 1.4.245 (coord@main, 2026-11-01, read only)
-#          `orca-ide orchestration run-current --json` returned the same Run
-#          from /tmp, from the cepa checkout and with ORCA_TERMINAL_HANDLE
-#          unset, so every repo's coordinator would check one repo's Run
+#   <run>  optional: the session's named Run (§12b rule 2 defines it),
+#          `run_` then [A-Za-z0-9_], read with `run-show`. Without it, the
+#          script reads this pane's `run-current` and checks that Run only
+#          when its `coordinator_handle` is ORCA_TERMINAL_HANDLE (it is then
+#          the named Run); a Run held elsewhere is not checked, only noted.
+#          `run-current` is per pane (Orca 1.4.245, 2026-11-01, read only:
+#          from a worker's pane it returned `"run": null` while another
+#          pane held a Run; `--from` with an invented handle returned
+#          `stable_pane_required`), so this never checks another pane's Run
 #          (punch-list L46).
 #   <key>  the text between `ORCA alert: ` and ` — ` on an alert line.
 #
@@ -101,8 +103,8 @@
 #     none (rule 8's limit), so an idle Run is still unwatched.
 #   - The alert files are on this machine. A send from another machine or
 #     another Orca host leaves no file here.
-#   - Its Run is the one the session named. A session that named none gets
-#     only the file and awaited alerts.
+#   - Its Run is the named one, or this pane's Run when this terminal holds
+#     it. A session with neither gets only the file and awaited alerts.
 #   - The inbox window is 200 rows, newest first (the whole store was 245 rows
 #     on 2026-10-31). An older question is not seen.
 #   - The bounds are fixed here, from one Run's history. A worker with a
@@ -227,6 +229,30 @@ print(r["id"])
 ' "$cepa_h_tmp/run.json" "$cepa_h_want" 2>/dev/null) || { cepa_h_run=; : >"$cepa_h_tmp/run.fail"; }
   else
     : >"$cepa_h_tmp/run.fail"
+  fi
+else
+  # No Run named: this pane's run-current Run counts only when this
+  # terminal holds it. Another holder is noted, never checked.
+  if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-current --json; then
+    cepa_h_run=$(python3 -I -c '
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+r = d["result"]["run"] if d.get("ok") is True else sys.exit(1)
+if r is None:
+    sys.exit(0)
+i, h = r["id"], r["coordinator_handle"]
+if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):
+    sys.exit(1)
+if not (isinstance(h, str) and re.fullmatch(r"term_[0-9a-f-]{36}", h)):
+    sys.exit(1)
+if h == sys.argv[2]:
+    print(i)
+else:
+    open(sys.argv[3], "w").write("%s %s" % (i, h))
+' "$cepa_h_tmp/run.json" "${ORCA_TERMINAL_HANDLE:-}" "$cepa_h_tmp/run.other" 2>/dev/null) \
+      || { cepa_h_run=; : >"$cepa_h_tmp/run.fail"; : >"$cepa_h_tmp/run.current"; }
+  else
+    : >"$cepa_h_tmp/run.fail"; : >"$cepa_h_tmp/run.current"
   fi
 fi
 mkdir -p "$cepa_h_tmp/show"
@@ -407,9 +433,14 @@ for n in listdir(adir, "alert-dir"):
 if other:
     notes.append("%d alert file%s for other worktrees or repos not shown" % (other, "" if other == 1 else "s"))
 
-# 2. The bound Run's live dispatches.
+# 2. The named Run's live dispatches (or this pane's Run held here).
 if os.path.exists(os.path.join(tmp, "run.fail")):
-    unreadable("run-show")
+    unreadable("run-current" if os.path.exists(os.path.join(tmp, "run.current")) else "run-show")
+try:
+    oid, oh = open(os.path.join(tmp, "run.other")).read().split()
+    notes.append("this pane's Run %s is held by %s, not this terminal; not checked (§12b rule 2)" % (oid, oh))
+except (OSError, ValueError):
+    pass
 if run and me:
     # L45: the Run's record names the terminal Orca prompts. A restarted
     # coordinator's Run still names the dead one until it re-binds.
@@ -519,7 +550,7 @@ if seen:
     print("ORCA health: %d alert%s — ask the operator (§12b rule 8)%s" % (len(seen), "" if len(seen) == 1 else "s", tail))
     print("Ending first line: Needed from you: check the Orca alerts below")
     sys.exit(1)
-print("ORCA health: ok — %s%s" % ("Run %s checked" % run if run else "no Run named; alert files and own questions checked", tail))
+print("ORCA health: ok — %s%s" % ("Run %s checked" % run if run else "no Run named or held here; alert files and own questions checked", tail))
 PY
 cepa_h_rc=$?
 # Any other exit is the reader's own failure: an alert, never a quiet pass.
