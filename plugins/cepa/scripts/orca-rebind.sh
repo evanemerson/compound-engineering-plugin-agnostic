@@ -50,7 +50,9 @@
 # Measured on Orca 1.4.245 (WSL), 2026-11-01: `run-use --help`, `run-current
 # --help`, `run-show --json` (result.run.{id,coordinator_handle,
 # consumer_generation}) and `terminal list --json` (result.terminals[].handle,
-# totalCount, truncated). No throwaway Run was made to probe `run-use`:
+# totalCount, truncated, hostScope.omittedHostIds: a list with any omitted
+# host reads as unknown, never as "gone"). An id Orca itself returns may also
+# hold `-` (orca-health.sh accepts it too); a `run:` field may not. No throwaway Run was made to probe `run-use`:
 # Orca 1.4.245 has no verb that closes a Run (`reset` clears every Run's
 # state), so a probe Run could not be removed. The `run-use` result itself
 # is not parsed: the re-read is the proof.
@@ -60,7 +62,13 @@
 #     dispatched worker that runs this gets `ok — no Run` or a failed
 #     `run-use`, never a stolen Run.
 #   - `terminal list` lists one Orca server's terminals. A Run held by a
-#     terminal on another paired server reads as absent here.
+#     terminal on a paired server that list does not cover reads as absent
+#     here; a host the list says it omitted reads as unknown (exit 1).
+#   - The proof is one re-read. Two sessions that re-bind the same Run at
+#     the same moment can both print `done`; the later `run-use` wins, and
+#     the loser's next rule 8 health check raises `unbound`.
+#   - Worst case about 150 seconds (each read 2 x 17, run-use 17): run the
+#     block with a tool timeout of at least 3 minutes.
 #   - It does not wait for or prove Orca's prompts reach the new terminal;
 #     it proves the Run's record names it.
 set -u
@@ -73,7 +81,7 @@ ask() {
 }
 failed() {
   echo "ORCA rebind failed: $1"
-  echo "Ending first line: Needed from you: re-bind the Run by hand (orchestration run-use) and check run-current"
+  echo "Ending first line: Needed from you: check which terminal holds the Run (orchestration run-current), close it if it is dead, then ask this session to run the re-bind again"
   exit 3
 }
 
@@ -144,7 +152,7 @@ r = d["result"]["run"] if d.get("ok") is True else sys.exit(1)
 if r is None:
     sys.exit(0)
 i, h = r["id"], r["coordinator_handle"]
-if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_]{1,64}", i)):
+if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):
     sys.exit(1)
 if not (isinstance(h, str) and re.fullmatch(r"term_[0-9a-f-]{36}", h)):
     sys.exit(1)
@@ -195,6 +203,9 @@ d = json.load(open(sys.argv[1]))
 r = d["result"] if d.get("ok") is True else sys.exit(1)
 t = r["terminals"]
 if not isinstance(t, list) or r.get("truncated") is not False or r.get("totalCount") != len(t):
+    sys.exit(1)
+# A host Orca left out of the list could hold the terminal (PR #113 review).
+if r["hostScope"]["omittedHostIds"] != []:
     sys.exit(1)
 hs = [x["handle"] for x in t]
 print("live" if sys.argv[2] in hs else "gone")

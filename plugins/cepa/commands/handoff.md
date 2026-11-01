@@ -802,8 +802,7 @@ the operator actually pastes into a fresh session. Requirements:
   next coordinator's re-bind then reads `run-current` alone. A worker
   writes no such line: its Run is its coordinator's, and `run-use` refuses
   a worker its own Run. Like the name line, these lines live only in the
-  block. Why: after the 2026-11-01 reboot, the Run still named the dead
-  terminal, and nothing told the new coordinator to re-bind it.
+  block. §12b rule 2 owns why (punch-list L45).
 - **Every terminal handle in the prompt is valid only while its terminal is
   open.** When the block names one (a `Report to:` line, another
   coordinator's handle, a worker's handle), it adds the line `Terminal
@@ -811,7 +810,8 @@ the operator actually pastes into a fresh session. Requirements:
   a restart, check each one with terminal list before you send to it.`
   after the `Orca Run:` lines (after the `Report to:` line when there are
   none). Never append it to the `Report to:` line: rule 2 requires that
-  line to be exact. A restart kills every handle (§12b rule 2).
+  line to be exact. Rule 1's open-terminal rule (`cepa:autonomy` §12b)
+  owns why.
 - **Absolute repo path and exact starting SHA** in the first lines after it.
 - **Same content as the saved file**, not a summary of it — with one
   exception: the name line above lives only in the block. The saved file is

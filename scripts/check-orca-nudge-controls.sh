@@ -410,16 +410,17 @@ HEALTH_MUTANTS = [
     ('health-unbound-holder-here', 'holder) and holder != me and k not in acked:', 'holder) and k not in acked:', {'HEALTH Run bound here is ok'}),
     ('health-unbound-holder-unchecked', 'isinstance(holder, str) and re.fullmatch(r"term_[0-9a-f-]{36}", holder) and', 'isinstance(holder, str) and', {'HEALTH unbound needs a valid holder'}),
     ('health-unbound-ack-ignored', 'holder != me and k not in acked:', 'holder != me:', {'HEALTH acked unbound is not reported'}),
+    ('health-unbound-me-unchecked', 'if run and me:\n    # L45', 'if run:\n    # L45', {"HEALTH unbound needs this terminal's handle"}),
     ('health-unbound-key-refused', '|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}', '', {'HEALTH unbound ack prints the key'}),
 ]
 # REBIND (punch-list L45): mutants of orca-rebind.sh, run by the health legs.
 REBIND_MUTANTS = [
     ('rebind-no-live-check', 'case "$cepa_rb_live" in\n  gone) ;;', 'case gone in\n  gone) ;;',
-     {'REBIND live holder is never taken', 'REBIND truncated terminal list asks', 'REBIND short terminal list asks', 'REBIND terminal list not ok asks'}),
+     {'REBIND live holder is never taken', 'REBIND truncated terminal list asks', 'REBIND short terminal list asks', 'REBIND terminal list not ok asks', 'REBIND omitted host asks', 'REBIND list with no host scope asks'}),
     ('rebind-truncated-ignored', ' or r.get("truncated") is not False', '', {'REBIND truncated terminal list asks'}),
     ('rebind-total-ignored', ' or r.get("totalCount") != len(t)', '', {'REBIND short terminal list asks'}),
     ('rebind-no-reread-check', 'if [ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ]; then', 'if true; then',
-     {'REBIND mismatch after run-use fails', 'REBIND no Run after run-use fails', 'REBIND run-use is not retried on vsock'}),
+     {'REBIND mismatch after run-use fails', 'REBIND no Run after run-use fails', 'REBIND run-use is not retried on vsock', 'REBIND other Run bound here after run-use fails'}),
     ('rebind-differ-ignored', 'if [ -n "$cepa_rb_cur_id" ] && [ -n "$cepa_rb_want" ] && [ "$cepa_rb_cur_id" != "$cepa_rb_want" ]; then', 'if false; then',
      {'REBIND differing Runs ask'}),
     ('rebind-run-unchecked', '[ -z "$cepa_rb_want" ] || [[ $cepa_rb_want =~ ^run_[A-Za-z0-9_]{1,64}$ ]] \\', '[ -z "$cepa_rb_want" ] || true \\',
@@ -432,6 +433,9 @@ REBIND_MUTANTS = [
     ('rebind-show-id-unchecked', '  [ "${cepa_rb_shown% *}" = "$cepa_rb_run" ] || failed "run-show did not return $cepa_rb_run"\n', '', {'REBIND run-show of another Run fails'}),
     ('rebind-handle-unchecked', 'if not (isinstance(h, str) and re.fullmatch(r"term_[0-9a-f-]{36}", h)):\n    sys.exit(1)\n', '', {'REBIND run-current bad shape fails'}),
     ('rebind-rest-ignored', '[ -z "${cepa_rb_rest//[[:space:]]/}" ] || refuse', 'true || refuse', {'REBINDREF line after fields'}),
+    ('rebind-host-scope-ignored', 'if r["hostScope"]["omittedHostIds"] != []:\n    sys.exit(1)\n', '', {'REBIND omitted host asks', 'REBIND list with no host scope asks'}),
+    ('rebind-after-handle-only', 'if [ "$cepa_rb_after" = "$cepa_rb_run $cepa_rb_me" ]; then', 'if [ "${cepa_rb_after#* }" = "$cepa_rb_me" ]; then', {'REBIND other Run bound here after run-use fails'}),
+    ('rebind-dashed-id-refused', 'if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):', 'if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_]{1,64}", i)):', {'REBIND a dashed Run id from Orca is re-bound'}),
     ('rebind-no-run-show', 'if [ -z "$cepa_rb_old" ]; then', 'if false; then',
      {'REBIND no current Run uses run-show', 'REBIND run-show names this terminal', 'REBIND run-show of another Run fails'}),
 ]

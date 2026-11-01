@@ -1500,6 +1500,8 @@ if LEGS in ("all", "health"):
     health("HEALTH Run bound here is ok", 0, [HOK], runcur=hrun(H))
     health("HEALTH acked unbound is not reported", 0, [HOK], runcur=hrun(OTHER), acked=["unbound:%s:%d" % (RUN, HOUR)])
     health("HEALTH unbound needs a valid holder", 0, [HOK], runcur=hrun("term_x; rm -rf /"))
+    health("HEALTH unbound needs this terminal's handle", 0,
+           [HOK + " (own-question check off: ORCA_TERMINAL_HANDLE is not a term_ handle)"], runcur=hrun(OTHER), me="term_x")
     health("HEALTH unbound ack prints the key", 0, ["ORCA ack: unbound:%s:%d" % (RUN, HOUR)],
            args=["orca-ide", "ack", "unbound:%s:%d" % (RUN, HOUR)], calls_want=[])
     # Acks: per worktree, checked before they are reported.
@@ -1546,16 +1548,18 @@ if LEGS in ("all", "health"):
     def rrun(rid, holder):
         return json.dumps({"ok": True, "result": {"run": {"id": rid, "coordinator_handle": holder,
                                                           "consumer_generation": 2}}})
-    def tlist(*hs, total=None, trunc=False):
+    def tlist(*hs, total=None, trunc=False, omitted=()):
         return json.dumps({"ok": True, "result": {"terminals": [{"handle": h} for h in hs],
                                                   "totalCount": len(hs) if total is None else total,
-                                                  "truncated": trunc}})
+                                                  "truncated": trunc,
+                                                  "hostScope": {"hostIds": ["local"], "omittedHostIds": list(omitted)}}})
     RCUR = ["orchestration", "run-current", "--json"]
     RUSE = ["orchestration", "run-use", "--id", RB_RUN, "--json"]
     RSHOW = ["orchestration", "run-show", "--id", RB_RUN, "--json"]
     TLIST = ["terminal", "list", "--json"]
     ASKEND = "Ending first line: Needed from you: "
-    FAILEND = ASKEND + "re-bind the Run by hand (orchestration run-use) and check run-current"
+    FAILEND = ASKEND + ("check which terminal holds the Run (orchestration run-current), close it if it is dead, "
+                        "then ask this session to run the re-bind again")
     def rebind(name, rc, want, stdin="cli: orca-ide\n", cur=None, after=None, show=None, tl=None, me=H,
                env_extra=None, calls_want=None, args=()):
         env = {"STUB_RUNCUR": cur if cur is not None else rrun(RB_RUN, DEAD),
@@ -1605,6 +1609,17 @@ if LEGS in ("all", "health"):
                "is unknown; nothing was changed" % DEAD, ASKEND + "check whether terminal %s is still open" % DEAD]
     rebind("REBIND truncated terminal list asks", 1, PARTIAL, tl=tlist(H, trunc=True), calls_want=[RCUR, TLIST])
     rebind("REBIND short terminal list asks", 1, PARTIAL, tl=tlist(H, total=5), calls_want=[RCUR, TLIST])
+    rebind("REBIND omitted host asks", 1, PARTIAL, tl=tlist(H, omitted=("paired-1",)), calls_want=[RCUR, TLIST])
+    rebind("REBIND list with no host scope asks", 1, PARTIAL,
+           tl=json.dumps({"ok": True, "result": {"terminals": [{"handle": H}], "totalCount": 1, "truncated": False}}),
+           calls_want=[RCUR, TLIST])
+    rebind("REBIND other Run bound here after run-use fails", 3,
+           ["ORCA rebind failed: after run-use (exit 0), run-current reports run_other %s, not %s bound to this terminal"
+            % (H, RB_RUN), FAILEND], after=rrun("run_other", H), calls_want=[RCUR, TLIST, RUSE, RCUR])
+    rebind("REBIND a dashed Run id from Orca is re-bound", 0,
+           ["ORCA rebind: done — run_ab-12 moved from %s to this terminal" % DEAD], cur=rrun("run_ab-12", DEAD),
+           after=rrun("run_ab-12", H),
+           calls_want=[RCUR, TLIST, ["orchestration", "run-use", "--id", "run_ab-12", "--json"], RCUR])
     rebind("REBIND terminal list not ok asks", 1, PARTIAL, tl=json.dumps({"ok": False}), calls_want=[RCUR, TLIST])
     rebind("REBIND terminal list fails asks", 1,
            ["ORCA rebind: ask — terminal list failed, so whether %s is still open is unknown; nothing was changed" % DEAD,
