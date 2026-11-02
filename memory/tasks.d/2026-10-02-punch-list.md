@@ -1527,8 +1527,10 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
 L47. **Too many send blocks are refused: 4 of the first sends after the reboot.**
     status: pending
     severity: P2
-    owner: unassigned — after L46 merges (same files: §12b rule 1, the
-      send script and `check-orca-nudge.sh`)
+    owner: roles (`tab30@roles`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L47 + L58 in parallel": task
+      `task_17486046d4ef`, dispatch `ctx_8a8b0b19abef`, branch
+      `fix/roles/send-refusals`)
     Measured 2026-11-01 by coord@main from the alert files in
     `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
     senders' terminals (Orca `terminal read`, read only). Sessions started on
@@ -1756,7 +1758,10 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
 L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive pre-check.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab9@integrity`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L47 + L58 in parallel": task
+      `task_dde0c2487da4`, dispatch `ctx_f6d836d4a425`, branch
+      `fix/integrity/lane-followups`)
     From PR #118 (tab26@roles). (1) rm refuses a reused lane after a squash
     merge and branch deletion, because its HEAD reflog holds commits no
     origin ref has (§11b's test, per the operator's #4 decision); tab26
