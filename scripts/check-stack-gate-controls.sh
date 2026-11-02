@@ -2,7 +2,9 @@
 # Controls for scripts/check-stack-gate.sh. Each mutant is one substitution in
 # a temp copy of plugins/cepa/scripts/stack-gate.sh. It must turn the check
 # red with EXACTLY the MISS cases named beside it (or, for a mutant marked
-# None, with at least one MISS), so each mutant shows which case catches it
+# None, with at least one MISS and the check's summary line — a crashed check
+# counts as a failed control, never a kill), so each mutant shows which case
+# catches it
 # and that no other case does. The unmutated copy must run with no MISS line,
 # or every red below proves nothing. A mutant whose anchor text is not found
 # exactly once is a MISS, never a skip: the shipped script changed shape and
@@ -40,20 +42,25 @@ MUTANTS = [
     ("octal", "val=$((10#$val))", "val=$((val))", {"CONFIG leading zero is decimal"}),
     ("digits-unbounded", "^[0-9]{1,6}$ ]]; then", "^[0-9]+$ ]]; then",
      {"CONFIG seven digits warns, default kept"}),
-    ("conf-sourced", "cepa_sg_read_conf\n\n# --- lock",
-     '. "$cepa_sg_conf" 2>/dev/null; cepa_sg_read_conf\n\n# --- lock', {"CONFIG shell text never runs"}),
+    ("conf-sourced", 'cepa_sg_read_conf || cepa_sg_refuse "cannot read the config',
+     '. "$cepa_sg_conf" 2>/dev/null; cepa_sg_read_conf || cepa_sg_refuse "cannot read the config',
+     {"CONFIG shell text never runs"}),
+    ("conf-unreadable-ok", 'is not a readable file"\n    return 1', 'is not a readable file"\n    return 0',
+     {"CONFIG unreadable file refuses", "COUNTMODE unreadable config is unknown"}),
     ("unknown-key-silent",
      '*) echo "STACK gate: WARN — $cepa_sg_conf line $n: unknown key $key; ignored" >&2; continue ;;',
      "*) continue ;;", {"CONFIG unknown key warns"}),
     ("max-ignored", "max_running) cepa_sg_max=$val ;;", "max_running) ;;", None),
     # COUNT
     ("self-counted", 'grep -cvxF -- "$cepa_sg_proj"', "grep -c .", {"COUNT own running stack not counted"}),
-    ("stopped-counted", "--filter status=running \\", "-a \\",
-     {"COUNT stopped stacks not counted", "COUNTMODE one line"}),
+    ("stopped-counted", "--filter status=running --filter status=paused --filter status=restarting \\", "-a \\",
+     {"COUNT stopped stacks not counted", "COUNTMODE one line", "COUNT paused and restarting stacks count"}),
+    ("paused-not-counted", "--filter status=running --filter status=paused --filter status=restarting \\",
+     "--filter status=running \\", {"COUNT paused and restarting stacks count"}),
+    ("ids-truncated", "docker ps --no-trunc \\", "docker ps \\", None),
     ("any-project-counted", "[[ $p == *-wt-* ]] || continue", "true || continue",
      {"COUNT non-wt projects not counted", "COUNTMODE one line"}),
-    ("docker-failure-ok", '    return 1\n  }\n  cepa_sg_rows=""', '    return 0\n  }\n  cepa_sg_rows=""',
-     {"COUNT docker failure refuses", "COUNTMODE docker failure is unknown"}),
+    ("docker-failure-ok", '    rm -f "$err"\n    return 1\n  fi', '    rm -f "$err"\n    return 0\n  fi', None),
     # MEM
     ("mem-strict", '[ "$cepa_sg_mem" -lt "$cepa_sg_min" ]', '[ "$cepa_sg_mem" -le "$cepa_sg_min" ]',
      {"MEM exactly the minimum passes"}),
@@ -62,15 +69,28 @@ MUTANTS = [
     ("meminfo-failure-ok", 'cepa_sg_refuse "cannot read MemAvailable from', 'true "cannot read MemAvailable from',
      {"MEM missing file refuses", "MEM no MemAvailable line refuses"}),
     # RUN
-    ("exit-0", '"$@" {cepa_sg_fd}<&-\nexit $?', '"$@" {cepa_sg_fd}<&-\nexit 0', {"RUN exit code comes through"}),
-    ("argv-split", '"$@" {cepa_sg_fd}<&-', '$@ {cepa_sg_fd}<&-', None),
+    ("exit-0", 'command "$@" {cepa_sg_fd}<&-\nexit $?', 'command "$@" {cepa_sg_fd}<&-\nexit 0',
+     {"RUN exit code comes through"}),
+    ("argv-split", 'command "$@" {cepa_sg_fd}<&-', 'command $@ {cepa_sg_fd}<&-', None),
     # LOCK
-    ("no-lock", 'flock -w "$cepa_sg_wait" "$cepa_sg_fd" ||', "true ||",
-     {"LOCK two starts on one count", "LOCK held lock refuses after the wait"}),
-    ("lock-inherited", '"$@" {cepa_sg_fd}<&-', '"$@"', {"LOCK not held by a process the command leaves"}),
-    ("wait-ignored", 'flock -w "$cepa_sg_wait"', "flock -w 600", {"LOCK held lock refuses after the wait"}),
+    ("no-lock", 'flock -w "$cepa_sg_wait" "$cepa_sg_fd"\n', "true\n",
+     {"LOCK two starts on one count", "LOCK held lock refuses after the wait",
+      "LOCK nested gate for another project waits"}),
+    ("lock-inherited", 'command "$@" {cepa_sg_fd}<&-', 'command "$@" ', {"LOCK not held by a process the command leaves"}),
+    ("nested-not-exported", 'CEPA_STACK_GATE_HELD="$cepa_sg_proj" command "$@"', 'command "$@"',
+     {"LOCK nested gate for the same project runs"}),
+    ("nested-any-project", 'if [ "${CEPA_STACK_GATE_HELD:-}" = "$cepa_sg_proj" ]; then',
+     'if [ -n "${CEPA_STACK_GATE_HELD:-}" ]; then', {"LOCK nested gate for another project waits"}),
+    ("wait-silent", 'echo "STACK gate: waiting up to ${cepa_sg_wait}s', 'true "STACK gate: waiting up to ${cepa_sg_wait}s',
+     {"LOCK a waiting start says so"}),
+    ("home-unchecked", 'if [ -z "${HOME:-}" ]; then', 'if false; then', {"USAGE HOME unset"}),
+    ("wait-ignored", 'flock -w "$cepa_sg_wait"', "flock -w 600",
+     {"LOCK held lock refuses after the wait", "LOCK nested gate for another project waits"}),
     # LIST
-    ("shortest-idle-first", "sort -t $'\\t' -k1,1nr", "sort -t $'\\t' -k1,1n", {LIST}),
+    ("shortest-idle-first", "-k1,1n -k2,2nr", "-k1,1n -k2,2n", {LIST}),
+    ("unknown-idle-last", "-k1,1n -k2,2nr", "-k1,1nr -k2,2nr", {"LIST unreadable start time sorts first"}),
+    ("inspect-failure-silent", 'note=" (docker inspect failed: idle times unknown)"', 'note=""',
+     {"LIST inspect failure is said"}),
     ("oldest-container", '[ "$t" -gt "${newest[$p]}" ]', '[ "$t" -lt "${newest[$p]}" ]', {LIST}),
     ("repo-from-project", 'repo="${w%/.claude/worktrees/*}"; repo="${repo##*/}"', 'repo="${proj%%-wt-*}"', {LIST}),
     ("label-uncleaned", "printf '%s' \"${v//[!A-Za-z0-9._\\/-]/?}\"", "printf '%s' \"$v\"",
@@ -80,7 +100,8 @@ MUTANTS = [
      'then shift; mkdir -p "$cepa_sg_dir"; cepa_sg_count_mode "$@"; fi', {"COUNTMODE creates nothing"}),
     ("count-locks", 'then shift; cepa_sg_count_mode "$@"; fi',
      'then shift; flock "$cepa_sg_dir" true 2>/dev/null; cepa_sg_count_mode "$@"; fi', {"COUNTMODE takes no lock"}),
-    ("count-unknown-exit0", '— $cepa_sg_err"\n    exit 1', '— $cepa_sg_err"\n    exit 0',
+    ("count-unknown-exit0", 'if ! cepa_sg_read_running; then\n    echo "STACK count: running=unknown limit=$cepa_sg_max — $cepa_sg_err"\n    exit 1',
+     'if ! cepa_sg_read_running; then\n    echo "STACK count: running=unknown limit=$cepa_sg_max — $cepa_sg_err"\n    exit 0',
      {"COUNTMODE docker failure is unknown"}),
 ]
 
@@ -101,6 +122,11 @@ def run(text):
     for line in r.stdout.splitlines():
         if line.startswith("MISS "):
             cases.add(line[5:].split(": ", 1)[0])
+    # A check that crashed (no summary line) proves nothing about the mutant.
+    if not re.search(r"^check-stack-gate: \d+ passed, \d+ failed$", r.stdout, re.M):
+        cases = {"CRASH"}
+        out = r.stdout + r.stderr
+        return 99, cases, out
     return r.returncode, cases, r.stdout
 
 
@@ -121,7 +147,10 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
     results = {n: (w, f.result()) for n, (w, f) in jobs.items()}
 
 for name, (want, (rc, cases, out)) in results.items():
-    if rc == 0 or not cases:
+    if cases == {"CRASH"}:
+        print(f"MISS control {name}: the check crashed instead of reporting: {out[-300:]!r}")
+        failed += 1
+    elif rc == 0 or not cases:
         print(f"MISS control {name}: mutant stayed green")
         failed += 1
     elif want is not None and cases != want:

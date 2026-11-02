@@ -13,39 +13,73 @@
 # exact set of cases each mutant breaks. Every refused or usage case also
 # asserts the start command did not run. Legs:
 #   USAGE     — no arguments, no `--`, no command, a project without `-wt-`
-#               or with shell text, `--count` with an argument: exit 2.
+#               or with shell text, `--count` with an argument, HOME unset:
+#               exit 2.
 #   CONFIG    — defaults (6 / 2048); a value is read; `010` is ten, not
 #               octal eight; a bad, 7-digit or unknown entry WARNs and keeps
-#               the default; shell text in the file never runs.
-#   COUNT     — distinct projects, not containers; stopped stacks, non-`-wt-`
-#               projects and the caller's own running stack are not counted;
-#               a docker failure refuses.
+#               the default; shell text in the file never runs; a file that
+#               exists but cannot be read refuses (skipped as root).
+#   COUNT     — distinct projects, not containers; stopped (exited, created)
+#               stacks, non-`-wt-` and non-compose containers and the
+#               caller's own running stack are not counted; paused and
+#               restarting stacks are; an empty working_dir label does not
+#               shift the fields; a docker failure refuses; `docker ps` is
+#               called, and never with -a.
 #   MEM       — below the minimum refuses; exactly the minimum passes; a
 #               missing file or a file with no MemAvailable refuses.
 #   RUN       — one ok line, then the command; its exit code and argv come
 #               through unchanged.
 #   LOCK      — two starts on one count: the second waits and is refused; a
 #               process the command leaves running does not hold the lock; a
-#               held lock refuses after lock_wait_seconds.
-#   LIST      — a refusal lists every running `-wt-` stack, longest idle
-#               first, with repo and lane; a hostile label prints as `?`.
-#   COUNTMODE — `--count` prints its one line, exits 1 when docker fails,
-#               takes no lock and creates no directory.
+#               held lock refuses after lock_wait_seconds and says it waited;
+#               a gate nested for the same project runs at once, for another
+#               project it waits and is refused. Ordering is by
+#               sentinel (the first start's command touches a file; an outside
+#               holder prints `ready` under flock), never by a sleep.
+#   LIST      — a refusal lists every running `-wt-` stack, unknown idle
+#               first, then longest idle first, with repo and lane; a hostile
+#               label prints as `?`; a failed `docker inspect` is said.
+#   COUNTMODE — `--count` prints its one line, exits 1 when docker fails or
+#               the config cannot be read, takes no lock, creates nothing.
+#
+# The stub is strict where the gate depends on docker's behavior: unknown ps
+# flags exit 64, ids are 12 characters without --no-trunc, `label=` and
+# `status=` filters apply. Temp dirs and lock holders are removed at exit.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
 CEPA_SG_SCRIPT="$(realpath "${1:-plugins/cepa/scripts/stack-gate.sh}")" \
 python3 - <<'PY'
-import datetime, json, os, shutil, subprocess, sys, tempfile, time
+import atexit, datetime, hashlib, json, os, shutil, subprocess, sys, tempfile, time
 
 SCRIPT = os.environ["CEPA_SG_SCRIPT"]
 STUB = os.path.realpath("scripts/fixtures/stack-gate-docker-stub.py")
 passed = failed = 0
-NOW = datetime.datetime.now(datetime.timezone.utc)
+DIRS, PROCS = [], []
+
+
+def cleanup():
+    for pr in PROCS:
+        try:
+            pr.kill()
+        except Exception:
+            pass
+    for d in DIRS:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+atexit.register(cleanup)
+
+
+def hexid(name):
+    return hashlib.sha256(name.encode()).hexdigest()
 
 
 def ago(sec):
-    return (NOW - datetime.timedelta(seconds=sec)).strftime("%Y-%m-%dT%H:%M:%S.123456789Z")
+    # Relative to the moment the fixture is built, not to the check's start:
+    # a case that waits must not shift a later case's idle times.
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - datetime.timedelta(seconds=sec)).strftime("%Y-%m-%dT%H:%M:%S.123456789Z")
 
 
 def miss(case, why):
@@ -62,6 +96,7 @@ def ok():
 class Env:
     def __init__(self, containers=(), conf=None, mem_mib=8000, meminfo=None):
         self.root = tempfile.mkdtemp(prefix="cepa-sg-")
+        DIRS.append(self.root)
         self.home = os.path.join(self.root, "home")
         os.makedirs(self.home)
         bindir = os.path.join(self.root, "bin")
@@ -97,10 +132,31 @@ class Env:
     def ran(self):
         return os.path.exists(self.marker)
 
-    def run(self, args, extra_env=None, timeout=60):
+    def run(self, args, extra_env=None, timeout=60, unset=()):
         env = dict(self.env, **(extra_env or {}))
-        return subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True,
-                              text=True, timeout=timeout, cwd=self.root)
+        for k in unset:
+            env.pop(k, None)
+        try:
+            return subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True,
+                                  text=True, timeout=timeout, cwd=self.root)
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(args, -9, "", f"timed out after {timeout}s")
+
+    def ps_logged(self):
+        if not os.path.exists(self.log):
+            return []
+        return [a for a in (json.loads(l) for l in open(self.log)) if a and a[0] == "ps"]
+
+    def hold_lock(self, secs):
+        """Hold the gate's lock from outside; return only once it is held."""
+        lockdir = os.path.join(self.home, ".config", "cepa")
+        os.makedirs(lockdir, exist_ok=True)
+        pr = subprocess.Popen(["flock", lockdir, "sh", "-c", f"echo ready; exec sleep {secs}"],
+                              stdout=subprocess.PIPE, text=True)
+        PROCS.append(pr)
+        if pr.stdout.readline().strip() != "ready":
+            raise SystemExit("MISS harness: lock holder never took the lock")
+        return pr
 
     def popen(self, args):
         return subprocess.Popen(["bash", SCRIPT] + args, env=self.env, stdout=subprocess.PIPE,
@@ -108,8 +164,8 @@ class Env:
 
 
 def wt(project, n=1, state="running", wd=None, started=3600, idp=None):
-    wd = wd or f"/home/u/webapps/{project.split('-wt-')[0]}/.claude/worktrees/{project.split('-wt-')[1]}"
-    return [{"project": project, "wd": wd, "id": f"{idp or project}-c{k}", "state": state,
+    wd = wd if wd is not None else f"/home/u/webapps/{project.split('-wt-')[0]}/.claude/worktrees/{project.split('-wt-')[1]}"
+    return [{"project": project, "wd": wd, "id": hexid(f"{idp or project}-c{k}"), "state": state,
              "started": ago(started)} for k in range(n)]
 
 
@@ -176,6 +232,13 @@ for case, args in [
     else:
         ok()
 
+e = Env()
+r = e.run(["n-wt-x", "--"] + e.touch_cmd(), unset=("HOME",))
+if r.returncode != 2 or e.ran() or "STACK gate: usage — HOME is not set" not in r.stderr:
+    miss("USAGE HOME unset", f"rc {r.returncode}, ran {e.ran()}, err {r.stderr!r}")
+else:
+    ok()
+
 # ---------------- CONFIG ----------------
 e = Env(stacks(5)); expect_ok("CONFIG default limit 6 passes 5", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 6", "minimum 2048 MiB"])
 e = Env(stacks(6)); expect_refused("CONFIG default limit 6 refuses 6", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 6"])
@@ -198,6 +261,12 @@ if any(os.path.exists(f"{pwn}{k}") for k in range(1, 5)):
     miss("CONFIG shell text never runs", "a config line ran")
 else:
     expect_ok("CONFIG shell text never runs", e, r, ["limit 6"], warn="WARN")
+e = Env(stacks(1), conf="max_running=1\n")
+os.chmod(os.path.join(e.home, ".config", "cepa", "stack-gate.conf"), 0)
+if os.access(os.path.join(e.home, ".config", "cepa", "stack-gate.conf"), os.R_OK):
+    ok()  # running as root: an unreadable file cannot be made; nothing to test
+else:
+    expect_refused("CONFIG unreadable file refuses", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["cannot read the config"])
 e = Env(conf="min_available_mib=4000\n", mem_mib=3000)
 expect_refused("CONFIG minimum memory is read", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["3000 MiB available, minimum 4000 MiB"])
 
@@ -206,11 +275,20 @@ e = Env(wt("big-wt-a", n=4), conf="max_running=2\n")
 expect_ok("COUNT projects, not containers", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["1 other running -wt- stacks"])
 e = Env(wt("r-wt-a", state="exited") + wt("r-wt-b", state="exited"), conf="max_running=1\n")
 expect_ok("COUNT stopped stacks not counted", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["0 other running"])
-args_logged = [json.loads(l) for l in open(e.log)] if os.path.exists(e.log) else []
-if any(a and a[0] == "ps" and ("-a" in a or "--all" in a) for a in args_logged):
+if not e.ps_logged():
+    miss("COUNT stopped stacks not counted", "docker ps was never called")
+elif any("-a" in a or "--all" in a for a in e.ps_logged()):
     miss("COUNT stopped stacks not counted", "docker ps was called with -a")
-e = Env([{"project": p, "wd": "/x/" + p, "id": p, "state": "running", "started": ago(60)}
-         for p in ("dpcpro", "helm", "traefik")], conf="max_running=1\n")
+e = Env(wt("r-wt-p", state="paused") + wt("r-wt-q", state="restarting") + wt("r-wt-c", state="created"),
+        conf="max_running=2\n")
+expect_refused("COUNT paused and restarting stacks count", e, e.run(["n-wt-x", "--"] + e.touch_cmd()),
+               ["2 running -wt- stacks other than n-wt-x"])
+e = Env(wt("r-wt-e", wd=""), conf="max_running=1\n")
+expect_refused("COUNT empty working_dir label still counts", e, e.run(["n-wt-x", "--"] + e.touch_cmd()),
+               ["r-wt-e (repo r, lane unknown, idle 1h0m)"])
+e = Env([{"project": p, "wd": "/x/" + p, "id": hexid(p), "state": "running", "started": ago(60)}
+         for p in ("dpcpro", "helm", "traefik")]
+        + [{"id": hexid("plain"), "state": "running", "started": ago(60)}], conf="max_running=1\n")
 expect_ok("COUNT non-wt projects not counted", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["0 other running"])
 e = Env(wt("n-wt-x", n=2), conf="max_running=1\n")
 expect_ok("COUNT own running stack not counted", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["0 other running", "already running"])
@@ -241,11 +319,18 @@ else:
 
 # ---------------- LOCK ----------------
 e = Env(conf="max_running=1\n")
-add = lambda p, d: ["bash", "-c", f'sleep {d}; "$0" add {p} /w/{p} {p}-c0; echo {p} >> {e.root}/started', STUB]
+add = lambda p, d: ["bash", "-c", f'touch {e.root}/entered-{p}; sleep {d}; python3 "$0" add {p} /w/{p} {hexid(p)}; echo {p} >> {e.root}/started', STUB]
 pa = e.popen(["a-wt-a", "--"] + add("a-wt-a", 1.5))
-time.sleep(0.4)
+PROCS.append(pa)
+deadline = time.time() + 30
+while not os.path.exists(f"{e.root}/entered-a-wt-a") and time.time() < deadline:
+    time.sleep(0.05)
 pb = e.popen(["b-wt-b", "--"] + add("b-wt-b", 0))
-ra, rb = pa.communicate(timeout=60), pb.communicate(timeout=60)
+PROCS.append(pb)
+try:
+    ra, rb = pa.communicate(timeout=60), pb.communicate(timeout=60)
+except subprocess.TimeoutExpired:
+    rb = ("timed out", "")
 started = open(f"{e.root}/started").read().split() if os.path.exists(f"{e.root}/started") else []
 if pa.returncode != 0 or pb.returncode != 3 or started != ["a-wt-a"]:
     miss("LOCK two starts on one count", f"a rc {pa.returncode}, b rc {pb.returncode}, started {started}; b out {rb[0]!r}")
@@ -259,10 +344,26 @@ if r1.returncode != 0 or r2.returncode != 0 or not e.ran():
 else:
     ok()
 e = Env(conf="lock_wait_seconds=1\n")
-lockdir = os.path.join(e.home, ".config", "cepa")
-holder = subprocess.Popen(["flock", lockdir, "sleep", "6"])
-time.sleep(0.4)
-expect_refused("LOCK held lock refuses after the wait", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["lock busy"])
+e.hold_lock(6)
+r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+expect_refused("LOCK held lock refuses after the wait", e, r, ["lock busy"])
+if "STACK gate: waiting up to 1s" not in r.stderr:
+    miss("LOCK a waiting start says so", f"no waiting line on stderr: {r.stderr!r}")
+else:
+    ok()
+e = Env(conf="lock_wait_seconds=2\n")
+r = e.run(["n-wt-x", "--", "bash", SCRIPT, "n-wt-x", "--"] + e.touch_cmd())
+if r.returncode != 0 or not e.ran() or "nested inside a gate" not in r.stdout:
+    miss("LOCK nested gate for the same project runs", f"rc {r.returncode}, ran {e.ran()}, out {r.stdout!r}")
+else:
+    ok()
+e = Env(conf="lock_wait_seconds=1\n")
+r = e.run(["n-wt-x", "--", "bash", SCRIPT, "o-wt-y", "--"] + e.touch_cmd(), timeout=20)
+# The inner gate's own line is what matters; the outer passes its rc through.
+if e.ran() or "STACK gate: refused — lock busy" not in r.stdout:
+    miss("LOCK nested gate for another project waits", f"rc {r.returncode}, ran {e.ran()}, out {r.stdout!r}")
+else:
+    ok()
 
 # ---------------- LIST ----------------
 conts = (wt("dpcpro-wt-apgar-765bd2", n=3, wd="/home/u/webapps/dpc-pro/.claude/worktrees/apgar", started=7200)
@@ -272,7 +373,7 @@ conts = (wt("dpcpro-wt-apgar-765bd2", n=3, wd="/home/u/webapps/dpc-pro/.claude/w
 conts[1]["started"] = ago(3600)
 e = Env(conts, conf="max_running=3\n")
 r = e.run(["n-wt-x", "--"] + e.touch_cmd())
-want = ("running -wt- stacks, longest idle first: "
+want = ("running -wt- stacks, unknown idle then longest idle first: "
         "helm-wt-lane1-3e9f61 (repo helm, lane lane1, idle 1d1h); "
         "dpcpro-wt-apgar-765bd2 (repo dpc-pro, lane apgar, idle 1h0m); "
         "contexthub-wt-lorena-9da911 (repo contexthub, lane lorena, idle 5m)")
@@ -286,8 +387,17 @@ if r.returncode != 3 or not lines or bad or "lane ??id???id????31mred," not in l
 else:
     ok()
 
+conts = wt("a-wt-old", started=18000) + wt("b-wt-bad", started=60)
+conts[1]["started"] = "not-a-date"
+e = Env(conts, conf="max_running=2\n")
+expect_refused("LIST unreadable start time sorts first", e, e.run(["n-wt-x", "--"] + e.touch_cmd()),
+               ["first: b-wt-bad (repo b, lane bad, idle unknown); a-wt-old (repo a, lane old, idle 5h0m)"])
+e = Env(stacks(2), conf="max_running=2\n")
+r = e.run(["n-wt-x", "--"] + e.touch_cmd(), {"STUB_DOCKER_FAIL": "inspect"})
+expect_refused("LIST inspect failure is said", e, r, ["idle unknown", "(docker inspect failed: idle times unknown)"])
+
 # ---------------- COUNTMODE ----------------
-e = Env(stacks(2) + wt("r-wt-z", state="exited") + [{"project": "helm", "wd": "/h", "id": "h", "state": "running", "started": ago(5)}])
+e = Env(stacks(2) + wt("r-wt-z", state="exited") + [{"project": "helm", "wd": "/h", "id": hexid("h"), "state": "running", "started": ago(5)}])
 r = e.run(["--count"])
 if r.returncode != 0 or r.stdout != "STACK count: running=2 limit=6\n":
     miss("COUNTMODE one line", f"rc {r.returncode}, out {r.stdout!r}")
@@ -299,10 +409,17 @@ if r.returncode != 1 or not r.stdout.startswith("STACK count: running=unknown li
     miss("COUNTMODE docker failure is unknown", f"rc {r.returncode}, out {r.stdout!r}")
 else:
     ok()
+e = Env(stacks(1), conf="max_running=1\n")
+os.chmod(os.path.join(e.home, ".config", "cepa", "stack-gate.conf"), 0)
+r = e.run(["--count"])
+if os.access(os.path.join(e.home, ".config", "cepa", "stack-gate.conf"), os.R_OK):
+    ok()
+elif r.returncode != 1 or not r.stdout.startswith("STACK count: running=unknown"):
+    miss("COUNTMODE unreadable config is unknown", f"rc {r.returncode}, out {r.stdout!r}")
+else:
+    ok()
 e = Env(stacks(1), conf="lock_wait_seconds=30\n")
-lockdir = os.path.join(e.home, ".config", "cepa")
-holder2 = subprocess.Popen(["flock", lockdir, "sleep", "8"])
-time.sleep(0.4)
+e.hold_lock(8)
 t0 = time.time()
 r = e.run(["--count"])
 if r.returncode != 0 or time.time() - t0 > 4:
@@ -316,8 +433,6 @@ if r.returncode != 0 or os.path.exists(os.path.join(e.home, ".config")):
 else:
     ok()
 
-for h in (holder, holder2):
-    h.kill()
 print(f"check-stack-gate: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
 PY

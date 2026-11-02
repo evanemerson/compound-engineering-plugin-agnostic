@@ -21,39 +21,65 @@
 #     when the gate passes, while the gate still holds its lock. The lock is
 #     released when the command returns; the command does not inherit the
 #     lock's file descriptor, so a process it leaves running never holds it.
+#     The lock is held for the command's WHOLE run, so the command must
+#     return once the stack is started (`compose up -d`, `start`, `restart`),
+#     never a foreground `compose up` or a long one-off `compose run`: every
+#     other lane's start waits behind it and is refused after
+#     lock_wait_seconds. A gate killed by SIGTERM or SIGKILL leaves its
+#     command running without the lock (Ctrl-C reaches both); the next start
+#     may then count before that stack is up. Stated, not handled.
+#     A start that waits prints one `waiting` line on stderr first.
+#     Nesting: the command runs with CEPA_STACK_GATE_HELD=<project>; a gate
+#     for the same project inside it runs at once (no lock, no count), so
+#     setup can gate `make up` while `make up` is gated too. A gate for a
+#     different project inside it waits like any other start.
+#     The lock follows $HOME: a start under another HOME (sudo, another WSL
+#     distro on the same Docker) takes a different lock. Stated, not handled.
 #   stack-gate.sh --count
 #     Read-only, for the coordinator health check (`stacks:over:<n>`): takes
 #     no lock, creates nothing, runs nothing. Prints exactly one line:
 #       STACK count: running=<n> limit=<limit>
 #     and exits 0, or, when Docker cannot be read:
 #       STACK count: running=unknown limit=<limit> — <why>
-#     and exits 1. The caller raises its alert when <n> > <limit>.
+#     and exits 1. The caller raises its alert when <n> > <limit> (the gate
+#     admits up to <limit>, so <n> = <limit> is normal), and treats exit 1 as
+#     its own unreadable alert, never as zero. A config that exists but cannot
+#     be read is also exit 1.
 #
 # The gate passes when BOTH hold:
 #   - the distinct compose projects whose name contains `-wt-` and that have
-#     at least one running container, not counting <project> itself (a start
-#     of a stack that already runs adds no stack), are fewer than the limit.
-#     Stopped stacks never count (`docker ps` without `-a`, status=running).
+#     at least one running, paused or restarting container, not counting
+#     <project> itself (a start of a stack that already runs adds no stack),
+#     are fewer than the limit. Stopped (exited or created) stacks never count
+#     (`docker ps` without `-a`). A restart of a running stack while the
+#     others already fill the limit, or while memory is low, still refuses:
+#     the gate fails closed rather than judge which start adds load.
 #   - MemAvailable in /proc/meminfo is at least the minimum. (The check sets
 #     CEPA_STACK_GATE_MEMINFO to read a fixture file instead; nothing else
 #     should set it.)
-# Docker or meminfo that cannot be read refuses: the gate fails closed.
+# Docker, meminfo or an existing config that cannot be read refuses: the gate
+# fails closed. A failed `flock` refuses as "lock busy" on its timeout (rc 1)
+# and as "cannot lock" on any other code.
 #
 # Output: one line on stdout before anything the command prints:
 #   STACK gate: ok — <counts>
-#   STACK gate: refused — <reason>; running -wt- stacks, longest idle first:
-#     <project> (repo <r>, lane <l>, idle <d>); …
+#   STACK gate: refused — <reason>; running -wt- stacks, unknown idle then
+#     longest idle first: <project> (repo <r>, lane <l>, idle <d>); …
 # A refused line lists every running `-wt-` stack, so coord@main can ask the
 # operator which to stop (3 longest-idle as options). Idle time is the time
 # since the newest container of that stack started — Docker records no later
-# use. Repo and lane come from the stack's compose working directory
+# use. A stack whose start time cannot be read prints `idle unknown` and
+# sorts FIRST, so it is never hidden below the three options; a failed
+# `docker inspect` adds one note saying so. Repo and lane come from the stack's compose working directory
 # (`<repo>/.claude/worktrees/<lane>` or `workspaces/<repo>/<lane>`), else the
 # project name before `-wt-`. Every listed value is reduced to
 # [A-Za-z0-9._/-]; any other character prints as `?`.
 # Config WARN lines go to stderr.
 #
 # Exit: 3 refused (the command was not run), 2 usage, otherwise the start
-# command's own exit code. --count: 0, or 1 when unreadable.
+# command's own exit code. --count: 0, or 1 when unreadable. The command can
+# itself exit 2 or 3 (`make` exits 2 on any error; a nested gate exits 3), so
+# the `STACK gate:` line, not the exit code, says whether the gate refused.
 #
 # Config: ~/.config/cepa/stack-gate.conf, `key=value` lines, READ — never
 # sourced or evaluated (review #19: every Docker repo's make runs the gate, so
@@ -70,6 +96,10 @@
 # Requires: bash, docker, flock, timeout, date (GNU). No jq.
 set -u
 
+if [ -z "${HOME:-}" ]; then
+  echo "STACK gate: usage — HOME is not set" >&2
+  exit 2
+fi
 cepa_sg_dir="$HOME/.config/cepa"
 cepa_sg_conf="$cepa_sg_dir/stack-gate.conf"
 cepa_sg_max=6
@@ -88,8 +118,12 @@ cepa_sg_clean() { # reduce a docker-supplied value to printable plain text
   printf '%s' "${v//[!A-Za-z0-9._\/-]/?}"
 }
 
-cepa_sg_read_conf() {
-  [ -f "$cepa_sg_conf" ] || return 0
+cepa_sg_read_conf() { # returns 1 when the file exists but cannot be read
+  [ -e "$cepa_sg_conf" ] || return 0
+  if [ ! -f "$cepa_sg_conf" ] || [ ! -r "$cepa_sg_conf" ]; then
+    cepa_sg_err="$cepa_sg_conf exists but is not a readable file"
+    return 1
+  fi
   local line key val n=0
   while IFS= read -r line || [ -n "$line" ]; do
     n=$((n + 1))
@@ -119,36 +153,56 @@ cepa_sg_read_conf() {
   done <"$cepa_sg_conf"
 }
 
-# Fills cepa_sg_rows with "project<TAB>working_dir<TAB>container id" lines of
-# RUNNING containers in `-wt-` compose projects. Returns 1 when docker fails.
+# Fills cepa_sg_rows with "container id<TAB>project<TAB>working_dir" lines of
+# running, paused or restarting containers in `-wt-` compose projects.
+# Returns 1 when docker fails. Each field carries a prefix in the template so
+# an empty label never collapses the tab-separated fields; a row whose id is
+# not 64 hex characters (a label holding a newline or tab) is dropped.
 cepa_sg_read_running() {
-  local out
-  out=$(timeout -k 2 30 docker ps --no-trunc --filter status=running \
+  local out err rc
+  err=$(mktemp) || { cepa_sg_err="mktemp failed"; return 1; }
+  out=$(timeout --foreground -k 2 30 docker ps --no-trunc \
+    --filter status=running --filter status=paused --filter status=restarting \
     --filter label=com.docker.compose.project \
-    --format '{{.Label "com.docker.compose.project"}}	{{.Label "com.docker.compose.project.working_dir"}}	{{.ID}}' 2>&1) || {
-    cepa_sg_err="docker ps failed: $(cepa_sg_clean "${out%%$'\n'*}")"
+    --format 'i:{{.ID}}	p:{{.Label "com.docker.compose.project"}}	w:{{.Label "com.docker.compose.project.working_dir"}}' 2>"$err")
+  rc=$?
+  if [ "$rc" != 0 ]; then
+    if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then
+      cepa_sg_err="docker ps timed out after 30s"
+    else
+      local first
+      first=$(head -n 1 "$err")
+      cepa_sg_err="docker ps failed (rc $rc): $(cepa_sg_clean "$first")"
+    fi
+    rm -f "$err"
     return 1
-  }
+  fi
+  rm -f "$err"
   cepa_sg_rows=""
-  local p w i
-  while IFS=$'\t' read -r p w i; do
+  local i p w
+  while IFS=$'\t' read -r i p w; do
+    [[ $i =~ ^i:[0-9a-f]{64}$ && $p == p:* && $w == w:* ]] || continue
+    i="${i#i:}"; p="${p#p:}"; w="${w#w:}"
     [[ $p == *-wt-* ]] || continue
-    cepa_sg_rows+="$p"$'\t'"$w"$'\t'"$i"$'\n'
+    cepa_sg_rows+="$i"$'\t'"$p"$'\t'"$w"$'\n'
   done <<<"$out"
   return 0
 }
 
 # Distinct project names in cepa_sg_rows, one per line, sorted.
 cepa_sg_projects() {
-  local p w i
-  while IFS=$'\t' read -r p w i; do
-    [ -n "$p" ] && echo "$p"
+  local i p w
+  while IFS=$'\t' read -r i p w; do
+    [ -n "$p" ] && printf '%s\n' "$p"
   done <<<"$cepa_sg_rows" | sort -u
 }
 
 cepa_sg_count_mode() {
   [ $# -eq 0 ] || cepa_sg_usage "--count takes no arguments"
-  cepa_sg_read_conf
+  if ! cepa_sg_read_conf; then
+    echo "STACK count: running=unknown limit=$cepa_sg_max — $cepa_sg_err"
+    exit 1
+  fi
   if ! cepa_sg_read_running; then
     echo "STACK count: running=unknown limit=$cepa_sg_max — $cepa_sg_err"
     exit 1
@@ -161,49 +215,59 @@ cepa_sg_count_mode() {
 
 cepa_sg_dur() { # seconds -> 3d4h, 2h5m, 7m
   local s=$1
+  [ "$s" -ge 0 ] || s=0
   if [ "$s" -ge 86400 ]; then echo "$((s / 86400))d$((s % 86400 / 3600))h"
   elif [ "$s" -ge 3600 ]; then echo "$((s / 3600))h$((s % 3600 / 60))m"
   else echo "$((s / 60))m"; fi
 }
 
-# The running `-wt-` stacks, longest idle first, as one `; `-joined string.
+# The running `-wt-` stacks as one `; `-joined string: stacks whose idle time
+# cannot be read come FIRST (marked `idle unknown`, so the operator sees them
+# among the first options), then longest idle first.
 cepa_sg_listing() {
-  local now ids line id started t p w i repo lane out="" proj
+  local now id started t i p w repo lane out="" proj idle note="" nt
+  local -a ids=()
+  local -A newest=() wd=() start_of=()
   now=$(date +%s)
-  declare -A newest=() wd=()
-  ids=$(while IFS=$'\t' read -r p w i; do [ -n "$i" ] && echo "$i"; done <<<"$cepa_sg_rows")
-  declare -A start_of=()
-  if [ -n "$ids" ]; then
-    # shellcheck disable=SC2086  # ids are docker's hex container ids
-    while read -r id started; do
-      t=$(date -d "$started" +%s 2>/dev/null) || continue
-      start_of[$id]=$t
-    done < <(timeout -k 2 30 docker inspect --format '{{.Id}} {{.State.StartedAt}}' $ids 2>/dev/null)
+  while IFS=$'\t' read -r i p w; do [ -n "$i" ] && ids+=("$i"); done <<<"$cepa_sg_rows"
+  if [ "${#ids[@]}" -gt 0 ]; then
+    local ins
+    if ins=$(timeout --foreground -k 2 30 docker inspect --format '{{.Id}} {{.State.StartedAt}}' -- "${ids[@]}" 2>/dev/null); then
+      while read -r id started; do
+        [[ $id =~ ^[0-9a-f]{64}$ ]] || continue
+        t=$(date -d "$started" +%s 2>/dev/null) || continue
+        start_of[$id]=$t
+      done <<<"$ins"
+    else
+      note=" (docker inspect failed: idle times unknown)"
+    fi
   fi
-  while IFS=$'\t' read -r p w i; do
+  while IFS=$'\t' read -r i p w; do
     [ -n "$p" ] || continue
     wd[$p]="$w"
     t="${start_of[$i]:-}"
     [ -n "$t" ] || continue
     if [ -z "${newest[$p]:-}" ] || [ "$t" -gt "${newest[$p]}" ]; then newest[$p]=$t; fi
   done <<<"$cepa_sg_rows"
-  while IFS=$'\t' read -r line proj; do
+  while IFS=$'\t' read -r idle proj; do
     [ -n "$proj" ] || continue
-    w="${wd[$proj]}"
+    w="${wd[$proj]:-}"
     if [[ $w == */.claude/worktrees/* ]]; then
       repo="${w%/.claude/worktrees/*}"; repo="${repo##*/}"; lane="${w##*/}"
     elif [[ $w =~ /workspaces/([^/]+)/([^/]+)$ ]]; then
       repo="${BASH_REMATCH[1]}"; lane="${BASH_REMATCH[2]}"
     else
-      repo="${proj%%-wt-*}"; lane="${w##*/}"; [ -n "$lane" ] || lane=unknown
+      repo="${proj%%-wt-*}"; lane="${w##*/}"
     fi
-    if [ "$line" = -1 ]; then line="idle unknown"; else line="idle $(cepa_sg_dur "$line")"; fi
-    out+="${out:+; }$(cepa_sg_clean "$proj") (repo $(cepa_sg_clean "$repo"), lane $(cepa_sg_clean "$lane"), $line)"
-  done < <(for proj in $(cepa_sg_projects); do
-             if [ -n "${newest[$proj]:-}" ]; then echo "$((now - newest[$proj]))	$proj"
-             else echo "-1	$proj"; fi
-           done | sort -t $'\t' -k1,1nr)
-  printf '%s' "${out:-none}"
+    [ -n "$lane" ] || lane=unknown
+    if [ "$idle" = unknown ]; then idle="idle unknown"; else idle="idle $(cepa_sg_dur "$idle")"; fi
+    out+="${out:+; }$(cepa_sg_clean "$proj") (repo $(cepa_sg_clean "$repo"), lane $(cepa_sg_clean "$lane"), $idle)"
+  done < <(cepa_sg_projects | while IFS= read -r proj; do
+             nt="${newest[$proj]:-}"
+             if [ -n "$nt" ]; then printf '1\t%s\t%s\n' "$((now - nt))" "$proj"
+             else printf '0\tunknown\t%s\n' "$proj"; fi
+           done | sort -t $'\t' -k1,1n -k2,2nr | cut -f2-)
+  printf '%s%s' "${out:-none}" "$note"
 }
 
 cepa_sg_refuse() {
@@ -221,13 +285,37 @@ cepa_sg_proj="$1"; shift
 shift
 [ $# -ge 1 ] || cepa_sg_usage "no start command after --"
 
-cepa_sg_read_conf
+# A gated target that calls another gated target for the SAME project (setup
+# runs `stack-gate.sh p -- make up`, and `make up` is gated too) would wait on
+# the lock its own parent holds and be refused as "lock busy". The outer gate
+# exports CEPA_STACK_GATE_HELD=<project> to its command; an inner gate for
+# that project runs its command without taking the lock or counting again.
+# Any other project nested inside a gate still waits (and is refused).
+if [ "${CEPA_STACK_GATE_HELD:-}" = "$cepa_sg_proj" ]; then
+  echo "STACK gate: ok — $cepa_sg_proj: nested inside a gate that holds the lock for it"
+  command "$@"
+  exit $?
+fi
+
+cepa_sg_read_conf || cepa_sg_refuse "cannot read the config — $cepa_sg_err"
+[ "$cepa_sg_meminfo" = /proc/meminfo ] ||
+  echo "STACK gate: WARN — reading memory from $cepa_sg_meminfo (CEPA_STACK_GATE_MEMINFO is set)" >&2
 
 # --- lock: flock on the config directory, held until the command returns ---
-mkdir -p "$cepa_sg_dir" 2>/dev/null || cepa_sg_refuse "cannot create $cepa_sg_dir for the lock"
+mkdir -p -m 700 "$cepa_sg_dir" 2>/dev/null || cepa_sg_refuse "cannot create $cepa_sg_dir for the lock"
 exec {cepa_sg_fd}<"$cepa_sg_dir" || cepa_sg_refuse "cannot open $cepa_sg_dir for the lock"
-flock -w "$cepa_sg_wait" "$cepa_sg_fd" ||
-  cepa_sg_refuse "lock busy — another start held $cepa_sg_dir for ${cepa_sg_wait}s"
+if flock -n "$cepa_sg_fd"; then
+  cepa_sg_lrc=0
+else
+  echo "STACK gate: waiting up to ${cepa_sg_wait}s for another start's lock on $cepa_sg_dir" >&2
+  flock -w "$cepa_sg_wait" "$cepa_sg_fd"
+  cepa_sg_lrc=$?
+fi
+case "$cepa_sg_lrc" in
+  0) ;;
+  1) cepa_sg_refuse "lock busy — another start held $cepa_sg_dir for ${cepa_sg_wait}s" ;;
+  *) cepa_sg_refuse "cannot lock $cepa_sg_dir — flock exited $cepa_sg_lrc" ;;
+esac
 
 # --- count, under the lock ---
 cepa_sg_read_running || cepa_sg_refuse "cannot count running stacks — $cepa_sg_err"
@@ -237,15 +325,15 @@ cepa_sg_projects | grep -qxF -- "$cepa_sg_proj" && cepa_sg_self=yes
 
 cepa_sg_mem=$(awk '$1 == "MemAvailable:" && $3 == "kB" { print int($2 / 1024); f = 1 } END { if (!f) exit 1 }' \
   "$cepa_sg_meminfo" 2>/dev/null) && [[ $cepa_sg_mem =~ ^[0-9]+$ ]] ||
-  cepa_sg_refuse "cannot read MemAvailable from $cepa_sg_meminfo; running -wt- stacks, longest idle first: $(cepa_sg_listing)"
+  cepa_sg_refuse "cannot read MemAvailable from $cepa_sg_meminfo; running -wt- stacks, unknown idle then longest idle first: $(cepa_sg_listing)"
 
 if [ "$cepa_sg_others" -ge "$cepa_sg_max" ]; then
-  cepa_sg_refuse "$cepa_sg_others running -wt- stacks other than $cepa_sg_proj, limit $cepa_sg_max; running -wt- stacks, longest idle first: $(cepa_sg_listing)"
+  cepa_sg_refuse "$cepa_sg_others running -wt- stacks other than $cepa_sg_proj, limit $cepa_sg_max; running -wt- stacks, unknown idle then longest idle first: $(cepa_sg_listing)"
 fi
 if [ "$cepa_sg_mem" -lt "$cepa_sg_min" ]; then
-  cepa_sg_refuse "${cepa_sg_mem} MiB available, minimum $cepa_sg_min MiB; running -wt- stacks, longest idle first: $(cepa_sg_listing)"
+  cepa_sg_refuse "${cepa_sg_mem} MiB available, minimum $cepa_sg_min MiB; running -wt- stacks, unknown idle then longest idle first: $(cepa_sg_listing)"
 fi
 
 echo "STACK gate: ok — $cepa_sg_proj: $cepa_sg_others other running -wt- stacks, limit $cepa_sg_max; ${cepa_sg_mem} MiB available, minimum $cepa_sg_min MiB$([ "$cepa_sg_self" = yes ] && echo "; already running")"
-"$@" {cepa_sg_fd}<&-
+CEPA_STACK_GATE_HELD="$cepa_sg_proj" command "$@" {cepa_sg_fd}<&-
 exit $?
