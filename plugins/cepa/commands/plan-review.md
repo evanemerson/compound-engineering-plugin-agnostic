@@ -122,7 +122,9 @@ always `judgment`.
 
 ## Step 5: Write Findings and Act
 
-1. Write `todos/review-YYYY-MM-DD-HHMMSS.md` in the **`cepa:file-todos`
+1. Reserve the path with the **`cepa:file-todos` `### Filename Convention`**
+   block (`kind=review`; never a hand-typed name or stamp), then write the
+   file it printed in the **`cepa:file-todos`
    format** — `scope: plan:docs/plans/<file>`, `file:` = the plan path,
    `agent:` = the persona name, `category:` = the persona's review domain
    (per the skill's mapping table), Run Metadata (`agents:` lists the
