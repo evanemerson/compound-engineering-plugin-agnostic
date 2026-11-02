@@ -2389,8 +2389,9 @@ limits.
      coordinator or a solo session only: a dispatched worker never calls
      AskUserQuestion (**A coordinator**, above), so it never runs the block.
      A headless run asks nothing, so it marks nothing. Every turn that ends
-     as **The operator** runs it, rule 8's health alerts and rule 2's
-     re-bind `ask` included. The script,
+     as **The operator** runs it, rule 8's health alerts, rule 2's
+     re-bind `ask` and a step with no reachable target (Delivery, above)
+     included. The script,
      `plugins/cepa/scripts/orca-attention.sh`, sets the flag only on this
      checkout's own worktree, by the full `id:` that `worktree current`
      returns for the checkout's top level, and proves each change by a
@@ -2407,12 +2408,20 @@ limits.
      - **Clear, after the answer.** The answer comes back as the tool's
        result, or as the next prompt when the operator typed it instead. The
        session's first step after it is the block with `action: clear` and
-       no `file:` line. Clear changes the flag only while the comment still
+       no `file:` line, whatever mark printed: a mark that failed or timed
+       out may still have set the flag, and clear on no flag changes
+       nothing. A coordinator or solo session also runs clear once on its
+       first turn under Orca, so a flag that an ended session left behind
+       does not stay.
+     - **Run it from the session's own checkout.** The script flags the
+       worktree of the current directory's top level. A session that `cd`'d
+       into another worktree (a coordinator reading a lane) goes back to the
+       directory it started in first. The result line names the path. Clear changes the flag only while the comment still
        starts with `NEEDS YOU: `. A session that marked and has not cleared
        (the clear failed, or the turn was cut) runs clear at the start of its
        next turn.
      ```bash
-     # Run with a tool timeout of at least 2 minutes (the script's header
+     # Run with a tool timeout of at least 3 minutes (the script's header
      # states its worst case).
      unset CEPA_ROOT
      for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \

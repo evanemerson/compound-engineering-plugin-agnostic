@@ -96,8 +96,24 @@
 #   - A session that ends before clear (closed tab, lost context) leaves the
 #     flag set; the next session in that checkout clears it on its first
 #     clear run, or the operator clears it in Orca.
-#   - Worst case about 110 seconds (three calls, each 2 x 17): run the block
-#     with a tool timeout of at least 2 minutes.
+#   - "This checkout" is the top level of the shell's current directory. A
+#     session that cd'd into another worktree (a coordinator reading a
+#     lane) and runs the block there flags that worktree: rule 7 says to run
+#     it from the session's own checkout, and the result line names the path.
+#   - A `set` cut by the 15-second bound may still land later on the Windows
+#     side (the bound kills the WSL launcher, not necessarily orca.exe; not
+#     measured). A late mark then sets a flag after clear found none; the
+#     session's next first-turn clear (rule 7) removes it.
+#   - Clear checks the comment and its write in two calls (show, then set),
+#     with no compare-and-set in Orca: an operator edit that lands between
+#     them is overwritten.
+#   - Clear leaves the unread dot alone when the comment is not a NEEDS YOU
+#     flag; its line then says the dot is still set.
+#   - A `worktree current` or `worktree show` reply is one row. Unlike
+#     `worktree list`, it carries no host scope to check (L57 reads).
+#   - Worst case about 140 seconds (clear makes four calls, mark three; each
+#     call is at most 2 x 17 s): run the block with a tool timeout of at least
+#     3 minutes.
 set -u
 
 refuse() { echo "ORCA attention refused: $1"; exit 4; }
@@ -267,19 +283,21 @@ if [ "$cepa_at_action" = mark ]; then
   cepa_at_show || failed "worktree set ran, but the re-read by id failed, so the flag is not proved"
   [ "$cepa_at_u" = 1 ] && [ "$cepa_at_c" = "$cepa_at_want" ] \
     || failed "after worktree set, the re-read does not show the unread dot and the NEEDS YOU comment"
-  echo "ORCA attention: marked — this worktree is unread with comment \"$cepa_at_want\""
+  echo "ORCA attention: marked — $cepa_at_top is unread with comment \"$cepa_at_want\""
   exit 0
 fi
 
 cepa_at_show || failed "worktree show failed, so whether a flag is set is unknown; nothing was changed"
 case "$cepa_at_c" in
   "NEEDS YOU: "*) ;;
-  *) echo "ORCA attention: ok — nothing to clear (the comment is not a NEEDS YOU flag)"; exit 0 ;;
+  *) cepa_at_dot=
+     [ "$cepa_at_u" = 0 ] || cepa_at_dot="; the unread dot is still set, by someone else"
+     echo "ORCA attention: ok — nothing to clear (the comment is not a NEEDS YOU flag$cepa_at_dot)"; exit 0 ;;
 esac
 cepa_at_orca "$cepa_at_tmp/set.json" worktree set --worktree "id:$cepa_at_id" --read --comment " " --json \
   || failed "worktree set failed; the NEEDS YOU flag may still show"
 cepa_at_show || failed "worktree set ran, but the re-read by id failed, so the clear is not proved"
 [ "$cepa_at_u" = 0 ] && [ "$cepa_at_c" = " " ] \
   || failed "after worktree set, the re-read still shows the unread dot or a comment"
-echo "ORCA attention: cleared — the unread dot and the NEEDS YOU comment are gone"
+echo "ORCA attention: cleared — $cepa_at_top has no unread dot and no NEEDS YOU comment"
 exit 0

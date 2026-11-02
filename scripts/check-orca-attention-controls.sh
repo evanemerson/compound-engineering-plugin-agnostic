@@ -13,7 +13,9 @@
 # mutant here that only its own cases kill; the last control asserts that, so
 # a new leg that also kills an old leg's only mutant shows.
 #
-# STATED LIMITS: a mutant is one substitution; two compensating edits are not
+# STATED LIMITS: the `-O` ownership check and the `cd` to the top level have
+# no mutant (the check's header says why neither can be pinned). A mutant is
+# one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case
 # list is complete.
 set -u
@@ -52,6 +54,21 @@ MUTANTS = [
     # CLEAR
     ("clear-any-comment", '  "NEEDS YOU: "*) ;;', '  *) ;;', None),
     ("clear-unproved", '[ "$cepa_at_u" = 0 ] && [ "$cepa_at_c" = " " ] \\', 'true \\', None),
+    ("cli-abs-any", '/*) [ "$cepa_at_cli" = "${ORCA_CLI_COMMAND:-}" ] || refuse "a cli path must equal ORCA_CLI_COMMAND" ;;',
+     '/*) ;;', None),
+    ("bare-orca-ok", '  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;',
+     '  orca) ;;', None),
+    ("dot-segment-ok", '&& $cepa_at_file != */./* && $cepa_at_file != */../* ]]', ']]', None),
+    ("phys-unchecked", '[[ $cepa_at_file != "$cepa_at_k"/* && $cepa_at_phys != "$cepa_at_k"/* ]]',
+     '[[ $cepa_at_file != "$cepa_at_k"/* ]]', None),
+    ("distro-unset-ok", "if not distro or m.group(1) != distro:", "if distro and m.group(1) != distro:", None),
+    ("no-timeout", 'timeout -k 2 15 "$cepa_at_cli" "$@"', '"$cepa_at_cli" "$@"', None),
+    ("retry-all", '[[ $e == *UtilAcceptVsock* && $e == *"accept4 failed 110"* ]] || return 1', ':', None),
+    ("show-shape-ok", 'if type(u) is not bool or not isinstance(c, str):', 'if not isinstance(c, str):', None),
+    ("mark-unread-unproved", '[ "$cepa_at_u" = 1 ] && [ "$cepa_at_c" = "$cepa_at_want" ]', '[ "$cepa_at_c" = "$cepa_at_want" ]', None),
+    ("clear-unread-unproved", '[ "$cepa_at_u" = 0 ] && [ "$cepa_at_c" = " " ]', '[ "$cepa_at_c" = " " ]', None),
+    ("prefix-loose", '  "NEEDS YOU: "*) ;;', '  "NEEDS YOU"*) ;;', None),
+    ("dot-unsaid", '[ "$cepa_at_u" = 0 ] || cepa_at_dot=', 'true || cepa_at_dot=', None),
     ("clear-empty-comment", '"id:$cepa_at_id" --read --comment " " --json', '"id:$cepa_at_id" --read --comment "" --json', None),
 ]
 SKILL_MUTANTS = [
@@ -67,7 +84,8 @@ EXPECT = {
     "multi-line-ok": {"FIELDS question two lines"},
     "cntrl-ok": {"FIELDS question control character"},
     "long-ok": {"FIELDS question too long"},
-    "in-repo-ok": {"FIELDS file inside the main checkout", "FIELDS file inside this checkout"},
+    "in-repo-ok": {"FIELDS file inside the main checkout", "FIELDS file inside this checkout",
+                   "FIELDS file through a symlinked directory into the checkout"},
     "symlink-ok": {"FIELDS file symlink"},
     "extra-line": {"FIELDS line after fields"},
     "distro-any": {"SCOPE another distro's path"},
@@ -77,16 +95,30 @@ EXPECT = {
     # succeed or reach the re-read fails at the set.
     "set-active": {"BLOCK clears", "BLOCK marks from a file", "MARK 200 characters pass",
                    "MARK interop error is retried", "MARK prefix not doubled", "MARK re-read fails",
-                   "MARK re-read of another id", "MARK set does not stick", "MARK shell text is stored as text",
+                   "MARK re-read of an unknown shape", "MARK re-read of another id", "MARK set does not stick",
+                   "MARK set stores the comment only", "MARK shell text is stored as text",
                    "SCOPE linked worktree sets its own id", "SCOPE main checkout sets its own id"},
-    "mark-unproved": {"MARK set does not stick"},
+    "mark-unproved": {"MARK set does not stick", "MARK set stores the comment only"},
     # Without the strip, "NEEDS YOU:   " is not empty, so the empty case
     # goes red too.
     "prefix-doubled": {"FIELDS question empty", "MARK prefix not doubled"},
     "show-id-unchecked": {"MARK re-read of another id"},
     "no-retry": {"MARK interop error is retried"},
-    "clear-any-comment": {"CLEAR leaves another comment alone"},
-    "clear-unproved": {"CLEAR set does not stick"},
+    "clear-any-comment": {"CLEAR a NEEDS YOUR note is not a flag", "CLEAR leaves another comment alone",
+                          "CLEAR says the dot is still set", "FIELDS absolute cli equal to ORCA_CLI_COMMAND passes"},
+    "clear-unproved": {"CLEAR set clears the comment only", "CLEAR set does not stick"},
+    "cli-abs-any": {"FIELDS absolute cli not ORCA_CLI_COMMAND"},
+    "bare-orca-ok": {"FIELDS bare orca on Linux"},
+    "dot-segment-ok": {"FIELDS file with a dot segment"},
+    "phys-unchecked": {"FIELDS file through a symlinked directory into the checkout"},
+    "distro-unset-ok": {"SCOPE WSL_DISTRO_NAME unset"},
+    "no-timeout": {"MARK a hung call is bounded"},
+    "retry-all": {"MARK other errors are not retried"},
+    "show-shape-ok": {"MARK re-read of an unknown shape"},
+    "mark-unread-unproved": {"MARK set stores the comment only"},
+    "clear-unread-unproved": {"CLEAR set clears the comment only"},
+    "prefix-loose": {"CLEAR a NEEDS YOUR note is not a flag"},
+    "dot-unsaid": {"CLEAR says the dot is still set"},
     # Orca ignores an empty --comment (measured L57), so the flag stays.
     "clear-empty-comment": {"BLOCK clears", "CLEAR clears a NEEDS YOU flag"},
     # Unquoted, the heredoc no longer matches the fill, so <cli> stays and

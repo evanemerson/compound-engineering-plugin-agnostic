@@ -15,23 +15,34 @@
 # Every MISS line starts with its case name, so the controls can assert the
 # exact set of cases each mutant breaks. Legs:
 #   FIELDS — each bad field, missing or extra field, extra line, argument,
-#            bad cli, bad action, bad question file (name, relative, symlink,
-#            inside the repo, more than one line, a control character, empty,
+#            bad cli (shell text, not Orca, a relative or foreign absolute
+#            path, bare orca on Linux; an absolute path equal to
+#            ORCA_CLI_COMMAND passes), bad action, bad question file (name, relative, symlink,
+#            inside the repo directly or through a symlinked directory,
+#            more than one line, a control character, empty,
 #            too long), and a caller outside git: exit 4, `refused`, and the
 #            stub is never called. A file that passed its path check is gone.
 #   SCOPE  — the worktree `current` returns must be this checkout's: another
-#            worktree's row, another WSL distro's path, an id that is not
-#            `<repoId>::<path>`, or no row is a failure with no set call; the
+#            worktree's row, another WSL distro's path, WSL_DISTRO_NAME
+#            unset, an id that is not `<repoId>::<path>`, or no row is a
+#            failure with no set call; the
 #            set names the linked worktree's own full id, and from the main
 #            checkout the main checkout's.
 #   MARK   — exact set argv and the stored flag; shell text in the question
 #            is stored as text and runs nothing; a leading `NEEDS YOU:` is not
 #            doubled; 200 characters pass; a failed set, a set that does not
-#            stick, a failed or wrong-id re-read, and a failed current are
-#            failures; the WSL interop error is retried.
+#            stick, a failed, wrong-id or unknown-shape re-read, and a
+#            failed current, and a set that stores the comment but not the
+#            dot are failures; a hung call is cut at 15 s; the
+#            WSL interop error is retried and no other error is.
 #   CLEAR  — exact set argv and the cleared flag; a comment that is not a
-#            NEEDS YOU flag is left alone with no set call; a set that does
+#            NEEDS YOU flag (`NEEDS YOUR …` included) is left alone with no
+#            set call, and the line says when the dot is still set; a set
+#            that clears the comment but not the dot is a failure; a set that does
 #            not stick and a failed show are failures.
+#   Not pinned: the `-O` ownership check (a test run cannot make a file
+#   another user owns) and the `cd` to the top level (the stub, like Orca,
+#   resolves any directory inside a worktree to that worktree).
 #   BLOCK  — §12b rule 7's attention block, extracted and run under
 #            `bash -e`: it marks from a file and clears; shell text in the
 #            file field runs nothing; with the script absent it prints the
@@ -143,9 +154,12 @@ def F(**kw):
     return "".join("%s: %s\n" % (k, kw[k]) for k in order if k in kw)
 
 
-def expect(name, got, rc=None, first=None, calls_none=False, sets_none=False, set_argv=None, extra=()):
+def expect(name, got, rc=None, first=None, calls_none=False, sets_none=False, set_argv=None, extra=(), has=()):
     rc_, out, calls = got
     why = []
+    for x in has:
+        if x not in "\n".join(out):
+            why.append("missing %r" % x)
     if rc is not None and rc_ != rc:
         why.append("rc=%s want %s" % (rc_, rc))
     if first is not None and not (out and out[0].startswith(first)):
@@ -190,6 +204,11 @@ cases = [
      "the question file is not an absolute path to a cepa-attention-<name>.txt file"),
     ("FIELDS file relative", F(cli=CLI, action="mark", file="scratch/cepa-attention-x.txt"), (),
      "the question file is not an absolute path to a cepa-attention-<name>.txt file"),
+    ("FIELDS file with a dot segment", F(cli=CLI, action="mark", file=W.scratch + "/./cepa-attention-dot.txt"), (),
+     "the question file is not an absolute path to a cepa-attention-<name>.txt file"),
+    ("FIELDS absolute cli not ORCA_CLI_COMMAND", F(cli="/usr/bin/orca-ide", action="clear"), (),
+     "a cli path must equal ORCA_CLI_COMMAND"),
+    ("FIELDS bare orca on Linux", F(cli="orca", action="clear"), (), "bare orca on Linux is the screen reader"),
 ]
 for name, fields, args, reason in cases:
     expect(name, W.run(fields, args=args), rc=4, first=R + reason, calls_none=True)
@@ -205,6 +224,16 @@ p_in = W.qfile("q\n", where=W.lane)
 expect("FIELDS file inside this checkout", W.run(F(cli=CLI, action="mark", file=p_in)), rc=4,
        first=R + "the question file is inside the repo", calls_none=True,
        extra=[(lambda: os.path.exists(p_in), "a refused path's file was removed")])
+# A scratch directory that is a symlink into the checkout: the physical
+# path is inside, so it is refused and the file is kept.
+os.makedirs(os.path.join(W.lane, "sub"), exist_ok=True)
+lnk = os.path.join(W.scratch, "into-lane")
+os.symlink(os.path.join(W.lane, "sub"), lnk)
+p_lnk = W.qfile("q\n", where=os.path.join(W.lane, "sub"))
+p_via = os.path.join(lnk, os.path.basename(p_lnk))
+expect("FIELDS file through a symlinked directory into the checkout", W.run(F(cli=CLI, action="mark", file=p_via)),
+       rc=4, first=R + "the question file is inside the repo", calls_none=True,
+       extra=[(lambda: os.path.exists(p_lnk), "the file inside the checkout was removed")])
 p_main = W.qfile("q\n", where=W.main)
 expect("FIELDS file inside the main checkout", W.run(F(cli=CLI, action="mark", file=p_main)), rc=4,
        first=R + "the question file is inside the repo", calls_none=True)
@@ -217,6 +246,10 @@ for name, text, reason in [
     p = W.qfile(text)
     expect(name, W.run(F(cli=CLI, action="mark", file=p)), rc=4, first=R + reason, calls_none=True,
            extra=[(lambda p=p: not os.path.exists(p), "a file that passed its path check was kept")])
+W.reset()
+expect("FIELDS absolute cli equal to ORCA_CLI_COMMAND passes",
+       W.run(F(cli=os.path.join(W.bin, "orca-ide"), action="clear"),
+             env={"ORCA_CLI_COMMAND": os.path.join(W.bin, "orca-ide")}), rc=0, first="ORCA attention: ok")
 expect("FIELDS outside git", W.run(F(cli=CLI, action="clear"), cwd=W.outside), rc=4,
        first=R + "not inside a git checkout", calls_none=True)
 
@@ -228,9 +261,10 @@ for name, mode in [("SCOPE another worktree's row", "currentother"), ("SCOPE ano
            first="ORCA attention failed: worktree current did not return this checkout's own worktree",
            sets_none=True)
 W.reset()
-expect("SCOPE no row for the checkout", W.run(F(cli=CLI, action="clear"), cwd=W.other), rc=4,
-       first=R + "not inside a git checkout", calls_none=True)
-# `other` is not a git repo above; make a git repo Orca does not know.
+expect("SCOPE WSL_DISTRO_NAME unset", W.run(F(cli=CLI, action="mark", file=q()), env={"WSL_DISTRO_NAME": ""}),
+       rc=3, first="ORCA attention failed: worktree current did not return this checkout's own worktree",
+       sets_none=True)
+# A git repo Orca does not know.
 sh("git", "init", "-q", W.outside)
 W.reset()
 # Orca 1.4.245 exits 1 with `selector_not_found` here (measured L57).
@@ -269,6 +303,7 @@ expect("MARK 200 characters pass", W.run(F(cli=CLI, action="mark", file=W.qfile(
 for name, mode, first in [
     ("MARK set fails", "setfail", "ORCA attention failed: worktree set failed"),
     ("MARK set does not stick", "setnostick", "ORCA attention failed: after worktree set"),
+    ("MARK set stores the comment only", "setcommentonly", "ORCA attention failed: after worktree set"),
     ("MARK re-read fails", "showfail", "ORCA attention failed: worktree set ran, but the re-read"),
     ("MARK re-read of another id", "showwrongid", "ORCA attention failed: worktree set ran, but the re-read"),
 ]:
@@ -277,6 +312,17 @@ for name, mode, first in [
 W.reset()
 expect("MARK current fails", W.run(F(cli=CLI, action="mark", file=q()), mode="currentfail"), rc=3,
        first="ORCA attention failed: worktree current failed", sets_none=True)
+W.reset()
+expect("MARK other errors are not retried", W.run(F(cli=CLI, action="mark", file=q()), mode="currentfail"), rc=3,
+       first="ORCA attention failed: worktree current failed",
+       extra=[(lambda: [json.loads(l)[:2] for l in open(W.log)].count(["worktree", "current"]) == 1,
+               "worktree current was called more than once")])
+W.reset()
+expect("MARK a hung call is bounded", W.run(F(cli=CLI, action="mark", file=q()), mode="hang"), rc=3,
+       first="ORCA attention failed: worktree current failed", sets_none=True)
+W.reset()
+expect("MARK re-read of an unknown shape", W.run(F(cli=CLI, action="mark", file=q()), mode="showshape"), rc=3,
+       first="ORCA attention failed: worktree set ran, but the re-read")
 W.reset()
 expect("MARK interop error is retried", W.run(F(cli=CLI, action="mark", file=q()), mode="interop"), rc=0,
        first="ORCA attention: marked")
@@ -290,8 +336,17 @@ W.reset(lane_comment="operator note", lane_unread=True)
 expect("CLEAR leaves another comment alone", W.run(F(cli=CLI, action="clear")), rc=0,
        first="ORCA attention: ok — nothing to clear", sets_none=True,
        extra=[(lambda: (W.wt(W.lane)["comment"], W.wt(W.lane)["unread"]) == ("operator note", True), "row changed")])
+W.reset(lane_comment="NEEDS YOUR note", lane_unread=False)
+expect("CLEAR a NEEDS YOUR note is not a flag", W.run(F(cli=CLI, action="clear")), rc=0,
+       first="ORCA attention: ok — nothing to clear", sets_none=True)
+W.reset(lane_comment="operator note", lane_unread=True)
+expect("CLEAR says the dot is still set", W.run(F(cli=CLI, action="clear")), rc=0,
+       first="ORCA attention: ok — nothing to clear", has=["the unread dot is still set"])
 W.reset(lane_comment="NEEDS YOU: Merge?", lane_unread=True)
 expect("CLEAR set does not stick", W.run(F(cli=CLI, action="clear"), mode="setnostick"), rc=3,
+       first="ORCA attention failed: after worktree set")
+W.reset(lane_comment="NEEDS YOU: Merge?", lane_unread=True)
+expect("CLEAR set clears the comment only", W.run(F(cli=CLI, action="clear"), mode="setcommentonly"), rc=3,
        first="ORCA attention failed: after worktree set")
 W.reset(lane_comment="NEEDS YOU: Merge?", lane_unread=True)
 expect("CLEAR show fails", W.run(F(cli=CLI, action="clear"), mode="showfail"), rc=3,

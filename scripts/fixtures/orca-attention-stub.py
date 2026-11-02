@@ -65,6 +65,9 @@ if "interop" in MODE and not st.get("interop_done"):
 if argv[:2] == ["worktree", "current"]:
     if "currentfail" in MODE:
         sys.exit(1)
+    if "hang" in MODE:  # longer than the script's 15 s bound
+        import time
+        time.sleep(25)
     cwd = os.path.realpath(os.getcwd())
     hits = [w for w in st["wts"] if cwd == w["path"] or cwd.startswith(w["path"] + "/")]
     if not hits:
@@ -87,7 +90,10 @@ if argv[:2] == ["worktree", "show"]:
         err("selector_not_found", "no worktree " + sel)
     if "showwrongid" in MODE:
         w = [x for x in st["wts"] if x is not w][0]
-    out({"id": "x", "ok": True, "result": {"worktree": row(w)}})
+    r = row(w)
+    if "showshape" in MODE:  # a field of a shape the reader does not know
+        r["isUnread"] = "true" if r["isUnread"] else "false"
+    out({"id": "x", "ok": True, "result": {"worktree": r}})
 
 if argv[:2] == ["worktree", "set"]:
     if "setfail" in MODE:
@@ -97,9 +103,9 @@ if argv[:2] == ["worktree", "set"]:
     if w is None:
         err("selector_not_found", "no worktree " + sel)
     if "setnostick" not in MODE:
-        if "--unread" in argv:
+        if "--unread" in argv and "setcommentonly" not in MODE:
             w["unread"] = True
-        if "--read" in argv:
+        if "--read" in argv and "setcommentonly" not in MODE:
             w["unread"] = False
         c = opt("--comment")
         if c:  # Orca 1.4.245 ignores an empty --comment (measured L57)
