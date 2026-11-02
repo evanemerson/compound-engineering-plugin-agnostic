@@ -1723,6 +1723,13 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     1.48.0 first. Head `f06e82e` matched, base already included, 12/12 checks
     green. Roles lane parked at `origin/main`, branch deleted, plugin
     freshness rc=0.
+    Late handoff from tab27@roles (2026-11-01, `msg_be0f1af29b69`): its
+    dispatch was `consumer_fenced` after the operator's account switch, so
+    its `worker_done` never went; it was alive, not dead. Open parts it
+    left for coord@main (not yet filed as items): probe the lost-post
+    hypothesis; send the drafted Orca report in PR #120's body; weigh Claude
+    Code's push notification as a third signal. Deferred P3s 14-17 are in
+    `memory/tasks.d/2026-11-01-fix-roles-needs-you-attention-flag.md`.
     severity: P1
     owner: roles (`tab27@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "L57 + L54 in parallel": task
@@ -1837,6 +1844,11 @@ L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `or
     same day), and `orca-health.sh` with the Run named printed `ORCA health:
     ok` on every coordinator turn after it. coord@main saw it only when the
     operator asked "have the other sessions returned completely?".
+    Related evidence: tab27@roles' late handoff says an account switch
+    makes Orca fence the Run's dispatches (`consumer_fenced`), and Orca's
+    "Agent exited unexpectedly (stop_unverified)" escalations for tab27 and
+    tab8 were about live workers. The tab31 failure was within minutes of
+    an account switch too, so a switch is a candidate cause; not proven.
     Same class as L34 (a dead session nobody sees). Fix candidate: the
     health check reads the Run's dispatches (`worker-show` or a dispatch
     list) and alerts on any `failed` dispatch it has not acked, with
