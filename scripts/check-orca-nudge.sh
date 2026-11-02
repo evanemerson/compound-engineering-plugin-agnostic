@@ -721,6 +721,25 @@ if LEGS in ("all", "send"):
                       target=tgt, typ="status", osend_json=osend(to=tgt), inbox_json=inbox({"id": MID, "to_handle": tgt}))
         (ok if sends(calls) == [] else miss)(name + " makes no nudge call" if sends(calls) == [] else
                                              name + " makes no nudge call: %r" % sends(calls))
+    # PR #122 review: the downgrade line follows a proven store only. A
+    # downgraded send that stored nothing exits 5 with no such line.
+    store("STORE downgraded send that stored nothing", 5,
+          [NOSTORE + "the send exited 1 and printed nothing",
+           END + "Needed from you: paste the block below into run:run_abc"],
+          target="run:run_abc", typ="status", osend_rc=1, osend_json="")
+    store("STORE downgraded send missing from the inbox", 5,
+          [NOSTORE + "%s is not in the inbox for run:run_abc" % MID,
+           END + "Needed from you: paste the block below into run:run_abc"],
+          target="run:run_abc", typ="status", osend_json=osend(to="run:run_abc"), inbox_json=inbox())
+    # PR #122 review: a downgraded send Orca stored for another term_ handle
+    # is not "not needed": it skips, names that handle, and exits 1.
+    calls = store("STORE downgraded send rerouted to a term_ handle", 1,
+                  ["Orca send stored: %s for %s" % (MID, OTHER), SK + "Orca stored it for %s, not the target" % OTHER,
+                   END + "Needed from you: tell %s to check its Orca inbox" % OTHER],
+                  target="dispatch:ctx_abcdef", typ="status", osend_json=osend(to=OTHER),
+                  inbox_json=inbox({"id": MID, "to_handle": OTHER}))
+    (ok if sends(calls) == [] else miss)("STORE downgraded rerouted send makes no nudge call" if sends(calls) == [] else
+                                         "STORE downgraded rerouted send makes no nudge call: %r" % sends(calls))
     # A no-nudge to the same address prints no such line: the line marks only
     # a mode the script changed.
     store("STORE no-nudge to a dispatch address prints no downgrade", 0,
@@ -1034,7 +1053,7 @@ if LEGS in ("all", "send"):
     # new file. A dangling symlink is not "no file": it is FREG.
     file_case("FILE does not exist", os.path.join(MSGDIR, "cepa-send-none.txt"),
               "the message file does not exist; orca-send.sh removes each message file once it reads it, "
-              "so a retry needs a new file")
+              "so a retry needs a new file (or the path is wrong)")
     os.mkdir(os.path.join(MSGDIR, "cepa-send-dir.txt"))
     file_case("FILE a directory", os.path.join(MSGDIR, "cepa-send-dir.txt"), FREG)
     p = msg_file(STDIN, "real-target.txt")
@@ -1088,6 +1107,19 @@ if LEGS in ("all", "send"):
         store("FILE unremovable", 4, [SR + "the message file could not be removed", PASTE],
               raw=([], F + "file: %s\n" % p), called=False)
         os.chmod(rod, 0o755)
+        # PR #122 review: a file in a directory this user cannot search is
+        # not "removed by a run"; it is refused as an unresolvable directory
+        # and kept.
+        lkd = os.path.join(TMP, "locked-dir")
+        os.mkdir(lkd)
+        p = os.path.join(lkd, "cepa-send-locked.txt")
+        open(p, "w").write(STDIN)
+        os.chmod(lkd, 0o000)
+        store("FILE in an unsearchable directory", 4, [SR + "the message file's directory could not be resolved", PASTE],
+              raw=([], F + "file: %s\n" % p), called=False)
+        os.chmod(lkd, 0o755)
+        (ok if os.path.exists(p) else miss)("FILE in an unsearchable directory keeps the file" if os.path.exists(p) else
+                                            "FILE in an unsearchable directory keeps the file: it was removed")
     else:
         miss("FILE unreadable: runs as root, so a mode-000 file stays readable")
     # One file, one run: removed after a stored send and after a refused one.

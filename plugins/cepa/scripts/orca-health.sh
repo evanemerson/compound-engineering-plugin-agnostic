@@ -322,7 +322,7 @@ REASONS = [re.compile(x) for x in (
     r"the message file is not a regular file this user owns", r"the message file is inside the repo",
     # 1.50.0 (punch-list L47): a path to no file says how to retry.
     r"the message file does not exist; orca-send\.sh removes each message file once it reads it, "
-    r"so a retry needs a new file",
+    r"so a retry needs a new file \(or the path is wrong\)",
     r"the message file could not be (read|removed)", r"the message file's directory could not be resolved",
     r"the session name holds a character outside \[A-Za-z0-9\._@-\]",
     r"a worker_done takes outcome and task fields, not nudge",

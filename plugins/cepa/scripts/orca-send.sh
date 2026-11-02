@@ -294,9 +294,13 @@ cepa_send_file=${cepa_send_f_file-}
   || refuse "the message file is not an absolute path to a cepa-send-<name>.txt file"
 # A path to nothing is most often a retry on a file the last run removed
 # (punch-list L47), so its reason says how to retry. A dangling symlink is
-# not "nothing": it goes on to the regular-file check below.
+# not "nothing": it goes on to the regular-file check below. A directory this
+# user cannot search makes `-e` false too, so it is refused first with its
+# own reason, never as a file a run removed (PR #122 review).
+[ -d "${cepa_send_file%/*}/" ] && [ -x "${cepa_send_file%/*}/" ] \
+  || refuse "the message file's directory could not be resolved"
 [ -e "$cepa_send_file" ] || [ -L "$cepa_send_file" ] \
-  || refuse "the message file does not exist; orca-send.sh removes each message file once it reads it, so a retry needs a new file"
+  || refuse "the message file does not exist; orca-send.sh removes each message file once it reads it, so a retry needs a new file (or the path is wrong)"
 [ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O "$cepa_send_file" ] \
   || refuse "the message file is not a regular file this user owns"
 # Never inside this checkout, nor inside the main checkout that holds it
@@ -552,7 +556,15 @@ if [ "$cepa_send_type" = reply ]; then
   fi
   cepa_send_target=$cepa_send_to
 fi
+# A downgraded send that Orca stored for a term_ handle other than the target
+# reached a mailbox Orca does not prompt: it says so, as a rerouted nudge
+# send does below, never "not needed" (PR #122 review).
 if [ -n "$cepa_send_downgraded" ]; then
+  if [ "$cepa_send_to" != "$cepa_send_target" ] && [[ $cepa_send_to == term_* ]]; then
+    echo "Orca nudge skipped: Orca stored it for $cepa_send_to, not the target"
+    echo "Ending first line: Needed from you: tell $cepa_send_to to check its Orca inbox"
+    exit 1
+  fi
   echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"
   exit 0
 fi

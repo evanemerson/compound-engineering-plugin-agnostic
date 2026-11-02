@@ -1671,7 +1671,7 @@ limits.
      refused run needs a new file (the next `<n>`) before the block runs
      again: the old file is gone, and a re-run on it is refused with
      `the message file does not exist; orca-send.sh removes each message file
-     once it reads it, so a retry needs a new file`. Why (punch-list L41, PR #110 review finding #3): up to cepa 1.43.0
+     once it reads it, so a retry needs a new file (or the path is wrong)`. Why (punch-list L41, PR #110 review finding #3): up to cepa 1.43.0
      the message sat in the heredoc, and a message line that was exactly the
      delimiter ended it, so every line after it ran as a shell command.
      Bodies carry relayed repo content, and only prose guarded that. A file
