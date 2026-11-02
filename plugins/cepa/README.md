@@ -109,6 +109,7 @@ CONFIGURATION.md.
 | `pr-feedback` | Fetch model, six-verdict rubric, reply conventions, and vendored gh scripts for `/cepa:resolve-pr` |
 | `grounding` | Optional graphify code-graph provider — availability checks, refresh, invocation discipline, consumer table; degrades to grep when absent |
 | `brain` | Optional OB1 cross-repo memory provider (opt-in per repo) — recall/writeback over the Agent Memory API, evidence-only governance, PHI scrub, §7 relay; degrades to grep when absent |
+| `lane-stack` | Shared lane & stack scheme under Orca — `orca.yaml` contract, gate-first setup that stops its stack, gated `make up`, the ten worktree properties, coord@main first prompt |
 
 ## Dependencies
 
