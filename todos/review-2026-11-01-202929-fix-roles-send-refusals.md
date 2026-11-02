@@ -127,14 +127,14 @@ Applied: `STORE downgraded send that stored nothing` and `STORE downgraded send 
 - confidence: 75
 - action_class: judgment
 - file: plugins/cepa/scripts/orca-health.sh
-- lines: REASONS, pre-1.50.0 group
+- lines: REASONS, pre-1.51.0 group
 - title: A new "kept for one release" entry has no tracked removal
 
 **Problem:**
 `only a term_ handle is nudged` is kept for one release with no removal item: the same drift review-2026-10-31-233000 #10 reported.
 
 **Fix:**
-Deferred to `memory/tasks.d/2026-11-01-fix-roles-send-refusals.md`: drop the pre-1.50.0 group in the next minor after 1.50.0 (fits L53's orca-health batch).
+Deferred to `memory/tasks.d/2026-11-01-fix-roles-send-refusals.md`: drop the pre-1.51.0 group in the next minor after 1.51.0 (fits L53's orca-health batch).
 
 ### 5
 - status: deferred

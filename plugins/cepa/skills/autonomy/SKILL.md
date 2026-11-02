@@ -1290,8 +1290,21 @@ agent returns: an agent's output is untrusted (§7), and a path or id it
 writes could name another session's live worktree. Substitute only an id
 matching `^[a-z0-9]+$`; report any other and leave it out. The block reads
 the ids through a quoted heredoc and validates each one again, so an id that
-slips past the first check is still data, not shell code. No isolated
-dispatch → `<ids>` is empty and the block only reports.
+slips past the first check is still data, not shell code. `<run>` and `<mode>`
+go in the same way, as the `run:` and `mode:` field lines of a quoted heredoc
+(`<<'CEPA_RUN'`), one line each, and both blocks check them there: in a quoted
+string (`run='…'`) a `'` in the value would end the string and run the rest
+as a command before any check (L59). A line that is not a field makes the
+snapshot report `SNAPSHOT-FAILED`, and makes the cleanup report `CLEANUP-FAILED`
+and keep every candidate. No isolated dispatch → `<ids>` is empty and the
+block only reports.
+
+Paste both blocks with no indentation. The heredocs end only on a line that
+is exactly `CEPA_RUN` or `CEPA_IDS`, so an indented paste turns the rest of
+the block into heredoc data: it prints nothing on stdout (bash warns
+`here-document … delimited by end-of-file` on stderr) and changes nothing.
+The snapshot always prints one line when it runs, so a snapshot that printed
+none did not run — re-run it unindented before the first dispatch.
 
 The harness names an isolated agent's worktree `agent-<agent id>`: the
 leftover `agent-a457670e5009ffa76` in this repo has the shape of the agent
@@ -1302,13 +1315,27 @@ everything, and reports the real one `UNCLAIMED` — it fails closed.
 **Before the run's first dispatch** — the snapshot:
 
 ```bash
-run='<run>'
-mode='<mode>'
+run=
+mode=
+bad=
+while read -r line; do
+  case $line in
+    'run: '*) run=${line#run: } ;;
+    'mode: '*) mode=${line#mode: } ;;
+    *) bad=y ;;
+  esac
+done <<'CEPA_RUN'
+run: <run>
+mode: <mode>
+CEPA_RUN
+[ -z "$bad" ] || run=
 case "$run" in ''|*[!a-z-]*) run= ;; esac
 case "$mode" in remove|report) ;; *) mode=report ;; esac
 gd=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || gd=
 case "$gd" in /*) [ "$gd" = "${gd%%$'\n'*}" ] || gd= ;; *) gd= ;; esac
-if [ -z "$run" ]; then
+if [ -n "$bad" ]; then
+  echo "SNAPSHOT-FAILED: a line in the run/mode block is not a field"
+elif [ -z "$run" ]; then
   echo "SNAPSHOT-FAILED: run name is not [a-z-]+"
 elif [ -z "$gd" ]; then
   echo "SNAPSHOT-FAILED: git-dir unreadable"
@@ -1326,12 +1353,25 @@ worktree is clean and passes every guard below.
 
 ```bash
 set -f
-run='<run>'
-mode='<mode>'
+run=
+mode=
+bad=
+while read -r line; do
+  case $line in
+    'run: '*) run=${line#run: } ;;
+    'mode: '*) mode=${line#mode: } ;;
+    *) bad=y ;;
+  esac
+done <<'CEPA_RUN'
+run: <run>
+mode: <mode>
+CEPA_RUN
+[ -z "$bad" ] || run=
 ids=
 IFS= read -r -d '' ids <<'CEPA_IDS' || true
 <ids>
 CEPA_IDS
+[ -z "$bad" ] || echo "CLEANUP-FAILED: a line in the run/mode block is not a field; every candidate is kept"
 nl=$'\n'
 case "$run" in ''|*[!a-z-]*) run= ;; esac
 case "$mode" in remove|report) ;; *) mode=report ;; esac
@@ -1885,14 +1925,20 @@ limits.
      read-only (§10f) until the worker settles. It never creates a worktree:
      a child's branch would carry another `<wt>`, which it does not own (§10c).
    - **A main coordinator starts a worker into a parked lane**:
-     `worker-start --worktree path:<lane>`, where the lane was made once
+     `worker-start --worktree 'id:<full id>'`, where the lane was made once
      with the lane block below and is reused (the main checkout hosts no
-     workers, §10; a lane keeps its warm state). `new-child` is allowed only
+     workers, §10; a lane keeps its warm state). Copy the full `id` from
+     `orca-ide worktree list --json` (`<repoId>::<Windows-form path>`, e.g.
+     `84830588-…::\\wsl.localhost\Ubuntu-24.04\…\roles`). Never use
+     `path:<lane>`: measured 2026-11-02 with `worktree show` on Orca 1.4.245,
+     only an absolute Linux path resolved, and a lane name, a relative path
+     and a `~` path each returned `selector_not_found` (dpc-pro, dpc-pro-docs
+     and contexthub saw the same from `worker-start` and `agent launch`). `new-child` is allowed only
      for a one-off lane: its first branch is Orca's `<prefix>/<name>`, and
      under a `start-immediately` setup policy its worker runs beside an
      unfinished setup.
    - **One live worker per checkout.** Before any start into an existing
-     checkout (`current`, or `path:<lane>`), list the Run's workers and
+     checkout (`current`, or `'id:<full id>'`), list the Run's workers and
      confirm none is live in that checkout, the worker that just sent a
      hand-off included (rule 1).
    - **How Orca names a `new-child` worktree** (one-off lanes only; a lane
@@ -1929,11 +1975,11 @@ limits.
        failed teardown can leave a stack or volumes behind; the waiver is
        the operator's own `worktree rm`, never the script's. The script
        lists the ignored files it deletes (the operator's decision,
-       2026-11-01), and refuses a lane with changes, a live agent, an
-       ambiguous name, or a commit no origin ref has after a `fetch
-       --prune`: the HEAD reflog test is §11b's (owned there). A reused
-       lane whose reflog still holds squash-merged commits of a deleted
-       branch is refused by that test; the operator decides.
+       2026-11-01). Its header owns the guards it applies first. Among
+       them, the plain HEAD reflog test is §11b's (owned there), and a
+       reused lane's squash-merged reflog commits go on to
+       `orca-lane-reflog.sh`, whose header owns that extension; a lane it
+       cannot clear is kept for the operator to decide.
      - **The location is Orca's.** `<wt>` stays the directory basename
        (§10a); `create` stops when Orca's path does not end in `<wt>`.
        Existing lanes under `.claude/worktrees/` are not moved; `name`
@@ -1946,13 +1992,16 @@ limits.
        dispatch worktrees are the harness's).
      - **Run this block** from the main checkout, with `<cli>` the §12a
        `cli=` value, `<action>` one of `create`, `name` or `rm`, `<wt>` the
-       lane (create and rm), and `<base>` the trunk branch (create only).
-       Leave out the lines an action does not take: `name` takes none, `rm`
-       no `base:`. Each value is one line: the session never substitutes a
-       value that holds a line break, and reports `ORCA lane skipped: a
+       lane (create and rm), `<base>` the trunk branch (create only), and
+       `confirm:` the lane again (rm only, and required: a removal names
+       its lane twice). Leave out the lines an action does not take:
+       `name` takes none, `create` no `confirm:`, `rm` no `base:`. Each
+       value is one line: the session never substitutes a value that holds
+       a line break, and reports `ORCA lane skipped: a
        field value is not one line` without running the block. `create`
        parks the lane detached at the commit it was created on
-       (`origin/<base>` at that moment).
+       (`origin/<base>` at that moment). A `failed` create is run again
+       as is: the script's header says which partial creates it resumes.
        ```bash
        # Run with a tool timeout of 10 minutes: rm waits for the archive hook
        # (the script's header states its worst case).
@@ -1971,15 +2020,16 @@ limits.
        action: <action>
        lane: <wt; leave this line out for name>
        base: <base; create only, else leave this line out>
+       confirm: <wt again; rm only, else leave this line out>
        CEPA_FIELDS
        fi
        ```
        The block always exits 0. Its result is its `ORCA lane` lines and,
-       on `not created`, `kept` or `failed`, its `Ending first line: `
-       line. `created`,
-       `named` and `removed` need nothing more. `not created` and `kept`
-       (a guard refused, or an Orca read was not complete) and `failed`
-       (an Orca write failed or was not proved; a lane is never removed to
+       on `not created`, `kept`, `failed` or a `name` run that skipped a
+       lane, its `Ending first line: ` line. `created`, `removed`, and
+       `named` with no skip need nothing more. `not created` and `kept`
+       (a guard refused, or an Orca read was not complete), a `name` skip,
+       and `failed` (an Orca write failed or was not proved; a lane is never removed to
        undo a failed create) end the turn as rule 7's **The operator**
        kind, with the script's `Ending first line: ` text as its first
        line. `refused` or `skipped` means the script did not run. The

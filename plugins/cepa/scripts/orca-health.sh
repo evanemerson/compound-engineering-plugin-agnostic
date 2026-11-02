@@ -320,7 +320,7 @@ REASONS = [re.compile(x) for x in (
     r"the heredoc holds a message after its fields; the message goes in the file the file: field names",
     r"the message file is not an absolute path to a cepa-send-<name>\.txt file",
     r"the message file is not a regular file this user owns", r"the message file is inside the repo",
-    # 1.50.0 (punch-list L47): a path to no file says how to retry.
+    # 1.51.0 (punch-list L47): a path to no file says how to retry.
     r"the message file does not exist; orca-send\.sh removes each message file once it reads it, "
     r"so a retry needs a new file \(or the path is wrong\)",
     r"the message file could not be (read|removed)", r"the message file's directory could not be resolved",
@@ -332,7 +332,7 @@ REASONS = [re.compile(x) for x in (
     r"the task id is not task_<id>", r"the worker_done outcome is not succeeded or failed",
     r"the type is not status, question, handoff, escalation, merge_ready, reply or worker_done",
     r"the nudge field is not nudge or no-nudge",
-    # Written before 1.50.0, which sends `nudge` to a run: or dispatch: target
+    # Written before 1.51.0, which sends `nudge` to a run: or dispatch: target
     # as no-nudge (punch-list L47); kept for one release, as the pre-1.43.0
     # and pre-1.44.0 groups were, so an alert from a session still on 1.49.x
     # is shown, not read as an unrecognised reason.

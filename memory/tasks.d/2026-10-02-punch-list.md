@@ -1527,8 +1527,17 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
 L47. **Too many send blocks are refused: 4 of the first sends after the reboot.**
     status: pending
     severity: P2
-    owner: unassigned — after L46 merges (same files: §12b rule 1, the
-      send script and `check-orca-nudge.sh`)
+    owner: roles (`tab30@roles`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L47 + L58 in parallel": task
+      `task_17486046d4ef`, dispatch `ctx_8a8b0b19abef`, branch
+      `fix/roles/send-refusals`)
+    2026-11-01: tab30@roles reported `done` (PR #122, head `598b74a`, 0 P1/P2).
+    #122 then went DIRTY against main (#121, #123) and claimed 1.50.0 like
+    #123. tab31@roles dispatched on the same branch to merge main, resolve,
+    and bump to 1.51.0 (task `task_93b21c682afb`, dispatch `ctx_6e3509555ba9`).
+    tab31 FAILED at start (`agent_readiness`, `terminal_exited`; see L60) and
+    changed nothing: #122 still `598b74a`, now also behind #124. On hold by
+    the operator ("not yet. we should do a cepa handoff soon").
     Measured 2026-11-01 by coord@main from the alert files in
     `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
     senders' terminals (Orca `terminal read`, read only). Sessions started on
@@ -1591,9 +1600,18 @@ L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4
     one-line wording fixes). Must not touch L46 files.
 
 L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #121 merged `a85eb85` (1.49.1), on the operator's
+    AskUserQuestion "Yes, merge #121" (the classifier denied the first try as
+    `[Merge Without Review]`). tab1@gain Handoff `done` at `8b8cb03`;
+    update-branch gave `de3440e`, 12/12 checks green. Gain lane parked at
+    `origin/main`, branch deleted, plugin freshness rc=0. The same shape at
+    other sites is L59.
     severity: P3
-    owner: unassigned (its own worker)
+    owner: gain (`tab1@gain`, dispatched via Orca 2026-11-01 on the operator's
+      AskUserQuestion "L50: sweep.md quoting fix": task `task_722565b7c3fe`,
+      dispatch `ctx_3cec2a286b05`, branch `fix/gain/sweep-heredoc-values`;
+      lane `gain` created 2026-11-01 with `orca-lane.sh create`)
     review-2026-10-31-230000 #5, judgment 80. The repo rule: such a value is
     read through a quoted heredoc and checked inside the block. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -1705,6 +1723,14 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     1.48.0 first. Head `f06e82e` matched, base already included, 12/12 checks
     green. Roles lane parked at `origin/main`, branch deleted, plugin
     freshness rc=0.
+    Late handoff from tab27@roles (2026-11-01, `msg_be0f1af29b69`, sent
+    because the operator told it to, not on its own): its
+    dispatch was `consumer_fenced` after the operator's account switch, so
+    its `worker_done` never went; it was alive, not dead. Open parts it
+    left for coord@main (not yet filed as items): probe the lost-post
+    hypothesis; send the drafted Orca report in PR #120's body; weigh Claude
+    Code's push notification as a third signal. Deferred P3s 14-17 are in
+    `memory/tasks.d/2026-11-01-fix-roles-needs-you-attention-flag.md`.
     severity: P1
     owner: roles (`tab27@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "L57 + L54 in parallel": task
@@ -1754,9 +1780,18 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     session scratchpad `needs-you-probe.log` (not committed).
 
 L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive pre-check.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #123 merged `f53331c` (1.50.0), on the operator's
+    AskUserQuestion "Yes, merge #123" (classifier denied the first try).
+    tab9@integrity Handoff `done` at `cc5afd1`, base already included,
+    12/12 checks green, review P1 applied. Adds `orca-lane-reflog.sh`.
+    Deferred P3 #14 and #15 in `memory/tasks.d/2026-11-01-fix-integrity-lane-followups.md`.
+    Integrity lane parked at `origin/main`, branch deleted, freshness rc=0.
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab9@integrity`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L47 + L58 in parallel": task
+      `task_dde0c2487da4`, dispatch `ctx_f6d836d4a425`, branch
+      `fix/integrity/lane-followups`)
     From PR #118 (tab26@roles). (1) rm refuses a reused lane after a squash
     merge and branch deletion, because its HEAD reflog holds commits no
     origin ref has (§11b's test, per the operator's #4 decision); tab26
@@ -1764,6 +1799,70 @@ L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive
     #4 create resume after a partial failure and #16 check the main
     checkout's orca.yaml before the archive hook runs (first), then #17, #28,
     #30. Source: `memory/tasks.d/2026-11-01-feat-roles-orca-lane-lifecycle.md`.
+
+L59. **The quoted-value injection shape is still live in `compound.md` and autonomy §11b.**
+    status: completed
+    CLOSED 2026-11-01 — PR #124 merged `ee16b2e` (1.50.1), on the operator's
+    AskUserQuestion "Yes, merge #124". tab3@gain Handoff `done` at `bb51a1f`
+    (main merged in, 1.49.2 → 1.50.1), CLEAN, 12/12 checks green; main was
+    ahead only by `c1b1673` (punch-list doc, no shared file), so no second
+    update. Probe after merge lists only `sweep.md:555` (prose). Gain lane
+    parked at `origin/main`, branch deleted, freshness rc=0.
+    severity: P3
+    owner: gain (`tab2@gain`, filed and dispatched 2026-11-01 on the
+      operator's AskUserQuestion "File L59 for gain": task `task_ec6f2adb77a3`,
+      dispatch `ctx_c7159a0fde26`, branch `fix/gain/quoted-values-compound-11b`)
+    2026-11-01: tab2@gain reported `done` (PR #124, head `6c43762`, 0 P1/P2;
+    probe now lists only `sweep.md:555`). #124 said 1.49.2, below main's
+    1.50.0 after #123. tab3@gain dispatched to merge main and bump to 1.50.1
+    (task `task_e89cce844ff9`, dispatch `ctx_689ddaff3893`). Deferred:
+    per-run heredoc delimiter (finding 4) and a drafted CLAUDE.md rule, both
+    in `memory/tasks.d/2026-11-01-fix-gain-quoted-values-compound-11b.md`.
+    Found by tab1@gain (L50, PR #121). Model-filled values sit inside quoted
+    shell strings, so a quote in the value breaks out before the later check
+    (repo CLAUDE.md: read them through a quoted heredoc). Probe, re-run by
+    coord@main on `a85eb85`:
+    `grep -nE "=['\"]<" plugins/cepa/commands/*.md plugins/cepa/skills/autonomy/SKILL.md`
+    → 8 live sites: `compound.md:251,322,325,548`, `SKILL.md:1305,1306,1329,1330`
+    (also `compound.md:238`, a comment, and `sweep.md:555`, prose about the
+    closed site). Source: `memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md`
+    finding 5.
+
+L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `orca-health.sh` says `ok`.**
+    status: pending
+    severity: P2
+    owner: gain (unassigned worker; filed 2026-11-01 on the operator's answer
+      "file L60, P2, for gain, but we're going to slow down and let things
+      catch up before we continue" — do not start until the operator says)
+    Evidence: tab31@roles, task `task_93b21c682afb`, dispatch
+    `ctx_6e3509555ba9` (Run `run_5682a0ed1455`). `worker-show` read by
+    coord@main: dispatched 03:07:13 UTC, `stage: agent_readiness`,
+    `timeoutMs: 60000`, `lastError: terminal_exited`, `lastHeartbeatAt: null`,
+    status `failed` at 03:08:14 UTC; the agent terminal was gone from
+    `terminal list`. Cause of the exit not recorded (likely the account
+    limit that broke the previous coord@main). Orca sent NO inbox message for
+    it (it did send `stop_unverified` escalations for tab27/tab8 earlier the
+    same day), and `orca-health.sh` with the Run named printed `ORCA health:
+    ok` on every coordinator turn after it. coord@main saw it only when the
+    operator asked "have the other sessions returned completely?".
+    Related evidence: tab27@roles' late handoff says an account switch
+    makes Orca fence the Run's dispatches (`consumer_fenced`), and Orca's
+    "Agent exited unexpectedly (stop_unverified)" escalations for tab27 and
+    tab8 were about live workers. The tab31 failure was within minutes of
+    an account switch too, so a switch is a candidate cause; not proven.
+    Second candidate for the fence (coord@main, 2026-11-01): the re-bind
+    itself. `orca-rebind.sh` ran `run-use` (consumer_generation 3 → 4), and
+    the two `stop_unverified` escalations were on the FIRST inbox read after
+    it; the inbox was not read before it, so the order is unknown. If
+    `run-use` fences live dispatches, `orca-rebind.sh` must say so and the
+    coordinator must prompt each fenced worker to send its report (tab27
+    sent its late handoff only when the operator told it to; tab8 never
+    did). Probe first: one live worker, read the inbox, re-bind, read again.
+    Same class as L34 (a dead session nobody sees). Fix candidate: the
+    health check reads the Run's dispatches (`worker-show` or a dispatch
+    list) and alerts on any `failed` dispatch it has not acked, with
+    `lastError` and `stage` in the alert text. Touches `orca-health.sh`,
+    which PR #122 (L47) also edits: merge after #122.
 
 ---
 

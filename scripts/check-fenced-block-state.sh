@@ -134,8 +134,8 @@ ALLOW=(
   # NO `RUN` ENTRY, deliberately, and this is the record of why. $RUN looks
   # like the archetypal documented literal, so an entry for it reads as
   # obviously correct — and leg 3 rejected it on the first run. compound.md
-  # RE-ASSIGNS `RUN="<short-run-id>"` in all three blocks that use it (lines
-  # 242, 316, 539), which is precisely 2j's fix, so it never reaches the
+  # RE-ASSIGNS RUN in all three blocks that use it (from a `run:` field line
+  # on a quoted heredoc since L59), which is precisely 2j's fix, so it never reaches the
   # candidate list and an entry would suppress nothing forever. Allowlisting
   # it would also hide the regression that matters: if a later edit dropped one
   # of those re-assignments, $RUN becomes a genuine instance and leg 1 must
@@ -143,7 +143,7 @@ ALLOW=(
   # NO `REPO` or `DOC` ENTRY either, and for a sharper reason than $RUN's.
   # Both ARE documented literals, so entries for them read as correct — and
   # both are assigned in the one block that uses them (compound.md block 1,
-  # `REPO="<repo>"; DOC="<doc-path>"`). Their only other appearance is inside a
+  # from its `repo:` and `doc:` field lines). Their only other appearance is inside a
   # COMMENT in block 0. Until the extractor stripped full-line comments from
   # the uses scan they surfaced as candidates and these entries looked
   # load-bearing; once the probe was corrected, leg 3 reported both as stale.

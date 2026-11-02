@@ -112,6 +112,11 @@ if verb == ["worktree", "create"]:
         p, br = p + "-2", br + "-2"
     if "branchsuffix" in MODE:
         br += "-2"
+    if "freshbase" in MODE:
+        # Orca fetches the base itself; here the fetch updates no
+        # remote-tracking ref, so the caller's origin/<base> stays stale.
+        git("-C", repo["path"], "fetch", "-q", "--refmap=", "origin", base[len("origin/"):])
+        base = git("-C", repo["path"], "rev-parse", "FETCH_HEAD").stdout.strip()
     r = git("-C", repo["path"], "worktree", "add", "-q", "-b", br, p, base)
     if r.returncode:
         err("runtime_error", r.stderr.strip()[:200])
