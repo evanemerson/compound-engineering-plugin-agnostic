@@ -1850,6 +1850,14 @@ L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `or
     "Agent exited unexpectedly (stop_unverified)" escalations for tab27 and
     tab8 were about live workers. The tab31 failure was within minutes of
     an account switch too, so a switch is a candidate cause; not proven.
+    Second candidate for the fence (coord@main, 2026-11-01): the re-bind
+    itself. `orca-rebind.sh` ran `run-use` (consumer_generation 3 → 4), and
+    the two `stop_unverified` escalations were on the FIRST inbox read after
+    it; the inbox was not read before it, so the order is unknown. If
+    `run-use` fences live dispatches, `orca-rebind.sh` must say so and the
+    coordinator must prompt each fenced worker to send its report (tab27
+    sent its late handoff only when the operator told it to; tab8 never
+    did). Probe first: one live worker, read the inbox, re-bind, read again.
     Same class as L34 (a dead session nobody sees). Fix candidate: the
     health check reads the Run's dispatches (`worker-show` or a dispatch
     list) and alerts on any `failed` dispatch it has not acked, with
