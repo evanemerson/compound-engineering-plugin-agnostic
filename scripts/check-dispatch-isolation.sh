@@ -323,8 +323,11 @@ exec "$REAL_GIT" "$@"
     # snapshot. It returns (cwd, ids, expected lines, {path: exists?},
     # {branch: exists?}). {name} in an expected line is wtp(m, name).
     class Case:
-        def __init__(self, name, setup, mode="remove", run="review", snap=True, stub=""):
+        def __init__(self, name, setup, mode="remove", run="review", snap=True, stub="", clean_mode=None):
             self.name, self.setup, self.mode, self.run, self.snap, self.stub = name, setup, mode, run, snap, stub
+            # clean_mode: a different <mode> for the cleanup only, so a fixture
+            # can pair a valid snapshot with a cleanup whose run/mode block is bad.
+            self.clean_mode = mode if clean_mode is None else clean_mode
 
     REMOVED = "REMOVED {agent-a1}; deleted branch worktree-agent-a1"
     def planted(m, c):
@@ -412,6 +415,17 @@ exec "$REAL_GIT" "$@"
     def bad_run(m, c):
         c.before(); w = planted_agent(m)
         return m, "a1", ["KEPT {agent-a1}: no pre-dispatch snapshot"], {w: True}, {"worktree-agent-a1": True}
+    STRAY = "CLEANUP-FAILED: a line in the run/mode block is not a field; every candidate is kept"
+    def stray_line(m, c):
+        # A non-field line in the run/mode heredoc (L59): the cleanup must keep
+        # every candidate, even when a valid snapshot exists.
+        c.before(); w = planted_agent(m)
+        return m, "a1", [STRAY, "KEPT {agent-a1}: no pre-dispatch snapshot"], {w: True}, {"worktree-agent-a1": True}
+    def quoted_run(m, c):
+        # A quote in <run> stays data (L59): no PWNED file, snapshot refused.
+        c.before(); w = planted_agent(m)
+        return m, "a1", ["KEPT {agent-a1}: no pre-dispatch snapshot"], \
+               {w: True, os.path.join(m, "PWNED"): False}, {"worktree-agent-a1": True}
     def locked(m, c):
         c.before(); w = planted_agent(m); g(m, "worktree", "lock", w)
         return m, "a1", ["KEPT {agent-a1}: git worktree remove refused"], {w: True}, {"worktree-agent-a1": True}
@@ -449,6 +463,9 @@ exec "$REAL_GIT" "$@"
              Case("local-only-head", local_head), Case("reflog-lost", reflog_lost),
              Case("no-snapshot", no_snapshot, snap=False), Case("snapshot-consumed", consumed),
              Case("bad-run-name", bad_run, run="Review!"), Case("locked", locked),
+             Case("snapshot-stray-line", stray_line, mode="remove\nextra"),
+             Case("cleanup-stray-line", stray_line, clean_mode="remove\nextra"),
+             Case("quoted-run", quoted_run, run="x'; touch PWNED; : '"),
              Case("no-branch", no_branch), Case("branch-unique-commit", branch_unique),
              Case("branch-held", branch_held), Case("unclaimed", unclaimed)]
 
@@ -490,14 +507,18 @@ exec "$REAL_GIT" "$@"
             if ctx.snap_out is not None:
                 got_snap, gd = ctx.snap_out
                 mode = case.mode if case.mode in ("remove", "report") else "report"
-                want_snap = ["SNAPSHOT %s/cepa-dispatch-before-%s-%s" % (gd, case.run, mode)] \
-                    if re.match(r"^[a-z-]+$", case.run) else ["SNAPSHOT-FAILED: run name is not [a-z-]+"]
+                if "\n" in case.run + case.mode:
+                    want_snap = ["SNAPSHOT-FAILED: a line in the run/mode block is not a field"]
+                elif re.match(r"^[a-z-]+$", case.run):
+                    want_snap = ["SNAPSHOT %s/cepa-dispatch-before-%s-%s" % (gd, case.run, mode)]
+                else:
+                    want_snap = ["SNAPSHOT-FAILED: run name is not [a-z-]+"]
                 if got_snap != want_snap:
                     bad.append((case.name, "snapshot printed %r, want %r" % (got_snap, want_snap)))
                     continue
             want = expand(want, m)
             got = [re.sub(r"\b[0-9a-f]{40}\b", "<sha>", l)
-                   for l in run_block(clean_block, cwd, stub=case.stub, run=case.run, mode=case.mode, ids=ids)]
+                   for l in run_block(clean_block, cwd, stub=case.stub, run=case.run, mode=case.clean_mode, ids=ids)]
             if got != want:
                 bad.append((case.name, "want %r, got %r" % (want, got)))
                 continue
@@ -518,6 +539,9 @@ exec "$REAL_GIT" "$@"
         ok("CLEANUP: the shipped blocks classify all %d fixtures, output and disk state" % len(cases))
 
     HEREDOC = "ids=\nIFS= read -r -d '' ids <<'CEPA_IDS' || true\n<ids>\nCEPA_IDS\n"
+    PARSE = ("run=\nmode=\nbad=\nwhile read -r line; do\n  case $line in\n"
+             "    'run: '*) run=${line#run: } ;;\n    'mode: '*) mode=${line#mode: } ;;\n"
+             "    *) bad=y ;;\n  esac\ndone <<'CEPA_RUN'\nrun: <run>\nmode: <mode>\nCEPA_RUN\n")
     # (name, block, old, new). block "clean" mutates the cleanup; "both" makes
     # the same substitution in the snapshot and the cleanup.
     mutants = [
@@ -545,14 +569,18 @@ exec "$REAL_GIT" "$@"
         ("clean", "no-unclaimed-report", 'echo "UNCLAIMED $p', 'true "UNCLAIMED $p'),
         ("clean", "snapshot-not-consumed", 'if [ -n "$snapf" ] && [ -f "$snapf" ]; then : > "$snapf"; fi', ":"),
         ("both", "snapshot-not-keyed-by-mode", "cepa-dispatch-before-$run-$mode", "cepa-dispatch-before-$run"),
+        ("both", "quoted-run-mode", PARSE, "run='<run>'\nmode='<mode>'\nbad=\n"),
+        ("clean", "no-bad-guard", PARSE + '[ -z "$bad" ] || run=\n', PARSE),
+        ("snap", "no-snapshot-bad-report", 'if [ -n "$bad" ]; then\n  echo "SNAPSHOT-FAILED: a line in the run/mode block is not a field"\nelif', "if false; then :\nelif"),
     ]
     for i, (which, name, old, new) in enumerate(mutants):
-        counts = [CLEAN.count(old)] if which == "clean" else [SNAP.count(old), CLEAN.count(old)]
-        if (which == "clean" and counts != [1]) or 0 in counts:
+        counts = {"clean": [CLEAN.count(old)], "snap": [SNAP.count(old)]}.get(which, [SNAP.count(old), CLEAN.count(old)])
+        if (which in ("clean", "snap") and counts != [1]) or 0 in counts:
             miss("CLEANUP mutant %s: anchor occurs %s times — re-read this script" % (name, counts))
             continue
-        snap_m = SNAP.replace(old, new) if which == "both" else SNAP
-        killers = outcome(snap_m, CLEAN.replace(old, new), "m%d" % i)
+        snap_m = SNAP.replace(old, new) if which in ("both", "snap") else SNAP
+        clean_m = CLEAN if which == "snap" else CLEAN.replace(old, new)
+        killers = outcome(snap_m, clean_m, "m%d" % i)
         if killers:
             ok("CLEANUP mutant %s is killed by %s" % (name, ", ".join(sorted(set(k[0] for k in killers)))))
         else:
