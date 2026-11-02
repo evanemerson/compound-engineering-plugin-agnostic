@@ -320,23 +320,23 @@ REASONS = [re.compile(x) for x in (
     r"the heredoc holds a message after its fields; the message goes in the file the file: field names",
     r"the message file is not an absolute path to a cepa-send-<name>\.txt file",
     r"the message file is not a regular file this user owns", r"the message file is inside the repo",
+    # 1.50.0 (punch-list L47): a path to no file says how to retry.
+    r"the message file does not exist; orca-send\.sh removes each message file once it reads it, "
+    r"so a retry needs a new file",
     r"the message file could not be (read|removed)", r"the message file's directory could not be resolved",
     r"the session name holds a character outside \[A-Za-z0-9\._@-\]",
     r"a worker_done takes outcome and task fields, not nudge",
     r"only a worker_done takes outcome and task fields",
-    # Written by orca-send.sh before 1.43.0 (positional arguments); kept for
-    # one release so an alert file from a session still on the old block is
-    # shown, not read as an unrecognised reason (PR #110 review).
-    r"usage: orca-send\.sh .{1,120}", r"worker_done takes <outcome> <task id> after the type",
-    r"the fourth argument is not nudge or no-nudge",
-    # Written before 1.44.0 (the message in the heredoc); kept for one release.
-    r"a field name is not cli, target, type, nudge, outcome, task or session", r"stdin has no subject line",
-    r"stdin has no empty line after its fields", r"a line before the empty line is not a <name>: <value> field",
     r"the target is not a term_ handle, run: or dispatch: address", r"a reply's target is not a msg_ message id",
     r"a worker_done target is not dispatch:ctx_<id>",
     r"the task id is not task_<id>", r"the worker_done outcome is not succeeded or failed",
     r"the type is not status, question, handoff, escalation, merge_ready, reply or worker_done",
-    r"the nudge field is not nudge or no-nudge", r"only a term_ handle is nudged",
+    r"the nudge field is not nudge or no-nudge",
+    # Written before 1.50.0, which sends `nudge` to a run: or dispatch: target
+    # as no-nudge (punch-list L47); kept for one release, as the pre-1.43.0
+    # and pre-1.44.0 groups were, so an alert from a session still on 1.49.x
+    # is shown, not read as an unrecognised reason.
+    r"only a term_ handle is nudged",
     r"no timeout command to bound the Orca calls", r"no python3 to read the Orca output", r"mktemp failed",
     r"no request id could be made", r"the send output could not be read",
     r"the send exited \d{1,3}( and printed (nothing|no JSON))?", r"the send printed JSON of an unexpected shape",

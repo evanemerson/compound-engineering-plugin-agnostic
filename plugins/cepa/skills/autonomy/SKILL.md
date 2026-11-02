@@ -1655,14 +1655,23 @@ limits.
      §10a name (`tab4@integrity`), and `<n>` counts this session's sends
      (1, 2, 3, …), so no two sessions and no two runs share a name, and Write
      never overwrites. Put it in the session's scratchpad directory when it
-     has one, else the system temp directory, never in a repo. Line 1 is the
+     has one, else the system temp directory, never in a repo. **Use exactly
+     this path, with no other file name** — the script refuses any name that
+     does not start `cepa-send-` and end `.txt`:
+     `<scratchpad>/cepa-send-<session>-<n>.txt`, for example
+     `/tmp/claude-1000/<project>/<id>/scratchpad/cepa-send-tab4@integrity-3.txt`,
+     or `/tmp/cepa-send-tab4@integrity-3.txt` with no scratchpad. A name such
+     as `msg-takeover.txt` is refused (punch-list L47: 2 of 4 refused sends
+     after the 2026-11-01 restart used another name). Line 1 is the
      subject and every line after it the body; a `reply` (rule 7) has no
      subject, so its whole file is the answer. Put the file's absolute path
      in the `file:` field. The script reads the fields first, then checks
      the path. A path that fails is refused and its file is kept. A path
      that passes is read and removed before any value is checked, so a
      refused run needs a new file (the next `<n>`) before the block runs
-     again. Why (punch-list L41, PR #110 review finding #3): up to cepa 1.43.0
+     again: the old file is gone, and a re-run on it is refused with
+     `the message file does not exist; orca-send.sh removes each message file
+     once it reads it, so a retry needs a new file`. Why (punch-list L41, PR #110 review finding #3): up to cepa 1.43.0
      the message sat in the heredoc, and a message line that was exactly the
      delimiter ended it, so every line after it ran as a shell command.
      Bodies carry relayed repo content, and only prose guarded that. A file
@@ -1718,7 +1727,12 @@ limits.
      reads the message (measured 2026-10-30, punch-list L26: the recipient
      stayed `done` with the message unread). So the block's `<nudge>` is
      `nudge` for a target that is not a Run coordinator, and `no-nudge` for
-     one. The nudge runs only after a send succeeds to a target that is not a Run coordinator: `orca-send.sh` then runs
+     one. A `run:` or `dispatch:` target given `nudge` is not refused: the
+     script sends it as `no-nudge` and prints `Orca nudge not needed: <target>
+     is a mailbox Orca delivers; sent as no-nudge` (punch-list L47). A Run
+     coordinator's `term_` handle cannot be told apart that way, so give it
+     `no-nudge` yourself.
+     The nudge runs only after a send succeeds to a target that is not a Run coordinator: `orca-send.sh` then runs
      `plugins/cepa/scripts/orca-nudge.sh`, which types one fixed line into the
      target's terminal and presses Enter:
      `You have 1 orchestration message. Run <cli> orchestration check --peek --json`.

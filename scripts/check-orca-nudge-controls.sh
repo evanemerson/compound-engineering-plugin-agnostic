@@ -206,8 +206,9 @@ SEND_MUTANTS = [
      {'SENDREF cap counts bytes', 'SENDREF over the size cap'}),
     ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
      {'SENDREF cap counts bytes'}),
-    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] ||', 'nudge) true ||',
-     {'SENDREF nudge a run address'}),
+    # L47: a run: or dispatch: target keeps no `nudge` mode; it is downgraded.
+    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] \\', 'nudge) true \\',
+     {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge'}),
     # L36 #20: every send carries a request id, so its vsock retry replays.
     ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
      {'BLOCK hostile message is sent as text', 'FIELDS any order sends the same argv', 'STORE argv and order', 'STORE retry reuses the request id'}),
@@ -278,6 +279,20 @@ SEND_MUTANTS = [
     # FILE (punch-list L41): the message is in a file, read once and removed.
     ('file-not-removed', 'rm -f -- "$cepa_send_file" 2>/dev/null\n[ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"\n', '',
      {'FILE removed after a refused send', 'FILE unremovable', 'BLOCK hostile message is sent as text', 'FILE removed after a stored send', 'FILE unreadable is still removed'}),
+    # L47: a path to no file names the retry; a dangling symlink is still FREG.
+    ('file-missing-reason-dropped', '[ -e "$cepa_send_file" ] || [ -L "$cepa_send_file" ] \\\n', 'true \\\n',
+     {'FILE does not exist'}),
+    ('file-dangling-link-as-missing', '[ -e "$cepa_send_file" ] || [ -L "$cepa_send_file" ] \\', '[ -e "$cepa_send_file" ] \\',
+     {'FILE a dangling symlink'}),
+    # L47: `nudge` to a run: or dispatch: target is sent as no-nudge, with a line.
+    ('nudge-run-refused-again', '|| { cepa_send_mode=no-nudge cepa_send_downgraded=1; } ;;', '|| refuse "only a term_ handle is nudged" ;;',
+     {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge'}),
+    ('nudge-downgrade-silent', 'if [ -n "$cepa_send_downgraded" ]; then', 'if false; then',
+     {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge'}),
+    ('nudge-downgrade-always', 'if [ -n "$cepa_send_downgraded" ]; then', 'if [ "$cepa_send_type" != reply ] && [[ $cepa_send_target != term_* ]]; then',
+     # A worker_done targets dispatch: with no-nudge too, so it is caught as well.
+     {'STORE no-nudge to a dispatch address prints no downgrade', 'STORE run address target',
+      'WDONE failed outcome', 'WDONE stored', 'WDONE vsock retry'}),
     ('file-symlink-allowed', '[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O', '[ -f "$cepa_send_file" ] && [ -O',
      {'FILE a symlink', 'FILE a symlink keeps the link'}),
     ('file-any-name', '/cepa-send-[A-Za-z0-9._@-]{1,64}\\.txt$', '/[A-Za-z0-9._@-]{1,64}$',
@@ -361,7 +376,7 @@ SEND_MUTANTS = [
      # Every refusal before the target is copied (the heredoc and file
      # checks, L41) then names "the target session".
      {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused', 'FIELDS name given twice',
-      'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot part',
+      'FILE a dangling symlink', 'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot part',
       'FILE dot-dot part', 'FILE field missing', 'FILE in the main checkout from a worktree', 'FILE inside the repo',
       'FILE relative path', 'FILE space in the path', 'FILE unreadable', 'FILE unremovable',
       'FILE via a symlinked directory', 'SENDREF target newline'}),
