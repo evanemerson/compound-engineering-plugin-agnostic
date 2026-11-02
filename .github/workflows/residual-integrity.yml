@@ -241,6 +241,26 @@ jobs:
         if: always()
         run: bash scripts/check-orca-lane-controls.sh
 
+  orca-outbox:
+    # The coord:<repo> address (autonomy section 12b rules 1 and 8, punch-list
+    # L61): orca-send.sh writes each coord: message to an outbox on disk and
+    # resolves it to the one live coord@main, orca-health.sh reports what is
+    # undelivered, and orca-outbox.sh is the receiver's drain. The check runs
+    # them in throwaway git repos against a stub CLI and a temp outbox and
+    # never reaches a real Orca; the controls mutate them. About 45 seconds
+    # locally. Headers own the legs and limits. Static commands, no
+    # workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca outbox
+        if: always()
+        run: bash scripts/check-orca-outbox.sh
+      - name: Check Orca outbox controls
+        if: always()
+        run: bash scripts/check-orca-outbox-controls.sh
+
   orca-attention:
     # The attention flag (autonomy section 12b rule 7) runs only through
     # plugins/cepa/scripts/orca-attention.sh, which marks this checkout's own
