@@ -33,6 +33,12 @@
 #   - own-*     the fields leg's own set: a finding the run did not write is a
 #               WARN, its own finding a MISS, a wrong own list a MISS, the
 #               repo checker strict; title-hint for the heading-title repair;
+#   - path-*    plugins/cepa/scripts/findings-path.sh, the one way a writer
+#               names a findings file (punch-list L54): the per-run slug,
+#               create-exclusive with the next free name on a collision (a
+#               planted prior file keeps its bytes), the readers' globs still
+#               walking the new name AND the old one, and the spec's
+#               reservation block run extracted;
 #   - wire-*    every writer cites the section before its commit, declared
 #               allowed-tools grant the verb, no second copy of the pattern
 #               exists in this repo, and the required-field list matches the
@@ -76,7 +82,12 @@ RESIDUAL_CHECKER=$(readlink -f "${CEPA_RESIDUAL_CHECKER:-$REPO_ROOT/scripts/chec
 [ -n "$RESIDUAL_CHECKER" ] && [ -r "$RESIDUAL_CHECKER" ] || {
   printf 'FATAL: no readable repo checker at %s\n' "${CEPA_RESIDUAL_CHECKER:-$REPO_ROOT/scripts/check-residual-integrity.sh}" >&2
   exit 2; }
-if { [ -n "${CEPA_FINDINGS_CHECKER:-}" ] || [ -n "${CEPA_RESIDUAL_CHECKER:-}" ]; } && [ -n "${CI:-}" ]; then
+# CEPA_FINDINGS_PATH: the same, for the path reserver (findings-path.sh).
+FPATH=$(readlink -f "${CEPA_FINDINGS_PATH:-$REPO_ROOT/plugins/cepa/scripts/findings-path.sh}" 2>/dev/null) || FPATH=''
+[ -n "$FPATH" ] && [ -r "$FPATH" ] || {
+  printf 'FATAL: no readable path reserver at %s\n' "${CEPA_FINDINGS_PATH:-$REPO_ROOT/plugins/cepa/scripts/findings-path.sh}" >&2
+  exit 2; }
+if { [ -n "${CEPA_FINDINGS_CHECKER:-}" ] || [ -n "${CEPA_RESIDUAL_CHECKER:-}" ] || [ -n "${CEPA_FINDINGS_PATH:-}" ]; } && [ -n "${CI:-}" ]; then
   printf 'FATAL: a checker override is set in CI — the suite would validate a checker nobody reviewed\n' >&2
   exit 2
 fi
@@ -171,6 +182,16 @@ reg title-tag       'reading a `[...]` tag as a title (the tag strip lost)'
 reg title-punct     'reading punctuation after a tag as a title (the letter-or-digit test lost)'
 reg block-own       'a Self-check block that drops --own "$own" — every old finding fails the writer'
 reg own-statusonly  'a status-only change on an old finding failing the self-check, or a second edited field passing it'
+reg path-slug       'a name without the per-run slug, or a slug that is not cepa:autonomy §5 slug(x)'
+reg path-detached   'a detached HEAD named with no per-run component (the short-SHA fallback lost)'
+reg path-collision  'an existing findings file truncated or reused (create-exclusive lost) — L54 itself'
+reg path-weekly     'the weekly kind or its --scope ignored'
+reg path-usage      'an unknown kind or argument accepted, or a stamp not taken from date'
+reg path-symlink    'a dangling symlink at the name followed, or skipped as if taken'
+reg path-readers    'a reader glob that walks only one name shape — the new name or the old one reads as no file'
+reg path-block      'the spec''s reservation block failing, or printing no path, from a non-cepa directory'
+reg path-predates   'the reservation block passing when the plugin copy lacks findings-path.sh'
+reg wire-path       'a writer composing the name itself instead of citing the Filename Convention block'
 reg wire-required   'REQUIRED_FIELDS drifting from the spec table yes rows'
 reg wire-cite       'a writer losing its Self-check citation'
 reg wire-order      'a writer citing the Self-check after its commit'
@@ -227,6 +248,21 @@ fi
 n_blocks=$(grep -l 'check-findings-file.sh' "$BLOCKDIR"/*.sh 2>/dev/null | wc -l)
 [ "$n_blocks" -eq 1 ] || { printf 'FATAL: %s bash blocks in %s run check-findings-file.sh; expected exactly 1\n' "$n_blocks" "$SKILL" >&2; exit 2; }
 SELFCHECK=$(grep -l 'check-findings-file.sh' "$BLOCKDIR"/*.sh)
+n_blocks=$(grep -l 'findings-path.sh' "$BLOCKDIR"/*.sh 2>/dev/null | wc -l)
+[ "$n_blocks" -eq 1 ] || { printf 'FATAL: %s bash blocks in %s run findings-path.sh; expected exactly 1\n' "$n_blocks" "$SKILL" >&2; exit 2; }
+RESERVE=$(grep -l 'findings-path.sh' "$BLOCKDIR"/*.sh)
+
+# mkrepo <dir> <branch> — a throwaway repo with one commit on <branch>.
+mkrepo() {
+  mkdir -p "$1" && git -C "$1" init -q -b "$2" && \
+    git -C "$1" -c user.name=x -c user.email=x@x commit -q --allow-empty -m x
+}
+# stubdate <dir> — a `date` on <dir>/bin that prints one fixed stamp, so a
+# collision can be planted at the exact name the reserver will pick.
+stubdate() {
+  mkdir -p "$1/bin"
+  printf '#!/bin/sh\necho 2026-01-01-000000\n' > "$1/bin/date"; chmod +x "$1/bin/date"
+}
 
 # run_block <workdir> <env...> -- <findings-path>... — the block with `files=`
 # set to the paths (each quoted), run under `bash -e` in its own process from
@@ -761,6 +797,87 @@ EOF
       awk '/^### /{n++} n==1 && /^- file: /{$0="- file: y.py"} {print}' "$f" > "$f.t" && mv "$f.t" "$f"
       OUT=$(BLOCK_OWN=1 run_block "$d" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" -- "$f"); RC=$?
       expect 1 '^MISS .*finding ### 1 lacks required field' '^WARN ' ;;
+    path-slug)
+      mkrepo "$d/r" 'feat/a—b-'
+      OUT=$(cd "$d/r" && bash "$FPATH" 2>&1); RC=$?
+      expect 0 '/todos/review-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-feat-a-b\.md$' || return 1
+      [ -f "$OUT" ] && [ ! -s "$OUT" ] || { DETAIL='the printed path is not an empty file'; return 1; } ;;
+    path-detached)
+      mkrepo "$d/r" main; git -C "$d/r" checkout -q --detach
+      sha=$(git -C "$d/r" rev-parse --short HEAD)
+      OUT=$(cd "$d/r" && bash "$FPATH" 2>&1); RC=$?
+      expect 0 "-[0-9]{6}-${sha}\.md\$" ;;
+    path-collision)
+      mkrepo "$d/r" fix/x; stubdate "$d"
+      mkdir -p "$d/r/todos"; printf 'PRIOR RUN\n' > "$d/r/todos/review-2026-01-01-000000-fix-x.md"
+      local a b
+      a=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" 2>&1); r1=$?
+      b=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" 2>&1); RC=$?
+      OUT="first:$a second:$b prior:$(cat "$d/r/todos/review-2026-01-01-000000-fix-x.md")"
+      [ "$r1" -eq 0 ] || { DETAIL="first reservation rc $r1"; return 1; }
+      expect 0 'first:.*/review-2026-01-01-000000-fix-x-2\.md second:.*/review-2026-01-01-000000-fix-x-3\.md prior:PRIOR RUN$' ;;
+    path-weekly)
+      mkrepo "$d/r" feat/y; stubdate "$d"
+      OUT=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" --kind review-weekly --scope main 2>&1); RC=$?
+      expect 0 '/todos/review-weekly-2026-01-01-000000-main\.md$' ;;
+    path-usage)
+      mkrepo "$d/r" main
+      local r2 r3
+      ( cd "$d/r" && bash "$FPATH" --kind sweep ) >/dev/null 2>&1; r2=$?
+      ( cd "$d/r" && bash "$FPATH" --bogus ) >/dev/null 2>&1; r3=$?
+      mkdir -p "$d/bin"; printf '#!/bin/sh\necho 213000\n' > "$d/bin/date"; chmod +x "$d/bin/date"
+      OUT=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" 2>&1); RC=$?
+      OUT="kind:$r2 arg:$r3 stamp:$RC $OUT"
+      [ "$r2" -eq 2 ] && [ "$r3" -eq 2 ] || { DETAIL="kind rc $r2, arg rc $r3, wanted 2 and 2"; return 1; }
+      expect 2 'malformed stamp' ;;
+    path-symlink)
+      mkrepo "$d/r" fix/x; stubdate "$d"; mkdir -p "$d/r/todos"
+      ln -s "$d/nowhere" "$d/r/todos/review-2026-01-01-000000-fix-x.md"
+      OUT=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" 2>&1); RC=$?
+      expect 2 'dangling symlink' ;;
+    path-readers)
+      # Both name shapes, each holding one MISS, under the repo checker's walk
+      # and the standalone checker's glob. Either shape dropping out of a
+      # reader shows as a missing MISS line, never as a pass.
+      mkdir -p "$d/r/todos" "$d/r/memory/tasks.d"
+      findings "$d/r/todos/review-2026-01-01-000000.md" "$(sumblock 1 0 1 0 0 0)" P2:pending
+      findings "$d/r/todos/review-2026-01-02-000000-fix-x-2.md" "$(sumblock 1 0 1 0 0 0)" P2:pending
+      local g
+      OUT=$(cd "$d/r" && bash "$RESIDUAL_CHECKER" 2>&1); RC=$?
+      g=$(cd "$d/r" && bash "$CHECKER" todos/review-*.md 2>&1)
+      OUT="$OUT
+GLOB: $g"
+      expect 1 'review-2026-01-01-000000\.md' || return 1
+      expect 1 'review-2026-01-02-000000-fix-x-2\.md' || return 1
+      grep -q 'review-2026-01-01-000000\.md' <<<"$g" && grep -q 'review-2026-01-02-000000-fix-x-2\.md' <<<"$g" ||
+        { DETAIL='the review-*.md glob missed a shape'; return 1; } ;;
+    path-block)
+      mkrepo "$d/r" fix/blk
+      cp "$RESERVE" "$d/reserve.sh"
+      mkdir -p "$TMPROOT/emptyhome"
+      OUT=$(cd "$d/r" && env -i PATH="$PATH" HOME="$TMPROOT/emptyhome" CEPA_PLUGIN_ROOT="$PLUGIN_DIR" bash -e "$d/reserve.sh" 2>&1); RC=$?
+      expect 0 "^$d/r/todos/review-[0-9-]{17}-fix-blk\.md\$" || return 1
+      [ -f "$OUT" ] || { DETAIL='the block printed a path that does not exist'; return 1; } ;;
+    path-predates)
+      mkrepo "$d/r" main
+      mkdir -p "$d/old/scripts"; cp "$PLUGIN_DIR/scripts/brain-client.sh" "$d/old/scripts/"; chmod +x "$d/old/scripts/brain-client.sh"
+      cp "$PLUGIN_DIR/scripts/resolve-plugin-root.sh" "$d/old/scripts/"
+      mkdir -p "$TMPROOT/emptyhome"
+      OUT=$(cd "$d/r" && env -i PATH="$PATH" HOME="$TMPROOT/emptyhome" CEPA_PLUGIN_ROOT="$d/old" bash -e "$RESERVE" 2>&1); RC=$?
+      expect 3 '^findings-path UNAVAILABLE' ;;
+    wire-path)
+      # Every command that writes a todos/review-* findings file cites the
+      # reservation block, and none still names the bare second-stamped path
+      # as the file it writes. Probe: the writers are the commands whose body
+      # says it writes a findings file to todos/ (stated list; a new writer
+      # must be added here).
+      local w bad=''
+      for w in review plan-review resolve-pr lfg; do
+        grep -qF 'Filename Convention' "$CMDS/$w.md" || bad="$bad $w(no-citation)"
+        grep -qE '(Write|Create a findings file at|findings file) `todos/review-YYYY-MM-DD-HHMMSS\.md`' "$CMDS/$w.md" && bad="$bad $w(bare-name)"
+      done
+      OUT="bad:${bad:- none}"; RC=0
+      expect 0 '^bad: none$' ;;
     wire-required)
       # The spec's `## Finding Fields` table, `yes` rows, against the checker.
       local spec_set code_set

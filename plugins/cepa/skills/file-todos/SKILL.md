@@ -14,11 +14,63 @@ Define the structured format for review findings stored in `todos/`. Each review
 ### Filename Convention
 
 ```
-todos/review-YYYY-MM-DD-HHMMSS.md          # per-PR review (/cepa:review)
-todos/review-weekly-YYYY-MM-DD-HHMMSS.md   # debt tier (/cepa:review cadence:weekly)
+todos/review-YYYY-MM-DD-HHMMSS-<slug>[-N].md          # per-run review (/cepa:review, /cepa:plan-review, /cepa:resolve-pr)
+todos/review-weekly-YYYY-MM-DD-HHMMSS-<slug>[-N].md   # debt tier (/cepa:review cadence:weekly)
+todos/review-YYYY-MM-DD-HHMMSS.md                     # old name — files written before 1.48.0
 ```
 
-Both keep the `review-` prefix so consumers globbing `review-*` match them.
+`<slug>` is `slug(<scope>)` per `cepa:autonomy` §5 — `<scope>` is the current
+branch (the short SHA on a detached HEAD), or the resolved trunk for a weekly
+run. `-N` appears only when the name was already taken.
+
+**A writer never composes this name by hand.** It reserves the path with the
+block below and writes into the file the block prints. The stamp comes from
+`date`, and the file is created exclusively, so a second run can never write
+over the first (punch-list L54: PR #108 replaced PR #107's
+`todos/review-2026-10-31-213000.md`, a stamp the writer had typed).
+
+```bash
+kind=review     # review | review-weekly
+scope=''        # '' = the current branch; a weekly run sets its trunk
+# ${CLAUDE_PLUGIN_ROOT} is NOT exported into this shell; resolve the root.
+# An inherited CEPA_ROOT is never trusted: only this loop may set it.
+unset CEPA_ROOT
+for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+         "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+         "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+         "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+  [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+done
+if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/findings-path.sh" ]; then
+  echo "findings-path UNAVAILABLE: no plugin copy with scripts/findings-path.sh — refresh the plugin or set CEPA_PLUGIN_ROOT"
+  exit 3
+fi
+if [ -n "$scope" ]; then
+  bash "$CEPA_ROOT/scripts/findings-path.sh" --kind "$kind" --scope "$scope"
+else
+  bash "$CEPA_ROOT/scripts/findings-path.sh" --kind "$kind"
+fi
+```
+
+**Exit 0** prints one absolute path to an empty file this run now owns. Read
+it once (the Write tool refuses an existing file it has not read), then Write
+the findings into it. Cite it repo-relative (`todos/<name>`). An empty file
+left by a run that died is not silent: the repo checker reports a findings
+file with no `summary:` block as a MISS.
+
+**Exit 3** (`findings-path UNAVAILABLE`) — the loaded copy predates the
+script. Report it verbatim. Until it is refreshed, compose the name above
+with the stamp from `date +%Y-%m-%d-%H%M%S` run in the shell, never typed, and
+check that the path does not exist before the first Write.
+
+**Exit 2** — usage, or the path could not be made; stderr says which. Report
+it and write no findings file under a name you made up.
+
+Every name keeps the `review-` prefix, so consumers globbing `review-*` match
+the new names and the old ones alike, and the stamp still leads, so a sort by
+name is still a sort by time. **Never narrow a reader to one shape** (a
+`review-????-??-??-??????.md` glob, a fixed-length cut): it would match zero
+new files, and a lagging reader's failure is a clean pass.
 **A consumer that SELECTS one file (rather than scanning all) must
 discriminate on `scope:`, not on the filename** — `review-weekly-*` sorts
 after every `review-<digit>-*` lexicographically, so a naive "most recent"
@@ -455,7 +507,7 @@ checker passes no own set, so there every missing field stays a MISS. When the
 files in `files` need different own sets, run the block once per file.
 
 ```bash
-files=(todos/review-YYYY-MM-DD-HHMMSS.md)
+files=(todos/review-YYYY-MM-DD-HHMMSS-slug.md)   # the path the Filename Convention block printed
 own=all
 # ${CLAUDE_PLUGIN_ROOT} is NOT exported into this shell; resolve the root.
 # An inherited CEPA_ROOT is never trusted: only this loop may set it.

@@ -85,8 +85,10 @@ reprocessed.
 Classify every item into the six verdicts with `confidence` +
 `action_class` per the skill's scoring rules (author-trust gate in
 unattended runs; identity never raises action_class; the compliance
-carve-out and the always-needs-human list are absolute). Write the
-findings file `todos/review-YYYY-MM-DD-HHMMSS.md` in the
+carve-out and the always-needs-human list are absolute). Reserve the
+findings file's path with the **`cepa:file-todos`
+`### Filename Convention`** block (`kind=review`; never a hand-typed name or stamp), and
+write the file it printed in the
 **`cepa:file-todos` format** — `scope: pr-feedback:#N`, `agent:` =
 `resolve-pr`, one finding per item with the verdict in the body, plus
 Run Metadata (`suspect_comments`, fetch-fallback note,
