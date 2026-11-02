@@ -1915,11 +1915,11 @@ limits.
        failed teardown can leave a stack or volumes behind; the waiver is
        the operator's own `worktree rm`, never the script's. The script
        lists the ignored files it deletes (the operator's decision,
-       2026-11-01), and refuses a lane with changes, a live agent, an
-       ambiguous name, or a commit no origin ref has after a `fetch
-       --prune`: the HEAD reflog test is §11b's (owned there). A reused
-       lane whose reflog still holds squash-merged commits of a deleted
-       branch is refused by that test; the operator decides.
+       2026-11-01). Its header owns the guards it applies first. Among
+       them, the plain HEAD reflog test is §11b's (owned there), and a
+       reused lane's squash-merged reflog commits go on to
+       `orca-lane-reflog.sh`, whose header owns that extension; a lane it
+       cannot clear is kept for the operator to decide.
      - **The location is Orca's.** `<wt>` stays the directory basename
        (§10a); `create` stops when Orca's path does not end in `<wt>`.
        Existing lanes under `.claude/worktrees/` are not moved; `name`
@@ -1932,13 +1932,16 @@ limits.
        dispatch worktrees are the harness's).
      - **Run this block** from the main checkout, with `<cli>` the §12a
        `cli=` value, `<action>` one of `create`, `name` or `rm`, `<wt>` the
-       lane (create and rm), and `<base>` the trunk branch (create only).
-       Leave out the lines an action does not take: `name` takes none, `rm`
-       no `base:`. Each value is one line: the session never substitutes a
-       value that holds a line break, and reports `ORCA lane skipped: a
+       lane (create and rm), `<base>` the trunk branch (create only), and
+       `confirm:` the lane again (rm only, and required: a removal names
+       its lane twice). Leave out the lines an action does not take:
+       `name` takes none, `create` no `confirm:`, `rm` no `base:`. Each
+       value is one line: the session never substitutes a value that holds
+       a line break, and reports `ORCA lane skipped: a
        field value is not one line` without running the block. `create`
        parks the lane detached at the commit it was created on
-       (`origin/<base>` at that moment).
+       (`origin/<base>` at that moment). A `failed` create is run again
+       as is: the script's header says which partial creates it resumes.
        ```bash
        # Run with a tool timeout of 10 minutes: rm waits for the archive hook
        # (the script's header states its worst case).
@@ -1957,15 +1960,16 @@ limits.
        action: <action>
        lane: <wt; leave this line out for name>
        base: <base; create only, else leave this line out>
+       confirm: <wt again; rm only, else leave this line out>
        CEPA_FIELDS
        fi
        ```
        The block always exits 0. Its result is its `ORCA lane` lines and,
-       on `not created`, `kept` or `failed`, its `Ending first line: `
-       line. `created`,
-       `named` and `removed` need nothing more. `not created` and `kept`
-       (a guard refused, or an Orca read was not complete) and `failed`
-       (an Orca write failed or was not proved; a lane is never removed to
+       on `not created`, `kept`, `failed` or a `name` run that skipped a
+       lane, its `Ending first line: ` line. `created`, `removed`, and
+       `named` with no skip need nothing more. `not created` and `kept`
+       (a guard refused, or an Orca read was not complete), a `name` skip,
+       and `failed` (an Orca write failed or was not proved; a lane is never removed to
        undo a failed create) end the turn as rule 7's **The operator**
        kind, with the script's `Ending first line: ` text as its first
        line. `refused` or `skipped` means the script did not run. The
