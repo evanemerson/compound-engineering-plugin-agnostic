@@ -1525,7 +1525,13 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
        print `done`; a `run:`-only Run is taken with no ownership check.
 
 L47. **Too many send blocks are refused: 4 of the first sends after the reboot.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #122 merged `a8b66c5` (1.51.0) on the operator's
+    AskUserQuestion "Merge #122". tab32@roles `done`, Head d6580bf = PR head;
+    update-branch → 869ead1, CI 4/4 green, CLEAN. roles parked at a8b66c5,
+    branch deleted, both hops run, freshness rc=0 (loaded 1.51.0). Also
+    shipped: §12b rule 2 starts workers with the lane's full `id:`, never
+    `path:<lane>`.
     severity: P2
     owner: roles (`tab30@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "L47 + L58 in parallel": task
@@ -1872,6 +1878,54 @@ L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `or
     list) and alerts on any `failed` dispatch it has not acked, with
     `lastError` and `stage` in the alert text. Touches `orca-health.sh`,
     which PR #122 (L47) also edits: merge after #122.
+
+L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
+    status: pending
+    severity: P1
+    owner: gain (unassigned worker; after #122 — merged)
+    Design (approved by the operator 2026-11-02; local, docs/ is gitignored):
+    `docs/superpowers/specs/2026-11-02-fleet-coord-reach-and-lane-stacks-design.md`,
+    "Piece 1" and "Builder-check answers" 1-5. Evidence: artist360
+    `docs/handoff/2026-10-31-coord-main-deploy-loop.md:10-11,103-108`
+    (`merged #N` sent to a closed coordinator tab); a failed send's alert file
+    holds no body (`~/.local/state/cepa/orca-alerts/*.alert`, read
+    2026-11-02). Touches `orca-send.sh`, `orca-health.sh`, §12b rules 1/2/8.
+
+L62. **Shared lane & stack scheme as a cepa skill, with a running-stack gate.**
+    status: pending
+    severity: P1
+    owner: integrity (unassigned worker)
+    Design: same doc, "Piece 2", "Piece 3", "Builder-check answers" 6-7.
+    Replaces `~/webapps/worktree-blueprint/` (not under git, pre-Orca, names
+    the forbidden `make worktree branch=`). Includes the coord@main
+    first-prompt template and a `/cepa:setup` check. Evidence: dpc-pro
+    `worktree-init` counts stacks with `docker ps -a` and checks only at
+    create (Makefile `worktree-init`, read 2026-11-02).
+
+L63. **Each repo adopts L61 + L62 (hand-off to each repo's coord@main).**
+    status: pending
+    severity: P2
+    owner: coord@main (hand-offs only; each repo's coord@main does the work)
+    After L61 and L62 ship. Per repo: stop-after-setup, call the gate,
+    fix `orca.yaml`, rebuild old lanes under the same names (rm, then
+    create). Known: dpc-pro 6 plain lanes (apgar, bath, cori, levi,
+    taussig, wright: keep names), helm 3, kcprimetime 2; dpc-pro-docs has no
+    `orca.yaml`; kcprimetime #30 and farmtender #79 unmerged. farmtender
+    keeps its no-stack setup.
+
+L64. **Shared `worktree-init` code with a small per-repo config (later).**
+    status: deferred
+    severity: P3
+    owner: unassigned
+    Operator 2026-11-02: "same behavior now, shared code later". After L63.
+
+L65. **A nudge is skipped without an alert when `worktree ps` times out.**
+    status: pending
+    severity: P3
+    owner: unassigned (fold into L60 or L61 if adjacent)
+    Evidence: dpc-insider-www `docs/handoff/2026-10-31-coord-main-worktreeinclude.md:24`
+    — send stored, nudge skipped ("worktree ps failed or timed out"), the
+    operator had to ask for an inbox check.
 
 ---
 
