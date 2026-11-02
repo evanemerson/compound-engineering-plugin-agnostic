@@ -1696,7 +1696,15 @@ L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mu
     the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
 
 L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees it.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #120 merged `859eef6` (1.49.0), on the operator's
+    AskUserQuestion "Yes, merge #120" (the auto-mode classifier had denied the
+    first merge attempt as `[Merge Without Review]`). tab28@roles fixed the
+    `rule-worker-may-ask` control MISS (`e548fcb`, checker made stricter);
+    tab29@roles bumped 1.48.0 → 1.49.0 (`f06e82e`) because #119 had shipped
+    1.48.0 first. Head `f06e82e` matched, base already included, 12/12 checks
+    green. Roles lane parked at `origin/main`, branch deleted, plugin
+    freshness rc=0.
     severity: P1
     owner: roles (`tab27@roles`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "L57 + L54 in parallel": task
