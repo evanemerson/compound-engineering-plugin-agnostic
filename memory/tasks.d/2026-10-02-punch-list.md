@@ -1723,7 +1723,8 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     1.48.0 first. Head `f06e82e` matched, base already included, 12/12 checks
     green. Roles lane parked at `origin/main`, branch deleted, plugin
     freshness rc=0.
-    Late handoff from tab27@roles (2026-11-01, `msg_be0f1af29b69`): its
+    Late handoff from tab27@roles (2026-11-01, `msg_be0f1af29b69`, sent
+    because the operator told it to, not on its own): its
     dispatch was `consumer_fenced` after the operator's account switch, so
     its `worker_done` never went; it was alive, not dead. Open parts it
     left for coord@main (not yet filed as items): probe the lost-post
