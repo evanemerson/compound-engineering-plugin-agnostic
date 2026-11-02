@@ -505,28 +505,83 @@ the **local** half rather than trusting this run's snapshot, and it never
 runs `-D` on an unverified branch — the operator may act days later:
 
 ```bash
-# Snapshot taken <run-date>. Verify, then delete. Never -D without the
-# check: it is unconditional and does not refuse an unmerged branch.
-b='<branch>'
-if git worktree list --porcelain | grep -qx "branch refs/heads/$b"; then
+# Verify, then delete. Never -D without the check: it is unconditional
+# and does not refuse an unmerged branch.
+b=''
+want=''
+taken=''
+bad=''
+while read -r line; do
+  case $line in
+    'branch: '*)
+      b=${line#branch: } ;;
+    'head: '*)
+      want=${line#head: } ;;
+    'taken: '*)
+      taken=${line#taken: } ;;
+    *)
+      bad=$line ;;
+  esac
+done <<'CEPA_BRANCH'
+branch: <branch>
+head: <headRefOid>
+taken: <run-date>
+CEPA_BRANCH
+if [ -n "$bad" ]; then
+  echo "SKIP — a line in the block is not a field: $bad"
+elif [ -z "$b" ] || [ "$(git check-ref-format --branch "$b" 2>/dev/null)" != "$b" ]; then
+  echo "SKIP — not a branch name: $b"
+elif ! [[ $want =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+  echo "SKIP $b — the expected head is not a full SHA: $want"
+elif grep -qxF -- "branch refs/heads/$b" <<<"$(git worktree list --porcelain)"; then
   echo "SKIP $b — a worktree holds it"
 else
-  tip=$(git rev-parse --verify --quiet "$b")
-  if [ "$tip" = "<headRefOid>" ]; then
-    git branch -D "$b"
+  tip=$(git rev-parse --verify --quiet "refs/heads/$b" || true)
+  if [ "$tip" = "$want" ]; then
+    git branch -D -- "$b"
   else
-    echo "SKIP $b — tip is ${tip:-absent}, expected <headRefOid>"
+    echo "SKIP $b — tip is ${tip:-absent}, expected $want (snapshot $taken)"
   fi
 fi
 ```
 
-Three things in that block are deliberate:
+These things in that block are deliberate:
 
+- **No value is spliced into a shell string.** The branch, the head and the
+  run date go in as field lines (`branch:`, `head:`, `taken:`) on a quoted
+  heredoc (`<<'CEPA_BRANCH'`), and the block checks each one before it uses
+  it. Why: the branch name comes from `gh pr list`, so it is repo data
+  (§7), and a branch name may hold `'` or `$(…)`. Before cepa 1.49.1 the
+  block had `b='<branch>'`: a `'` in the name ended the string, and the rest
+  ran as a command before any check (review-2026-10-31-230000 finding #5).
+  The block refuses any line that is not a field, a name that
+  `git check-ref-format --branch` does not return unchanged (this also
+  refuses `@{-1}` and a leading `-`), and a head that is not a full SHA.
+  It looks the branch up as `refs/heads/<name>`, matches the worktree line
+  as a fixed string (`grep -F`, so a `.` in the name is not a wildcard),
+  and passes `--` before the name to `git branch -D`.
+- **Every field value is one line.** Each field line starts `<name>: `, so
+  none can equal `CEPA_BRANCH`, but a value with a line break would start
+  a line of its own, and a line equal to `CEPA_BRANCH` would end the
+  heredoc early and run the lines after it. Never substitute such a value:
+  count the branch under the omissions instead. Git refuses control
+  characters in a ref name and `headRefOid` is hex, so this is the rare
+  case.
+- **Paste the block with no indentation.** The heredoc ends only on a line
+  that is exactly `CEPA_BRANCH`. A copy from a terminal that indents the
+  output puts spaces before it, so bash reads every later line, later
+  blocks included, as heredoc data and runs none of them (it fails closed:
+  nothing is deleted, and bash warns `here-document … delimited by
+  end-of-file`). Strip the indent, or copy from the report file a headless
+  run writes to `todos/sweep-*.md`, which has none.
 - **`--verify --quiet`** — without it, an already-deleted branch prints a
   `fatal: ambiguous argument` to stderr before the SKIP. The chain is still
   safe (verified: the comparison fails and no deletion runs), but an
   operator pasting twenty blocks reads a wall of git fatals as "the sweep
-  gave me broken commands" and stops trusting the SKIPs.
+  gave me broken commands" and stops trusting the SKIPs. The `|| true`
+  after it is not redundant: without it, an absent branch makes the
+  assignment fail and ends a `set -e` shell before the SKIP; with it, the
+  empty `$tip` takes the SKIP path.
 - **Report observed-vs-expected, never a diagnosis.** The earlier wording
   asserted "tip moved; it has unmerged work" on *every* non-match —
   including the already-deleted branch, which is the most likely case
@@ -543,7 +598,7 @@ frozen from the run that wrote the report, so the *GitHub* half —
 conditions 1 and 2 — is a snapshot of that age. A PR reopened, or a new PR
 opened on the same head, after the report was written is invisible to the
 block: nothing local changed, so the tip still matches and the deletion
-proceeds. State the run date in the block (above) and add one line to the
+proceeds. State the run date in the block (the `taken:` field) and add one line to the
 section: **if the report is more than a few days old, re-run `/cepa:sweep`
 rather than pasting it.**
 
