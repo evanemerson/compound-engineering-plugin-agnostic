@@ -49,7 +49,7 @@ MUTANTS = [
     ("rule-options-as-text", "skill", "Do not also write the options as\n       text.", "Also write the options as\n       text.",
      {"RULE: rule 7 holds Do not also write the options as text."}),
     ("rule-worker-may-ask", "skill", "Dispatch IDs) never calls AskUserQuestion.", "Dispatch IDs) may call AskUserQuestion.",
-     {"RULE: rule 7 holds never calls AskUserQuestion"}),
+     {"RULE: rule 7 holds A dispatched worker (a live preamble with Task and Dispatch IDs) never calls AskUserQuestion."}),
     ("rule-transcript-delivers", "skill", "Writing a step in the\n     transcript is not delivery.",
      "Writing a step in the\n     transcript is delivery.",
      {"RULE: rule 7 holds Writing a step in the transcript is not delivery."}),

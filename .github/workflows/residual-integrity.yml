@@ -240,3 +240,22 @@ jobs:
       - name: Check Orca lane controls
         if: always()
         run: bash scripts/check-orca-lane-controls.sh
+
+  orca-attention:
+    # The attention flag (autonomy section 12b rule 7) runs only through
+    # plugins/cepa/scripts/orca-attention.sh, which marks this checkout's own
+    # Orca worktree unread with a NEEDS YOU comment and clears it, proving
+    # each by a re-read. The check runs it in a throwaway git repo against a
+    # stub CLI and never reaches a real Orca; the controls mutate it. Headers
+    # own the legs and limits. Static commands, no workflow-context
+    # interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca attention
+        if: always()
+        run: bash scripts/check-orca-attention.sh
+      - name: Check Orca attention controls
+        if: always()
+        run: bash scripts/check-orca-attention-controls.sh
