@@ -1593,7 +1593,13 @@ L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4
     one-line wording fixes). Must not touch L46 files.
 
 L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #121 merged `a85eb85` (1.49.1), on the operator's
+    AskUserQuestion "Yes, merge #121" (the classifier denied the first try as
+    `[Merge Without Review]`). tab1@gain Handoff `done` at `8b8cb03`;
+    update-branch gave `de3440e`, 12/12 checks green. Gain lane parked at
+    `origin/main`, branch deleted, plugin freshness rc=0. The same shape at
+    other sites is L59.
     severity: P3
     owner: gain (`tab1@gain`, dispatched via Orca 2026-11-01 on the operator's
       AskUserQuestion "L50: sweep.md quoting fix": task `task_722565b7c3fe`,
@@ -1772,6 +1778,22 @@ L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive
     #4 create resume after a partial failure and #16 check the main
     checkout's orca.yaml before the archive hook runs (first), then #17, #28,
     #30. Source: `memory/tasks.d/2026-11-01-feat-roles-orca-lane-lifecycle.md`.
+
+L59. **The quoted-value injection shape is still live in `compound.md` and autonomy §11b.**
+    status: pending
+    severity: P3
+    owner: gain (`tab2@gain`, filed and dispatched 2026-11-01 on the
+      operator's AskUserQuestion "File L59 for gain": task `task_ec6f2adb77a3`,
+      dispatch `ctx_c7159a0fde26`, branch `fix/gain/quoted-values-compound-11b`)
+    Found by tab1@gain (L50, PR #121). Model-filled values sit inside quoted
+    shell strings, so a quote in the value breaks out before the later check
+    (repo CLAUDE.md: read them through a quoted heredoc). Probe, re-run by
+    coord@main on `a85eb85`:
+    `grep -nE "=['\"]<" plugins/cepa/commands/*.md plugins/cepa/skills/autonomy/SKILL.md`
+    → 8 live sites: `compound.md:251,322,325,548`, `SKILL.md:1305,1306,1329,1330`
+    (also `compound.md:238`, a comment, and `sweep.md:555`, prose about the
+    closed site). Source: `memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md`
+    finding 5.
 
 ---
 
