@@ -12,4 +12,4 @@
 - [ ] The dpc-pro miss is still unexplained; probe hypothesis (a), a lost PreToolUse(AskUserQuestion) hook post.
 - [ ] Send the bug report drafted in PR #120's body to Orca's maintainers, with the probe log.
 - [ ] Weigh Claude Code's push notification as a third signal.
-- [ ] The flag only helps sessions that load cepa 1.48.0 or later.
+- [ ] The flag only helps sessions that load cepa 1.49.0 or later.
