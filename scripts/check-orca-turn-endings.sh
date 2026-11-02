@@ -107,7 +107,7 @@ RULE_PHRASES = [
     "In a headless run (the `mode:headless` token, or no AskUserQuestion tool), file the decision per §5",
     "call AskUserQuestion: one question, at most 3 options",
     "Do not also write the options as text.",
-    "never calls AskUserQuestion",
+    "A dispatched worker (a live preamble with Task and Dispatch IDs) never calls AskUserQuestion.",
     "`Sent: <to> — <subject> (<message id>)`",
     "Writing a step in the transcript is not delivery.",
     "`/cepa:handoff` never sends it",
