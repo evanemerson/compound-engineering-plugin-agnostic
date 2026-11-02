@@ -235,10 +235,10 @@ and authoritative either way.
    #   other run's payload mid-flight.
    # mktemp with a template, not a bare name, so the uniqueness is the
    # kernel's rather than the agent's.
-   # RUN="<a short id unique to this run>" — substitute it ONCE here, then
-   # paste the SAME literal into every later block. It is the run's only
-   # cross-block identifier and it is a documented literal, exactly like $REPO
-   # and $DOC. Any short unique string works (the branch name, an issue
+   # RUN (the `run:` line below) is a short id unique to this run — substitute
+   # it ONCE here, then paste the SAME literal into every later block. It is
+   # the run's only cross-block identifier and it is a documented literal,
+   # exactly like $REPO and $DOC. Any short unique string works (the branch name, an issue
    # number, a timestamp you read from `date` yourself).
    #
    # DO NOT reach for `$$` here. Each fenced block is a different shell, so
@@ -248,7 +248,26 @@ and authoritative either way.
    # residual 2g's class — instance 6, inside the fix for 2j — and it is why
    # the identifier is a literal you paste rather than anything the shell
    # derives.
-   RUN="<short-run-id>"
+   # The value goes in as a field line on a QUOTED heredoc, never inside a
+   # quoted shell string: in `RUN="…"` a `"` in the value ends the
+   # string and `$(…)` expands, before the check below can run (L59; the
+   # same shape sweep.md's branch block closed in 1.49.1). The same holds for
+   # every field block in this phase. Every value is ONE line: a value with a
+   # line break, or a line that is exactly `CEPA_RUN`, would end the heredoc
+   # early. Any line that is not a field stops the block with exit 1 — that
+   # includes the lines an indented paste swallows into the heredoc, so that
+   # mistake fails loudly instead of exiting 0 having done nothing.
+   RUN=''
+   while read -r line; do
+     case $line in
+       'run: '*) RUN=${line#run: } ;;
+       *) echo "brain writeback ABORTED: not a field line (paste this block with no" >&2
+          echo "  indentation, one value per line): $line" >&2
+          exit 1 ;;
+     esac
+   done <<'CEPA_RUN'
+   run: <short-run-id>
+   CEPA_RUN
    # Validate before composing any path from it. $RUN lands in a filename, so
    # an unsubstituted placeholder or a value carrying `/` or `..` would write
    # the pointer somewhere no later block looks — or outside $TMPDIR entirely.
@@ -319,10 +338,25 @@ and authoritative either way.
 
    ```bash
    set -euo pipefail
-   REPO="<repo>"; DOC="<doc-path>"
-   # The SAME literal you substituted above. This is the one value that has to
-   # be identical across blocks; everything else is re-derived from it.
-   RUN="<short-run-id>"
+   REPO=''
+   DOC=''
+   RUN=''
+   while read -r line; do
+     case $line in
+       'repo: '*) REPO=${line#repo: } ;;
+       'doc: '*) DOC=${line#doc: } ;;
+       'run: '*) RUN=${line#run: } ;;
+       *) echo "brain writeback ABORTED: not a field line (paste this block with no" >&2
+          echo "  indentation, one value per line): $line" >&2
+          exit 1 ;;
+     esac
+   done <<'CEPA_RUN'
+   repo: <repo>
+   doc: <doc-path>
+   run: <short-run-id>
+   CEPA_RUN
+   # `run:` is the SAME literal you substituted above. It is the one value that
+   # has to be identical across blocks; everything else is re-derived from it.
    # Re-read the payload path from the pointer rather than retyping it: a
    # retyped path is an agent-chosen path again, and a typo here operates on a
    # file that does not exist while every later step still reads rc=0 on its
@@ -332,6 +366,18 @@ and authoritative either way.
      echo "  in the path-minting block ([A-Za-z0-9._-])." >&2
      exit 1 ;;
    esac
+   # Check REPO and DOC too, before any use: both reach `git hash-object` and
+   # `brain-client.sh idkey` as arguments, so a leading `-` would be read as
+   # an option.
+   case "$REPO" in ''|'<repo>'|-*|*[!A-Za-z0-9._/-]*)
+     echo "brain writeback ABORTED: substitute repo with the repo name ([A-Za-z0-9._/-])." >&2
+     exit 1 ;;
+   esac
+   case "$DOC" in ''|'<doc-path>'|-*)
+     echo "brain writeback ABORTED: substitute doc with the solution doc's path." >&2
+     exit 1 ;;
+   esac
+   [ -f "$DOC" ] || { echo "brain writeback ABORTED: doc '$DOC' is not a file." >&2; exit 1; }
    PTR="${TMPDIR:-/tmp}/cepa-compound-payload-$RUN.path"
    [ -s "$PTR" ] || { echo "brain writeback ABORTED: no payload pointer at $PTR — run the path-minting block first, with the same RUN id." >&2; exit 1; }
    P="$(cat "$PTR")"
@@ -545,7 +591,17 @@ and authoritative either way.
    # agent-chosen path residual 2j is about, and a path that does not exist
    # makes `scrub-verify` report rc=2 "unevaluable" for a run whose payload was
    # in fact perfectly clean.
-   RUN="<short-run-id>"
+   RUN=''
+   while read -r line; do
+     case $line in
+       'run: '*) RUN=${line#run: } ;;
+       *) echo "brain writeback ABORTED: not a field line (paste this block with no" >&2
+          echo "  indentation, one value per line): $line" >&2
+          exit 1 ;;
+     esac
+   done <<'CEPA_RUN'
+   run: <short-run-id>
+   CEPA_RUN
    # Validate HERE too, not only in the minting block. Each block composes
    # $PTR from $RUN independently, so a guard that lives in one block leaves
    # the other two deriving the same path unchecked — the asymmetry residual 2g
