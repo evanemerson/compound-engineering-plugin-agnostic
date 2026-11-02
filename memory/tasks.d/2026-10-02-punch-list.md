@@ -1885,7 +1885,8 @@ L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
     owner: gain (unassigned worker; after #122 — merged)
     Design (approved by the operator 2026-11-02; local, docs/ is gitignored):
     `docs/superpowers/specs/2026-11-02-fleet-coord-reach-and-lane-stacks-design.md`,
-    "Piece 1" and "Builder-check answers" 1-5. Evidence: artist360
+    "Piece 1" and "Builder-check answers" 1-5. Plan review 2026-11-02:
+    `todos/review-2026-11-02-085725-main.md` (8 applied, 17 pending triage). Evidence: artist360
     `docs/handoff/2026-10-31-coord-main-deploy-loop.md:10-11,103-108`
     (`merged #N` sent to a closed coordinator tab); a failed send's alert file
     holds no body (`~/.local/state/cepa/orca-alerts/*.alert`, read
