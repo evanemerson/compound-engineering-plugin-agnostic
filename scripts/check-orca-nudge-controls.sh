@@ -208,7 +208,7 @@ SEND_MUTANTS = [
     ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
      {'SENDREF cap counts bytes'}),
     # L47: a run: or dispatch: target keeps no `nudge` mode; it is downgraded.
-    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] \\', 'nudge) true \\',
+    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_target == coord:* || $cepa_send_type == reply ]] \\', 'nudge) true \\',
      {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge'}),
     # L36 #20: every send carries a request id, so its vsock retry replays.
     ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
@@ -414,7 +414,7 @@ HEALTH_MUTANTS = [
     ('health-follow-up-answers', ' and x.get("from_handle") != sender.get(t):', ':', {"HEALTH asker's own follow-up is not an answer"}),
     ('health-acks-ignored', 'acked = set(listdir(acked_dir, "ack-dir"))', 'acked = set()', {'HEALTH acked unreadable is unknown, never ok', 'HEALTH unreadable alert directory', 'HEALTH acked key is not reported', 'HEALTH acked file is not reported', 'HEALTH acked unbound is not reported'}),
     ('health-acks-shared', 'cepa_h_acked="$cepa_h_dir/acked/$cepa_h_wt"', 'cepa_h_acked="$cepa_h_dir/acked"', {'HEALTH ack marks keys for this worktree only', 'HEALTH acked unreadable is unknown, never ok', "HEALTH another worktree's ack does not hide it", 'HEALTH acked key is not reported', 'HEALTH acked unbound is not reported'}),
-    ('health-ack-missing-file-ok', '[[ $k == send-failed:* ]] && [ ! -f', '[[ $k == none ]] && [ ! -f', {'HEALTH ack of a missing alert file fails'}),
+    ('health-ack-missing-file-ok', '[[ $k == send-failed:* ]] && cepa_h_af=', '[[ $k == none ]] && cepa_h_af=', {'HEALTH ack of a missing alert file fails'}),
     ('health-ack-key-loose', 'send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\\.alert|', 'send-failed:[A-Za-z0-9_.-]{1,40}|', {'HEALTHREF ack temp file name'}),
     ('health-hidden-is-ok', 'if hidden and not seen:', 'if False:', {'HEALTH acked unreadable is unknown, never ok'}),
     ('health-run-id-unchecked', ' or r["id"] != sys.argv[2]:', ':', {'HEALTH run-show bad run id', 'HEALTH run-show names another Run'}),

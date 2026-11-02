@@ -816,6 +816,16 @@ the operator actually pastes into a fresh session. Requirements:
   none). Never append it to the `Report to:` line: rule 2 requires that
   line to be exact. Rule 1's open-terminal rule (`cepa:autonomy` §12b)
   owns why.
+- **Another repo's coordinator is named by its address, not its handle.**
+  When the prompt tells the next session to send to another repo's
+  coord@main, it names the target `coord:<repo>` (`cepa:autonomy` §12b
+  rule 1), which reaches that repo's live coord@main or waits in the outbox
+  for the next one. A `term_` handle for it stays only as a fallback for a
+  peer on a cepa older than the `coord:` address (punch-list L61).
+- **A coord@main's first turn also drains its outbox.** Its prompt's
+  `First turn:` line is followed by `Then run cepa:autonomy §12b rule 8's
+  outbox drain block, show every message to the operator, and wait.`
+  (rule 8 owns the drain; rule 2 owns the Run whose objective it needs).
 - **Absolute repo path and exact starting SHA** in the first lines after it.
 - **Same content as the saved file**, not a summary of it — with one
   exception: the name line above lives only in the block. The saved file is

@@ -16,7 +16,10 @@
 #     cli: <cli>            §12a's printed `cli=` value, checked as
 #                           orca-nudge.sh checks it.
 #     target: <target>      a `term_` handle, or a `run:<id>` / `dispatch:<id>`
-#                           address; for a reply, the question's msg_ id.
+#                           address; for a reply, the question's msg_ id; or
+#                           `coord:<repo>`, the live coord@main of <repo>
+#                           (THE COORD ADDRESS, below; status, question,
+#                           handoff and merge_ready only).
 #     type: <type>          status, question, handoff, escalation, merge_ready,
 #                           reply or worker_done. Orca refuses `escalation`
 #                           from a sender with no Dispatch. heartbeat is not
@@ -100,6 +103,11 @@
 #      re-read window with this session as its sender. The asker never gets
 #      it.
 #   4  Orca send refused: <reason>   — an argument failed its check; no call.
+#      A `coord:` message is then kept as refused in the outbox.
+#   6  Orca send pending: <reason>; kept in the outbox as <repo>/<file>
+#      — a `coord:` target with no one live coord@main to send to, or a Run
+#      list that could not be read. Nothing was sent; the receiver's drain
+#      (§12b rule 8) is the only path that delivers it. Then the ending line.
 #   5  Orca send failed: no message stored — <reason>
 #      Orca send failed: not proven stored — <reason>   — Orca returned
 #      `"ok": true` and a msg_ id, but the recipient, the reply's thread or
@@ -156,7 +164,60 @@
 # A session that runs the block again after a failure makes a new request id,
 # so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
+# THE COORD ADDRESS (punch-list L61; design 2026-11-02 "Piece 1", Builder-check
+# 1-5, plan-review #9, #10, #17, #18, #23-#25). A peer that addressed another
+# repo's coordinator by its `term_` handle lost the message when that
+# coordinator restarted (artist360 2026-10-31: `merged #N` to a closed tab).
+# `coord:<repo>` names the role, and the script resolves it at send time:
+#   - <repo> is §12b rule 6's <repo> (the main checkout's directory name) as
+#     autonomy §5 `slug(x)` writes it. It is checked FIRST, right after the
+#     message file is read: it must equal slug(<repo>) (so it is not empty,
+#     `.`, `..`, and does not start with `-`).
+#   - THE OUTBOX. A `coord:` message is written to disk before any other
+#     check and before any send: <outbox>/<repo>/<UTC time>-<rand>.md, mode
+#     600, directories mode 700. <outbox> is CEPA_ORCA_OUTBOX_DIR, else
+#     ${XDG_STATE_HOME:-$HOME/.local/state}/cepa/outbox: on this machine,
+#     never in a repo. A <repo> that fails its check is kept in the fixed
+#     directory <outbox>/_invalid/, never under a path built from the target.
+#     The name is made unique by mktemp and claimed with a hard link, which
+#     fails rather than overwrite, so two senders never share a file. The
+#     status is the directory: <repo>/ is pending, <repo>/refused/ refused
+#     (exit 4, never delivered by anyone), <repo>/delivered/ delivered.
+#     Format: `cepa-outbox 1`, then time=, repo=, worktree=, sender=,
+#     target=, type=, session= (each checked or replaced, as the alert's
+#     are), then a `---` line, then the message file's text.
+#   - THE RESOLVER. `run-list` is read page by page (`nextCursor` until null,
+#     at most 20 pages of 100). A Run counts when its objective is
+#     `<word> coord@main` followed by the end, a space or `:`, where
+#     slug(<word>) is <repo> (so `artist360` never matches `artist360-docs
+#     coord@main`, and `foo.bar coord@main` is coord:foo-bar). Its coordinator_handle is
+#     live only when `terminal list` shows it AND `worktree ps` has exactly
+#     one agent row on that terminal's pane with `hasLivePty: true` (an open
+#     tab whose Claude died has no live pty; measured 2026-11-02: rows of
+#     closed tabs carry no hasLivePty). A live handle counts only when its
+#     terminal's worktree is a main checkout (`isMainWorktree`) whose
+#     directory name slugs to <repo>; a live one elsewhere is a mismatch.
+#     One distinct live handle: send to it. None: pending. More than one:
+#     pending and an `outbox_ambiguous` alert. Only mismatches: pending and
+#     an `outbox_mismatch` alert. A read that fails, is truncated or has a
+#     shape this reader does not know: pending and an `outbox_unreadable`
+#     alert. Pending never retries: the receiver's drain is the one owner.
+#   - Delivered = `Orca send stored` (the proof above) to a handle that was
+#     live right before the send: the file moves to
+#     <repo>/delivered/<name stem>.to-<handle>.md. Exit 5 leaves it pending
+#     (it may have stored: a drained copy is then a duplicate, never a loss).
+#   - RETENTION (#18). Every coord: send prunes outbox files older than 7
+#     days by the time in their name, in every status. Pruning a pending or
+#     refused file (one nobody acked) writes an `outbox_pruned` alert. A
+#     sender never puts patient data in a coordinator message.
+#   - The resolved handle then follows the nudge rules of a `term_` target.
+#
 # STATED LIMITS:
+#   - The outbox is on this machine, and every session runs as one user, so
+#     a file's sender is a claim, never proven (review residual risk).
+#   - A tab that closes in the seconds after a stored send leaves a
+#     `delivered` file no coordinator read (Builder-check 4); a new
+#     coord@main's drain shows such files for 7 days (#10).
 #   - The misaddressed-reply check needs ORCA_TERMINAL_HANDLE. Unset, a reply
 #     Orca stored in this session's own `dispatch:` mailbox reads as stored
 #     unless the message it names is in the 200-row window.
@@ -175,9 +236,22 @@ set -u
 
 cepa_send_cli= cepa_send_target= cepa_send_type= cepa_send_mode= cepa_send_task=
 cepa_send_outcome= cepa_send_session=
+# THE COORD ADDRESS state: the target repo, the outbox root, and this
+# message's outbox file (empty until written).
+cepa_send_coord= cepa_send_obox= cepa_send_oroot=
 
 cepa_send_valid_target() {
-  [[ $cepa_send_target =~ ^(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]]
+  [[ $cepa_send_target =~ ^(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64}|coord:[A-Za-z0-9_-]{1,100})$ ]]
+}
+# autonomy §5 slug(x): every character outside [A-Za-z0-9_-] becomes `-`,
+# each run of `-` collapses to one, leading and trailing `-` are stripped.
+# (§5's short-SHA fallback for an empty result does not apply: an empty
+# slug is simply no repo.)
+cepa_send_slug() {
+  local s
+  s=$(LC_ALL=C; printf '%s' "$1" | tr -c 'A-Za-z0-9_-' '-' | tr -s '-')
+  s=${s#-} s=${s%-}
+  printf '%s' "$s"
 }
 # The target as the ending names it: `<session> (<address>)` when a session
 # name passed its check, else the address alone.
@@ -224,10 +298,17 @@ cepa_send_alert() {
   wt=$(git rev-parse --show-toplevel 2>/dev/null) || wt=
   wt=${wt##*/}
   [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
+  # A prune alert speaks for the file's own sender (cepa_send_alert_for).
+  [ -z "${cepa_send_arepo-}" ] || repo=$cepa_send_arepo
+  [ -z "${cepa_send_awt-}" ] || wt=$cepa_send_awt
+  [[ $repo =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || repo=unknown
+  [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
   me=${ORCA_TERMINAL_HANDLE:-}
   [[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
   tgt=$cepa_send_target
-  [[ $tgt =~ ^(msg_[0-9a-f]{6,32}|term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]] || tgt=invalid
+  [[ $tgt =~ ^(msg_[0-9a-f]{6,32}|term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64}|coord:[A-Za-z0-9_-]{1,100})$ ]] || tgt=invalid
+  # A coord: repo that is not its own slug (`-x`, `a--b`) is no address.
+  [[ $tgt != coord:* ]] || [ "$(cepa_send_slug "${tgt#coord:}")" = "${tgt#coord:}" ] || tgt=invalid
   typ=$cepa_send_type
   [[ $typ =~ ^[a-z_]{1,20}$ ]] || typ=invalid
   why=$(LC_ALL=C; printf '%s' "${why:0:300}" | tr -c ' -~' '?')
@@ -241,11 +322,115 @@ cepa_send_alert() {
     echo "Orca alert not recorded: the alert file could not be written"
   fi
 }
-refuse() { echo "Orca send refused: $1"; cepa_send_alert send_refused "$1"; cepa_send_ending; exit 4; }
-fail() { echo "Orca send failed: no message stored — $1"; cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }
+# THE OUTBOX: the status of a written file is its directory. A refused
+# message moves to refused/ (never delivered); a failed one stays pending.
+# Each line names the file by <repo>/<name>, never by its full path.
+cepa_send_obox_note() {
+  [ -n "$cepa_send_obox" ] || return 0
+  local n=${cepa_send_obox##*/} d=${cepa_send_obox%/*}
+  d=${d##*/}
+  if [ "$1" = refused ] && [ "$d" != _invalid ]; then
+    if ( umask 077 && mkdir -p "${cepa_send_obox%/*}/refused" ) 2>/dev/null \
+        && mv -f "$cepa_send_obox" "${cepa_send_obox%/*}/refused/$n" 2>/dev/null; then
+      echo "Orca outbox: kept as refused: $d/refused/$n"
+    else
+      echo "Orca outbox: could not mark refused; still pending: $d/$n"
+    fi
+  elif [ "$1" = refused ]; then
+    echo "Orca outbox: kept as refused: _invalid/$n"
+  else
+    echo "Orca outbox: kept as pending: $d/$n (the receiver's drain delivers it)"
+  fi
+}
+refuse() { echo "Orca send refused: $1"; cepa_send_obox_note refused; cepa_send_alert send_refused "$1"; cepa_send_ending; exit 4; }
+fail() { echo "Orca send failed: no message stored — $1"; cepa_send_obox_note pending; cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }
 # Orca returned "ok": true and a msg_ id, but the reply did not match: the
 # message may be stored, so the line never says it stored nothing.
-unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_alert send_unproven "$1"; cepa_send_ending; exit 5; }
+unproven() { echo "Orca send failed: not proven stored — $1"; cepa_send_obox_note pending; cepa_send_alert send_unproven "$1"; cepa_send_ending; exit 5; }
+# A coord: message with no one live coord@main to take it: kept, not sent.
+# $1 is the alert kind (or empty: no alert), $2 the line's reason.
+pending() {
+  echo "Orca send pending: $2; kept in the outbox as ${cepa_send_obox#"$cepa_send_oroot"/}"
+  [ -z "$1" ] || cepa_send_alert "$1" "$2"
+  echo "Ending first line: Needed from you: nothing now; coord@main of $cepa_send_coord shows the message from the outbox on its next turn (§12b rule 8)"
+  exit 6
+}
+# Writes this message to the outbox (THE COORD ADDRESS). $1 is the directory
+# under the root: the checked repo, or _invalid. Fails closed: a copy that
+# cannot be written is a refusal, and the reason says so.
+cepa_send_obox_write() {
+  local sub=$1 root d t stamp tmp me wt repo typ sess tg=coord:$1
+  [ "$sub" != _invalid ] || tg=invalid
+  root=${CEPA_ORCA_OUTBOX_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/outbox}
+  [[ $root == /* ]] || refuse "the outbox directory is not an absolute path"
+  d=$root/$sub
+  ( umask 077 && mkdir -p "$d" ) 2>/dev/null || refuse "the outbox directory could not be made"
+  [ -d "$root" ] && [ ! -L "$root" ] && [ -O "$root" ] && [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ] \
+    || refuse "the outbox directory is not a directory this user owns"
+  chmod 700 "$root" "$d" 2>/dev/null || refuse "the outbox directory could not be made"
+  t=$(date +%s 2>/dev/null) || t=
+  [[ $t =~ ^[0-9]{1,12}$ ]] || t=0
+  stamp=$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null) || stamp=
+  [[ $stamp =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || refuse "the outbox file could not be written"
+  repo=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || repo=
+  case "$repo" in /*/.git) repo=${repo%/.git} repo=${repo##*/} ;; *) repo=unknown ;; esac
+  [[ $repo =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || repo=unknown
+  wt=$(git rev-parse --show-toplevel 2>/dev/null) || wt=
+  wt=${wt##*/}
+  [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
+  me=${ORCA_TERMINAL_HANDLE:-}
+  [[ ${me} =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
+  typ=$cepa_send_type
+  [[ $typ =~ ^[a-z_]{1,20}$ ]] || typ=invalid
+  sess=${cepa_send_f_session-}
+  [[ $sess =~ ^[A-Za-z0-9._@]([A-Za-z0-9._@-]{0,99})$ ]] || sess=
+  tmp=$( umask 077 && mktemp "$d/.new.XXXXXXXX" 2>/dev/null ) || refuse "the outbox file could not be written"
+  if printf '%s\n' "cepa-outbox 1" "time=$t" "repo=$repo" "worktree=$wt" "sender=$me" \
+      "target=$tg" "type=$typ" "session=$sess" "---" "$cepa_send_msg" >"$tmp" 2>/dev/null \
+      && chmod 600 "$tmp" 2>/dev/null \
+      && ln "$tmp" "$d/$stamp-${tmp##*.new.}.md" 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null
+    cepa_send_oroot=$root cepa_send_obox=$d/$stamp-${tmp##*.new.}.md
+  else
+    rm -f "$tmp" 2>/dev/null
+    refuse "the outbox file could not be written"
+  fi
+}
+# RETENTION (#18): outbox files older than 7 days go, in every status. A
+# pending or refused one goes only after its alert is recorded, and the alert
+# carries the file's own repo= and worktree=, so the session that sent it
+# sees it, not the one that happened to prune (review). Names that are not
+# the writer's shape are left for orca-health.sh to report.
+cepa_send_obox_prune() {
+  local cut f n st sub r w
+  cut=$(python3 -I -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(time.time() - 7 * 86400)))' 2>/dev/null) \
+    || { echo "Orca outbox: prune skipped (no clock)"; return 0; }
+  [[ $cut =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo "Orca outbox: prune skipped (no clock)"; return 0; }
+  for f in "$cepa_send_oroot"/*/*.md "$cepa_send_oroot"/*/refused/*.md "$cepa_send_oroot"/*/delivered/*.md; do
+    [ -f "$f" ] && [ ! -L "$f" ] && [ -O "$f" ] || continue
+    n=${f##*/}
+    [[ $n =~ ^([0-9]{8}T[0-9]{6}Z)-[A-Za-z0-9]{8}(\.to-term_[0-9a-f-]{36}|\.drained)?\.md$ ]] || continue
+    [[ ${BASH_REMATCH[1]} < $cut ]] || continue
+    st=${f%/*} st=${st##*/}
+    if [ "$st" != delivered ]; then
+      if [ "$st" = refused ]; then sub=${f%/refused/*} sub=${sub##*/} n=refused/$n; else sub=$st; fi
+      r=$(sed -n '3s/^repo=//p' "$f" 2>/dev/null) w=$(sed -n '4s/^worktree=//p' "$f" 2>/dev/null)
+      cepa_send_alert_for outbox_pruned "coord:$sub" "an outbox file was pruned unread after 7 days: $sub/$n" "$r" "$w" \
+        || { echo "Orca outbox: kept $sub/$n past 7 days: its prune alert could not be recorded"; continue; }
+    fi
+    rm -f -- "$f" 2>/dev/null || echo "Orca outbox: could not prune $st/${f##*/}"
+  done
+}
+# An alert about another coord: target than this send's (a pruned file).
+# $4 and $5 are that file's own repo= and worktree= (checked again in the
+# writer). Returns non-zero when the alert was not recorded.
+cepa_send_alert_for() {
+  local keep=$cepa_send_target out
+  cepa_send_target=$2 cepa_send_arepo=${4-} cepa_send_awt=${5-}
+  out=$(cepa_send_alert "$1" "$3")
+  cepa_send_target=$keep cepa_send_arepo= cepa_send_awt=
+  [[ $out == "Orca alert recorded: "* ]]
+}
 
 [ $# -eq 0 ] || refuse "orca-send.sh takes no arguments; its fields go on stdin"
 # THE FIELDS: `<name>: <value>` lines up to an empty line or the end of
@@ -326,6 +511,19 @@ cepa_send_read=$?
 rm -f -- "$cepa_send_file" 2>/dev/null
 [ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"
 [ "$cepa_send_read" = 0 ] || refuse "the message file could not be read"
+# THE COORD ADDRESS: <repo> is checked first, and the message goes to the
+# outbox before every other check, so a refusal below keeps its text.
+if [[ ${cepa_send_f_target-} == coord:* ]]; then
+  cepa_send_coord=${cepa_send_f_target#coord:}
+  if [[ $cepa_send_coord =~ ^[A-Za-z0-9_-]{1,100}$ ]] && [ "$(cepa_send_slug "$cepa_send_coord")" = "$cepa_send_coord" ]; then
+    cepa_send_obox_write "$cepa_send_coord"
+    cepa_send_obox_prune
+  else
+    cepa_send_coord=
+    cepa_send_obox_write _invalid
+    refuse "the coord: repo is not slug(<repo>) (autonomy §5)"
+  fi
+fi
 cepa_send_cli=${cepa_send_f_cli-} cepa_send_target=${cepa_send_f_target-} cepa_send_type=${cepa_send_f_type-}
 cepa_send_task=${cepa_send_f_task-}
 if [ -n "${cepa_send_f_session-}" ]; then
@@ -359,7 +557,10 @@ case "${cepa_send_cli##*/}" in
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
 case "$cepa_send_type" in
-  status|question|handoff|escalation|merge_ready)
+  escalation)
+    [[ $cepa_send_target != coord:* ]] || refuse "an escalation cannot go to a coord: address; it keeps its Run path"
+    cepa_send_valid_target || refuse "the target is not a term_ handle, run: or dispatch: address" ;;
+  status|question|handoff|merge_ready)
     cepa_send_valid_target || refuse "the target is not a term_ handle, run: or dispatch: address" ;;
   reply)
     [[ $cepa_send_target =~ ^msg_[0-9a-f]{6,32}$ ]] || refuse "a reply's target is not a msg_ message id" ;;
@@ -382,7 +583,7 @@ esac
 cepa_send_downgraded=
 case "$cepa_send_mode" in
   no-nudge) ;;
-  nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] \
+  nudge) [[ $cepa_send_target == term_* || $cepa_send_target == coord:* || $cepa_send_type == reply ]] \
            || { cepa_send_mode=no-nudge cepa_send_downgraded=1; } ;;
   *) refuse "the nudge field is not nudge or no-nudge" ;;
 esac
@@ -435,6 +636,115 @@ cepa_send_orca() {
 # the same --retry-request returned the same msg_ id with `replayed: true`).
 cepa_send_req=$(python3 -I -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)
 [[ $cepa_send_req =~ ^[0-9a-f-]{36}$ ]] || fail "no request id could be made"
+
+# THE RESOLVER (header: THE COORD ADDRESS). Reads every run-list page, the
+# terminal list and worktree ps, then prints one line: `SEND <handle>`, or
+# `PENDING <kind> <reason>`. A read that fails is `PENDING outbox_unreadable`.
+if [ -n "$cepa_send_coord" ]; then
+  cepa_send_cur= cepa_send_pg=0
+  while :; do
+    cepa_send_pg=$((cepa_send_pg + 1))
+    if [ -z "$cepa_send_cur" ]; then
+      cepa_send_orca "$cepa_send_tmp/runs.$cepa_send_pg.json" orchestration run-list --limit 100 --json
+    else
+      cepa_send_orca "$cepa_send_tmp/runs.$cepa_send_pg.json" orchestration run-list --limit 100 \
+        --cursor "$cepa_send_cur" --json
+    fi || pending outbox_unreadable "the Run list could not be read"
+    cepa_send_cur=$(python3 -I - "$cepa_send_tmp/runs.$cepa_send_pg.json" <<'PY' 2>/dev/null
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+r = d["result"] if d.get("ok") is True else sys.exit(1)
+if not isinstance(r.get("runs"), list) or "nextCursor" not in r:
+    sys.exit(1)
+c = r["nextCursor"]
+if c is None:
+    print("END")
+elif isinstance(c, str) and re.fullmatch(r"[A-Za-z0-9_=-]{1,512}", c) and r["runs"]:
+    print(c)   # a cursor with no rows on its page is a short read
+else:
+    sys.exit(1)
+PY
+) || pending outbox_unreadable "the Run list could not be read"
+    [ "$cepa_send_cur" != END ] || break
+    [ "$cepa_send_pg" -lt 20 ] || pending outbox_unreadable "the Run list has more than 20 pages"
+  done
+  cepa_send_orca "$cepa_send_tmp/tlist.json" terminal list --limit 1000 --json \
+    || pending outbox_unreadable "the terminal list could not be read"
+  cepa_send_orca "$cepa_send_tmp/ps.json" worktree ps --json \
+    || pending outbox_unreadable "worktree ps could not be read"
+  cepa_send_res=$(python3 -I - "$cepa_send_tmp" "$cepa_send_pg" "$cepa_send_coord" <<'PY' 2>/dev/null
+import json, re, sys
+tmp, pages, repo = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+TERM = re.compile(r"term_[0-9a-f-]{36}")
+
+def slug(x):
+    x = re.sub(r"-+", "-", re.sub(r"[^A-Za-z0-9_-]", "-", x))
+    return x.strip("-")
+
+def load(n):
+    d = json.load(open("%s/%s" % (tmp, n)))
+    return d["result"] if d.get("ok") is True else sys.exit(1)
+
+def main():
+    runs = []
+    for i in range(1, pages + 1):
+        runs += load("runs.%d.json" % i)["runs"]
+    # The objective's first word is rule 6's <repo>, the raw directory name;
+    # it counts when its slug is the address (`foo.bar` for coord:foo-bar).
+    obj = re.compile(r"(\S{1,100}) coord@main(?:$|[ :])")
+    claimed = set()
+    for r in runs:
+        o, h = r["objective"], r["coordinator_handle"]
+        m = obj.match(o) if isinstance(o, str) else None
+        if m and slug(m.group(1)) == repo and isinstance(h, str) and TERM.fullmatch(h):
+            claimed.add(h)
+    tl, ps = load("tlist.json"), load("ps.json")
+    if tl["truncated"] is not False or ps["truncated"] is not False:
+        return "PENDING outbox_unreadable the terminal list or worktree ps was truncated"
+    terms = {t["handle"]: t for t in tl["terminals"]}
+    wts = {w["path"]: w for w in ps["worktrees"]}
+    agents = [a for w in ps["worktrees"] for a in (w.get("agents") or [])]
+    live, wrong = set(), set()
+    for h in claimed:
+        t = terms.get(h)
+        if not t or t.get("connected") is not True:
+            continue
+        pane = "%s:%s" % (t["tabId"], t["leafId"])
+        rows = [a for a in agents if a.get("paneKey") == pane]
+        if len(rows) != 1 or rows[0].get("hasLivePty") is not True:
+            continue
+        w = wts.get(t["worktreePath"])
+        base = t["worktreePath"].replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+        if w and w.get("isMainWorktree") is True and slug(base) == repo:
+            live.add(h)
+        else:
+            wrong.add(h)
+    if len(live) == 1:
+        return "SEND " + live.pop()
+    if len(live) > 1:
+        return "PENDING outbox_ambiguous more than one live coord@main claims %s: %s" % (repo, " ".join(sorted(live)))
+    if wrong:
+        return "PENDING outbox_mismatch a live session claims coord@main of %s outside its main checkout: %s" % (
+            repo, " ".join(sorted(wrong)))
+    return "PENDING - no live coord@main for %s" % repo
+
+try:
+    print(main())
+except Exception:
+    print("PENDING outbox_unreadable the Orca output has a shape this reader does not know")
+PY
+) || cepa_send_res=
+  case "$cepa_send_res" in
+    'SEND '*) cepa_send_target=${cepa_send_res#SEND }
+              [[ $cepa_send_target =~ ^term_[0-9a-f-]{36}$ ]] \
+                || pending outbox_unreadable "the Orca output has a shape this reader does not know" ;;
+    'PENDING - '*) pending "" "${cepa_send_res#PENDING - }" ;;
+    'PENDING '*) cepa_send_res=${cepa_send_res#PENDING }
+                 pending "${cepa_send_res%% *}" "${cepa_send_res#* }" ;;
+    *) pending outbox_unreadable "the Orca output has a shape this reader does not know" ;;
+  esac
+  echo "Orca send resolved: coord:$cepa_send_coord is $cepa_send_target"
+fi
 case "$cepa_send_type" in
   reply)
     cepa_send_orca "$cepa_send_tmp/send.json" orchestration reply --id "$cepa_send_target" \
@@ -548,6 +858,18 @@ case $? in
 esac
 
 echo "Orca send stored: $cepa_send_id for $cepa_send_to"
+# Delivered (Builder-check 4): the outbox file moves to delivered/, named
+# with the handle it went to, so a new coord@main's drain can show it when
+# that handle is gone (#10).
+if [ -n "$cepa_send_obox" ]; then
+  cepa_send_n=${cepa_send_obox##*/}
+  if ( umask 077 && mkdir -p "${cepa_send_obox%/*}/delivered" ) 2>/dev/null \
+      && mv -f "$cepa_send_obox" "${cepa_send_obox%/*}/delivered/${cepa_send_n%.md}.to-$cepa_send_target.md" 2>/dev/null; then
+    echo "Orca outbox: delivered: $cepa_send_coord/delivered/${cepa_send_n%.md}.to-$cepa_send_target.md"
+  else
+    echo "Orca outbox: could not mark delivered; still pending: $cepa_send_coord/$cepa_send_n (a drain may show it again)"
+  fi
+fi
 if [ "$cepa_send_type" = reply ]; then
   [ "$cepa_send_mode" = nudge ] || exit 0
   if [[ $cepa_send_to != term_* ]]; then

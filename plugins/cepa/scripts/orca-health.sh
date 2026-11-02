@@ -75,6 +75,30 @@
 #                        ack silences it for that hour only, and while it is
 #                        acked the summary reads `ORCA health: unknown — …`,
 #                        never `ok`.
+#   outbox:<repo>:<newest file>  THE OUTBOX (punch-list L61): messages this
+#                        checkout sent to `coord:<repo>` (orca-send.sh) that
+#                        are still pending or were refused. One alert per
+#                        target repo; the text carries the count, and the key
+#                        the newest file name (#25), so an ack holds until a
+#                        new file arrives. Whose: the alert-file rule below.
+#   outbox:<repo>:(ambiguous|mismatch|unreadable|pruned):<alert file>
+#                        orca-send.sh kept a coord: message pending because
+#                        more than one live coord@main claimed <repo>, a live
+#                        one sat outside <repo>'s main checkout (#17), or an
+#                        Orca read failed (#24); or it pruned an unread file
+#                        after 7 days (#18). From its alert file, by kind.
+#   outbox:<repo>:unknown-shape:<sha1 of the name, 12 hex>  a file under the
+#                        outbox that the writer could not have made: a name
+#                        outside its pattern, a symlink or non-regular file,
+#                        another owner, a mode other than 600, or a header in
+#                        another shape. Never counted, never shown, never
+#                        named unless the name is plain. Shown to the main
+#                        checkout whose repo slugs to <repo> (`_root` and
+#                        `_invalid`: every main checkout).
+#   A main checkout's coordinator also gets a note in the summary when
+#   messages wait in its own repo's outbox: rule 8's drain block shows them.
+#   This script prints only counts and file names from the outbox, never a
+#   header value or a body (the relay guard, design "Piece 1" decision 5).
 #   A reader crash prints `ORCA health failed: the reader crashed (<type>)`
 #   and then an orca-unreadable:reader alert, never a bare exit 1.
 # WHOSE ALERTS. A linked worktree's coordinator sees only alert files its own
@@ -163,13 +187,16 @@ elif [ $# -ge 2 ]; then
   [ $# -ge 3 ] || refuse "usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."
   shift 2
   for k in "$@"; do
-    [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|(exited|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
+    [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|outbox:[A-Za-z0-9_-]{1,100}:([0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md|(ambiguous|mismatch|unreadable|pruned):[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|unknown-shape:[0-9a-f]{12})|(exited|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
       || refuse "not an alert key: $(printf '%s' "${k:0:80}" | tr -c 'A-Za-z0-9_.:-' '?')"
   done
   mkdir -p "$cepa_h_acked" 2>/dev/null || { echo "ORCA ack failed: the ack directory could not be made"; exit 1; }
   cepa_h_bad=0
   for k in "$@"; do
-    if [[ $k == send-failed:* ]] && [ ! -f "$cepa_h_dir/${k#send-failed:}" ]; then
+    cepa_h_af=
+    [[ $k == send-failed:* ]] && cepa_h_af=${k#send-failed:}
+    [[ $k =~ ^outbox:[^:]+:(ambiguous|mismatch|unreadable|pruned):(.+)$ ]] && cepa_h_af=${BASH_REMATCH[2]}
+    if [ -n "$cepa_h_af" ] && [ ! -f "$cepa_h_dir/$cepa_h_af" ]; then
       echo "ORCA ack failed: $k — no such alert file"; cepa_h_bad=1
     elif : >"$cepa_h_acked/$k" 2>/dev/null; then
       echo "ORCA ack: $k"
@@ -287,8 +314,9 @@ print(" ".join(ids[:20]))
 fi
 cepa_h_orca "$cepa_h_tmp/inbox.json" orchestration inbox --limit 200 --json || : >"$cepa_h_tmp/inbox.fail"
 
+cepa_h_obox=${CEPA_ORCA_OUTBOX_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/outbox}
 python3 -I - "$cepa_h_tmp" "$cepa_h_dir" "$cepa_h_now" "$cepa_h_run" "$cepa_h_repo" \
-  "${ORCA_TERMINAL_HANDLE:-}" "$cepa_h_wt" "$cepa_h_main" "$cepa_h_acked" <<'PY'
+  "${ORCA_TERMINAL_HANDLE:-}" "$cepa_h_wt" "$cepa_h_main" "$cepa_h_acked" "$cepa_h_obox" <<'PY'
 import calendar, json, os, re, sys, time
 
 def _crash(t, v, tb):
@@ -296,11 +324,11 @@ def _crash(t, v, tb):
     print("ORCA health failed: the reader crashed (%s)" % t.__name__, flush=True)
     os._exit(3)
 sys.excepthook = _crash
-tmp, adir, now, run, repo, me, wt, main, acked_dir = sys.argv[1:10]
+tmp, adir, now, run, repo, me, wt, main, acked_dir, obox = sys.argv[1:11]
 now, main = int(now), main == "1"
 HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 30   # minutes
 SAFE = re.compile(r"[A-Za-z0-9_.:@-]{1,120}")
-ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})"
+ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64}|coord:[A-Za-z0-9_-]{1,100})"
 MID = r"msg_[0-9a-f]{6,32}"
 # The reason field is shown only when it is one orca-send.sh writes (security
 # review of PR #109): any other text is replaced, so an alert file planted by
@@ -344,7 +372,20 @@ REASONS = [re.compile(x) for x in (
     r"the reply names no valid recipient", r"the reply is not threaded on " + MID,
     r"Orca did not record the dispatch as (completed|failed)",
     MID + r" is not in the inbox for " + ADDR,
-    r"the inbox could not be (parsed|re-read), so " + MID + r" is unconfirmed")]
+    r"the inbox could not be (parsed|re-read), so " + MID + r" is unconfirmed",
+    # 1.54.0 (punch-list L61): the coord: address and its outbox.
+    r"the coord: repo is not slug\(<repo>\) \(autonomy §5\)",
+    r"an escalation cannot go to a coord: address; it keeps its Run path",
+    r"the outbox directory is not an absolute path", r"the outbox directory could not be made",
+    r"the outbox directory is not a directory this user owns", r"the outbox file could not be written",
+    r"the (Run list|terminal list) could not be read", r"worktree ps could not be read",
+    r"the Run list has more than 20 pages", r"the terminal list or worktree ps was truncated",
+    r"the Orca output has a shape this reader does not know",
+    r"more than one live coord@main claims [A-Za-z0-9_-]{1,100}: term_[0-9a-f-]{36}( term_[0-9a-f-]{36}){1,9}",
+    r"a live session claims coord@main of [A-Za-z0-9_-]{1,100} outside its main checkout: "
+    r"term_[0-9a-f-]{36}( term_[0-9a-f-]{36}){0,9}",
+    r"an outbox file was pruned unread after 7 days: [A-Za-z0-9_-]{1,100}(/refused)?/"
+    r"[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md")]
 if not re.fullmatch(r"term_[0-9a-f-]{36}", me):
     me = ""
 hour = now // 3600
@@ -396,7 +437,7 @@ def load(name):
     return d if isinstance(d, dict) and d.get("ok") is True else None
 
 # 1. Alert files from orca-send.sh.
-FIELD = {"kind": r"send_(refused|failed|unproven)", "time": r"\d{1,12}", "repo": r"[A-Za-z0-9._@-]{1,100}",
+FIELD = {"kind": r"send_(refused|failed|unproven)|outbox_(ambiguous|mismatch|unreadable|pruned)", "time": r"\d{1,12}", "repo": r"[A-Za-z0-9._@-]{1,100}",
          "worktree": r"[A-Za-z0-9._@-]{1,100}", "sender": r"term_[0-9a-f-]{36}|unknown",
          "target": r"(msg_[0-9a-f]{6,32}|%s)|invalid" % ADDR[1:-1],
          "type": r"[a-z_]{1,20}", "reason": r"[ -~]{0,300}"}
@@ -422,6 +463,20 @@ for n in listdir(adir, "alert-dir"):
     if not mine:
         other += 1
         continue
+    if f["kind"].startswith("outbox_"):
+        cls = f["kind"][len("outbox_"):]
+        orepo = f["target"][len("coord:"):] if f["target"].startswith("coord:") else "_invalid"
+        key = "outbox:%s:%s:%s" % (orepo, cls, n)
+        if key in acked:
+            continue
+        oreason = f["reason"] if any(r.fullmatch(f["reason"]) for r in REASONS) else "an unrecognised reason"
+        what = {"ambiguous": "kept a %s to %s pending, not sent (%s)",
+                "mismatch": "kept a %s to %s pending, not sent (%s)",
+                "unreadable": "kept a %s to %s pending: orca-unreadable (%s)",
+                "pruned": "found a %s file for %s too old (%s)"}[cls]
+        alert(key, "%s: orca-send.sh %s, at %s, from %s" % (
+            f["worktree"], what % (f["type"], f["target"], oreason), hhmm(int(f["time"])), f["sender"]))
+        continue
     if key in acked:
         continue
     what = {"send_refused": "was refused before any Orca call",
@@ -432,6 +487,119 @@ for n in listdir(adir, "alert-dir"):
         f["worktree"], f["type"], f["target"], what, why, hhmm(int(f["time"])), f["sender"]))
 if other:
     notes.append("%d alert file%s for other worktrees or repos not shown" % (other, "" if other == 1 else "s"))
+
+# 1b. THE OUTBOX (punch-list L61). Only counts and file names are printed,
+# never a header value or a body. A file counts only in the writer's exact
+# shape: its name, a regular file (not a symlink) this user owns, mode 600,
+# and the header orca-send.sh writes. Any other entry is unknown-shape.
+import hashlib, stat
+OSLUG = re.compile(r"[A-Za-z0-9_](?:[A-Za-z0-9_]|-(?!-)){0,98}[A-Za-z0-9_]|[A-Za-z0-9_]")
+ONAME = re.compile(r"(\d{8}T\d{6}Z)-[A-Za-z0-9]{8}(\.to-term_[0-9a-f-]{36}|\.drained)?\.md")
+OHEAD = [("time", r"\d{1,12}"), ("repo", r"[A-Za-z0-9._@-]{1,100}"), ("worktree", r"[A-Za-z0-9._@-]{1,100}"),
+         ("sender", r"term_[0-9a-f-]{36}|unknown"), ("target", r"coord:[A-Za-z0-9_-]{1,100}|invalid"),
+         ("type", r"[a-z_]{1,20}"), ("session", r"([A-Za-z0-9._@][A-Za-z0-9._@-]{0,99})?")]
+
+def oslug(x):
+    return re.sub(r"-+", "-", re.sub(r"[^A-Za-z0-9_-]", "-", x)).strip("-")
+
+def ofile(path, sub, status):
+    # The parsed header, or None for a file the writer could not have made.
+    n = os.path.basename(path)
+    m = ONAME.fullmatch(n)
+    if not m or (m.group(2) is None) != (status != "delivered"):
+        return None
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o600 \
+                or st.st_size > 65536:
+            return None
+        lines = open(path, encoding="utf-8", errors="replace").read().split("\n")
+    except OSError:
+        return None
+    if lines[:1] != ["cepa-outbox 1"] or len(lines) < 10 or lines[8] != "---":
+        return None
+    h = {}
+    for (k, rx), l in zip(OHEAD, lines[1:8]):
+        if not l.startswith(k + "=") or not re.fullmatch(rx, l[len(k) + 1:]):
+            return None
+        h[k] = l[len(k) + 1:]
+    if h["target"] != ("invalid" if sub == "_invalid" else "coord:" + sub):
+        return None
+    return h
+
+def unknown(where, name):
+    k = "outbox:%s:unknown-shape:%s" % (where, hashlib.sha1(name.encode("utf-8", "replace")).hexdigest()[:12])
+    plain = name if re.fullmatch(r"[A-Za-z0-9._-]{1,120}", name) else "a name that is not plain text"
+    return k, "a file in the outbox that orca-send.sh did not write (%s/%s); it is never shown or counted" % (
+        where, plain)
+
+me_slug = oslug(repo) if repo != "unknown" else ""
+inbound = 0
+# Only an outbox that does not exist is empty: a symlink, a file or a
+# directory that cannot be read is unreadable, never `ok` (review).
+try:
+    _st = os.lstat(obox)
+    if not stat.S_ISDIR(_st.st_mode) or _st.st_uid != os.getuid():
+        raise PermissionError(obox)
+    osubs = sorted(os.listdir(obox))
+except FileNotFoundError:
+    osubs = []
+except OSError:
+    unreadable("outbox-dir", "the outbox directory could not be read, so its alerts are unknown")
+    osubs = []
+for sub in osubs:
+    sp = os.path.join(obox, sub)
+    see_unknown = main and (sub in ("_invalid",) or sub == me_slug)
+    if not (sub == "_invalid" or OSLUG.fullmatch(sub)) or os.path.islink(sp) or not os.path.isdir(sp):
+        if main:
+            k, t = unknown("_root", sub)
+            if k not in acked:
+                alert(k, t)
+        continue
+    mine_n, pend, refd, newest = 0, 0, 0, ""
+    for status, d in (("pending", sp), ("refused", os.path.join(sp, "refused")),
+                      ("delivered", os.path.join(sp, "delivered"))):
+        if status != "pending" and (os.path.islink(d) or (os.path.exists(d) and not os.path.isdir(d))):
+            if see_unknown:
+                k, t = unknown(sub, status)
+                if k not in acked:
+                    alert(k, t)
+            continue
+        for n in listdir(d, "outbox-dir"):
+            p = os.path.join(d, n)
+            if status == "pending" and n in ("refused", "delivered") and os.path.isdir(p) and not os.path.islink(p):
+                continue
+            if n.startswith(".new."):
+                continue   # a write in progress (orca-send.sh links it to its name)
+            h = ofile(p, sub, status)
+            if h is None:
+                if see_unknown:
+                    k, t = unknown(sub, n)
+                    if k not in acked:
+                        alert(k, t)
+                continue
+            if status == "pending" and main and sub == me_slug:
+                inbound += 1
+            if status == "delivered":
+                continue
+            ours = repo == "unknown" or h["repo"] in (repo, "unknown")
+            if ours and not main and repo != "unknown":
+                ours = h["worktree"] == wt
+            if not ours:
+                continue
+            mine_n += 1
+            pend += status == "pending"
+            refd += status == "refused"
+            newest = max(newest, n)
+    if mine_n:
+        k = "outbox:%s:%s" % (sub, newest)
+        if k not in acked:
+            alert(k, "%d message%s to %s not delivered (%d pending, %d refused); newest %s" % (
+                mine_n, "" if mine_n == 1 else "s", "coord:" + sub if sub != "_invalid" else "an invalid coord: address",
+                pend, refd, newest))
+if inbound:
+    notes.append("%d outbox message%s for coord:%s wait; rule 8's drain block shows them"
+                 % (inbound, "" if inbound == 1 else "s", me_slug))
 
 # 2. The named Run's live dispatches (or this pane's Run held here).
 if os.path.exists(os.path.join(tmp, "run.fail")):

@@ -20,9 +20,11 @@
 # controls overran the residual-integrity job's 10-minute bound (run
 # 41072902545).
 #
-# STATED LIMITS: a mutant is one substitution; two compensating edits are not
-# modeled. The controls prove each named case can fail, not that the case list
-# is complete.
+# STATED LIMITS: a mutant is one substitution, or one tuple of substitutions
+# when the check would still find a second copy of what it removes (the check
+# normalizes whitespace, so a citation wrapped over two lines counts); two
+# compensating edits are not modeled. The controls prove each named case can
+# fail, not that the case list is complete.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
@@ -35,6 +37,8 @@ CHECK = "scripts/check-orca-detection.sh"
 TO = 'timeout -k "$cepa_orca_kill" "$cepa_orca_wait" '
 PROBE = '  ' + TO + '"$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>"$cepa_orca_err" && return 0'
 # (name, file, old, new, killer) — file is "skill" or a command file name.
+# old and new may be equal-length tuples: every anchor is replaced, and each
+# must occur exactly once.
 MUTANTS = [
     ("linux-bare", "skill", "    cepa_orca_cli=orca-ide\n", "    cepa_orca_cli=orca\n", "unset-no-cli"),
     ("no-cli-check", "skill", '  if ! command -v "$cepa_orca_cli" >/dev/null 2>&1; then',
@@ -225,7 +229,9 @@ MUTANTS = [
      "Then it runs `/rename <role>@<wt>` in the\n   worker's tab (rule 6)", "TITLE-SURFACES"),
     ("task-launches-named", "task.md", "apply `cepa:autonomy` §12 —",
      "start the worker with `claude --name tab3@wt`, then apply `cepa:autonomy` §12 —", "TITLE-SURFACES"),
-    ("handoff-no-rule1", "handoff.md", "§12b rule 1", "§12b", "handoff.md cites §12b rule 1"),
+    # handoff.md cites rule 1 twice; the second wraps, so remove both.
+    ("handoff-no-rule1", "handoff.md", ("§12b rule 1", "§12b\n  rule 1)"), ("§12b", "§12b)"),
+     "handoff.md cites §12b rule 1"),
     ("handoff-no-ask-grant", "handoff.md", ", Bash(orca-ide orchestration ask:*)", "",
      "handoff.md grants Bash(orca-ide orchestration ask:*)"),
 ]
@@ -271,10 +277,15 @@ def mutate(name, target, old, new, killer):
     skill, sites = copy_tree(name)
     path = skill if target == "skill" else os.path.join(sites, target)
     text = open(path).read()
-    n = text.count(old)
-    if n != 1:
-        return False, "%s: anchor occurs %d times in %s, want 1" % (name, n, target)
-    open(path, "w").write(text.replace(old, new, 1))
+    if isinstance(old, tuple) and len(old) != len(new):
+        return False, "%s: %d anchors but %d replacements" % (name, len(old), len(new))
+    pairs = zip(old, new) if isinstance(old, tuple) else [(old, new)]
+    for o, nw in pairs:
+        n = text.count(o)
+        if n != 1:
+            return False, "%s: anchor %r occurs %d times in %s, want 1" % (name, o, n, target)
+        text = text.replace(o, nw, 1)
+    open(path, "w").write(text)
     rc, misses = run(skill, sites)
     if rc is None:
         return False, "%s: check still running after 600s" % name
