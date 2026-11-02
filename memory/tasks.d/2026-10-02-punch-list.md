@@ -1886,13 +1886,13 @@ L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
     Design (approved by the operator 2026-11-02; local, docs/ is gitignored):
     `docs/superpowers/specs/2026-11-02-fleet-coord-reach-and-lane-stacks-design.md`,
     "Piece 1" and "Builder-check answers" 1-5. Plan review 2026-11-02:
-    `todos/review-2026-11-02-085725-main.md` (8 applied, 17 pending triage). Evidence: artist360
+    `todos/review-2026-11-02-085725-main.md` (25 of 25 applied). Evidence: artist360
     `docs/handoff/2026-10-31-coord-main-deploy-loop.md:10-11,103-108`
     (`merged #N` sent to a closed coordinator tab); a failed send's alert file
     holds no body (`~/.local/state/cepa/orca-alerts/*.alert`, read
     2026-11-02). Touches `orca-send.sh`, `orca-health.sh`, §12b rules 1/2/8.
 
-L62. **Shared lane & stack scheme as a cepa skill, with a running-stack gate.**
+L62. **Shared lane & stack scheme as a cepa skill (PR B; gate is L66, setup check is L67).**
     status: pending
     severity: P1
     owner: integrity (unassigned worker)
@@ -1902,6 +1902,19 @@ L62. **Shared lane & stack scheme as a cepa skill, with a running-stack gate.**
     first-prompt template and a `/cepa:setup` check. Evidence: dpc-pro
     `worktree-init` counts stacks with `docker ps -a` and checks only at
     create (Makefile `worktree-init`, read 2026-11-02).
+
+L66. **Stack gate script `stack-gate.sh` (PR C), runs the start under its lock.**
+    status: pending
+    severity: P1
+    owner: roles (unassigned worker)
+    Design doc "Builder-check answers" 6 and "Plan-review decisions" #14,
+    #19. Config `~/.config/cepa/stack-gate.conf`. Before fleet launch.
+
+L67. **`/cepa:setup` check for the lane & stack scheme (PR B2, after launch).**
+    status: pending
+    severity: P2
+    owner: unassigned (after L62 and L66)
+    Scope per "Plan-review decisions" #20.
 
 L63. **Each repo adopts L61 + L62 (hand-off to each repo's coord@main).**
     status: pending
