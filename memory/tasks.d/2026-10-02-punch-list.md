@@ -1895,6 +1895,10 @@ L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
     2026-11-02). Touches `orca-send.sh`, `orca-health.sh`, §12b rules 1/2/8.
 
 L62. **Shared lane & stack scheme as a cepa skill (PR B; gate is L66, setup check is L67).**
+    2026-11-02: tab10@integrity `done`, PR #125 (head 9fa0628, 1.52.0); 6 P3s
+    deferred to `memory/tasks.d/2026-11-02-feat-integrity-lane-stack-skill.md`.
+    `stacks:over:<n>` alert owner: L61 (tab4@gain wires it to L66's
+    read-only `stack-gate.sh --count`).
     status: pending
     severity: P1
     owner: integrity (unassigned worker)
@@ -1926,7 +1930,10 @@ L63. **Each repo adopts L61 + L62 (hand-off to each repo's coord@main).**
     status: pending
     severity: P2
     owner: coord@main (hand-offs only; each repo's coord@main does the work)
-    After L61 and L62 ship. Per repo: stop-after-setup, call the gate,
+    After L61, L62 AND L66 ship (tab10@integrity, 2026-11-02: the skill cites
+    the gate, so adoption waits for it). Live coordinators that asked to be
+    told: dpc-pro coord@main `term_b4cdd4b7-56c8-460d-a789-3eb4168e9e9c`, Run
+    `run_11d22a5bc5fc` (status msg 2026-11-02). Per repo: stop-after-setup, call the gate,
     fix `orca.yaml`, rebuild old lanes under the same names (rm, then
     create). Known: dpc-pro 6 plain lanes (apgar, bath, cori, levi,
     taussig, wright: keep names), helm 3, kcprimetime 2; dpc-pro-docs has no
