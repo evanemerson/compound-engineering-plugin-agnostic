@@ -1595,7 +1595,10 @@ L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4
 L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
     status: pending
     severity: P3
-    owner: unassigned (its own worker)
+    owner: gain (`tab1@gain`, dispatched via Orca 2026-11-01 on the operator's
+      AskUserQuestion "L50: sweep.md quoting fix": task `task_722565b7c3fe`,
+      dispatch `ctx_3cec2a286b05`, branch `fix/gain/sweep-heredoc-values`;
+      lane `gain` created 2026-11-01 with `orca-lane.sh create`)
     review-2026-10-31-230000 #5, judgment 80. The repo rule: such a value is
     read through a quoted heredoc and checked inside the block. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
