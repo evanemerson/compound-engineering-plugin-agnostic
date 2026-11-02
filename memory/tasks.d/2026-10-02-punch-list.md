@@ -1647,9 +1647,16 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
     operator told coord@main "you can update that"; coord@main replaced the
     global "New lane" bullet with the U6 text (+ "Removing a lane", "Existing
     lanes" bullets; kept "A repo with no worktree creates one this way").
-    Backup `~/.claude/CLAUDE.md.bak-2026-11-01-l55`. Left: hand-offs to the
-    other repos' coord@main (incl. plan-review #19, artist360's probe
-    create/rm). Follow-ups: L58.
+    Backup `~/.claude/CLAUDE.md.bak-2026-11-01-l55`. Hand-offs SENT
+    2026-11-01 (operator: "send to all listed"; helm = term_35229546), all
+    stored: artist360 msg_37464fafa59d, artist360-docs msg_af0d4e857c1c,
+    dpc-pro msg_e0f576aadf47, contexthub msg_d5b54c93f125, ci-ops
+    msg_05a2cd3871c7, dpc-insider-www msg_7892acc62e72, kcprimetime
+    msg_641f70984a9a, youtube msg_383a3123535f, dpc-pro-docs
+    msg_88d3908f79de, helm msg_c798592acef3 (7 nudged; 3 went to Run
+    mailboxes Orca prompts). Left: plan-review #19 (artist360 probe
+    create/rm), asked for separately once artist360's coordinator has the
+    new rule. Follow-ups: L58.
     severity: P2
     owner: roles (`tab26@roles`, dispatched via Orca 2026-11-01 after #116
       merged: task `task_b9a11d589bc4`, dispatch `ctx_d674e9b36de7`, branch
