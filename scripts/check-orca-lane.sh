@@ -45,11 +45,15 @@
 #            a failed archive hook (kept, exit 3, output scrubbed); a reply
 #            that says removed while the lane stays; a re-list that fails.
 #            Reused lanes (L58, #1): a squash-merged, deleted branch's reflog
-#            commits are vouched for by its MERGED PR (removed); a PR merged
-#            before the commit, a branch with no merged PR, and a gh failure
-#            keep the lane; a detached commit with an equal patch on the
-#            default branch is removed. The main checkout's orca.yaml (#16):
-#            uncommitted, unpushed, or with no upstream keeps the lane.
+#            commits are landed by its MERGED PR's head (removed); an
+#            unpushed commit the PR head lacks, a branch with no merged PR,
+#            a PR into another base, a fork PR, a gh failure, a merge commit
+#            whose parents landed, and a helper that exits 0 without a
+#            `landed:` line keep the lane; an amended-away commit, a
+#            `checkout HEAD~1` entry, and a detached commit with an equal
+#            patch on the default branch are removed. The main checkout's
+#            orca.yaml (#16): untracked, unpushed, or edited under
+#            skip-worktree keeps the lane; pushed to the default is removed.
 #   BLOCK  — §12b rule 2's lane block, extracted and run under `bash -e`:
 #            it runs `name`; shell text in a field runs nothing; with the
 #            script absent it prints the skipped line.
@@ -164,7 +168,7 @@ class World:
     def wid(self, p, repo=RID):
         return repo + "::" + unc(p)
 
-    def run(self, fields, mode="", cwd=None, args=(), env=None):
+    def run(self, fields, mode="", cwd=None, args=(), env=None, script=None):
         open(self.log, "w").close()
         self.load(); self.st["lists"] = 0; self.save()
         e = dict(os.environ, PATH=self.bin + ":" + os.environ["PATH"], STUB_STATE=self.state, STUB_LOG=self.log,
@@ -172,7 +176,7 @@ class World:
                  STUB_GH=self.gh, STUB_GH_LOG=self.ghlog)
         e.pop("ORCA_CLI_COMMAND", None)
         e.update(env or {})
-        r = subprocess.run(["bash", SCRIPT, *args], input=fields, cwd=cwd or self.main, capture_output=True,
+        r = subprocess.run(["bash", script or SCRIPT, *args], input=fields, cwd=cwd or self.main, capture_output=True,
                            text=True, env=e, timeout=120)
         calls = [json.loads(l) for l in open(self.log) if l.strip()]
         return r.returncode, r.stdout.splitlines(), calls
@@ -497,9 +501,12 @@ W.done()
 W = World("reuse")
 
 
-def squashed(name, n=1):
+def squashed(name, n=1, unpushed=0, detour=False):
     """A lane that worked on feat/<name>/work, pushed it, saw it squash-merged
-    as one new commit on origin/main, deleted the branch and parked."""
+    as one new commit on origin/main, deleted the branch and parked. Returns
+    the lane, the branch, and the pushed head (the PR's headRefOid).
+    unpushed: commits made after the push and never pushed. detour: a
+    `checkout HEAD~1` and back, which the reflog logs as typed."""
     p = W.lane(name)
     b = "feat/%s/work" % name
     W.git("checkout", "-q", "-b", b, cwd=p)
@@ -507,7 +514,15 @@ def squashed(name, n=1):
         open(os.path.join(p, "%s%d.txt" % (name, i)), "w").write("x\n")
         W.git("add", ".", cwd=p)
         W.commit("work %d" % i, cwd=p)
+    if detour:
+        W.git("checkout", "-q", "HEAD~1", cwd=p)
+        W.git("checkout", "-q", b, cwd=p)
     W.git("push", "-q", "origin", b, cwd=p)
+    head = W.git("rev-parse", "HEAD", cwd=p)
+    for i in range(unpushed):
+        open(os.path.join(p, "%s-late%d.txt" % (name, i)), "w").write("late\n")
+        W.git("add", ".", cwd=p)
+        W.commit("late %d" % i, cwd=p)
     W.git("checkout", "-q", "main")
     W.git("pull", "-q", "origin", "main")
     W.git("merge", "-q", "--squash", "origin/" + b)
@@ -517,35 +532,77 @@ def squashed(name, n=1):
     W.git("fetch", "-q", "--prune", "origin")
     W.git("checkout", "-q", "--detach", "origin/main", cwd=p)
     W.git("branch", "-q", "-D", b)
-    return p, b
+    return p, b, head
 
 
 def gh(prs=None, fail=False):
     json.dump({"prs": prs or {}, "default": "main", "fail": fail}, open(W.gh, "w"))
 
 
-p, b = squashed("up1", 2)
-gh({b: [[7, "MERGED", "2099-01-01T00:00:00Z"]]})
-got = W.run(F(cli=CLI, action="rm", lane="up1"))
-expect("RM reused lane after a squash merge", got, rc=0, first="ORCA lane: removed up1",
-       has=("reflog landed: 2 reflog commit(s) origin lacks — 2 by a merged PR",))
-# Two commits each, so the squash's patch equals neither: only the PR test
-# can vouch (a one-commit squash IS an equal patch, and passes that way).
-p, b = squashed("up2", 2)
-gh({b: [[8, "MERGED", "2000-01-01T00:00:00Z"]]})
-expect("RM PR merged before the commit", W.run(F(cli=CLI, action="rm", lane="up2")), rc=1,
-       first="ORCA lane: kept up2 — HEAD reflog holds a commit that is on no origin ref and not landed",
-       has=("no PR of " + b + " is MERGED after it was committed",), verbs_lack=[["worktree", "rm"]])
-p, b = squashed("up3", 2)
-gh({b: [[9, "CLOSED", None], [10, "OPEN", None]]})
-expect("RM branch with no merged PR", W.run(F(cli=CLI, action="rm", lane="up3")), rc=1,
-       first="ORCA lane: kept up3 — HEAD reflog holds a commit that is on no origin ref and not landed",
+KEPT = "HEAD reflog holds a commit that is on no origin ref and not landed"
+p, b, h = squashed("up1", 2)
+gh({b: [[7, "MERGED", "main", h, False]]})
+expect("RM reused lane after a squash merge", W.run(F(cli=CLI, action="rm", lane="up1")), rc=0,
+       first="ORCA lane: removed up1", has=("reflog landed: 2 reflog commit(s) origin lacks — 2 in a merged PR's head",))
+# The PR #123 review's P1: a commit made after the push, before the merge.
+p, b, h = squashed("up2", 2, unpushed=1)
+gh({b: [[8, "MERGED", "main", h, False]]})
+expect("RM unpushed commit the PR head lacks", W.run(F(cli=CLI, action="rm", lane="up2")), rc=1,
+       first="ORCA lane: kept up2 — " + KEPT, has=("no merged PR of " + b + " has it in its head",),
        verbs_lack=[["worktree", "rm"]])
-p, b = squashed("up4", 2)
+# Two commits each from here, so a squash's patch equals no single commit:
+# only the PR-head rule can land them (a one-commit squash IS an equal patch).
+p, b, h = squashed("up3", 2)
+gh({b: [[9, "CLOSED", "main", h, False], [10, "OPEN", "main", h, False]]})
+expect("RM branch with no merged PR", W.run(F(cli=CLI, action="rm", lane="up3")), rc=1,
+       first="ORCA lane: kept up3 — " + KEPT, has=("no merged PR of " + b + " has it in its head",),
+       verbs_lack=[["worktree", "rm"]])
+p, b, h = squashed("up4", 2)
 gh(fail=True)
+# Without origin/HEAD the default branch comes from gh too (the cases above
+# read it there): set origin/HEAD, so the PR read is the call that fails.
+W.git("remote", "set-head", "origin", "main")
 expect("RM gh fails", W.run(F(cli=CLI, action="rm", lane="up4")), rc=1,
        first="ORCA lane: kept up4 — HEAD reflog holds a commit no origin ref has, and whether it landed is unknown",
        has=("gh pr list failed",), verbs_lack=[["worktree", "rm"]])
+W.git("remote", "set-head", "origin", "-d")
+p, b, h = squashed("up6", 2)
+gh({b: [[11, "MERGED", "feat/base/x", h, False]]})
+expect("RM PR into another base", W.run(F(cli=CLI, action="rm", lane="up6")), rc=1,
+       first="ORCA lane: kept up6 — " + KEPT, verbs_lack=[["worktree", "rm"]])
+p, b, h = squashed("up7", 2)
+gh({b: [[12, "MERGED", "main", h, True]]})
+expect("RM fork PR", W.run(F(cli=CLI, action="rm", lane="up7")), rc=1,
+       first="ORCA lane: kept up7 — " + KEPT, verbs_lack=[["worktree", "rm"]])
+p, b, h = squashed("up8", 2, detour=True)
+gh({b: [[13, "MERGED", "main", h, False]]})
+expect("RM checkout HEAD~1 in the reflog", W.run(F(cli=CLI, action="rm", lane="up8")), rc=0,
+       first="ORCA lane: removed up8")
+# An amend: the pre-amend commit is in no head, its replacement is.
+p = W.lane("up9")
+b = "feat/up9/work"
+W.git("checkout", "-q", "-b", b, cwd=p)
+for i in range(2):
+    open(os.path.join(p, "up9-%d.txt" % i), "w").write("x\n")
+    W.git("add", ".", cwd=p)
+    W.commit("work %d" % i, cwd=p)
+open(os.path.join(p, "up9-1.txt"), "w").write("amended\n")
+W.git("add", ".", cwd=p)
+W.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--amend", "-m", "work 1 amended", cwd=p)
+W.git("push", "-q", "origin", b, cwd=p)
+h = W.git("rev-parse", "HEAD", cwd=p)
+W.git("checkout", "-q", "main")
+W.git("pull", "-q", "origin", "main")
+W.git("merge", "-q", "--squash", "origin/" + b)
+W.commit("squash " + b)
+W.git("push", "-q", "origin", "main")
+W.git("push", "-q", "origin", "--delete", b)
+W.git("fetch", "-q", "--prune", "origin")
+W.git("checkout", "-q", "--detach", "origin/main", cwd=p)
+W.git("branch", "-q", "-D", b)
+gh({b: [[14, "MERGED", "main", h, False]]})
+expect("RM amended-away commit", W.run(F(cli=CLI, action="rm", lane="up9")), rc=0,
+       first="ORCA lane: removed up9", has=("1 replaced by a landed amend",))
 # A commit made detached, then landed on main as a rebased copy (equal patch).
 p = W.lane("up5")
 open(os.path.join(p, "up5.txt"), "w").write("x\n")
@@ -562,6 +619,43 @@ W.git("checkout", "-q", "--detach", "origin/main", cwd=p)
 gh()
 expect("RM detached commit landed as an equal patch", W.run(F(cli=CLI, action="rm", lane="up5")), rc=0,
        first="ORCA lane: removed up5", has=("1 by an equal patch on origin/main",))
+# A merge commit whose parent's patch landed: git cherry never lists the merge
+# itself, so its own content must keep the lane (PR #123 review).
+p = W.lane("upm")
+W.git("checkout", "-q", "-b", "side", "origin/main")
+open(os.path.join(W.main, "side.txt"), "w").write("s\n")
+W.git("add", ".")
+W.commit("side work")
+W.git("push", "-q", "origin", "side")
+s = W.git("rev-parse", "HEAD")
+W.git("checkout", "-q", "main")
+W.git("fetch", "-q", "origin")
+W.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "--no-commit", "origin/side", cwd=p)
+open(os.path.join(p, "evil.txt"), "w").write("only here\n")
+W.git("add", ".", cwd=p)
+W.commit("merge side, plus more", cwd=p)
+W.git("pull", "-q", "origin", "main")
+W.commit("main moved on again")
+W.git("-c", "user.name=t", "-c", "user.email=t@t", "cherry-pick", s)
+W.git("push", "-q", "origin", "main")
+W.git("push", "-q", "origin", "--delete", "side")
+W.git("branch", "-q", "-D", "side")
+W.git("fetch", "-q", "--prune", "origin")
+W.git("checkout", "-q", "--detach", "origin/main", cwd=p)
+gh()
+expect("RM merge commit whose parent landed", W.run(F(cli=CLI, action="rm", lane="upm")), rc=1,
+       first="ORCA lane: kept upm — " + KEPT, verbs_lack=[["worktree", "rm"]])
+# A helper that exits 0 but prints no `landed:` line (truncated or stubbed).
+p, b, h = squashed("upz", 2)
+gh({b: [[15, "MERGED", "main", h, False]]})
+stubd = os.path.join(W.d, "stubhelper")
+os.makedirs(stubd)
+shutil.copy(SCRIPT, os.path.join(stubd, "orca-lane.sh"))
+open(os.path.join(stubd, "orca-lane-reflog.sh"), "w").write("exit 0\n")
+expect("RM helper exits 0 without a landed line", W.run(F(cli=CLI, action="rm", lane="upz"),
+       script=os.path.join(stubd, "orca-lane.sh")), rc=1,
+       first="ORCA lane: kept upz — HEAD reflog holds a commit no origin ref has, and whether it landed is unknown",
+       verbs_lack=[["worktree", "rm"]])
 W.done()
 
 # ---- RM, the main checkout's orca.yaml (#16): Orca reads the archive hook
@@ -577,14 +671,18 @@ expect("RM main orca.yaml uncommitted", W.run(F(cli=CLI, action="rm", lane="y1")
        verbs_lack=[["worktree", "rm"]])
 W.git("add", "orca.yaml")
 W.commit("hook")
-W.git("branch", "-q", "--unset-upstream")
-expect("RM main orca.yaml with no upstream", W.run(F(cli=CLI, action="rm", lane="y2")), rc=1,
-       first="ORCA lane: kept y2 — the main checkout has no upstream", verbs_lack=[["worktree", "rm"]])
-W.git("branch", "-q", "-u", "origin/main")
-expect("RM main orca.yaml unpushed", W.run(F(cli=CLI, action="rm", lane="y3")), rc=1,
-       first="ORCA lane: kept y3 — the main checkout's orca.yaml differs from its upstream's",
+expect("RM main orca.yaml unpushed", W.run(F(cli=CLI, action="rm", lane="y2")), rc=1,
+       first="ORCA lane: kept y2 — the main checkout's orca.yaml is not the one origin/main holds",
        verbs_lack=[["worktree", "rm"]])
 W.git("push", "-q", "origin", "main")
+W.git("fetch", "-q", "origin")
+W.git("update-index", "--skip-worktree", "orca.yaml")
+open(os.path.join(W.main, "orca.yaml"), "w").write("archive: rm -rf /\n")
+expect("RM main orca.yaml edited under skip-worktree", W.run(F(cli=CLI, action="rm", lane="y3")), rc=1,
+       first="ORCA lane: kept y3 — the main checkout's orca.yaml is not the one origin/main holds",
+       verbs_lack=[["worktree", "rm"]])
+W.git("update-index", "--no-skip-worktree", "orca.yaml")
+W.git("checkout", "--", "orca.yaml")
 expect("RM main orca.yaml pushed", W.run(F(cli=CLI, action="rm", lane="y4")), rc=0, first="ORCA lane: removed y4")
 W.done()
 

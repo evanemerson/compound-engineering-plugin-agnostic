@@ -1915,16 +1915,11 @@ limits.
        failed teardown can leave a stack or volumes behind; the waiver is
        the operator's own `worktree rm`, never the script's. The script
        lists the ignored files it deletes (the operator's decision,
-       2026-11-01), and refuses a lane with changes, a live agent, an
-       ambiguous name, an archive hook origin does not hold (the main
-       checkout's `orca.yaml` uncommitted, changed, or unpushed), or a
-       commit no origin ref has after a `fetch --prune`: the HEAD reflog
-       test is §11b's (owned there). A reused lane's reflog holds the
-       squash-merged commits of deleted branches; `orca-lane-reflog.sh`
-       counts such a commit as landed only when a MERGED PR of the branch
-       that held it, or an equal patch on the default branch, vouches for
-       it (its header owns the test), and anything else is refused for the
-       operator to decide.
+       2026-11-01). Its header owns the guards it applies first. Among
+       them, the plain HEAD reflog test is §11b's (owned there), and a
+       reused lane's squash-merged reflog commits go on to
+       `orca-lane-reflog.sh`, whose header owns that extension; a lane it
+       cannot clear is kept for the operator to decide.
      - **The location is Orca's.** `<wt>` stays the directory basename
        (§10a); `create` stops when Orca's path does not end in `<wt>`.
        Existing lanes under `.claude/worktrees/` are not moved; `name`
@@ -1945,8 +1940,8 @@ limits.
        a line break, and reports `ORCA lane skipped: a
        field value is not one line` without running the block. `create`
        parks the lane detached at the commit it was created on
-       (`origin/<base>` at that moment); run after a `failed` create that
-       left the lane on its park branch, it resumes.
+       (`origin/<base>` at that moment). A `failed` create is run again
+       as is: the script's header says which partial creates it resumes.
        ```bash
        # Run with a tool timeout of 10 minutes: rm waits for the archive hook
        # (the script's header states its worst case).

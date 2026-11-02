@@ -86,18 +86,21 @@
 #           2. Refuse on any tracked or untracked change (`status --porcelain
 #              --untracked-files=all`; ignored files excluded here).
 #           3. `git fetch --prune origin` (60 s bound; a failure refuses),
-#              then refuse when HEAD is on no origin ref. A commit in the
-#              lane's HEAD reflog that is on no origin ref (`cepa:autonomy`
-#              §11b's reflog test, owned there) is then put to
-#              orca-lane-reflog.sh (L58), which owns the sanctioned test: a
-#              MERGED PR of the branch that held it, or an equal patch on
-#              origin's default branch. Its exit 1 or 3 refuses.
+#              then refuse when HEAD is on no origin ref. Then
+#              `cepa:autonomy` §11b's plain reflog test (owned there): when
+#              a commit in the lane's HEAD reflog is on no origin ref,
+#              orca-lane-reflog.sh (L58; its header owns the test, bounded
+#              here at 60 s) decides whether each such commit landed. Only
+#              its exit 0 with a `landed:` line passes; anything else
+#              refuses.
 #           4. Refuse when `worktree ps` shows an agent on the lane, or the
 #              read is not complete.
 #           5. Refuse unless the main checkout's orca.yaml (where Orca reads
-#              the archive hook, U1) is committed unchanged, not a symlink,
-#              and, when HEAD has one, equal to its upstream's (review
-#              finding #16). List the ignored files and directories it will
+#              the archive hook, U1) is clean in `git status`, not a
+#              symlink, and, when present, byte-equal to origin's default
+#              branch's copy (review finding #16; hashing the file also
+#              sees an edit `skip-worktree` hides from status). The default
+#              is origin/HEAD, else `git ls-remote --symref` (10 s bound). List the ignored files and directories it will
 #              delete (the operator's #4 decision: list them, then remove).
 #           6. `worktree rm --worktree id:<id> --run-hooks --json`. Never
 #              `--force`, never `--allow-failed-archive-hook`.
@@ -110,9 +113,9 @@
 #   0  `ORCA lane: created …` (or `resumed and created …`), `ORCA lane: named
 #      …`, `ORCA lane: removed …`.
 #   1  `ORCA lane: not created — …` or `ORCA lane: kept <lane> — …`: a guard
-#      refused, or a read was not complete. Orca was not asked to write.
-#      Also `name` with a skipped lane: the renames it made are done, and
-#      its summary line counts the skips.
+#      refused, or a read was not complete; Orca was not asked to write.
+#      Also `name` when it skipped a lane: it exits 1 AFTER its renames,
+#      and its summary line counts the skips.
 #   3  `ORCA lane failed: …`: an Orca write failed or was not proved, or the
 #      created lane did not match. A lane is never removed by this script to
 #      undo a failed create.
@@ -156,9 +159,10 @@
 #     once can both pass step 1. One coord@main per repo makes it rare; the
 #     basename check in step 3 then stops the second.
 #   - `rm` runs the repo's archive hook with Orca's own bound; the script
-#     bounds the call at 330 s. Worst case about 595 s: four reads at
-#     2 x 17 s, the fetch 62 s, the reflog check's gh budget 60 s (its
-#     header), rm 332 s. Run the block with a tool timeout
+#     bounds the call at 300 s. Worst case about 575 s of bounded calls:
+#     four reads at 2 x 17 s, the fetch 62 s, the default-branch read 12 s,
+#     the reflog check 62 s, rm 302 s; local git work (measured 2-10 s on
+#     the 2026-11-01 lanes) comes on top. Run the block with a tool timeout
 #     of 10 minutes. A call the bound killed reads as "removal not proved";
 #     Orca's hook may still be running on the server then.
 #   - The archive hook's output is never relayed (repo rule: relayed content
@@ -166,10 +170,8 @@
 #   - The live-agent check sees agents Orca knows (`worktree ps`). A session
 #     started from a plain terminal is not seen, and the checks and the
 #     `rm` are not atomic.
-#   - A reflog commit landed by neither a merged PR of its branch nor an
-#     equal patch on the default branch (a commit made detached, or a branch
-#     with no PR) is refused; the operator decides. orca-lane-reflog.sh
-#     states that test's own limits.
+#   - A reflog commit orca-lane-reflog.sh cannot show landed is refused;
+#     the operator decides. That script states its own limits.
 #   - `name` skips a lane whose basename another lane already shows.
 #   - The setup starts before the park: a `setup:` that reads the branch
 #     name sees `chore/<lane>/park`, then a detached HEAD, and one that
@@ -543,10 +545,13 @@ if [ "$cepa_ln_action" = create ]; then
   # origin/<base> can be older than the lane. Re-read it first; a failed fetch
   # leaves the old ref, which can only fail closed (the lane is kept, and a
   # re-run resumes).
-  timeout -k 2 60 git fetch -q origin "+refs/heads/$cepa_ln_base:refs/remotes/origin/$cepa_ln_base" </dev/null >/dev/null 2>&1 || true
+  cepa_ln_fetch=
+  timeout -k 2 60 git fetch -q origin "+refs/heads/$cepa_ln_base:refs/remotes/origin/$cepa_ln_base" </dev/null >/dev/null 2>&1 \
+    || cepa_ln_fetch="; the re-fetch of origin/$cepa_ln_base failed, so that count may be stale"
   cepa_ln_ahead=$(git rev-list --count "refs/remotes/origin/$cepa_ln_base..refs/heads/$cepa_ln_park" 2>/dev/null) || cepa_ln_ahead=
   [ "$cepa_ln_ahead" = 0 ] \
-    || failed "$cepa_ln_park has ${cepa_ln_ahead:-unknown} commit(s) not on origin/$cepa_ln_base, so it was not deleted; the lane is kept at $c_path"
+    || failed "$cepa_ln_park has ${cepa_ln_ahead:-unknown} commit(s) not on origin/$cepa_ln_base, so it was not deleted; the lane is kept at $c_path$cepa_ln_fetch" \
+              "check $cepa_ln_park, then ask this session to run create again: it resumes"
   # The same commit, so detaching changes no file under a running setup.
   if [ -n "$cepa_ln_br" ]; then
     git -C "$c_path" checkout -q --detach "$cepa_ln_head" 2>/dev/null \
@@ -563,7 +568,7 @@ if [ "$cepa_ln_action" = create ]; then
   [ "$cepa_ln_shown" = "$cepa_ln_lane fixed" ] \
     || failed "the lane is created and parked at $c_path, but worktree show reports '${cepa_ln_shown:-an unknown shape}', not '$cepa_ln_lane fixed'" \
               "check that lane $cepa_ln_lane shows its name in Orca's sidebar"
-  echo "ORCA lane: ${cepa_ln_resume:+resumed and }created $cepa_ln_lane at $c_path, parked detached at ${cepa_ln_head:0:12} (origin/$cepa_ln_base), named $cepa_ln_lane (fixed); setup policy $cepa_ln_policy — Orca reports no setup result, so read the lane's Setup tab before starting a worker"
+  echo "ORCA lane: ${cepa_ln_resume:+resumed and }created $cepa_ln_lane at $c_path, parked detached at ${cepa_ln_head:0:12} (at or behind origin/$cepa_ln_base), named $cepa_ln_lane (fixed); setup policy $cepa_ln_policy — Orca reports no setup result, so read the lane's Setup tab before starting a worker"
   exit 0
 fi
 
@@ -602,7 +607,7 @@ cepa_ln_st=$(git -C "$r_path" status --porcelain --untracked-files=all 2>/dev/nu
 timeout -k 2 60 git fetch -q --prune origin </dev/null >/dev/null 2>&1 \
   || kept "kept $cepa_ln_lane — git fetch --prune origin failed, so which commits origin holds is unknown" \
           "check the network and the origin remote, then ask again"
-# The reflog guard: the same test as cepa:autonomy §11b (owned there).
+# HEAD, then cepa:autonomy §11b's plain reflog test (owned there).
 cepa_ln_head=$(git -C "$r_path" rev-parse --verify -q HEAD 2>/dev/null) || cepa_ln_head=
 [ -n "$cepa_ln_head" ] || kept "kept $cepa_ln_lane — HEAD unreadable" "inspect $r_path"
 cepa_ln_on=$(git for-each-ref --contains "$cepa_ln_head" --format='%(refname)' refs/remotes/origin/ 2>/dev/null) || cepa_ln_on=
@@ -614,17 +619,18 @@ cepa_ln_refl=$(git -C "$r_path" log -g --format=%H HEAD 2>/dev/null) || cepa_ln_
 cepa_ln_lost=$(git rev-list $(sort -u <<<"$cepa_ln_refl") --not --remotes=origin 2>/dev/null) \
   || kept "kept $cepa_ln_lane — git rev-list over the HEAD reflog failed" "inspect $r_path"
 # A reused lane's reflog holds the squash-merged commits of deleted branches
-# (L58). orca-lane-reflog.sh owns the sanctioned test: each such commit must
-# be vouched for by a MERGED PR of the branch that held it, or by an equal
-# patch on origin's default branch. Its exit 1 and 3 both refuse.
+# (L58): orca-lane-reflog.sh owns the test that extends §11b's here. It is
+# bounded, and only exit 0 with a `landed:` line passes (PR #123 review: a
+# truncated or stub helper exits 0 with no output).
 cepa_ln_landed=
 if [ -n "$cepa_ln_lost" ]; then
   cepa_ln_rh="$(dirname "${BASH_SOURCE[0]}")/orca-lane-reflog.sh"
   [ -f "$cepa_ln_rh" ] || kept "kept $cepa_ln_lane — HEAD reflog holds a commit no origin ref has (${cepa_ln_lost%%$'\n'*}), and orca-lane-reflog.sh is missing" \
     "reinstall the cepa plugin, then ask again"
   cepa_ln_rrc=0
-  cepa_ln_rout=$(bash "$cepa_ln_rh" "$r_path" </dev/null 2>/dev/null) || cepa_ln_rrc=$?
+  cepa_ln_rout=$(timeout -k 2 60 bash "$cepa_ln_rh" "$r_path" </dev/null 2>/dev/null) || cepa_ln_rrc=$?
   cepa_ln_rlast=$(tail -n 1 <<<"$cepa_ln_rout" | tr -d '\000-\037\177' | cut -c1-400)
+  [ "$cepa_ln_rrc" != 0 ] || [[ $cepa_ln_rlast == "landed: "* ]] || cepa_ln_rrc=99
   case "$cepa_ln_rrc" in
     0) cepa_ln_landed=$cepa_ln_rlast ;;
     1) kept "kept $cepa_ln_lane — HEAD reflog holds a commit that is on no origin ref and not landed ($cepa_ln_rlast)" \
@@ -641,21 +647,28 @@ cepa_ln_agents=$(cepa_ln_py agents "$cepa_ln_tmp/ps.json" "$r_id") \
 [ "$cepa_ln_agents" = 0 ] || kept "kept $cepa_ln_lane — $cepa_ln_agents agent(s) on it in worktree ps" \
   "close the agent in $cepa_ln_lane, then ask again"
 # Orca runs the archive hook from the MAIN checkout's working-tree orca.yaml
-# (U1). Review finding #16: that file must be committed, unchanged, not a
-# symlink, and equal to the main checkout's upstream, so the hook that runs is
-# one origin holds.
+# (U1). Review finding #16: the file Orca will read must be the one origin's
+# default branch holds.
 cepa_ln_oy=$(git -C "$cepa_ln_main" status --porcelain --untracked-files=all --ignored -- orca.yaml 2>/dev/null) \
   || kept "kept $cepa_ln_lane — git status of the main checkout's orca.yaml failed" "inspect $cepa_ln_main/orca.yaml"
 [ -z "$cepa_ln_oy" ] || kept "kept $cepa_ln_lane — the main checkout's orca.yaml is not committed as it is (${cepa_ln_oy%%$'\n'*}); Orca would run its archive hook from that file" \
   "commit and push orca.yaml, or restore it, in the main checkout, then ask again"
 [ ! -L "$cepa_ln_main/orca.yaml" ] || kept "kept $cepa_ln_lane — the main checkout's orca.yaml is a symlink" "inspect $cepa_ln_main/orca.yaml"
-if git -C "$cepa_ln_main" cat-file -e HEAD:orca.yaml 2>/dev/null; then
-  cepa_ln_up=$(git -C "$cepa_ln_main" rev-parse -q --verify '@{upstream}' 2>/dev/null) \
-    || kept "kept $cepa_ln_lane — the main checkout has no upstream, so whether origin holds its orca.yaml is unknown" \
-            "put the main checkout on its base branch (with its upstream), then ask again"
-  [ "$(git -C "$cepa_ln_main" rev-parse -q --verify HEAD:orca.yaml 2>/dev/null)" = "$(git -C "$cepa_ln_main" rev-parse -q --verify "$cepa_ln_up:orca.yaml" 2>/dev/null)" ] \
-    || kept "kept $cepa_ln_lane — the main checkout's orca.yaml differs from its upstream's; Orca would run an archive hook origin does not hold" \
-            "push or reset orca.yaml in the main checkout, then ask again"
+if [ -e "$cepa_ln_main/orca.yaml" ]; then
+  cepa_ln_dflt=$(git -C "$cepa_ln_main" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || cepa_ln_dflt=
+  cepa_ln_dflt=${cepa_ln_dflt#origin/}
+  if [ -z "$cepa_ln_dflt" ]; then
+    cepa_ln_dflt=$(timeout -k 2 10 git -C "$cepa_ln_main" ls-remote --symref origin HEAD </dev/null 2>/dev/null \
+      | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$#\1#p' | head -n 1) || cepa_ln_dflt=
+  fi
+  [[ $cepa_ln_dflt =~ ^[A-Za-z0-9_][A-Za-z0-9._/-]{0,99}$ ]] && git check-ref-format "refs/heads/$cepa_ln_dflt" 2>/dev/null \
+    || kept "kept $cepa_ln_lane — origin's default branch is unknown, so whether origin holds the main checkout's orca.yaml is unknown" \
+            "check the network and the origin remote, then ask again"
+  cepa_ln_yw=$(git -C "$cepa_ln_main" hash-object -- orca.yaml 2>/dev/null) || cepa_ln_yw=
+  cepa_ln_yo=$(git -C "$cepa_ln_main" rev-parse -q --verify "refs/remotes/origin/$cepa_ln_dflt:orca.yaml" 2>/dev/null) || cepa_ln_yo=
+  [ -n "$cepa_ln_yw" ] && [ "$cepa_ln_yw" = "$cepa_ln_yo" ] \
+    || kept "kept $cepa_ln_lane — the main checkout's orca.yaml is not the one origin/$cepa_ln_dflt holds; Orca would run an archive hook origin does not hold" \
+            "push orca.yaml to $cepa_ln_dflt, or restore it in the main checkout, then ask again"
 fi
 cepa_ln_br=$(git -C "$r_path" symbolic-ref -q --short HEAD 2>/dev/null) || cepa_ln_br=
 cepa_ln_igs=$(git -C "$r_path" status --porcelain --ignored 2>/dev/null) \
@@ -668,7 +681,7 @@ while IFS= read -r g; do
   [ "$cepa_ln_ni" -le 20 ] && echo "ORCA lane: deleting ignored $g"
 done <<<"$cepa_ln_ign"
 [ "$cepa_ln_ni" -le 20 ] || echo "ORCA lane: deleting ignored … and $((cepa_ln_ni - 20)) more"
-cepa_ln_orca "$cepa_ln_tmp/rm.json" 0 330 worktree rm --worktree "id:$r_id" --run-hooks --json || true
+cepa_ln_orca "$cepa_ln_tmp/rm.json" 0 300 worktree rm --worktree "id:$r_id" --run-hooks --json || true
 cepa_ln_res=$(cepa_ln_py rmres "$cepa_ln_tmp/rm.json") || cepa_ln_res="unknown"
 case "$cepa_ln_res" in
   removed|unknown) ;;
