@@ -68,7 +68,9 @@ it and write no findings file under a name you made up.
 
 Every name keeps the `review-` prefix, so consumers globbing `review-*` match
 the new names and the old ones alike, and the stamp still leads, so a sort by
-name is still a sort by time. **Never narrow a reader to one shape** (a
+name orders files by second. Within one second it does not (`…-x-2.md` sorts
+before `…-x.md`), so a reader that must find one run's file uses the path that
+run printed, never "the newest name". **Never narrow a reader to one shape** (a
 `review-????-??-??-??????.md` glob, a fixed-length cut): it would match zero
 new files, and a lagging reader's failure is a clean pass.
 **A consumer that SELECTS one file (rather than scanning all) must

@@ -22,7 +22,8 @@
 # Name:  <dir>/<kind>-YYYY-MM-DD-HHMMSS-<slug>[-N].md
 # Every reader that globs `review-*.md` or `review-weekly-*.md` matches both
 # this name and the old `<kind>-YYYY-MM-DD-HHMMSS.md` one, and the stamp still
-# leads, so a sort by name is still a sort by time.
+# leads, so a sort by name orders files by second. Within one second it does
+# not: `-` sorts before `.`, so `…-x-2.md` sorts before `…-x.md`.
 #
 # Usage:
 #   bash findings-path.sh [--kind review|review-weekly] [--scope <value>] [--dir <dir>]
@@ -35,13 +36,13 @@
 # Exit:   0 reserved   2 usage, or the path could not be made   (stderr says why)
 set -u
 
-kind=review; scope=''; dir=''
+kind=review; scope=''; scope_given=0; dir=''
 while [ $# -gt 0 ]; do
   case "$1" in
     --kind)  shift; [ $# -gt 0 ] || { echo 'findings-path: --kind needs a value' >&2; exit 2; }; kind="$1" ;;
-    --scope) shift; [ $# -gt 0 ] || { echo 'findings-path: --scope needs a value' >&2; exit 2; }; scope="$1" ;;
+    --scope) shift; [ $# -gt 0 ] || { echo 'findings-path: --scope needs a value' >&2; exit 2; }; scope="$1"; scope_given=1 ;;
     --dir)   shift; [ $# -gt 0 ] || { echo 'findings-path: --dir needs a value' >&2; exit 2; }; dir="$1" ;;
-    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
     *) echo "findings-path: unknown argument (see --help)" >&2; exit 2 ;;
   esac
   shift
@@ -54,14 +55,22 @@ short_sha() { git rev-parse --short HEAD 2>/dev/null; }
 # character becomes a run of `-` that the collapse then folds to one.
 slug() {
   local s
-  s=$(printf '%s' "$1" | LC_ALL=C sed -e 's/[^A-Za-z0-9_-]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+  # tr first: sed works line by line, so a newline in --scope would survive it.
+  s=$(printf '%s' "$1" | LC_ALL=C tr '\n\r' '--' | LC_ALL=C sed -e 's/[^A-Za-z0-9_-]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
   case "$s" in ''|.*) s=$(short_sha) ;; esac
   printf '%s' "$s"
 }
 
 # A detached HEAD gives an empty branch; slug() then falls back to the short
 # SHA, as §5 says. That fallback is the only one (path-detached pins it).
-[ -n "$scope" ] || scope=$(git branch --show-current 2>/dev/null) || scope=''
+# A --scope that is present but empty is an error, never "not given": a weekly
+# run whose trunk resolved to '' would otherwise be named by the checkout's
+# branch, silently.
+if [ "$scope_given" -eq 1 ]; then
+  [ -n "$scope" ] || { echo 'findings-path: --scope given but empty' >&2; exit 2; }
+else
+  scope=$(git branch --show-current 2>/dev/null) || scope=''
+fi
 s=$(slug "$scope")
 [ -n "$s" ] || { echo 'findings-path: no per-run component — no branch, no --scope, and no commit to take a short SHA from' >&2; exit 2; }
 
@@ -78,13 +87,24 @@ stamp=$(date +%Y-%m-%d-%H%M%S) || exit 2
 base="$dir/$kind-$stamp-$s"
 path="$base.md"; n=1
 while :; do
-  if ( set -C; : > "$path" ) 2>/dev/null; then
-    printf '%s\n' "$path"; exit 0
+  # noclobber gives O_EXCL only for an absent or regular target: a symlink to
+  # /dev/null, or a FIFO, would "succeed" (or block). Refuse any non-regular
+  # entry at the name before creating, and check what was created after.
+  if [ -L "$path" ]; then
+    echo "findings-path: ${path##*/} is a symlink — refusing to reserve through it" >&2; exit 2
+  fi
+  if [ -e "$path" ] && [ ! -f "$path" ]; then
+    echo "findings-path: ${path##*/} exists and is not a regular file" >&2; exit 2
+  fi
+  if err=$( ( set -C; : > "$path" ) 2>&1 ); then
+    if [ -f "$path" ] && [ ! -L "$path" ] && [ ! -s "$path" ]; then
+      printf '%s\n' "$path"; exit 0
+    fi
+    echo "findings-path: reserved ${path##*/} is not a plain empty file" >&2; exit 2
   fi
   # Not created. If nothing is there, the failure was not a collision
-  # (permissions, a dangling symlink): say so, never loop or fall through.
-  [ -e "$path" ] || [ -L "$path" ] || { echo "findings-path: cannot create ${path##*/}" >&2; exit 2; }
-  [ -L "$path" ] && [ ! -e "$path" ] && { echo "findings-path: ${path##*/} is a dangling symlink" >&2; exit 2; }
+  # (permissions, read-only disk, a name too long): say so with the cause.
+  [ -e "$path" ] || { echo "findings-path: cannot create ${path##*/}: ${err##*: }" >&2; exit 2; }
   n=$((n + 1))
   [ "$n" -le 99 ] || { echo "findings-path: 99 names taken for ${base##*/}" >&2; exit 2; }
   path="$base-$n.md"

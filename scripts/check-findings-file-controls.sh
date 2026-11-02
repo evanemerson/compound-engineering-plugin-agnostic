@@ -187,8 +187,9 @@ reg path-detached   'a detached HEAD named with no per-run component (the short-
 reg path-collision  'an existing findings file truncated or reused (create-exclusive lost) — L54 itself'
 reg path-weekly     'the weekly kind or its --scope ignored'
 reg path-usage      'an unknown kind or argument accepted, or a stamp not taken from date'
-reg path-symlink    'a dangling symlink at the name followed, or skipped as if taken'
-reg path-readers    'a reader glob that walks only one name shape — the new name or the old one reads as no file'
+reg path-symlink    'a symlink at the name (dangling, or to /dev/null) reserved through, or skipped as if taken'
+reg path-emptyscope 'an empty --scope read as not given — a weekly run named by the checkout branch'
+reg path-readers    'the repo checker''s walk (check-residual-integrity.sh) missing either name shape — that shape reads as no file'
 reg path-block      'the spec''s reservation block failing, or printing no path, from a non-cepa directory'
 reg path-predates   'the reservation block passing when the plugin copy lacks findings-path.sh'
 reg wire-path       'a writer composing the name itself instead of citing the Filename Convention block'
@@ -801,7 +802,13 @@ EOF
       mkrepo "$d/r" 'feat/a—b-'
       OUT=$(cd "$d/r" && bash "$FPATH" 2>&1); RC=$?
       expect 0 '/todos/review-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-feat-a-b\.md$' || return 1
-      [ -f "$OUT" ] && [ ! -s "$OUT" ] || { DETAIL='the printed path is not an empty file'; return 1; } ;;
+      [ -f "$OUT" ] && [ ! -s "$OUT" ] || { DETAIL='the printed path is not an empty file'; return 1; }
+      # A newline in --scope must not reach the name (sed is line-based).
+      local nl
+      nl=$(cd "$d/r" && bash "$FPATH" --scope $'a\n-b-\n.c' 2>&1); RC=$?
+      OUT="$nl"
+      [ "$(wc -l <<<"$nl")" -eq 1 ] || { DETAIL='a newline in --scope split the printed path'; return 1; }
+      expect 0 '-a-b-c\.md$' ;;
     path-detached)
       mkrepo "$d/r" main; git -C "$d/r" checkout -q --detach
       sha=$(git -C "$d/r" rev-parse --short HEAD)
@@ -833,8 +840,17 @@ EOF
     path-symlink)
       mkrepo "$d/r" fix/x; stubdate "$d"; mkdir -p "$d/r/todos"
       ln -s "$d/nowhere" "$d/r/todos/review-2026-01-01-000000-fix-x.md"
+      local o1 r1
+      o1=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" 2>&1); r1=$?
+      ln -sf /dev/null "$d/r/todos/review-2026-01-01-000000-fix-x.md"
       OUT=$(cd "$d/r" && PATH="$d/bin:$PATH" bash "$FPATH" 2>&1); RC=$?
-      expect 2 'dangling symlink' ;;
+      OUT="dangling:$r1 $o1 | devnull:$RC $OUT"
+      [ "$r1" -eq 2 ] || { DETAIL="dangling symlink rc $r1, wanted 2"; return 1; }
+      expect 2 'devnull:2 .*is a symlink' ;;
+    path-emptyscope)
+      mkrepo "$d/r" feat/y
+      OUT=$(cd "$d/r" && bash "$FPATH" --kind review-weekly --scope '' 2>&1); RC=$?
+      expect 2 'given but empty' ;;
     path-readers)
       # Both name shapes, each holding one MISS, under the repo checker's walk
       # and the standalone checker's glob. Either shape dropping out of a
@@ -874,7 +890,7 @@ GLOB: $g"
       local w bad=''
       for w in review plan-review resolve-pr lfg; do
         grep -qF 'Filename Convention' "$CMDS/$w.md" || bad="$bad $w(no-citation)"
-        grep -qE '(Write|Create a findings file at|findings file) `todos/review-YYYY-MM-DD-HHMMSS\.md`' "$CMDS/$w.md" && bad="$bad $w(bare-name)"
+        grep -qE 'todos/review(-weekly)?-YYYY-MM-DD-HHMMSS\.md' "$CMDS/$w.md" && bad="$bad $w(bare-name)"
       done
       OUT="bad:${bad:- none}"; RC=0
       expect 0 '^bad: none$' ;;
