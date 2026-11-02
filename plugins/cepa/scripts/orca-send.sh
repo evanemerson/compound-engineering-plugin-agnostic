@@ -187,9 +187,10 @@
 #     target=, type=, session= (each checked or replaced, as the alert's
 #     are), then a `---` line, then the message file's text.
 #   - THE RESOLVER. `run-list` is read page by page (`nextCursor` until null,
-#     at most 20 pages of 100). A Run counts when its objective is exactly
-#     `<repo> coord@main` followed by the end, a space or `:` (so `artist360`
-#     never matches `artist360-docs coord@main`). Its coordinator_handle is
+#     at most 20 pages of 100). A Run counts when its objective is
+#     `<word> coord@main` followed by the end, a space or `:`, where
+#     slug(<word>) is <repo> (so `artist360` never matches `artist360-docs
+#     coord@main`, and `foo.bar coord@main` is coord:foo-bar). Its coordinator_handle is
 #     live only when `terminal list` shows it AND `worktree ps` has exactly
 #     one agent row on that terminal's pane with `hasLivePty: true` (an open
 #     tab whose Claude died has no live pty; measured 2026-11-02: rows of
@@ -297,6 +298,11 @@ cepa_send_alert() {
   wt=$(git rev-parse --show-toplevel 2>/dev/null) || wt=
   wt=${wt##*/}
   [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
+  # A prune alert speaks for the file's own sender (cepa_send_alert_for).
+  [ -z "${cepa_send_arepo-}" ] || repo=$cepa_send_arepo
+  [ -z "${cepa_send_awt-}" ] || wt=$cepa_send_awt
+  [[ $repo =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || repo=unknown
+  [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
   me=${ORCA_TERMINAL_HANDLE:-}
   [[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
   tgt=$cepa_send_target
@@ -324,7 +330,7 @@ cepa_send_obox_note() {
   local n=${cepa_send_obox##*/} d=${cepa_send_obox%/*}
   d=${d##*/}
   if [ "$1" = refused ] && [ "$d" != _invalid ]; then
-    if mkdir -p "${cepa_send_obox%/*}/refused" 2>/dev/null \
+    if ( umask 077 && mkdir -p "${cepa_send_obox%/*}/refused" ) 2>/dev/null \
         && mv -f "$cepa_send_obox" "${cepa_send_obox%/*}/refused/$n" 2>/dev/null; then
       echo "Orca outbox: kept as refused: $d/refused/$n"
     else
@@ -373,11 +379,11 @@ cepa_send_obox_write() {
   wt=${wt##*/}
   [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
   me=${ORCA_TERMINAL_HANDLE:-}
-  [[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
+  [[ ${me} =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
   typ=$cepa_send_type
   [[ $typ =~ ^[a-z_]{1,20}$ ]] || typ=invalid
   sess=${cepa_send_f_session-}
-  [[ $sess =~ ^[A-Za-z0-9._@][A-Za-z0-9._@-]{0,99}$ ]] || sess=
+  [[ $sess =~ ^[A-Za-z0-9._@]([A-Za-z0-9._@-]{0,99})$ ]] || sess=
   tmp=$( umask 077 && mktemp "$d/.new.XXXXXXXX" 2>/dev/null ) || refuse "the outbox file could not be written"
   if printf '%s\n' "cepa-outbox 1" "time=$t" "repo=$repo" "worktree=$wt" "sender=$me" \
       "target=$tg" "type=$typ" "session=$sess" "---" "$cepa_send_msg" >"$tmp" 2>/dev/null \
@@ -391,33 +397,39 @@ cepa_send_obox_write() {
   fi
 }
 # RETENTION (#18): outbox files older than 7 days go, in every status. A
-# pending or refused one goes with an alert, since no one acked it. Names
-# that are not the writer's shape are left for orca-health.sh to report.
+# pending or refused one goes only after its alert is recorded, and the alert
+# carries the file's own repo= and worktree=, so the session that sent it
+# sees it, not the one that happened to prune (review). Names that are not
+# the writer's shape are left for orca-health.sh to report.
 cepa_send_obox_prune() {
-  local cut f n st sub
-  cut=$(python3 -I -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(time.time() - 7 * 86400)))' 2>/dev/null) || return 0
-  [[ $cut =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || return 0
+  local cut f n st sub r w
+  cut=$(python3 -I -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(time.time() - 7 * 86400)))' 2>/dev/null) \
+    || { echo "Orca outbox: prune skipped (no clock)"; return 0; }
+  [[ $cut =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo "Orca outbox: prune skipped (no clock)"; return 0; }
   for f in "$cepa_send_oroot"/*/*.md "$cepa_send_oroot"/*/refused/*.md "$cepa_send_oroot"/*/delivered/*.md; do
     [ -f "$f" ] && [ ! -L "$f" ] && [ -O "$f" ] || continue
     n=${f##*/}
     [[ $n =~ ^([0-9]{8}T[0-9]{6}Z)-[A-Za-z0-9]{8}(\.to-term_[0-9a-f-]{36}|\.drained)?\.md$ ]] || continue
     [[ ${BASH_REMATCH[1]} < $cut ]] || continue
     st=${f%/*} st=${st##*/}
-    rm -f -- "$f" 2>/dev/null || continue
-    case "$st" in
-      delivered) ;;
-      refused) sub=${f%/refused/*} sub=${sub##*/}
-               cepa_send_alert_for outbox_pruned "coord:$sub" "an outbox file was pruned unread after 7 days: $sub/refused/$n" ;;
-      *) cepa_send_alert_for outbox_pruned "coord:$st" "an outbox file was pruned unread after 7 days: $st/$n" ;;
-    esac
+    if [ "$st" != delivered ]; then
+      if [ "$st" = refused ]; then sub=${f%/refused/*} sub=${sub##*/} n=refused/$n; else sub=$st; fi
+      r=$(sed -n '3s/^repo=//p' "$f" 2>/dev/null) w=$(sed -n '4s/^worktree=//p' "$f" 2>/dev/null)
+      cepa_send_alert_for outbox_pruned "coord:$sub" "an outbox file was pruned unread after 7 days: $sub/$n" "$r" "$w" \
+        || { echo "Orca outbox: kept $sub/$n past 7 days: its prune alert could not be recorded"; continue; }
+    fi
+    rm -f -- "$f" 2>/dev/null || echo "Orca outbox: could not prune $st/${f##*/}"
   done
 }
 # An alert about another coord: target than this send's (a pruned file).
+# $4 and $5 are that file's own repo= and worktree= (checked again in the
+# writer). Returns non-zero when the alert was not recorded.
 cepa_send_alert_for() {
-  local keep=$cepa_send_target
-  cepa_send_target=$2
-  cepa_send_alert "$1" "$3" >/dev/null
-  cepa_send_target=$keep
+  local keep=$cepa_send_target out
+  cepa_send_target=$2 cepa_send_arepo=${4-} cepa_send_awt=${5-}
+  out=$(cepa_send_alert "$1" "$3")
+  cepa_send_target=$keep cepa_send_arepo= cepa_send_awt=
+  [[ $out == "Orca alert recorded: "* ]]
 }
 
 [ $# -eq 0 ] || refuse "orca-send.sh takes no arguments; its fields go on stdin"
@@ -677,11 +689,14 @@ def main():
     runs = []
     for i in range(1, pages + 1):
         runs += load("runs.%d.json" % i)["runs"]
-    obj = re.compile(re.escape(repo) + r" coord@main(?:$|[ :])")
+    # The objective's first word is rule 6's <repo>, the raw directory name;
+    # it counts when its slug is the address (`foo.bar` for coord:foo-bar).
+    obj = re.compile(r"(\S{1,100}) coord@main(?:$|[ :])")
     claimed = set()
     for r in runs:
         o, h = r["objective"], r["coordinator_handle"]
-        if isinstance(o, str) and obj.match(o) and isinstance(h, str) and TERM.fullmatch(h):
+        m = obj.match(o) if isinstance(o, str) else None
+        if m and slug(m.group(1)) == repo and isinstance(h, str) and TERM.fullmatch(h):
             claimed.add(h)
     tl, ps = load("tlist.json"), load("ps.json")
     if tl["truncated"] is not False or ps["truncated"] is not False:
@@ -848,7 +863,7 @@ echo "Orca send stored: $cepa_send_id for $cepa_send_to"
 # that handle is gone (#10).
 if [ -n "$cepa_send_obox" ]; then
   cepa_send_n=${cepa_send_obox##*/}
-  if mkdir -p "${cepa_send_obox%/*}/delivered" 2>/dev/null \
+  if ( umask 077 && mkdir -p "${cepa_send_obox%/*}/delivered" ) 2>/dev/null \
       && mv -f "$cepa_send_obox" "${cepa_send_obox%/*}/delivered/${cepa_send_n%.md}.to-$cepa_send_target.md" 2>/dev/null; then
     echo "Orca outbox: delivered: $cepa_send_coord/delivered/${cepa_send_n%.md}.to-$cepa_send_target.md"
   else

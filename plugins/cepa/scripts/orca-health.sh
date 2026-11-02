@@ -469,13 +469,13 @@ for n in listdir(adir, "alert-dir"):
         key = "outbox:%s:%s:%s" % (orepo, cls, n)
         if key in acked:
             continue
-        why = f["reason"] if any(r.fullmatch(f["reason"]) for r in REASONS) else "an unrecognised reason"
+        oreason = f["reason"] if any(r.fullmatch(f["reason"]) for r in REASONS) else "an unrecognised reason"
         what = {"ambiguous": "kept a %s to %s pending, not sent (%s)",
                 "mismatch": "kept a %s to %s pending, not sent (%s)",
                 "unreadable": "kept a %s to %s pending: orca-unreadable (%s)",
                 "pruned": "found a %s file for %s too old (%s)"}[cls]
         alert(key, "%s: orca-send.sh %s, at %s, from %s" % (
-            f["worktree"], what % (f["type"], f["target"], why), hhmm(int(f["time"])), f["sender"]))
+            f["worktree"], what % (f["type"], f["target"], oreason), hhmm(int(f["time"])), f["sender"]))
         continue
     if key in acked:
         continue
@@ -513,8 +513,8 @@ def ofile(path, sub, status):
         if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o600 \
                 or st.st_size > 65536:
             return None
-        lines = open(path, encoding="utf-8").read().split("\n")
-    except (OSError, ValueError):
+        lines = open(path, encoding="utf-8", errors="replace").read().split("\n")
+    except OSError:
         return None
     if lines[:1] != ["cepa-outbox 1"] or len(lines) < 10 or lines[8] != "---":
         return None
@@ -535,8 +535,15 @@ def unknown(where, name):
 
 me_slug = oslug(repo) if repo != "unknown" else ""
 inbound = 0
+# Only an outbox that does not exist is empty: a symlink, a file or a
+# directory that cannot be read is unreadable, never `ok` (review).
 try:
-    osubs = sorted(os.listdir(obox)) if os.path.isdir(obox) and not os.path.islink(obox) else []
+    _st = os.lstat(obox)
+    if not stat.S_ISDIR(_st.st_mode) or _st.st_uid != os.getuid():
+        raise PermissionError(obox)
+    osubs = sorted(os.listdir(obox))
+except FileNotFoundError:
+    osubs = []
 except OSError:
     unreadable("outbox-dir", "the outbox directory could not be read, so its alerts are unknown")
     osubs = []
