@@ -1290,8 +1290,21 @@ agent returns: an agent's output is untrusted (§7), and a path or id it
 writes could name another session's live worktree. Substitute only an id
 matching `^[a-z0-9]+$`; report any other and leave it out. The block reads
 the ids through a quoted heredoc and validates each one again, so an id that
-slips past the first check is still data, not shell code. No isolated
-dispatch → `<ids>` is empty and the block only reports.
+slips past the first check is still data, not shell code. `<run>` and `<mode>`
+go in the same way, as the `run:` and `mode:` field lines of a quoted heredoc
+(`<<'CEPA_RUN'`), one line each, and both blocks check them there: in a quoted
+string (`run='…'`) a `'` in the value would end the string and run the rest
+as a command before any check (L59). A line that is not a field makes the
+snapshot report `SNAPSHOT-FAILED`, and makes the cleanup report `CLEANUP-FAILED`
+and keep every candidate. No isolated dispatch → `<ids>` is empty and the
+block only reports.
+
+Paste both blocks with no indentation. The heredocs end only on a line that
+is exactly `CEPA_RUN` or `CEPA_IDS`, so an indented paste turns the rest of
+the block into heredoc data: it prints nothing on stdout (bash warns
+`here-document … delimited by end-of-file` on stderr) and changes nothing.
+The snapshot always prints one line when it runs, so a snapshot that printed
+none did not run — re-run it unindented before the first dispatch.
 
 The harness names an isolated agent's worktree `agent-<agent id>`: the
 leftover `agent-a457670e5009ffa76` in this repo has the shape of the agent
@@ -1302,13 +1315,27 @@ everything, and reports the real one `UNCLAIMED` — it fails closed.
 **Before the run's first dispatch** — the snapshot:
 
 ```bash
-run='<run>'
-mode='<mode>'
+run=
+mode=
+bad=
+while read -r line; do
+  case $line in
+    'run: '*) run=${line#run: } ;;
+    'mode: '*) mode=${line#mode: } ;;
+    *) bad=y ;;
+  esac
+done <<'CEPA_RUN'
+run: <run>
+mode: <mode>
+CEPA_RUN
+[ -z "$bad" ] || run=
 case "$run" in ''|*[!a-z-]*) run= ;; esac
 case "$mode" in remove|report) ;; *) mode=report ;; esac
 gd=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || gd=
 case "$gd" in /*) [ "$gd" = "${gd%%$'\n'*}" ] || gd= ;; *) gd= ;; esac
-if [ -z "$run" ]; then
+if [ -n "$bad" ]; then
+  echo "SNAPSHOT-FAILED: a line in the run/mode block is not a field"
+elif [ -z "$run" ]; then
   echo "SNAPSHOT-FAILED: run name is not [a-z-]+"
 elif [ -z "$gd" ]; then
   echo "SNAPSHOT-FAILED: git-dir unreadable"
@@ -1326,12 +1353,25 @@ worktree is clean and passes every guard below.
 
 ```bash
 set -f
-run='<run>'
-mode='<mode>'
+run=
+mode=
+bad=
+while read -r line; do
+  case $line in
+    'run: '*) run=${line#run: } ;;
+    'mode: '*) mode=${line#mode: } ;;
+    *) bad=y ;;
+  esac
+done <<'CEPA_RUN'
+run: <run>
+mode: <mode>
+CEPA_RUN
+[ -z "$bad" ] || run=
 ids=
 IFS= read -r -d '' ids <<'CEPA_IDS' || true
 <ids>
 CEPA_IDS
+[ -z "$bad" ] || echo "CLEANUP-FAILED: a line in the run/mode block is not a field; every candidate is kept"
 nl=$'\n'
 case "$run" in ''|*[!a-z-]*) run= ;; esac
 case "$mode" in remove|report) ;; *) mode=report ;; esac
