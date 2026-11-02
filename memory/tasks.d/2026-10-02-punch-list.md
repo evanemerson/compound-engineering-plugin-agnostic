@@ -1795,6 +1795,12 @@ L59. **The quoted-value injection shape is still live in `compound.md` and auton
     owner: gain (`tab2@gain`, filed and dispatched 2026-11-01 on the
       operator's AskUserQuestion "File L59 for gain": task `task_ec6f2adb77a3`,
       dispatch `ctx_c7159a0fde26`, branch `fix/gain/quoted-values-compound-11b`)
+    2026-11-01: tab2@gain reported `done` (PR #124, head `6c43762`, 0 P1/P2;
+    probe now lists only `sweep.md:555`). #124 said 1.49.2, below main's
+    1.50.0 after #123. tab3@gain dispatched to merge main and bump to 1.50.1
+    (task `task_e89cce844ff9`, dispatch `ctx_689ddaff3893`). Deferred:
+    per-run heredoc delimiter (finding 4) and a drafted CLAUDE.md rule, both
+    in `memory/tasks.d/2026-11-01-fix-gain-quoted-values-compound-11b.md`.
     Found by tab1@gain (L50, PR #121). Model-filled values sit inside quoted
     shell strings, so a quote in the value breaks out before the later check
     (repo CLAUDE.md: read them through a quoted heredoc). Probe, re-run by
