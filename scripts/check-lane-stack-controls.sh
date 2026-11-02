@@ -7,8 +7,11 @@
 # anchor text is not found exactly once is a MISS, never a skip: the skill
 # changed shape and the mutant needs re-reading.
 #
-# Every leg of the check (YAML, GATE, MAKE, TEMPLATE, ENTRY) has at least one
-# mutant here that only its own cases kill; the last control asserts that.
+# Every case the unmutated check prints is in at least one mutant's exact
+# set, and every leg (YAML, GATE, MAKE, TEMPLATE, ENTRY) has a mutant that
+# only its own cases kill; the last controls assert both. The one case no
+# mutant of the skill can reach, `YAML PyYAML available`, is about the
+# runner, not the skill: it prints only when the import fails.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case
@@ -47,7 +50,7 @@ MUTANTS = [
      {"GATE config path"}),
     # MAKE
     ("make-ungated", '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d; \\\n',
-     '\t  $(DEV_COMPOSE) up -d; \\\n', {"MAKE lane starts through gate"}),
+     '\t  $(DEV_COMPOSE) up -d; \\\n', {"MAKE lane starts through gate", "MAKE lane gate refusal propagates"}),
     ("make-fail-open", 'echo "STACK gate: not found — this lane\'s stack was not started (set CEPA_PLUGIN_ROOT)"; exit 1; }; \\',
      'echo "STACK gate: not found — this lane\'s stack was not started (set CEPA_PLUGIN_ROOT)"; $(DEV_COMPOSE) up -d; exit 0; }; \\',
      {"MAKE lane without gate refuses"}),
@@ -62,6 +65,33 @@ MUTANTS = [
      "rebuild it under the SAME name: `create`, then\n   `orca-lane.sh rm`", {"TEMPLATE steps 1-5 in order"}),
     ("template-no-make-up", "start the stack with `make up` before exec targets.\n````",
      "start the stack before exec targets.\n````", {"TEMPLATE worker step make up"}),
+    ("no-setup", "  setup: env -u COMPOSE_PROJECT_NAME make worktree-init\n", "",
+     {"YAML scripts.setup present", "YAML setup strips COMPOSE_PROJECT_NAME"}),
+    ("gate-section-renamed", "## The stack gate\n", "## The gate\n",
+     {"GATE section present", "GATE script path", "GATE config path", "GATE call shape",
+      "GATE refused line", "GATE exit 3 refused", "GATE exit 2 usage",
+      "GATE runs start under lock", "GATE counts running only"}),
+    ("gate-path-gone", "The gate is `plugins/cepa/scripts/stack-gate.sh`, built", "The gate is built",
+     {"GATE script path"}),
+    ("call-no-dashdash", "- **Call:** `stack-gate.sh <compose project name> -- <start command…>`.",
+     "- **Call:** `stack-gate.sh <compose project name> <start command…>`.", {"GATE call shape"}),
+    ("refused-line-renamed", "`STACK gate: refused — …`", "`STACK gate: no — …`", {"GATE refused line"}),
+    ("usage-code", "`2` usage", "`4` usage", {"GATE exit 2 usage"}),
+    ("lock-dropped", "runs the start command itself, under its lock", "checks, then returns",
+     {"GATE runs start under lock"}),
+    ("refusal-swallowed", '-- $(DEV_COMPOSE) up -d; \\\n\tfi', '-- $(DEV_COMPOSE) up -d || true; \\\n\tfi',
+     {"MAKE lane gate refusal propagates"}),
+    ("unset-project-ok", '*-wt-*) ;; *) \\', '*-wt-*|"") ;; *) \\', {"MAKE lane unset project refuses"}),
+    ("any-project-ok", '*-wt-*) ;; *) \\', '*-wt-*|?*) ;; *) \\', {"MAKE lane non-wt project refuses"}),
+    ("identity-fail-open",
+     '\t@GD=$$(git rev-parse --absolute-git-dir) && \\\n\t  CD=$$(git rev-parse --path-format=absolute --git-common-dir) && \\\n\t  [ -n "$$GD" ] && [ -n "$$CD" ] || { \\\n',
+     '\t@GD=$$(git rev-parse --absolute-git-dir 2>/dev/null); CD=$$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); false && { \\\n',
+     {"MAKE severed lane refuses"}),
+    ("template-wrong-fence", "````markdown\nYou are <session name>.", "````text\nYou are <session name>.",
+     {"TEMPLATE one first-prompt block", "TEMPLATE line 1 is the name blank", "TEMPLATE blank <lane names>",
+      "TEMPLATE blank <lane count>", "TEMPLATE steps 1-5 in order", "TEMPLATE worker step make up"}),
+    ("template-no-names", "Lanes to have: <lane count> — <lane names>.", "Lanes to have: <lane count>.",
+     {"TEMPLATE blank <lane names>"}),
     # ENTRY
     ("entry-promoted", "1. **One entry point: `orca-lane.sh create`.**",
      "1. **One entry point: `orca-lane.sh create`, or `make worktree branch=<b>` by hand.**",
@@ -103,6 +133,14 @@ with tempfile.TemporaryDirectory() as d:
         legs = {m.split(" ", 1)[0] for m in miss}
         if len(legs) == 1:
             killers.setdefault(legs.pop(), []).append(name)
+
+    # Every case the clean run prints must be in some mutant's exact set, so
+    # no case can be broken or deleted while the suite stays green.
+    r0 = subprocess.run(["bash", CHECK, clean], capture_output=True, text=True)
+    clean_cases = {l[3:] for l in r0.stdout.splitlines() if l.startswith("ok ")}
+    covered = set().union(*(m[3] for m in MUTANTS))
+    control("every case has a killing mutant", clean_cases <= covered,
+            "no mutant kills: %s" % sorted(clean_cases - covered))
 
     for leg in ("YAML", "GATE", "MAKE", "TEMPLATE", "ENTRY"):
         control("leg %s has a mutant only it kills" % leg, bool(killers.get(leg)),

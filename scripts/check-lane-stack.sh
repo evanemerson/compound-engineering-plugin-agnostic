@@ -13,12 +13,18 @@
 #             out/shared/orca-yaml.js), and has scripts.setup,
 #             scripts.archive and `setupAgentStartupPolicy: wait-for-setup`
 #             (the only two values that parser accepts are listed there).
-#   GATE      the gate is cited by path, config path, call shape, output
-#             line and exit codes (design "Builder-check answers" 6).
+#   GATE      inside the `## The stack gate` section, the gate is cited by
+#             path, config path, call shape, output line and exit codes
+#             (design "Builder-check answers" 6). Scoped to that section so
+#             a sentence elsewhere cannot satisfy a needle.
 #   MAKE      the `make up` example block is RUN in throwaway git repos with
 #             a stub gate: the main checkout starts directly; a lane starts
-#             only through the gate, with `<project> -- <start>`; a lane with
-#             no gate exits non-zero and does not run the start command.
+#             only through the gate, with `<project> -- <start>`; a gate
+#             refusal (exit 3) fails make; and each default-deny refusal
+#             starts nothing: a lane with no gate, a lane whose project name
+#             is unset or lacks `-wt-`, and a severed lane (its main repo
+#             moved, so git cannot resolve it). A missing `git` or `make`,
+#             or a failed fixture step, is a MISS that names it.
 #   TEMPLATE  exactly one four-backtick `markdown` block (the coord@main first
 #             prompt); line 1 is `You are <session name>.`; it carries the
 #             `<lane names>` and `<lane count>` blanks, steps 1-5 in order
@@ -35,7 +41,7 @@
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SKILL="$(realpath "${1:-plugins/cepa/skills/lane-stack/SKILL.md}")" python3 - <<'PY'
-import os, re, subprocess, sys, tempfile
+import os, re, shutil, subprocess, sys, tempfile
 
 path = os.environ["CEPA_LS_SKILL"]
 try:
@@ -62,11 +68,15 @@ ORCA_KEYS = {"scripts", "setupAgentStartupPolicy", "issueCommand", "defaultTabs"
              "environmentRecipes", "worktree"}
 ys = blocks("yaml")
 doc = None
-if len(ys) == 1:
+try:
+    import yaml
+except ImportError:
+    yaml = None
+    case("YAML PyYAML available", False, "python3 cannot import yaml — install PyYAML")
+if len(ys) == 1 and yaml is not None:
     try:
-        import yaml
         doc = yaml.safe_load(ys[0])
-    except Exception as e:  # noqa: BLE001 - any parse failure is the finding
+    except yaml.YAMLError:
         doc = None
 case("YAML one orca.yaml block that parses", isinstance(doc, dict),
      "found %d yaml blocks, or the block does not parse to a mapping" % len(ys))
@@ -83,6 +93,9 @@ case("YAML setup strips COMPOSE_PROJECT_NAME",
      "setup does not start with `env -u COMPOSE_PROJECT_NAME`")
 
 # GATE
+gm = re.search(r"^## The stack gate\n(.*?)(?=^## )", text, re.S | re.M)
+gsec = gm.group(1) if gm else ""
+case("GATE section present", bool(gsec), "no `## The stack gate` section")
 for name, needle in [
     ("GATE script path", "`plugins/cepa/scripts/stack-gate.sh`"),
     ("GATE config path", "`~/.config/cepa/stack-gate.conf`"),
@@ -93,14 +106,18 @@ for name, needle in [
     ("GATE runs start under lock", "runs the start command itself, under its lock"),
     ("GATE counts running only", "at least one running container (stopped\n  stacks do not count)"),
 ]:
-    case(name, needle in text, "the skill no longer says %r" % needle)
+    case(name, needle in gsec, "the stack gate section no longer says %r" % needle)
 
 # MAKE
+MAKE_CASES = ("MAKE main starts directly", "MAKE lane starts through gate",
+              "MAKE lane gate refusal propagates", "MAKE lane without gate refuses",
+              "MAKE lane unset project refuses", "MAKE lane non-wt project refuses",
+              "MAKE severed lane refuses")
 ms = blocks("make")
-if len(ms) != 1:
-    for n in ("MAKE main starts directly", "MAKE lane starts through gate",
-              "MAKE lane without gate refuses"):
-        case(n, False, "found %d make blocks, expected 1" % len(ms))
+tools = [t for t in ("git", "make") if not shutil.which(t)]
+if len(ms) != 1 or tools:
+    for n in MAKE_CASES:
+        case(n, False, "found %d make blocks (expected 1), missing tools %s" % (len(ms), tools))
 else:
     with tempfile.TemporaryDirectory() as d:
         mk = os.path.join(d, "Makefile")
@@ -111,34 +128,64 @@ else:
         with open(os.path.join(root, "scripts", "resolve-plugin-root.sh"), "w") as f:
             f.write("#!/usr/bin/env bash\necho %s\n" % root)
         with open(os.path.join(root, "scripts", "stack-gate.sh"), "w") as f:
-            f.write('#!/usr/bin/env bash\necho "GATE $*"\nshift 2\n"$@"\n')
-        main = os.path.join(d, "main")
-        lane = os.path.join(d, "lane")
-        genv = dict(os.environ, GIT_AUTHOR_NAME="c", GIT_AUTHOR_EMAIL="c@c",
-                    GIT_COMMITTER_NAME="c", GIT_COMMITTER_EMAIL="c@c")
+            f.write('#!/usr/bin/env bash\necho "GATE $*"\n'
+                    'if [ -n "${STUB_REFUSE:-}" ]; then echo "STACK gate: refused — stub"; exit 3; fi\n'
+                    'shift 2\n"$@"\n')
+        # A caller's GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (a hook) would
+        # point the fixture at the real repo: drop every GIT_* variable.
+        base = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        base.update(GIT_AUTHOR_NAME="c", GIT_AUTHOR_EMAIL="c@c",
+                    GIT_COMMITTER_NAME="c", GIT_COMMITTER_EMAIL="c@c",
+                    GIT_CONFIG_NOSYSTEM="1", HOME=os.path.join(d, "nohome"))
         def run(args, cwd, env=None):
-            return subprocess.run(args, cwd=cwd, env=env or genv, capture_output=True, text=True)
-        os.makedirs(main)
-        run(["git", "init", "-q"], main)
-        run(["git", "commit", "-q", "--allow-empty", "-m", "x"], main)
-        run(["git", "worktree", "add", "-q", lane], main)
-        def make(cwd, **env):
-            e = dict(genv, HOME=os.path.join(d, "nohome"), CEPA_PLUGIN_ROOT="")
-            e.pop("COMPOSE_PROJECT_NAME", None)
-            e.update(env)
-            return run(["make", "-s", "-f", mk, "up"], cwd, e)
-        r = make(main, CEPA_PLUGIN_ROOT=root)
-        case("MAKE main starts directly",
-             r.returncode == 0 and r.stdout.strip() == "START up -d",
-             "rc=%d out=%r" % (r.returncode, r.stdout + r.stderr))
-        r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME="x-wt-lane-1")
-        case("MAKE lane starts through gate",
-             r.returncode == 0 and r.stdout.splitlines() == ["GATE x-wt-lane-1 -- echo START up -d", "START up -d"],
-             "rc=%d out=%r" % (r.returncode, r.stdout + r.stderr))
-        r = make(lane, COMPOSE_PROJECT_NAME="x-wt-lane-1")
-        case("MAKE lane without gate refuses",
-             r.returncode != 0 and "START" not in r.stdout and "STACK gate: not found" in r.stdout,
-             "rc=%d out=%r" % (r.returncode, r.stdout + r.stderr))
+            return subprocess.run(args, cwd=cwd, env=env or base, capture_output=True, text=True)
+        main, lane = os.path.join(d, "main"), os.path.join(d, "lane")
+        sev_main, sev_lane = os.path.join(d, "smain"), os.path.join(d, "slane")
+        setup_err = ""
+        for m_dir, l_dir in ((main, lane), (sev_main, sev_lane)):
+            os.makedirs(m_dir)
+            for args, cwd in ((["git", "init", "-q"], m_dir),
+                              (["git", "commit", "-q", "--allow-empty", "-m", "x"], m_dir),
+                              (["git", "worktree", "add", "-q", l_dir], m_dir)):
+                r = run(args, cwd)
+                if r.returncode != 0 and not setup_err:
+                    setup_err = "%s failed: %s" % (" ".join(args), r.stderr.strip())
+        if not setup_err:
+            os.rename(sev_main, sev_main + "-moved")   # severs the lane's .git link
+        if setup_err:
+            for n in MAKE_CASES:
+                case(n, False, "fixture setup: " + setup_err)
+        else:
+            def make(cwd, **env):
+                e = dict(base, CEPA_PLUGIN_ROOT="")
+                e.pop("COMPOSE_PROJECT_NAME", None)
+                e.update(env)
+                return run(["make", "-s", "-f", mk, "up"], cwd, e)
+            def show(r):
+                return "rc=%d out=%r" % (r.returncode, r.stdout + r.stderr)
+            proj = "x-wt-lane-1"
+            r = make(main, CEPA_PLUGIN_ROOT=root)
+            case("MAKE main starts directly",
+                 r.returncode == 0 and r.stdout.strip() == "START up -d", show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
+            case("MAKE lane starts through gate",
+                 r.returncode == 0 and r.stdout.splitlines() == ["GATE %s -- echo START up -d" % proj, "START up -d"],
+                 show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_REFUSE="1")
+            case("MAKE lane gate refusal propagates",
+                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "STACK gate: refused" in r.stdout, show(r))
+            r = make(lane, COMPOSE_PROJECT_NAME=proj)
+            case("MAKE lane without gate refuses",
+                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "STACK gate: not found" in r.stdout, show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root)
+            case("MAKE lane unset project refuses",
+                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "GATE" not in r.stdout, show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME="x")
+            case("MAKE lane non-wt project refuses",
+                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "GATE" not in r.stdout, show(r))
+            r = make(sev_lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
+            case("MAKE severed lane refuses",
+                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "GATE" not in r.stdout, show(r))
 
 # TEMPLATE
 ts = blocks("markdown", "````")
