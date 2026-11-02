@@ -280,6 +280,7 @@ with `- !agent-name` in `cepa.local.md`.
 | `pr-feedback` | PR-feedback contract: three-bucket fetch, six-verdict rubric, reply conventions, vendored gh scripts |
 | `grounding` | Optional graphify code-graph provider. Availability checks, single refresh path, invocation discipline, consumer table, compliance rules. Degrades to grep when absent |
 | `brain` | Optional OB1 cross-repo memory, opt-in per repo. Recall and writeback over the Agent Memory API, evidence-only governance, PHI scrub, §7 relay, budgets. Degrades to grep when absent |
+| `lane-stack` | The shared lane and Docker-stack scheme under Orca: the `orca.yaml` contract, setup that calls the stack gate first and stops its stack, the gated `make up` start target, the worktree properties, and the coord@main first prompt |
 
 [CONCEPTS.md](CONCEPTS.md) is the shared vocabulary map: the entities and named
 processes above, defined once, accreting as solutions get documented.

@@ -260,6 +260,24 @@ jobs:
         if: always()
         run: bash scripts/check-stack-gate-controls.sh
 
+  lane-stack:
+    # The lane & stack scheme skill (plugins/cepa/skills/lane-stack/SKILL.md,
+    # punch-list L62). The check parses its orca.yaml example, reads its gate
+    # contract, runs its `make up` example in throwaway git repos with a stub
+    # gate, and checks the coord@main first-prompt template; the controls
+    # mutate the skill. Headers own the legs and limits. Static commands, no
+    # workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check lane-stack skill
+        if: always()
+        run: bash scripts/check-lane-stack.sh
+      - name: Check lane-stack skill controls
+        if: always()
+        run: bash scripts/check-lane-stack-controls.sh
+
   orca-attention:
     # The attention flag (autonomy section 12b rule 7) runs only through
     # plugins/cepa/scripts/orca-attention.sh, which marks this checkout's own
