@@ -1527,8 +1527,10 @@ L46. **Harden the rename and re-bind blocks: four P2s from #110 and #113.**
 L47. **Too many send blocks are refused: 4 of the first sends after the reboot.**
     status: pending
     severity: P2
-    owner: unassigned — after L46 merges (same files: §12b rule 1, the
-      send script and `check-orca-nudge.sh`)
+    owner: roles (`tab30@roles`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L47 + L58 in parallel": task
+      `task_17486046d4ef`, dispatch `ctx_8a8b0b19abef`, branch
+      `fix/roles/send-refusals`)
     Measured 2026-11-01 by coord@main from the alert files in
     `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
     senders' terminals (Orca `terminal read`, read only). Sessions started on
@@ -1591,9 +1593,18 @@ L49. **Small cleanup batch from the L48 triage: D1, D2, D6, D9 and #115 review 4
     one-line wording fixes). Must not touch L46 files.
 
 L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #121 merged `a85eb85` (1.49.1), on the operator's
+    AskUserQuestion "Yes, merge #121" (the classifier denied the first try as
+    `[Merge Without Review]`). tab1@gain Handoff `done` at `8b8cb03`;
+    update-branch gave `de3440e`, 12/12 checks green. Gain lane parked at
+    `origin/main`, branch deleted, plugin freshness rc=0. The same shape at
+    other sites is L59.
     severity: P3
-    owner: unassigned (its own worker)
+    owner: gain (`tab1@gain`, dispatched via Orca 2026-11-01 on the operator's
+      AskUserQuestion "L50: sweep.md quoting fix": task `task_722565b7c3fe`,
+      dispatch `ctx_3cec2a286b05`, branch `fix/gain/sweep-heredoc-values`;
+      lane `gain` created 2026-11-01 with `orca-lane.sh create`)
     review-2026-10-31-230000 #5, judgment 80. The repo rule: such a value is
     read through a quoted heredoc and checked inside the block. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -1756,7 +1767,10 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
 L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive pre-check.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab9@integrity`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L47 + L58 in parallel": task
+      `task_dde0c2487da4`, dispatch `ctx_f6d836d4a425`, branch
+      `fix/integrity/lane-followups`)
     From PR #118 (tab26@roles). (1) rm refuses a reused lane after a squash
     merge and branch deletion, because its HEAD reflog holds commits no
     origin ref has (§11b's test, per the operator's #4 decision); tab26
@@ -1764,6 +1778,22 @@ L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive
     #4 create resume after a partial failure and #16 check the main
     checkout's orca.yaml before the archive hook runs (first), then #17, #28,
     #30. Source: `memory/tasks.d/2026-11-01-feat-roles-orca-lane-lifecycle.md`.
+
+L59. **The quoted-value injection shape is still live in `compound.md` and autonomy §11b.**
+    status: pending
+    severity: P3
+    owner: gain (`tab2@gain`, filed and dispatched 2026-11-01 on the
+      operator's AskUserQuestion "File L59 for gain": task `task_ec6f2adb77a3`,
+      dispatch `ctx_c7159a0fde26`, branch `fix/gain/quoted-values-compound-11b`)
+    Found by tab1@gain (L50, PR #121). Model-filled values sit inside quoted
+    shell strings, so a quote in the value breaks out before the later check
+    (repo CLAUDE.md: read them through a quoted heredoc). Probe, re-run by
+    coord@main on `a85eb85`:
+    `grep -nE "=['\"]<" plugins/cepa/commands/*.md plugins/cepa/skills/autonomy/SKILL.md`
+    → 8 live sites: `compound.md:251,322,325,548`, `SKILL.md:1305,1306,1329,1330`
+    (also `compound.md:238`, a comment, and `sweep.md:555`, prose about the
+    closed site). Source: `memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md`
+    finding 5.
 
 ---
 
