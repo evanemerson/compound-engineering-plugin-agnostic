@@ -1790,7 +1790,13 @@ L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive
     #30. Source: `memory/tasks.d/2026-11-01-feat-roles-orca-lane-lifecycle.md`.
 
 L59. **The quoted-value injection shape is still live in `compound.md` and autonomy §11b.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #124 merged `ee16b2e` (1.50.1), on the operator's
+    AskUserQuestion "Yes, merge #124". tab3@gain Handoff `done` at `bb51a1f`
+    (main merged in, 1.49.2 → 1.50.1), CLEAN, 12/12 checks green; main was
+    ahead only by `c1b1673` (punch-list doc, no shared file), so no second
+    update. Probe after merge lists only `sweep.md:555` (prose). Gain lane
+    parked at `origin/main`, branch deleted, freshness rc=0.
     severity: P3
     owner: gain (`tab2@gain`, filed and dispatched 2026-11-01 on the
       operator's AskUserQuestion "File L59 for gain": task `task_ec6f2adb77a3`,
