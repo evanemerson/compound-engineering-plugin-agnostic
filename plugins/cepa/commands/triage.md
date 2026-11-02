@@ -1,7 +1,7 @@
 ---
 description: Triage findings from /cepa:review. Default batch mode auto-applies safe verified fixes and presents the rest as one decision table; pass "interactive" for the classic one-at-a-time flow.
 argument-hint: "[interactive]"
-allowed-tools: Edit, Write, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-send.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-health.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-rebind.sh":*)
+allowed-tools: Edit, Write, Bash(git diff:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(bash:*), Bash(orca-ide status:*), Bash(orca-ide skills get:*), Bash(orca-ide orchestration send:*), Bash(orca-ide orchestration ask:*), Bash(orca-ide orchestration check:*), Bash(bash "$CEPA_ROOT/scripts/orca-nudge.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-send.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-health.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-rebind.sh":*), Bash(bash "$CEPA_ROOT/scripts/orca-lane.sh":*)
 ---
 
 # Compound Triage
