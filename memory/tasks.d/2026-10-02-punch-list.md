@@ -1880,7 +1880,14 @@ L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `or
     which PR #122 (L47) also edits: merge after #122.
 
 L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #127 merged `5a271ab` (1.54.0) on the operator's
+    AskUserQuestion "Merge #127". tab5@gain fixed the `handoff-no-rule1`
+    control (head be1977a = Handoff, CI 4/4 green, CLEAN). gain parked,
+    branch deleted, both hops, freshness rc=0 (loaded 1.54.0). First live
+    `coord:dpc-pro` send: resolved to term_b4cdd4b7…, stored
+    msg_b6ebcbd11041, outbox marked delivered. Pointer written:
+    `~/webapps/worktree-blueprint/MOVED-TO-CEPA.md`. Follow-ups: L69.
     severity: P1
     owner: gain (unassigned worker; after #122 — merged)
     2026-11-02: tab4@gain dispatched via Orca (Run run_5682a0ed1455, dispatch
@@ -1944,7 +1951,8 @@ L63. **Each repo adopts L61 + L62 (hand-off to each repo's coord@main).**
     status: pending
     severity: P2
     owner: coord@main (hand-offs only; each repo's coord@main does the work)
-    After L61, L62 AND L66 ship (tab10@integrity, 2026-11-02: the skill cites
+    UNBLOCKED 2026-11-02 (1.54.0). dpc-pro told via `coord:dpc-pro`
+    (msg_b6ebcbd11041). After L61, L62 AND L66 ship (tab10@integrity, 2026-11-02: the skill cites
     the gate, so adoption waits for it). Live coordinators that asked to be
     told: dpc-pro coord@main `term_b4cdd4b7-56c8-460d-a789-3eb4168e9e9c`, Run
     `run_11d22a5bc5fc` (status msg 2026-11-02). Per repo: stop-after-setup, call the gate,
