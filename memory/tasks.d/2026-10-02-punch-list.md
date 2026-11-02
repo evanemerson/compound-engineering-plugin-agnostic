@@ -1621,7 +1621,9 @@ L53. **`orca-health.sh` hardening batch (L48 D4) — after L47.**
 L54. **Two reviews in the same second write one findings file; the second overwrites the first.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: integrity (`tab8@integrity`, dispatched via Orca 2026-11-01:
+      task `task_e44fb773c106`, dispatch `ctx_647b3ff08f2a`, branch
+      `fix/integrity/findings-file-collision`)
     From L49 (tab7@integrity, operator chose to file it 2026-11-01).
     Findings files are named `todos/review-YYYY-MM-DD-HHMMSS.md`. PR #108
     (`8d71f58`) replaced PR #107's `todos/review-2026-10-31-213000.md`
@@ -1687,7 +1689,10 @@ L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mu
 L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees it.**
     status: pending
     severity: P1
-    owner: coord@main (measuring)
+    owner: roles (`tab27@roles`, dispatched via Orca 2026-11-01 on the
+      operator's AskUserQuestion "L57 + L54 in parallel": task
+      `task_8903d78b9cdd`, dispatch `ctx_e9de54da3ef6`, branch
+      `fix/roles/needs-you-attention-flag`)
     Operator report, 2026-11-01: after a couple of hours away, coord@main tabs
     show an open AskUserQuestion (merge approvals etc.) that is NOT listed under
     NEEDS YOU on the Agent Dashboard. The question asked here earlier never
