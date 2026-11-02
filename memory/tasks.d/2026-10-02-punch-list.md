@@ -1899,7 +1899,11 @@ L62. **Shared lane & stack scheme as a cepa skill (PR B; gate is L66, setup chec
     deferred to `memory/tasks.d/2026-11-02-feat-integrity-lane-stack-skill.md`.
     `stacks:over:<n>` alert owner: L61 (tab4@gain wires it to L66's
     read-only `stack-gate.sh --count`).
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #125 merged `b549e02` (1.52.0) on the operator's
+    AskUserQuestion "Merge #125". Head 9fa0628 = Handoff; update-branch →
+    793c5a4, CI 4/4 green; main then gained only the punch list. integrity
+    parked, branch deleted, both hops, freshness rc=0 (loaded 1.52.0).
     severity: P1
     owner: integrity (unassigned worker)
     2026-11-02: tab10@integrity dispatched via Orca (Run run_5682a0ed1455, dispatch
