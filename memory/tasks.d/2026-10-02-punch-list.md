@@ -1883,6 +1883,8 @@ L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
     status: pending
     severity: P1
     owner: gain (unassigned worker; after #122 — merged)
+    2026-11-02: tab4@gain dispatched via Orca (Run run_5682a0ed1455, dispatch
+      `ctx_1e032312155c`) after the operator chose "apply all as recommended".
     Design (approved by the operator 2026-11-02; local, docs/ is gitignored):
     `docs/superpowers/specs/2026-11-02-fleet-coord-reach-and-lane-stacks-design.md`,
     "Piece 1" and "Builder-check answers" 1-5. Plan review 2026-11-02:
@@ -1896,6 +1898,8 @@ L62. **Shared lane & stack scheme as a cepa skill (PR B; gate is L66, setup chec
     status: pending
     severity: P1
     owner: integrity (unassigned worker)
+    2026-11-02: tab10@integrity dispatched via Orca (Run run_5682a0ed1455, dispatch
+      `ctx_d18257835907`) after the operator chose "apply all as recommended".
     Design: same doc, "Piece 2", "Piece 3", "Builder-check answers" 6-7.
     Replaces `~/webapps/worktree-blueprint/` (not under git, pre-Orca, names
     the forbidden `make worktree branch=`). Includes the coord@main
@@ -1907,6 +1911,8 @@ L66. **Stack gate script `stack-gate.sh` (PR C), runs the start under its lock.*
     status: pending
     severity: P1
     owner: roles (unassigned worker)
+    2026-11-02: tab33@roles dispatched via Orca (Run run_5682a0ed1455, dispatch
+      `ctx_77507ac03527`) after the operator chose "apply all as recommended".
     Design doc "Builder-check answers" 6 and "Plan-review decisions" #14,
     #19. Config `~/.config/cepa/stack-gate.conf`. Before fleet launch.
 
