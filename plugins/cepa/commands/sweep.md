@@ -551,7 +551,7 @@ These things in that block are deliberate:
   run date go in as field lines (`branch:`, `head:`, `taken:`) on a quoted
   heredoc (`<<'CEPA_BRANCH'`), and the block checks each one before it uses
   it. Why: the branch name comes from `gh pr list`, so it is repo data
-  (§7), and a branch name may hold `'` or `$(…)`. Up to this change the
+  (§7), and a branch name may hold `'` or `$(…)`. Before cepa 1.49.1 the
   block had `b='<branch>'`: a `'` in the name ended the string, and the rest
   ran as a command before any check (review-2026-10-31-230000 finding #5).
   The block refuses any line that is not a field, a name that
@@ -567,12 +567,21 @@ These things in that block are deliberate:
   count the branch under the omissions instead. Git refuses control
   characters in a ref name and `headRefOid` is hex, so this is the rare
   case.
-
+- **Paste the block with no indentation.** The heredoc ends only on a line
+  that is exactly `CEPA_BRANCH`. A copy from a terminal that indents the
+  output puts spaces before it, so bash reads every later line, later
+  blocks included, as heredoc data and runs none of them (it fails closed:
+  nothing is deleted, and bash warns `here-document … delimited by
+  end-of-file`). Strip the indent, or copy from the report file a headless
+  run writes to `todos/sweep-*.md`, which has none.
 - **`--verify --quiet`** — without it, an already-deleted branch prints a
   `fatal: ambiguous argument` to stderr before the SKIP. The chain is still
   safe (verified: the comparison fails and no deletion runs), but an
   operator pasting twenty blocks reads a wall of git fatals as "the sweep
-  gave me broken commands" and stops trusting the SKIPs.
+  gave me broken commands" and stops trusting the SKIPs. The `|| true`
+  after it is not redundant: without it, an absent branch makes the
+  assignment fail and ends a `set -e` shell before the SKIP; with it, the
+  empty `$tip` takes the SKIP path.
 - **Report observed-vs-expected, never a diagnosis.** The earlier wording
   asserted "tip moved; it has unmerged work" on *every* non-match —
   including the already-deleted branch, which is the most likely case
@@ -589,7 +598,7 @@ frozen from the run that wrote the report, so the *GitHub* half —
 conditions 1 and 2 — is a snapshot of that age. A PR reopened, or a new PR
 opened on the same head, after the report was written is invisible to the
 block: nothing local changed, so the tip still matches and the deletion
-proceeds. State the run date in the block (above) and add one line to the
+proceeds. State the run date in the block (the `taken:` field) and add one line to the
 section: **if the report is more than a few days old, re-run `/cepa:sweep`
 rather than pasting it.**
 
