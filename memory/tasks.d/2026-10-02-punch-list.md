@@ -1958,6 +1958,26 @@ L65. **A nudge is skipped without an alert when `worktree ps` times out.**
     — send stored, nudge skipped ("worktree ps failed or timed out"), the
     operator had to ask for an inbox check.
 
+L68. **Gate lock held through a cold `up -d --build` (PR #126 deferred P2 #7).**
+    status: pending
+    severity: P2
+    owner: unassigned (one doc + script item, before many lanes start at once)
+    tab33@roles: the lock covers the whole start command; at fleet launch a
+    cold build per lane can push a third lane past 600 s and get "lock busy".
+    Recommended (worker's pick): the lane-stack skill says build OUTSIDE the
+    gate, `make up` runs only `up -d`. Other deferred P3s:
+    `memory/tasks.d/2026-11-02-feat-roles-stack-gate.md`.
+
+L69. **L61 follow-ups from PR #127's review (finding #15 + P3s #16-#26).**
+    status: pending
+    severity: P2
+    owner: unassigned (gain, after #127 merges)
+    #15 (P2): a new coord@main is shown, for 7 days, every message its
+    predecessor already received live (plan-review #10's rule). Worker's
+    recommended fix: keep the `msg_` id in the delivered file name and show
+    only messages still unread in Orca — changes #10's rule, operator's call.
+    #16-#26: `todos/review-2026-11-02-094119-feat-gain-coord-outbox.md`.
+
 ---
 
 ## How this list is used
