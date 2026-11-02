@@ -1643,9 +1643,13 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
     measured: create returns before setup starts and reports no setup
     result (a failed setup is still ok:true); setup comes from the lane's
     base-ref orca.yaml, archive from the MAIN checkout's working tree; a
-    duplicate --name is suffixed, not refused. Left: the operator applies
-    the U6 text to ~/.claude/CLAUDE.md; then other repos get a hand-off
-    (incl. plan-review #19, artist360's probe create/rm). Follow-ups: L58.
+    duplicate --name is suffixed, not refused. U6 DONE 2026-11-01: the
+    operator told coord@main "you can update that"; coord@main replaced the
+    global "New lane" bullet with the U6 text (+ "Removing a lane", "Existing
+    lanes" bullets; kept "A repo with no worktree creates one this way").
+    Backup `~/.claude/CLAUDE.md.bak-2026-11-01-l55`. Left: hand-offs to the
+    other repos' coord@main (incl. plan-review #19, artist360's probe
+    create/rm). Follow-ups: L58.
     severity: P2
     owner: roles (`tab26@roles`, dispatched via Orca 2026-11-01 after #116
       merged: task `task_b9a11d589bc4`, dispatch `ctx_d674e9b36de7`, branch
