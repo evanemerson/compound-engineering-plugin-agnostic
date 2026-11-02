@@ -241,6 +241,43 @@ jobs:
         if: always()
         run: bash scripts/check-orca-lane-controls.sh
 
+  stack-gate:
+    # Every worktree Docker stack starts through
+    # plugins/cepa/scripts/stack-gate.sh (punch-list L66), which counts the
+    # running -wt- stacks and free memory and runs the start under its lock.
+    # The check runs it against a stub docker and a fixture meminfo and never
+    # reaches Docker; the controls mutate it. About 15 seconds for the check,
+    # 4 minutes for the controls. Headers own the legs and limits. Static
+    # commands, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check stack gate
+        if: always()
+        run: bash scripts/check-stack-gate.sh
+      - name: Check stack gate controls
+        if: always()
+        run: bash scripts/check-stack-gate-controls.sh
+
+  lane-stack:
+    # The lane & stack scheme skill (plugins/cepa/skills/lane-stack/SKILL.md,
+    # punch-list L62). The check parses its orca.yaml example, reads its gate
+    # contract, runs its `make up` example in throwaway git repos with a stub
+    # gate, and checks the coord@main first-prompt template; the controls
+    # mutate the skill. Headers own the legs and limits. Static commands, no
+    # workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check lane-stack skill
+        if: always()
+        run: bash scripts/check-lane-stack.sh
+      - name: Check lane-stack skill controls
+        if: always()
+        run: bash scripts/check-lane-stack-controls.sh
+
   orca-outbox:
     # The coord:<repo> address (autonomy section 12b rules 1 and 8, punch-list
     # L61): orca-send.sh writes each coord: message to an outbox on disk and
@@ -260,6 +297,7 @@ jobs:
       - name: Check Orca outbox controls
         if: always()
         run: bash scripts/check-orca-outbox-controls.sh
+
 
   orca-attention:
     # The attention flag (autonomy section 12b rule 7) runs only through

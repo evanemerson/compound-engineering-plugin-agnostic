@@ -373,7 +373,7 @@ REASONS = [re.compile(x) for x in (
     r"Orca did not record the dispatch as (completed|failed)",
     MID + r" is not in the inbox for " + ADDR,
     r"the inbox could not be (parsed|re-read), so " + MID + r" is unconfirmed",
-    # 1.52.0 (punch-list L61): the coord: address and its outbox.
+    # 1.54.0 (punch-list L61): the coord: address and its outbox.
     r"the coord: repo is not slug\(<repo>\) \(autonomy §5\)",
     r"an escalation cannot go to a coord: address; it keeps its Run path",
     r"the outbox directory is not an absolute path", r"the outbox directory could not be made",
