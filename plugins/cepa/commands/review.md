@@ -572,7 +572,10 @@ and `<ids>` = the agent ids of any dispatch this run made with isolation
 
 ## Step 5: Write Findings to todos/
 
-Create a findings file at `todos/review-YYYY-MM-DD-HHMMSS.md` in the
+Reserve the findings file's path with the **`cepa:file-todos`
+`### Filename Convention`** block (`kind=review`) — never compose the name or
+the stamp by hand: two runs that type one name overwrite each other (punch-list L54). Write
+the findings into the file it printed, in the
 **`cepa:file-todos` skill format — that skill is the single canonical spec**
 (YAML frontmatter with the `summary` block including `applied`/`deferred`
 counters, the Run Metadata fields — `agents_skipped`,
@@ -612,7 +615,9 @@ its §5 filing below and before its `chore(review)` commit.
 A `cadence:weekly` run writes the same canonical format with three
 differences:
 
-- **Path:** `todos/review-weekly-YYYY-MM-DD-HHMMSS.md`. The `review-`
+- **Path:** reserved by the same block with `kind=review-weekly` and
+  `scope=<resolved trunk>`, which gives
+  `todos/review-weekly-YYYY-MM-DD-HHMMSS-<slug(trunk)>.md`. The `review-`
   prefix is deliberate — existing consumers that glob `review-*` keep
   matching it.
 - **`scope:` is `weekly:<YYYY-MM-DD>`**, following the same
@@ -722,7 +727,7 @@ themselves, and this interactive tail fires only when the user invoked
 - When this was a PR-mode review with unresolved human review threads, state
   the count ("M open human review threads") — so a clean-diff PR with open
   threads never reports as fully resolved.
-- "Findings saved to `todos/review-YYYY-MM-DD-HHMMSS.md`."
+- "Findings saved to `todos/<the reserved name>`."
 
 **`## Next steps`** — 1-indexed per §6; include only the options this run
 produced, renumbered from 1, always ending with a "Stop here" option and a

@@ -118,7 +118,7 @@ review agents in parallel:
 
 `learnings-researcher` runs first and feeds its findings to every review agent
 as additional context. Results are deduplicated and written to
-`todos/review-YYYY-MM-DD-HHMMSS.md` with P1/P2/P3 severity and confidence
+`todos/review-YYYY-MM-DD-HHMMSS-<branch-slug>.md` with P1/P2/P3 severity and confidence
 scores.
 
 Without `cepa.local.md`, it falls back to `/pr-review-toolkit:review-pr`.
