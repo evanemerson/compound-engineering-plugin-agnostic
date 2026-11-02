@@ -185,7 +185,7 @@ Applied: finding 5 is `applied` with a "Fully applied … PR #124" note; counter
 It named a branch, not a PR, put the severity after the closure prose, and kept pre-L59 line numbers.
 
 **Fix:**
-Applied: `CLOSED in PR #124 (L59, 1.49.2) — P3 — <paths> — <problem>. Closed: <how>. Probe: <cmd>`, with no line numbers. Striking L59 in the punch list is coord@main's.
+Applied: `CLOSED in PR #124 (L59, 1.50.1) — P3 — <paths> — <problem>. Closed: <how>. Probe: <cmd>`, with no line numbers. Striking L59 in the punch list is coord@main's.
 
 ### 8
 - status: applied

@@ -1531,6 +1531,10 @@ L47. **Too many send blocks are refused: 4 of the first sends after the reboot.*
       operator's AskUserQuestion "L47 + L58 in parallel": task
       `task_17486046d4ef`, dispatch `ctx_8a8b0b19abef`, branch
       `fix/roles/send-refusals`)
+    2026-11-01: tab30@roles reported `done` (PR #122, head `598b74a`, 0 P1/P2).
+    #122 then went DIRTY against main (#121, #123) and claimed 1.50.0 like
+    #123. tab31@roles dispatched on the same branch to merge main, resolve,
+    and bump to 1.51.0 (task `task_93b21c682afb`, dispatch `ctx_6e3509555ba9`).
     Measured 2026-11-01 by coord@main from the alert files in
     `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
     senders' terminals (Orca `terminal read`, read only). Sessions started on
@@ -1765,7 +1769,13 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     session scratchpad `needs-you-probe.log` (not committed).
 
 L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive pre-check.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #123 merged `f53331c` (1.50.0), on the operator's
+    AskUserQuestion "Yes, merge #123" (classifier denied the first try).
+    tab9@integrity Handoff `done` at `cc5afd1`, base already included,
+    12/12 checks green, review P1 applied. Adds `orca-lane-reflog.sh`.
+    Deferred P3 #14 and #15 in `memory/tasks.d/2026-11-01-fix-integrity-lane-followups.md`.
+    Integrity lane parked at `origin/main`, branch deleted, freshness rc=0.
     severity: P2
     owner: integrity (`tab9@integrity`, dispatched via Orca 2026-11-01 on the
       operator's AskUserQuestion "L47 + L58 in parallel": task
