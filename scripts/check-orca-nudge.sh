@@ -78,7 +78,9 @@
 #              message id, an id missing from the inbox or stored for another
 #              recipient, and an inbox that cannot be read or parsed. A warning beside a
 #              stored message still counts. A send stored for a `run:` mailbox
-#              is not nudged. A failed nudge passes its own lines and exit
+#              is not nudged. `nudge` for a `run:` or `dispatch:` target is
+#              sent as `no-nudge` with a line that says so, and no nudge call
+#              (L47); `no-nudge` to one prints no such line. A failed nudge passes its own lines and exit
 #              code through. The vsock retry runs once, never after a timeout, and
 #              carries the first try's request id (L36 #20).
 #   REPLY    — orca-send.sh's `reply` mode (§12b rule 7, punch-list L35). The
@@ -103,7 +105,8 @@
 #   SENDREF  — orca-send.sh's value checks: a bad cli (a flag, shell text,
 #              bare `orca` on Linux, a path that is not ORCA_CLI_COMMAND, a
 #              relative path, a name not on PATH), target, type (heartbeat
-#              included), nudge mode, subject or body (empty, starting with
+#              included), nudge mode (a word that is not nudge or no-nudge),
+#              subject or body (empty, starting with
 #              `--`, over 28,000 bytes): exit 4, prints `Orca send refused`,
 #              and the stub is never called. For the plain send types its
 #              ending line names the target only when the target passed its
@@ -119,8 +122,9 @@
 #              the same argv; a CR after the subject is dropped too.
 #   FILE     — punch-list L41: the message file. A missing field, a path that
 #              is relative, has a `.` or `..` part or a space, or is not named
-#              cepa-send-<name>.txt, a file that does not exist, a directory,
-#              a symlink, and a file inside the current repo (directly,
+#              cepa-send-<name>.txt, a file that does not exist (its reason
+#              says a retry needs a new file, L47), a directory, a symlink
+#              (a dangling one included), and a file inside the current repo (directly,
 #              through a symlinked directory, or in the main checkout seen
 #              from a linked worktree) are each refused before any call, and
 #              a refused path's file (or link) is kept. A file that passes is
@@ -708,6 +712,40 @@ if LEGS in ("all", "send"):
     store("STORE run address target", 0, ["Orca send stored: %s for run:run_abc" % MID], mode="no-nudge",
           target="run:run_abc", osend_json=osend(to="run:run_abc"),
           inbox_json=inbox({"id": MID, "to_handle": "run:run_abc"}))
+    # L47: `nudge` for a run: or dispatch: target is sent as no-nudge, never
+    # refused, and the output says so. No nudge call is made.
+    for name, tgt in [("STORE nudge to a run address is sent as no-nudge", "run:run_abc"),
+                      ("STORE nudge to a dispatch address is sent as no-nudge", "dispatch:ctx_abcdef")]:
+        calls = store(name, 0, ["Orca send stored: %s for %s" % (MID, tgt),
+                                "Orca nudge not needed: %s is a mailbox Orca delivers; sent as no-nudge" % tgt],
+                      target=tgt, typ="status", osend_json=osend(to=tgt), inbox_json=inbox({"id": MID, "to_handle": tgt}))
+        (ok if sends(calls) == [] else miss)(name + " makes no nudge call" if sends(calls) == [] else
+                                             name + " makes no nudge call: %r" % sends(calls))
+    # PR #122 review: the downgrade line follows a proven store only. A
+    # downgraded send that stored nothing exits 5 with no such line.
+    store("STORE downgraded send that stored nothing", 5,
+          [NOSTORE + "the send exited 1 and printed nothing",
+           END + "Needed from you: paste the block below into run:run_abc"],
+          target="run:run_abc", typ="status", osend_rc=1, osend_json="")
+    store("STORE downgraded send missing from the inbox", 5,
+          [NOSTORE + "%s is not in the inbox for run:run_abc" % MID,
+           END + "Needed from you: paste the block below into run:run_abc"],
+          target="run:run_abc", typ="status", osend_json=osend(to="run:run_abc"), inbox_json=inbox())
+    # PR #122 review: a downgraded send Orca stored for another term_ handle
+    # is not "not needed": it skips, names that handle, and exits 1.
+    calls = store("STORE downgraded send rerouted to a term_ handle", 1,
+                  ["Orca send stored: %s for %s" % (MID, OTHER), SK + "Orca stored it for %s, not the target" % OTHER,
+                   END + "Needed from you: tell %s to check its Orca inbox" % OTHER],
+                  target="dispatch:ctx_abcdef", typ="status", osend_json=osend(to=OTHER),
+                  inbox_json=inbox({"id": MID, "to_handle": OTHER}))
+    (ok if sends(calls) == [] else miss)("STORE downgraded rerouted send makes no nudge call" if sends(calls) == [] else
+                                         "STORE downgraded rerouted send makes no nudge call: %r" % sends(calls))
+    # A no-nudge to the same address prints no such line: the line marks only
+    # a mode the script changed.
+    store("STORE no-nudge to a dispatch address prints no downgrade", 0,
+          ["Orca send stored: %s for dispatch:ctx_abcdef" % MID], mode="no-nudge", typ="status",
+          target="dispatch:ctx_abcdef", osend_json=osend(to="dispatch:ctx_abcdef"),
+          inbox_json=inbox({"id": MID, "to_handle": "dispatch:ctx_abcdef"}))
     store("STORE rerouted to a Run mailbox", 0,
           ["Orca send stored: %s for run:run_abc" % MID,
            "Orca nudge not needed: Orca stored it in run:run_abc, a Run mailbox it prompts"],
@@ -933,8 +971,6 @@ if LEGS in ("all", "send"):
              "the type is not status, question, handoff, escalation, merge_ready, reply or worker_done", PASTE),
             ("SENDREF task field on a send", ["orca-ide", H, "status", "nudge", "task_abcdef"], STDIN,
              "only a worker_done takes outcome and task fields", PASTE),
-            ("SENDREF nudge a run address", ["orca-ide", "run:run_abc", "status", "nudge"], STDIN,
-             "only a term_ handle is nudged", END + "Needed from you: paste the block below into run:run_abc"),
             ("SENDREF bad mode", ["orca-ide", H, "status", "yes"], STDIN,
              "the nudge field is not nudge or no-nudge", PASTE),
             # L36 #22: the send's own cli checks, each with its own reason.
@@ -1013,7 +1049,11 @@ if LEGS in ("all", "send"):
     file_case("FILE dot-dot part", os.path.join(MSGDIR, "..", "msgs", "cepa-send-dd.txt"), FBAD, keep=p)
     file_case("FILE space in the path", os.path.join(MSGDIR, "a b", "cepa-send-s.txt"), FBAD)
     FREG = "the message file is not a regular file this user owns"
-    file_case("FILE does not exist", os.path.join(MSGDIR, "cepa-send-none.txt"), FREG)
+    # L47: a path to no file says the script removed it, so a retry needs a
+    # new file. A dangling symlink is not "no file": it is FREG.
+    file_case("FILE does not exist", os.path.join(MSGDIR, "cepa-send-none.txt"),
+              "the message file does not exist; orca-send.sh removes each message file once it reads it, "
+              "so a retry needs a new file (or the path is wrong)")
     os.mkdir(os.path.join(MSGDIR, "cepa-send-dir.txt"))
     file_case("FILE a directory", os.path.join(MSGDIR, "cepa-send-dir.txt"), FREG)
     p = msg_file(STDIN, "real-target.txt")
@@ -1022,6 +1062,9 @@ if LEGS in ("all", "send"):
     file_case("FILE a symlink", link, FREG, keep=p)
     (ok if os.path.lexists(link) else miss)("FILE a symlink keeps the link" if os.path.lexists(link) else
                                             "FILE a symlink keeps the link: it was removed")
+    dangling = os.path.join(MSGDIR, "cepa-send-dangling.txt")
+    os.symlink(os.path.join(MSGDIR, "no-such-file.txt"), dangling)
+    file_case("FILE a dangling symlink", dangling, FREG)
     p = msg_file(STDIN, "cepa-send-dot.txt")
     file_case("FILE dot part", os.path.join(MSGDIR, ".", "cepa-send-dot.txt"), FBAD, keep=p)
     REPO_DIR = os.path.join(TMP, "a-repo")
@@ -1064,6 +1107,19 @@ if LEGS in ("all", "send"):
         store("FILE unremovable", 4, [SR + "the message file could not be removed", PASTE],
               raw=([], F + "file: %s\n" % p), called=False)
         os.chmod(rod, 0o755)
+        # PR #122 review: a file in a directory this user cannot search is
+        # not "removed by a run"; it is refused as an unresolvable directory
+        # and kept.
+        lkd = os.path.join(TMP, "locked-dir")
+        os.mkdir(lkd)
+        p = os.path.join(lkd, "cepa-send-locked.txt")
+        open(p, "w").write(STDIN)
+        os.chmod(lkd, 0o000)
+        store("FILE in an unsearchable directory", 4, [SR + "the message file's directory could not be resolved", PASTE],
+              raw=([], F + "file: %s\n" % p), called=False)
+        os.chmod(lkd, 0o755)
+        (ok if os.path.exists(p) else miss)("FILE in an unsearchable directory keeps the file" if os.path.exists(p) else
+                                            "FILE in an unsearchable directory keeps the file: it was removed")
     else:
         miss("FILE unreadable: runs as root, so a mode-000 file stays readable")
     # One file, one run: removed after a stored send and after a refused one.

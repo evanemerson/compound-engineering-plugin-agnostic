@@ -22,8 +22,14 @@
 #                           from a sender with no Dispatch. heartbeat is not
 #                           sent here: the preamble's own command sends it.
 #     nudge: <nudge>        `nudge` for a target that is not a Run coordinator
-#                           (only a `term_` handle, or a reply); `no-nudge`
-#                           for a Run coordinator. Every type but worker_done.
+#                           (a `term_` handle, or a reply); `no-nudge` for a
+#                           Run coordinator. Every type but worker_done. A
+#                           `run:` or `dispatch:` target with `nudge` is sent
+#                           as `no-nudge`, never refused: Orca delivers to
+#                           that mailbox itself, so there is nothing to nudge.
+#                           After `Orca send stored` the script then prints
+#                           `Orca nudge not needed: <target> is a mailbox Orca
+#                           delivers; sent as no-nudge` (punch-list L47).
 #     outcome: <outcome>    worker_done only: succeeded or failed.
 #     task: <task id>       worker_done only: the preamble's task_<id>.
 #     session: <name>       optional: the target's session name, as §10a
@@ -40,6 +46,10 @@
 #                           fails is refused and kept. A path that passes is
 #                           read and removed before any value is checked, so
 #                           each file serves one run and is never re-sent.
+#                           A path to no file is refused with a reason that
+#                           says so: a retry after a refusal needs a new file
+#                           (punch-list L47: a sender re-ran the block on a
+#                           file the first run had already removed).
 #   A field line is `<name>: <value>`, one per line, each name at most once,
 #   in any order. Trailing spaces and a CR are dropped from a value. Any
 #   other line is refused, so a block that lost a field name is never read.
@@ -77,7 +87,9 @@
 # Prints one result line, then the nudge's lines when it runs. Exit codes:
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
-#      <reason>` (stored in a Run mailbox), or nothing more (`no-nudge`).
+#      <reason>` (stored in a Run mailbox, or `nudge` given for a `run:` or
+#      `dispatch:` target and sent as `no-nudge`), or nothing more
+#      (`no-nudge`).
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
@@ -280,6 +292,15 @@ cepa_send_file=${cepa_send_f_file-}
 [[ $cepa_send_file =~ ^(/[A-Za-z0-9._@+-]+)*/cepa-send-[A-Za-z0-9._@-]{1,64}\.txt$ \
    && $cepa_send_file != */./* && $cepa_send_file != */../* ]] \
   || refuse "the message file is not an absolute path to a cepa-send-<name>.txt file"
+# A path to nothing is most often a retry on a file the last run removed
+# (punch-list L47), so its reason says how to retry. A dangling symlink is
+# not "nothing": it goes on to the regular-file check below. A directory this
+# user cannot search makes `-e` false too, so it is refused first with its
+# own reason, never as a file a run removed (PR #122 review).
+[ -d "${cepa_send_file%/*}/" ] && [ -x "${cepa_send_file%/*}/" ] \
+  || refuse "the message file's directory could not be resolved"
+[ -e "$cepa_send_file" ] || [ -L "$cepa_send_file" ] \
+  || refuse "the message file does not exist; orca-send.sh removes each message file once it reads it, so a retry needs a new file (or the path is wrong)"
 [ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O "$cepa_send_file" ] \
   || refuse "the message file is not a regular file this user owns"
 # Never inside this checkout, nor inside the main checkout that holds it
@@ -354,9 +375,15 @@ case "$cepa_send_type" in
     cepa_send_mode=no-nudge ;;
   *) refuse "the type is not status, question, handoff, escalation, merge_ready, reply or worker_done" ;;
 esac
+# A `run:` or `dispatch:` target is a mailbox Orca delivers, so `nudge` there
+# has nothing to do: it is sent as `no-nudge` and says so, never refused
+# (punch-list L47). The target already passed its check above, and a
+# worker_done already set no-nudge, so this reaches only a plain send.
+cepa_send_downgraded=
 case "$cepa_send_mode" in
   no-nudge) ;;
-  nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] || refuse "only a term_ handle is nudged" ;;
+  nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] \
+           || { cepa_send_mode=no-nudge cepa_send_downgraded=1; } ;;
   *) refuse "the nudge field is not nudge or no-nudge" ;;
 esac
 command -v "$cepa_send_cli" >/dev/null 2>&1 || refuse "$cepa_send_cli is not on PATH"
@@ -528,6 +555,18 @@ if [ "$cepa_send_type" = reply ]; then
     exit 0
   fi
   cepa_send_target=$cepa_send_to
+fi
+# A downgraded send that Orca stored for a term_ handle other than the target
+# reached a mailbox Orca does not prompt: it says so, as a rerouted nudge
+# send does below, never "not needed" (PR #122 review).
+if [ -n "$cepa_send_downgraded" ]; then
+  if [ "$cepa_send_to" != "$cepa_send_target" ] && [[ $cepa_send_to == term_* ]]; then
+    echo "Orca nudge skipped: Orca stored it for $cepa_send_to, not the target"
+    echo "Ending first line: Needed from you: tell $cepa_send_to to check its Orca inbox"
+    exit 1
+  fi
+  echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"
+  exit 0
 fi
 [ "$cepa_send_mode" = nudge ] || exit 0
 if [ "$cepa_send_to" != "$cepa_send_target" ]; then

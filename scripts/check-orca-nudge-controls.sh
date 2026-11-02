@@ -191,23 +191,25 @@ SEND_MUTANTS = [
     ('send-rc-unchecked', '    if rc != 0:\n', '    if False:\n',
      {'STORE ok reply with a non-zero exit'}),
     ('send-no-reread', '  1) fail "$cepa_send_id is not in the inbox for $cepa_send_to" ;;', '  1) ;;',
-     {'STORE id in the inbox for another recipient', 'STORE inbox not ok', 'STORE id missing from the inbox'}),
+     {'STORE id in the inbox for another recipient', 'STORE inbox not ok', 'STORE id missing from the inbox',
+      'STORE downgraded send missing from the inbox'}),
     ('send-inbox-parse-ignored', '  *) fail "the inbox could not be parsed, so $cepa_send_id is unconfirmed" ;;', '  *) ;;',
      {'STORE inbox not JSON', 'STORE inbox wrong shape'}),
     ('send-inbox-ok-unchecked', 'rows = d["result"]["messages"] if d.get("ok") is True else []', 'rows = d["result"]["messages"]',
      {'STORE inbox not ok'}),
     ('send-reread-any-recipient', ' and x.get("to_handle") == sys.argv[3]', '',
-     {'STORE id in the inbox for another recipient'}),
+     {'STORE id in the inbox for another recipient', 'STORE downgraded send missing from the inbox'}),
     ('send-inbox-fail-ignored', '|| fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"', '|| true',
      {'STORE inbox fails'}),
     ('send-fail-continues', 'cepa_send_alert send_failed "$1"; cepa_send_ending; exit 5; }', 'cepa_send_alert send_failed "$1"; cepa_send_ending; }',
-     {'ALERT failed send writes one file', 'ALERT relative directory is not used', 'ALERT unmakeable directory is reported', 'ALERT worker_done failure names its dispatch', 'GUARD mktemp fails', 'GUARD no python3', 'GUARD no timeout', 'REPLY ok false', 'SESSION failed send names it', 'STORE JSON list', 'STORE bad message id', 'STORE empty stdout', 'STORE envelope id without result.message', 'STORE envelope uuid as message id', 'STORE id in the inbox for another recipient', 'STORE id missing from the inbox', 'STORE inbox fails', 'STORE inbox not JSON', 'STORE inbox not ok', 'STORE inbox wrong shape', 'STORE not JSON', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok reply with a non-zero exit', 'STORE ok truthy', 'STORE send timeout not retried', 'STORE send vsock twice', 'STORE warning-only result', 'WDONE empty stdout', 'WDONE ok false'}),
+     {'ALERT failed send writes one file', 'ALERT relative directory is not used', 'ALERT unmakeable directory is reported', 'ALERT worker_done failure names its dispatch', 'GUARD mktemp fails', 'GUARD no python3', 'GUARD no timeout', 'REPLY ok false', 'SESSION failed send names it', 'STORE JSON list', 'STORE bad message id', 'STORE downgraded send missing from the inbox', 'STORE downgraded send that stored nothing', 'STORE empty stdout', 'STORE envelope id without result.message', 'STORE envelope uuid as message id', 'STORE id in the inbox for another recipient', 'STORE id missing from the inbox', 'STORE inbox fails', 'STORE inbox not JSON', 'STORE inbox not ok', 'STORE inbox wrong shape', 'STORE not JSON', 'STORE ok false', 'STORE ok false code not a word', 'STORE ok reply with a non-zero exit', 'STORE ok truthy', 'STORE send timeout not retried', 'STORE send vsock twice', 'STORE warning-only result', 'WDONE empty stdout', 'WDONE ok false'}),
     ('send-no-size-cap', '-le 28000 ]', '-le 99999999 ]',
      {'SENDREF cap counts bytes', 'SENDREF over the size cap'}),
     ('send-cap-counts-chars', 'cepa_send_bytes=$(LC_ALL=C; printf \'%s%s\' "$cepa_send_subject" "$cepa_send_body" | wc -c)', 'cepa_send_bytes=$(( ${#cepa_send_subject} + ${#cepa_send_body} ))',
      {'SENDREF cap counts bytes'}),
-    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] ||', 'nudge) true ||',
-     {'SENDREF nudge a run address'}),
+    # L47: a run: or dispatch: target keeps no `nudge` mode; it is downgraded.
+    ('send-nudge-any-target', 'nudge) [[ $cepa_send_target == term_* || $cepa_send_type == reply ]] \\', 'nudge) true \\',
+     {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge'}),
     # L36 #20: every send carries a request id, so its vsock retry replays.
     ('send-no-request-id', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --retry-request "$cepa_send_req" --json ;;', '  --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \\\n  --json ;;',
      {'BLOCK hostile message is sent as text', 'FIELDS any order sends the same argv', 'STORE argv and order', 'STORE retry reuses the request id'}),
@@ -278,6 +280,31 @@ SEND_MUTANTS = [
     # FILE (punch-list L41): the message is in a file, read once and removed.
     ('file-not-removed', 'rm -f -- "$cepa_send_file" 2>/dev/null\n[ ! -e "$cepa_send_file" ] || refuse "the message file could not be removed"\n', '',
      {'FILE removed after a refused send', 'FILE unremovable', 'BLOCK hostile message is sent as text', 'FILE removed after a stored send', 'FILE unreadable is still removed'}),
+    # L47: a path to no file names the retry; a dangling symlink is still FREG.
+    ('file-missing-reason-dropped', '[ -e "$cepa_send_file" ] || [ -L "$cepa_send_file" ] \\\n', 'true \\\n',
+     {'FILE does not exist'}),
+    ('file-dangling-link-as-missing', '[ -e "$cepa_send_file" ] || [ -L "$cepa_send_file" ] \\', '[ -e "$cepa_send_file" ] \\',
+     {'FILE a dangling symlink'}),
+    # L47: `nudge` to a run: or dispatch: target is sent as no-nudge, with a line.
+    ('nudge-run-refused-again', '|| { cepa_send_mode=no-nudge cepa_send_downgraded=1; } ;;', '|| refuse "only a term_ handle is nudged" ;;',
+     {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge',
+      'STORE downgraded send rerouted to a term_ handle', 'STORE downgraded send missing from the inbox', 'STORE downgraded send that stored nothing'}),
+    ('nudge-downgrade-silent', 'if [ -n "$cepa_send_downgraded" ]; then', 'if false; then',
+     {'STORE nudge to a run address is sent as no-nudge', 'STORE nudge to a dispatch address is sent as no-nudge',
+      'STORE downgraded send rerouted to a term_ handle'}),
+    ('nudge-downgrade-always', 'if [ -n "$cepa_send_downgraded" ]; then', 'if [ "$cepa_send_type" != reply ] && [[ $cepa_send_target != term_* ]]; then',
+     # A worker_done targets dispatch: with no-nudge too, so it is caught as well.
+     {'STORE no-nudge to a dispatch address prints no downgrade', 'STORE run address target',
+      'WDONE failed outcome', 'WDONE stored', 'WDONE vsock retry'}),
+    ('file-dir-unsearchable-unchecked', '[ -d "${cepa_send_file%/*}/" ] && [ -x "${cepa_send_file%/*}/" ] \\', 'true \\',
+     {'FILE in an unsearchable directory'}),
+    # PR #122 review tail: the downgrade line follows a proven store only. This
+    # mutant reports a downgraded send as delivered when it stored nothing, so
+    # the two downgraded-store checks each have a kill no store mutant gives.
+    ('nudge-downgrade-before-store', 'fail() { echo "Orca send failed: no message stored', 'fail() { [ -z "$cepa_send_downgraded" ] || { echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"; exit 0; }; echo "Orca send failed: no message stored',
+     {'STORE downgraded send that stored nothing', 'STORE downgraded send missing from the inbox'}),
+    ('nudge-downgrade-reroute-hidden', '  if [ "$cepa_send_to" != "$cepa_send_target" ] && [[ $cepa_send_to == term_* ]]; then', '  if false; then',
+     {'STORE downgraded send rerouted to a term_ handle'}),
     ('file-symlink-allowed', '[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O', '[ -f "$cepa_send_file" ] && [ -O',
      {'FILE a symlink', 'FILE a symlink keeps the link'}),
     ('file-any-name', '/cepa-send-[A-Za-z0-9._@-]{1,64}\\.txt$', '/[A-Za-z0-9._@-]{1,64}$',
@@ -361,8 +388,8 @@ SEND_MUTANTS = [
      # Every refusal before the target is copied (the heredoc and file
      # checks, L41) then names "the target session".
      {'FIELDS 1.43.0 block is refused', 'FIELDS message after a file field is refused', 'FIELDS name given twice',
-      'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot part',
-      'FILE dot-dot part', 'FILE field missing', 'FILE in the main checkout from a worktree', 'FILE inside the repo',
+      'FILE a dangling symlink', 'FILE a directory', 'FILE a symlink', 'FILE another name', 'FILE does not exist', 'FILE dot part',
+      'FILE dot-dot part', 'FILE field missing', 'FILE in an unsearchable directory', 'FILE in the main checkout from a worktree', 'FILE inside the repo',
       'FILE relative path', 'FILE space in the path', 'FILE unreadable', 'FILE unremovable',
       'FILE via a symlinked directory', 'SENDREF target newline'}),
     ('subject-cr-kept', "  cepa_send_subject=${cepa_send_subject%$'\\r'}\n", '',
