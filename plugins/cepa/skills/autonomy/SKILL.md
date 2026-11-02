@@ -2332,7 +2332,10 @@ limits.
        text. Under `full` autonomy, ask only at the end of a finished run,
        never mid-run. In a headless run (the `mode:headless` token, or no
        AskUserQuestion tool), file the decision per §5 and end as **Nobody**,
-       naming the residual. A completion token goes before the call.
+       naming the residual. A completion token goes before the call. Right
+       before that call, the session runs the attention block below with
+       `action: mark`; after the answer, its first step is the same block
+       with `action: clear`.
      - **A coordinator.** A dispatched worker (a live preamble with Task and
        Dispatch IDs) never calls AskUserQuestion. It sends the decision with
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.
@@ -2375,6 +2378,70 @@ limits.
      happened or what comes later. It goes before a Handoff block. It holds no question, no numbers to pick,
      and no `My read`.
    - **One Handoff block per message** (rule 1).
+   - **The attention flag, for The operator kind.** NEEDS YOU is built from
+     Orca's hook events, and it can miss an open question: on 2026-11-01
+     dpc-pro's coord@main had an AskUserQuestion open while the dashboard
+     listed dpc-pro in no column and `worktree ps` read its row `done`
+     (punch-list L57). So a session that ends as **The operator** also marks
+     its own Orca worktree: the sidebar's unread dot, which Orca documents
+     "to ask for a person's attention", and the worktree comment
+     `NEEDS YOU: <question>`. No hook event moves either. This is for a
+     coordinator or a solo session only: a dispatched worker never calls
+     AskUserQuestion (**A coordinator**, above), so it never runs the block.
+     A headless run asks nothing, so it marks nothing. Every turn that ends
+     as **The operator** runs it, rule 8's health alerts and rule 2's
+     re-bind `ask` included. The script,
+     `plugins/cepa/scripts/orca-attention.sh`, sets the flag only on this
+     checkout's own worktree, by the full `id:` that `worktree current`
+     returns for the checkout's top level, and proves each change by a
+     re-read. Its header owns those checks, the measurements and the limits.
+     - **Mark, right before the AskUserQuestion call.** First write the
+       question as ONE line (at most 200 characters, the question in short,
+       not its options) with the file-write tool (Write) to a NEW file,
+       `cepa-attention-<session>-<n>.txt`, named and placed as rule 1's
+       message file is (`<n>` counts this session's attention files). Its
+       text comes from the session, so it goes through a file, never through
+       the shell. Then run the block with `action: mark` and the file's
+       absolute path in the `file:` line. The script reads and removes the
+       file, so each run needs a new one.
+     - **Clear, after the answer.** The answer comes back as the tool's
+       result, or as the next prompt when the operator typed it instead. The
+       session's first step after it is the block with `action: clear` and
+       no `file:` line. Clear changes the flag only while the comment still
+       starts with `NEEDS YOU: `. A session that marked and has not cleared
+       (the clear failed, or the turn was cut) runs clear at the start of its
+       next turn.
+     ```bash
+     # Run with a tool timeout of at least 2 minutes (the script's header
+     # states its worst case).
+     unset CEPA_ROOT
+     for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
+              "$HOME"/.claude/plugins/marketplaces/*/plugins/cepa/scripts/resolve-plugin-root.sh \
+              "${CEPA_DEV:+$(git rev-parse --show-toplevel 2>/dev/null)/plugins/cepa/scripts/resolve-plugin-root.sh}"; do
+       [ -f "$R" ] && . "$R" && break     # sets $CEPA_ROOT
+     done
+     if [ -z "${CEPA_ROOT:-}" ] || [ ! -f "$CEPA_ROOT/scripts/orca-attention.sh" ]; then
+       echo "ORCA attention skipped: orca-attention.sh not found (set CEPA_PLUGIN_ROOT)"
+     else
+       bash "$CEPA_ROOT/scripts/orca-attention.sh" <<'CEPA_FIELDS' || true
+     cli: <cli>
+     action: <mark or clear>
+     file: <mark only: the question file's absolute path; leave this line out for clear>
+     CEPA_FIELDS
+     fi
+     ```
+     `<cli>` is the §12a `cli=` value. The block's result is its line.
+     `ORCA attention: marked — …`, `ORCA attention: cleared — …` and
+     `ORCA attention: ok — nothing to clear …` need nothing more.
+     `ORCA attention failed: …`, `ORCA attention refused: …` and
+     `ORCA attention skipped: …` never stop the turn: the question is still
+     asked, and the body quotes the line, so the operator knows the flag is
+     not there. A block that printed none of these lines did not run.
+     **Stated limit.** The flag does not fix NEEDS YOU; it adds a signal
+     beside it. The comment is a worktree card's status line, so a mark
+     replaces any comment the worktree had, and clear leaves one space
+     (Orca 1.4.245 keeps the old comment when given an empty one).
 
    Why: Orca's dashboard puts a card in NEEDS YOU only while a tool prompt is
    pending. A turn that ends with options written as text lands in DONE with
@@ -2428,7 +2495,8 @@ limits.
      "alone can make" test: only the operator can look at another session.
      The body lists every alert line verbatim, the first line is the
      script's `Ending first line: ` text, and the last action is one
-     AskUserQuestion that names the sessions to check. Its options are
+     AskUserQuestion that names the sessions to check, with rule 7's
+     attention flag marked before it and cleared after the answer. Its options are
      `I will check them (Recommended)`, `Ignore them`, and, when the alerts
      allow one, a single fix inside this session's own role (§10e). When a
      rule 1 send in the same turn also failed, rule 1's paste line is the
