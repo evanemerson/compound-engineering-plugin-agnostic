@@ -334,8 +334,8 @@ REASONS = [re.compile(x) for x in (
     r"the nudge field is not nudge or no-nudge",
     # Written before 1.51.0, which sends `nudge` to a run: or dispatch: target
     # as no-nudge (punch-list L47); kept for one release, as the pre-1.43.0
-    # and pre-1.44.0 groups were, so an alert from a session still on 1.49.x
-    # is shown, not read as an unrecognised reason.
+    # and pre-1.44.0 groups were, so an alert from a session still on 1.50.x
+    # or earlier is shown, not read as an unrecognised reason.
     r"only a term_ handle is nudged",
     r"no timeout command to bound the Orca calls", r"no python3 to read the Orca output", r"mktemp failed",
     r"no request id could be made", r"the send output could not be read",

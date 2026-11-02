@@ -298,6 +298,11 @@ SEND_MUTANTS = [
       'WDONE failed outcome', 'WDONE stored', 'WDONE vsock retry'}),
     ('file-dir-unsearchable-unchecked', '[ -d "${cepa_send_file%/*}/" ] && [ -x "${cepa_send_file%/*}/" ] \\', 'true \\',
      {'FILE in an unsearchable directory'}),
+    # PR #122 review tail: the downgrade line follows a proven store only. This
+    # mutant reports a downgraded send as delivered when it stored nothing, so
+    # the two downgraded-store checks each have a kill no store mutant gives.
+    ('nudge-downgrade-before-store', 'fail() { echo "Orca send failed: no message stored', 'fail() { [ -z "$cepa_send_downgraded" ] || { echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"; exit 0; }; echo "Orca send failed: no message stored',
+     {'STORE downgraded send that stored nothing', 'STORE downgraded send missing from the inbox'}),
     ('nudge-downgrade-reroute-hidden', '  if [ "$cepa_send_to" != "$cepa_send_target" ] && [[ $cepa_send_to == term_* ]]; then', '  if false; then',
      {'STORE downgraded send rerouted to a term_ handle'}),
     ('file-symlink-allowed', '[ -f "$cepa_send_file" ] && [ ! -L "$cepa_send_file" ] && [ -O', '[ -f "$cepa_send_file" ] && [ -O',

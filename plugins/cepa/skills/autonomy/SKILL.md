@@ -1930,10 +1930,13 @@ limits.
      workers, §10; a lane keeps its warm state). Copy the full `id` from
      `orca-ide worktree list --json` (`<repoId>::<Windows-form path>`, e.g.
      `84830588-…::\\wsl.localhost\Ubuntu-24.04\…\roles`). Never use
-     `path:<lane>`: measured 2026-11-02 with `worktree show` on Orca 1.4.245,
-     only an absolute Linux path resolved, and a lane name, a relative path
-     and a `~` path each returned `selector_not_found` (dpc-pro, dpc-pro-docs
-     and contexthub saw the same from `worker-start` and `agent launch`). `new-child` is allowed only
+     `path:<lane>`. Measured 2026-11-02 with `orca-ide worktree show
+     --worktree <selector> --json` on Orca 1.4.245: a lane name, a relative
+     path and a `~` path each returned `"code": "selector_not_found"`; only an
+     absolute Linux path resolved, and that was `worktree show` only, not
+     `worker-start`. Unverified here: dpc-pro, dpc-pro-docs and contexthub
+     report `selector_not_found` from `worker-start` and `agent launch` with
+     a `path:` selector. `new-child` is allowed only
      for a one-off lane: its first branch is Orca's `<prefix>/<name>`, and
      under a `start-immediately` setup policy its worker runs beside an
      unfinished setup.
