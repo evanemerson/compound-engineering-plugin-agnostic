@@ -1633,7 +1633,19 @@ L54. **Two reviews in the same second write one findings file; the second overwr
     `memory/tasks.d/2026-11-01-chore-integrity-l48-cleanup-batch.md` line 11.
 
 L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-01 — PR #118 merged `1a8a2a8` (1.47.0), on the operator's
+    AskUserQuestion "Merge when green". Head ae658e8 = Handoff `Head:`, CI
+    11/11 green (incl. new orca-lane job); main had gained only this file.
+    roles parked, branch deleted, tab26 closed; both hops run, freshness
+    rc=0. U5 done here: `orca-lane.sh name` → "named 2 lane(s)"; `worktree
+    show` reports roles and integrity `displayNameMode: "fixed"`. U1
+    measured: create returns before setup starts and reports no setup
+    result (a failed setup is still ok:true); setup comes from the lane's
+    base-ref orca.yaml, archive from the MAIN checkout's working tree; a
+    duplicate --name is suffixed, not refused. Left: the operator applies
+    the U6 text to ~/.claude/CLAUDE.md; then other repos get a hand-off
+    (incl. plan-review #19, artist360's probe create/rm). Follow-ups: L58.
     severity: P2
     owner: roles (`tab26@roles`, dispatched via Orca 2026-11-01 after #116
       merged: task `task_b9a11d589bc4`, dispatch `ctx_d674e9b36de7`, branch
@@ -1693,6 +1705,28 @@ L57. **An open AskUserQuestion drops out of NEEDS YOU before the operator sees i
     `agentWait: null` for every row, so Orca's terminal-screen wait check
     did not fire either. `worktree ps` lists 15 agent rows; the dashboard
     shows 2, so it filters rows by a rule not in any help text.
+    PROBE RESULT (coord@main, this tab): an AskUserQuestion opened at 17:52;
+    `worktree ps` read this row `waiting`, tool AskUserQuestion, on every
+    30 s sample until it was answered at 18:19 (52 samples), including after
+    a background task finished at ~18:00. The operator saw this tab in NEEDS
+    YOU for 20+ minutes. So: no expiry within 27 minutes, and a background
+    task finishing does not clear `waiting` (hypotheses b and c weakened).
+    dpc-pro's miss stays unexplained; next: probe a lost-post (hypothesis a)
+    and add the `worktree set --unread --comment` attention flag when cepa
+    asks (does not depend on hooks). Log:
+    session scratchpad `needs-you-probe.log` (not committed).
+
+L58. **L55 follow-ups: reused-lane rm after squash merge; create resume; archive pre-check.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From PR #118 (tab26@roles). (1) rm refuses a reused lane after a squash
+    merge and branch deletion, because its HEAD reflog holds commits no
+    origin ref has (§11b's test, per the operator's #4 decision); tab26
+    recommends a sanctioned PR-state check of those commits. (2) Deferred
+    #4 create resume after a partial failure and #16 check the main
+    checkout's orca.yaml before the archive hook runs (first), then #17, #28,
+    #30. Source: `memory/tasks.d/2026-11-01-feat-roles-orca-lane-lifecycle.md`.
 
 ---
 
