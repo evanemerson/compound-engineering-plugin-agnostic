@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+# Check for plugins/cepa/scripts/stack-gate.sh, the gate every worktree stack
+# start goes through (punch-list L66). It runs the script with
+# scripts/fixtures/stack-gate-docker-stub.py as `docker` on PATH, a fixture
+# file as meminfo (CEPA_STACK_GATE_MEMINFO) and a throwaway HOME, so it never
+# reaches Docker or the real config.
+#
+# Usage: check-stack-gate.sh [stack-gate.sh]
+#   The optional path replaces the shipped script. Only
+#   check-stack-gate-controls.sh sets it, to run this check against a mutant.
+#
+# Every MISS line starts with its case name, so the controls can assert the
+# exact set of cases each mutant breaks. Every refused or usage case also
+# asserts the start command did not run. Legs:
+#   USAGE     — no arguments, no `--`, no command, a project without `-wt-`
+#               or with shell text, `--count` with an argument: exit 2.
+#   CONFIG    — defaults (6 / 2048); a value is read; `010` is ten, not
+#               octal eight; a bad, 7-digit or unknown entry WARNs and keeps
+#               the default; shell text in the file never runs.
+#   COUNT     — distinct projects, not containers; stopped stacks, non-`-wt-`
+#               projects and the caller's own running stack are not counted;
+#               a docker failure refuses.
+#   MEM       — below the minimum refuses; exactly the minimum passes; a
+#               missing file or a file with no MemAvailable refuses.
+#   RUN       — one ok line, then the command; its exit code and argv come
+#               through unchanged.
+#   LOCK      — two starts on one count: the second waits and is refused; a
+#               process the command leaves running does not hold the lock; a
+#               held lock refuses after lock_wait_seconds.
+#   LIST      — a refusal lists every running `-wt-` stack, longest idle
+#               first, with repo and lane; a hostile label prints as `?`.
+#   COUNTMODE — `--count` prints its one line, exits 1 when docker fails,
+#               takes no lock and creates no directory.
+set -u
+cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
+
+CEPA_SG_SCRIPT="$(realpath "${1:-plugins/cepa/scripts/stack-gate.sh}")" \
+python3 - <<'PY'
+import datetime, json, os, shutil, subprocess, sys, tempfile, time
+
+SCRIPT = os.environ["CEPA_SG_SCRIPT"]
+STUB = os.path.realpath("scripts/fixtures/stack-gate-docker-stub.py")
+passed = failed = 0
+NOW = datetime.datetime.now(datetime.timezone.utc)
+
+
+def ago(sec):
+    return (NOW - datetime.timedelta(seconds=sec)).strftime("%Y-%m-%dT%H:%M:%S.123456789Z")
+
+
+def miss(case, why):
+    global failed
+    failed += 1
+    print(f"MISS {case}: {why}")
+
+
+def ok():
+    global passed
+    passed += 1
+
+
+class Env:
+    def __init__(self, containers=(), conf=None, mem_mib=8000, meminfo=None):
+        self.root = tempfile.mkdtemp(prefix="cepa-sg-")
+        self.home = os.path.join(self.root, "home")
+        os.makedirs(self.home)
+        bindir = os.path.join(self.root, "bin")
+        os.makedirs(bindir)
+        # A wrapper, not a symlink: a stub that lost its exec bit would let
+        # PATH fall through to the real docker and count this machine's stacks.
+        with open(os.path.join(bindir, "docker"), "w") as f:
+            f.write(f'#!/bin/sh\nexec python3 "{STUB}" "$@"\n')
+        os.chmod(os.path.join(bindir, "docker"), 0o755)
+        self.state = os.path.join(self.root, "state.json")
+        with open(self.state, "w") as f:
+            json.dump(list(containers), f)
+        self.log = os.path.join(self.root, "docker.log")
+        self.marker = os.path.join(self.root, "ran")
+        self.meminfo = os.path.join(self.root, "meminfo")
+        if meminfo is None:
+            meminfo = f"MemTotal:       32000000 kB\nMemFree:  100 kB\nMemAvailable:   {mem_mib * 1024} kB\n"
+        if meminfo is not False:
+            with open(self.meminfo, "w") as f:
+                f.write(meminfo)
+        if conf is not None:
+            os.makedirs(os.path.join(self.home, ".config", "cepa"))
+            with open(os.path.join(self.home, ".config", "cepa", "stack-gate.conf"), "w") as f:
+                f.write(conf)
+        self.env = dict(os.environ, HOME=self.home, PATH=bindir + ":" + os.environ["PATH"],
+                        STUB_DOCKER_STATE=self.state, STUB_DOCKER_LOG=self.log,
+                        CEPA_STACK_GATE_MEMINFO=self.meminfo)
+        self.env.pop("CEPA_STACK_GATE_CONF", None)
+
+    def touch_cmd(self):
+        return ["touch", self.marker]
+
+    def ran(self):
+        return os.path.exists(self.marker)
+
+    def run(self, args, extra_env=None, timeout=60):
+        env = dict(self.env, **(extra_env or {}))
+        return subprocess.run(["bash", SCRIPT] + args, env=env, capture_output=True,
+                              text=True, timeout=timeout, cwd=self.root)
+
+    def popen(self, args):
+        return subprocess.Popen(["bash", SCRIPT] + args, env=self.env, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, cwd=self.root)
+
+
+def wt(project, n=1, state="running", wd=None, started=3600, idp=None):
+    wd = wd or f"/home/u/webapps/{project.split('-wt-')[0]}/.claude/worktrees/{project.split('-wt-')[1]}"
+    return [{"project": project, "wd": wd, "id": f"{idp or project}-c{k}", "state": state,
+             "started": ago(started)} for k in range(n)]
+
+
+def stacks(k, prefix="r-wt-s"):
+    out = []
+    for i in range(k):
+        out += wt(f"{prefix}{i}", started=600 * (i + 1))
+    return out
+
+
+def gate_line(out):
+    return [l for l in out.splitlines() if l.startswith("STACK gate:")]
+
+
+def expect_refused(case, e, r, must=()):
+    if r.returncode != 3:
+        return miss(case, f"rc {r.returncode}, want 3; out={r.stdout!r} err={r.stderr!r}")
+    if e.ran():
+        return miss(case, "start command ran on a refusal")
+    lines = gate_line(r.stdout)
+    if len(lines) != 1 or not lines[0].startswith("STACK gate: refused — "):
+        return miss(case, f"want one refused line, got {r.stdout!r}")
+    for m in must:
+        if m not in lines[0]:
+            return miss(case, f"{m!r} not in {lines[0]!r}")
+    ok()
+
+
+def expect_ok(case, e, r, must=(), warn=None):
+    if r.returncode != 0:
+        return miss(case, f"rc {r.returncode}, want 0; out={r.stdout!r} err={r.stderr!r}")
+    if not e.ran():
+        return miss(case, "start command did not run")
+    lines = gate_line(r.stdout)
+    if len(lines) != 1 or not lines[0].startswith("STACK gate: ok — ") or not r.stdout.startswith("STACK gate: ok"):
+        return miss(case, f"want one ok line first, got {r.stdout!r}")
+    for m in must:
+        if m not in lines[0]:
+            return miss(case, f"{m!r} not in {lines[0]!r}")
+    if warn is not None:
+        if warn not in r.stderr:
+            return miss(case, f"no WARN {warn!r} on stderr: {r.stderr!r}")
+        if "WARN" in r.stdout:
+            return miss(case, "WARN on stdout")
+    ok()
+
+
+# ---------------- USAGE ----------------
+for case, args in [
+    ("USAGE no arguments", []),
+    ("USAGE no --", ["a-wt-b", "TOUCH"]),
+    ("USAGE no command", ["a-wt-b", "--"]),
+    ("USAGE project without -wt-", ["dpcpro", "--", "TOUCH"]),
+    ("USAGE project with shell text", ["a-wt-$(id)", "--", "TOUCH"]),
+    ("USAGE --count with argument", ["--count", "x"]),
+]:
+    e = Env()
+    args = [a if a != "TOUCH" else "touch" for a in args] + ([e.marker] if "TOUCH" in args else [])
+    r = e.run(args)
+    if r.returncode != 2:
+        miss(case, f"rc {r.returncode}, want 2; out={r.stdout!r} err={r.stderr!r}")
+    elif e.ran():
+        miss(case, "start command ran")
+    else:
+        ok()
+
+# ---------------- CONFIG ----------------
+e = Env(stacks(5)); expect_ok("CONFIG default limit 6 passes 5", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 6", "minimum 2048 MiB"])
+e = Env(stacks(6)); expect_refused("CONFIG default limit 6 refuses 6", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 6"])
+e = Env(stacks(2), conf="max_running=2\n"); expect_refused("CONFIG limit is read", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 2"])
+e = Env(stacks(9), conf="# limit\n\nmax_running = 010 \r\n"); expect_ok("CONFIG leading zero is decimal", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 10"])
+e = Env(stacks(5), conf="max_running=abc\n"); expect_ok("CONFIG bad value warns, default kept", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 6"], warn="WARN")
+e = Env(stacks(6), conf="max_running=1234567\n"); r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+if "WARN" not in r.stderr:
+    miss("CONFIG seven digits warns, default kept", f"no WARN: {r.stderr!r}")
+else:
+    expect_refused("CONFIG seven digits warns, default kept", e, r, ["limit 6"])
+e = Env(stacks(1), conf="colour=9\n"); expect_ok("CONFIG unknown key warns", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["limit 6"], warn="unknown key")
+e = Env(stacks(1))
+pwn = os.path.join(e.root, "PWN")
+os.makedirs(os.path.join(e.home, ".config", "cepa"))
+with open(os.path.join(e.home, ".config", "cepa", "stack-gate.conf"), "w") as f:
+    f.write(f"max_running=$(touch {pwn}1)\nmax_running=1; touch {pwn}2\ntouch {pwn}3\nmax_running=`touch {pwn}4`\n")
+r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+if any(os.path.exists(f"{pwn}{k}") for k in range(1, 5)):
+    miss("CONFIG shell text never runs", "a config line ran")
+else:
+    expect_ok("CONFIG shell text never runs", e, r, ["limit 6"], warn="WARN")
+e = Env(conf="min_available_mib=4000\n", mem_mib=3000)
+expect_refused("CONFIG minimum memory is read", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["3000 MiB available, minimum 4000 MiB"])
+
+# ---------------- COUNT ----------------
+e = Env(wt("big-wt-a", n=4), conf="max_running=2\n")
+expect_ok("COUNT projects, not containers", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["1 other running -wt- stacks"])
+e = Env(wt("r-wt-a", state="exited") + wt("r-wt-b", state="exited"), conf="max_running=1\n")
+expect_ok("COUNT stopped stacks not counted", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["0 other running"])
+args_logged = [json.loads(l) for l in open(e.log)] if os.path.exists(e.log) else []
+if any(a and a[0] == "ps" and ("-a" in a or "--all" in a) for a in args_logged):
+    miss("COUNT stopped stacks not counted", "docker ps was called with -a")
+e = Env([{"project": p, "wd": "/x/" + p, "id": p, "state": "running", "started": ago(60)}
+         for p in ("dpcpro", "helm", "traefik")], conf="max_running=1\n")
+expect_ok("COUNT non-wt projects not counted", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["0 other running"])
+e = Env(wt("n-wt-x", n=2), conf="max_running=1\n")
+expect_ok("COUNT own running stack not counted", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["0 other running", "already running"])
+e = Env(stacks(1)); expect_refused("COUNT docker failure refuses", e, e.run(["n-wt-x", "--"] + e.touch_cmd(), {"STUB_DOCKER_FAIL": "ps"}), ["cannot count"])
+
+# ---------------- MEM ----------------
+e = Env(mem_mib=1000); expect_refused("MEM below minimum refuses", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["1000 MiB available"])
+e = Env(mem_mib=2048); expect_ok("MEM exactly the minimum passes", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["2048 MiB available"])
+e = Env(meminfo=False); expect_refused("MEM missing file refuses", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["MemAvailable"])
+e = Env(meminfo="MemTotal: 100 kB\nMemFree: 99999999 kB\n"); expect_refused("MEM no MemAvailable line refuses", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["MemAvailable"])
+
+# ---------------- RUN ----------------
+e = Env()
+r = e.run(["n-wt-x", "--", "bash", "-c", f"touch {e.marker}; exit 7"])
+if r.returncode != 7:
+    miss("RUN exit code comes through", f"rc {r.returncode}, want 7: {r.stdout!r} {r.stderr!r}")
+elif not e.ran() or not r.stdout.startswith("STACK gate: ok — "):
+    miss("RUN exit code comes through", f"command not run after the ok line: {r.stdout!r}")
+else:
+    ok()
+e = Env()
+r = e.run(["n-wt-x", "--", "printf", "%s|", "a b", "$HOME", "*", "x;y"])
+want = "a b|$HOME|*|x;y|"
+if r.returncode != 0 or r.stdout.split("\n", 1)[-1] != want:
+    miss("RUN argv kept", f"want {want!r} after the gate line, got {r.stdout!r}")
+else:
+    ok()
+
+# ---------------- LOCK ----------------
+e = Env(conf="max_running=1\n")
+add = lambda p, d: ["bash", "-c", f'sleep {d}; "$0" add {p} /w/{p} {p}-c0; echo {p} >> {e.root}/started', STUB]
+pa = e.popen(["a-wt-a", "--"] + add("a-wt-a", 1.5))
+time.sleep(0.4)
+pb = e.popen(["b-wt-b", "--"] + add("b-wt-b", 0))
+ra, rb = pa.communicate(timeout=60), pb.communicate(timeout=60)
+started = open(f"{e.root}/started").read().split() if os.path.exists(f"{e.root}/started") else []
+if pa.returncode != 0 or pb.returncode != 3 or started != ["a-wt-a"]:
+    miss("LOCK two starts on one count", f"a rc {pa.returncode}, b rc {pb.returncode}, started {started}; b out {rb[0]!r}")
+else:
+    ok()
+e = Env(conf="lock_wait_seconds=2\n")
+r1 = e.run(["a-wt-a", "--", "bash", "-c", "sleep 8 >/dev/null 2>&1 & exit 0"])
+r2 = e.run(["b-wt-b", "--"] + e.touch_cmd())
+if r1.returncode != 0 or r2.returncode != 0 or not e.ran():
+    miss("LOCK not held by a process the command leaves", f"rc {r1.returncode}/{r2.returncode}; {r2.stdout!r}")
+else:
+    ok()
+e = Env(conf="lock_wait_seconds=1\n")
+lockdir = os.path.join(e.home, ".config", "cepa")
+holder = subprocess.Popen(["flock", lockdir, "sleep", "6"])
+time.sleep(0.4)
+expect_refused("LOCK held lock refuses after the wait", e, e.run(["n-wt-x", "--"] + e.touch_cmd()), ["lock busy"])
+
+# ---------------- LIST ----------------
+conts = (wt("dpcpro-wt-apgar-765bd2", n=3, wd="/home/u/webapps/dpc-pro/.claude/worktrees/apgar", started=7200)
+         + wt("contexthub-wt-lorena-9da911", wd="/home/u/orca/workspaces/contexthub/lorena", started=300)
+         + wt("helm-wt-lane1-3e9f61", wd="/srv/odd/lane1", started=90000))
+# the newest container of a stack sets its idle time: one dpcpro container started 2h ago, one 1h ago
+conts[1]["started"] = ago(3600)
+e = Env(conts, conf="max_running=3\n")
+r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+want = ("running -wt- stacks, longest idle first: "
+        "helm-wt-lane1-3e9f61 (repo helm, lane lane1, idle 1d1h); "
+        "dpcpro-wt-apgar-765bd2 (repo dpc-pro, lane apgar, idle 1h0m); "
+        "contexthub-wt-lorena-9da911 (repo contexthub, lane lorena, idle 5m)")
+expect_refused("LIST every stack, longest idle first, repo and lane", e, r, [want])
+e = Env(wt("x-wt-y", wd="/w/$(id);`id` \x1b[31mred"), conf="max_running=1\n")
+r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+lines = gate_line(r.stdout)
+bad = [c for c in "$`\x1b" if lines and c in lines[0]]
+if r.returncode != 3 or not lines or bad or "lane ??id???id????31mred," not in lines[0]:
+    miss("LIST hostile label prints as ?", f"rc {r.returncode}, bad {bad}, line {lines!r}")
+else:
+    ok()
+
+# ---------------- COUNTMODE ----------------
+e = Env(stacks(2) + wt("r-wt-z", state="exited") + [{"project": "helm", "wd": "/h", "id": "h", "state": "running", "started": ago(5)}])
+r = e.run(["--count"])
+if r.returncode != 0 or r.stdout != "STACK count: running=2 limit=6\n":
+    miss("COUNTMODE one line", f"rc {r.returncode}, out {r.stdout!r}")
+else:
+    ok()
+e = Env(conf="max_running=3\n")
+r = e.run(["--count"], {"STUB_DOCKER_FAIL": "ps"})
+if r.returncode != 1 or not r.stdout.startswith("STACK count: running=unknown limit=3 — ") or r.stdout.count("\n") != 1:
+    miss("COUNTMODE docker failure is unknown", f"rc {r.returncode}, out {r.stdout!r}")
+else:
+    ok()
+e = Env(stacks(1), conf="lock_wait_seconds=30\n")
+lockdir = os.path.join(e.home, ".config", "cepa")
+holder2 = subprocess.Popen(["flock", lockdir, "sleep", "8"])
+time.sleep(0.4)
+t0 = time.time()
+r = e.run(["--count"])
+if r.returncode != 0 or time.time() - t0 > 4:
+    miss("COUNTMODE takes no lock", f"rc {r.returncode}, {time.time() - t0:.1f}s")
+else:
+    ok()
+e = Env(stacks(1))
+r = e.run(["--count"])
+if r.returncode != 0 or os.path.exists(os.path.join(e.home, ".config")):
+    miss("COUNTMODE creates nothing", f"rc {r.returncode}, .config exists: {os.path.exists(os.path.join(e.home, '.config'))}")
+else:
+    ok()
+
+for h in (holder, holder2):
+    h.kill()
+print(f"check-stack-gate: {passed} passed, {failed} failed")
+sys.exit(1 if failed else 0)
+PY
