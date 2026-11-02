@@ -1535,6 +1535,9 @@ L47. **Too many send blocks are refused: 4 of the first sends after the reboot.*
     #122 then went DIRTY against main (#121, #123) and claimed 1.50.0 like
     #123. tab31@roles dispatched on the same branch to merge main, resolve,
     and bump to 1.51.0 (task `task_93b21c682afb`, dispatch `ctx_6e3509555ba9`).
+    tab31 FAILED at start (`agent_readiness`, `terminal_exited`; see L60) and
+    changed nothing: #122 still `598b74a`, now also behind #124. On hold by
+    the operator ("not yet. we should do a cepa handoff soon").
     Measured 2026-11-01 by coord@main from the alert files in
     `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
     senders' terminals (Orca `terminal read`, read only). Sessions started on
@@ -1816,6 +1819,29 @@ L59. **The quoted-value injection shape is still live in `compound.md` and auton
     (also `compound.md:238`, a comment, and `sweep.md:555`, prose about the
     closed site). Source: `memory/tasks.d/2026-10-31-refactor-roles-send-block-stdin.md`
     finding 5.
+
+L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `orca-health.sh` says `ok`.**
+    status: pending
+    severity: P2
+    owner: gain (unassigned worker; filed 2026-11-01 on the operator's answer
+      "file L60, P2, for gain, but we're going to slow down and let things
+      catch up before we continue" — do not start until the operator says)
+    Evidence: tab31@roles, task `task_93b21c682afb`, dispatch
+    `ctx_6e3509555ba9` (Run `run_5682a0ed1455`). `worker-show` read by
+    coord@main: dispatched 03:07:13 UTC, `stage: agent_readiness`,
+    `timeoutMs: 60000`, `lastError: terminal_exited`, `lastHeartbeatAt: null`,
+    status `failed` at 03:08:14 UTC; the agent terminal was gone from
+    `terminal list`. Cause of the exit not recorded (likely the account
+    limit that broke the previous coord@main). Orca sent NO inbox message for
+    it (it did send `stop_unverified` escalations for tab27/tab8 earlier the
+    same day), and `orca-health.sh` with the Run named printed `ORCA health:
+    ok` on every coordinator turn after it. coord@main saw it only when the
+    operator asked "have the other sessions returned completely?".
+    Same class as L34 (a dead session nobody sees). Fix candidate: the
+    health check reads the Run's dispatches (`worker-show` or a dispatch
+    list) and alerts on any `failed` dispatch it has not acked, with
+    `lastError` and `stage` in the alert text. Touches `orca-health.sh`,
+    which PR #122 (L47) also edits: merge after #122.
 
 ---
 
