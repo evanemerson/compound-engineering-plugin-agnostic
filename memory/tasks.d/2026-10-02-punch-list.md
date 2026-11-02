@@ -1893,6 +1893,11 @@ L61. **Reach a restarted coordinator: `coord:<repo>` address + on-disk outbox.**
     (`merged #N` sent to a closed coordinator tab); a failed send's alert file
     holds no body (`~/.local/state/cepa/orca-alerts/*.alert`, read
     2026-11-02). Touches `orca-send.sh`, `orca-health.sh`, §12b rules 1/2/8.
+    2026-11-02: tab4@gain done, PR #127 (head 967ee40). coord@main merged
+    main + re-bumped 1.54.0 → 68f5cdb. CI red (also red at 967ee40):
+    orca-detection control `handoff-no-rule1` not killed — #127's handoff.md
+    note adds a second §12b rule 1 citation. Fix dispatched to tab5@gain
+    (dispatch `ctx_7ebae4bf47b8`) on the same branch.
 
 L62. **Shared lane & stack scheme as a cepa skill (PR B; gate is L66, setup check is L67).**
     2026-11-02: tab10@integrity `done`, PR #125 (head 9fa0628, 1.52.0); 6 P3s
@@ -1916,7 +1921,12 @@ L62. **Shared lane & stack scheme as a cepa skill (PR B; gate is L66, setup chec
     create (Makefile `worktree-init`, read 2026-11-02).
 
 L66. **Stack gate script `stack-gate.sh` (PR C), runs the start under its lock.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #126 merged `2a899a3` (1.53.0) on the operator's
+    AskUserQuestion "Merge #126". tab33@roles done (head c04afba = Handoff);
+    coord@main merged main (kept both CI jobs) and re-bumped to 1.53.0 →
+    03d369b, CI 4/4 green. roles parked, branch deleted. Deferred P2/P3s:
+    L68 and `memory/tasks.d/2026-11-02-feat-roles-stack-gate.md`.
     severity: P1
     owner: roles (unassigned worker)
     2026-11-02: tab33@roles dispatched via Orca (Run run_5682a0ed1455, dispatch
