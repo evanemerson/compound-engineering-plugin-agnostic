@@ -1538,6 +1538,15 @@ L47. **Too many send blocks are refused: 4 of the first sends after the reboot.*
     tab31 FAILED at start (`agent_readiness`, `terminal_exited`; see L60) and
     changed nothing: #122 still `598b74a`, now also behind #124. On hold by
     the operator ("not yet. we should do a cepa handoff soon").
+    2026-11-02: hold lifted (operator AskUserQuestion "Land both first").
+    tab32@roles dispatched via Orca on Run `run_5682a0ed1455` (re-bound to
+    the new coord@main): task `task_beb35984616d`, dispatch
+    `ctx_260c7738d244`, on `fix/roles/send-refusals`: merge main, 1.51.0,
+    plus the selector doc fix — §12b rule 2 says `path:<lane>`, which
+    returns `selector_not_found` for a lane name, relative path or `~`
+    (measured with `worktree show`; an absolute Linux path resolved). Use
+    the `id:` from `worktree list --json`. Global CLAUDE.md line 82 fixed
+    by coord@main (backup `~/.claude/CLAUDE.md.bak-2026-11-02-selector`).
     Measured 2026-11-01 by coord@main from the alert files in
     `~/.local/state/cepa/orca-alerts/` (written 16:34-16:42 UTC) and the
     senders' terminals (Orca `terminal read`, read only). Sessions started on
