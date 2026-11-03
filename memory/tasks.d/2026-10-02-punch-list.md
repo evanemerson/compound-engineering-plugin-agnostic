@@ -2160,9 +2160,21 @@ L75. **`stack-gate.sh --build` never skips when compose lists pull-only images.*
     lock), only slow. Fix: check only services that have a `build:` section.
 
 L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not check them.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-03 — PR #133 merged `c0fc4bd` (1.55.4) on the operator's
+    AskUserQuestion "Merge #133". tab1@optimization built the check
+    (orca-lane.sh create and rm refuse when hookSettings shadow orca.yaml's
+    setup or archive; unknown shape refuses; create re-checks the parked
+    lane's HEAD:orca.yaml). Measured in Orca 1.4.246's code: setup and
+    archive resolve separately; unset policy + non-empty local script also
+    means local-only; run-both runs orca.yaml then local; wait-for-setup
+    wins from either side, so a saved start-immediately needs no check.
+    CI: the new mutants pushed the orca-lane job past its 10-minute bound
+    (12m06s, cancelled); on the operator's choice tab2@optimization sharded
+    the controls 1/4..4/4 (jobs 4m16s, 2m41s, 3m44s, 3m17s). CI 18/18.
+    Plugin 1.55.4 (rc=0), optimization parked, worker tabs closed.
     severity: P2
-    owner: optimization (tab1@optimization)
+    owner: optimization (tab1@optimization, tab2@optimization)
     Reported by dpc-pro-docs coord@main 2026-11-03 (msg_973360628a62):
     with `hookSettings.commandSourcePolicy: "local-only"`, Orca runs the
     LOCAL setup script (or none when it is empty) and ignores orca.yaml's
