@@ -1433,6 +1433,23 @@ L43. **Orca chat UI shows an old message below new ones, so live output moves up
     Dashboard showed "0 total" while `worktree ps` listed 13 Claude agents.
     After the reboot `worktree ps` still lists 11 agent rows `done` with 0
     live terminals (ghost rows from ended sessions).
+    Second instance, operator report 2026-11-02 18:27 CST
+    (`Screenshot 2026-11-02 182728.png`): dpc-pro coord@main chat UI. The
+    operator posted a message with 8 screenshots (the demo-invite plan
+    request). Many messages and replies later, that same message still
+    renders at the bottom of the chat, under the newest assistant reply and
+    above `Worked for 20s`. Same shape as the first instance: an older user
+    message is drawn after newer output. This one is inside ONE session
+    (no session swap in the tab), so the "merges two sessions' transcripts"
+    guess does not explain it. Candidate: a message with image attachments
+    is placed by something other than its time. Not measured.
+    Evidence (local only, NOT in git — the screenshots show a dpc-pro user
+    name): `~/.local/share/cepa/evidence/L43/`, mode 700, holding
+    `orca-chat-order-2026-11-01-065042.png` (sha256 82a8ff83…),
+    `orca-chat-order-2026-11-01-065113.png` (7180819e…) and
+    `orca-chat-order-2026-11-02-182728.png` (cd96e8b3…), copied from the
+    operator's Windows Pictures/Screenshots. Crop or redact the name before
+    any hand-off to Orca's maintainers.
 
 L45. **A restarted coordinator does not re-bind its Run, so Orca prompts a dead terminal.**
     status: completed
@@ -1977,9 +1994,15 @@ L65. **A nudge is skipped without an alert when `worktree ps` times out.**
     operator had to ask for an inbox check.
 
 L68. **Gate lock held through a cold `up -d --build` (PR #126 deferred P2 #7).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #128 merged `af9b4b1` (1.54.1) on the operator's
+    AskUserQuestion "Merge #128". tab34@roles done (head 0789a74 = Handoff,
+    CI 15/15 green, branch already contained main). Setup and `make up` now
+    build outside the gate; the gate wraps only `up -d --no-build`. roles
+    parked at af9b4b1, branch deleted, worker tab closed (absent from
+    `terminal list`), loaded plugin 1.54.1 (freshness rc=0). Follow-ups: L70.
     severity: P2
-    owner: unassigned (one doc + script item, before many lanes start at once)
+    owner: roles (tab34@roles)
     tab33@roles: the lock covers the whole start command; at fleet launch a
     cold build per lane can push a third lane past 600 s and get "lock busy".
     Recommended (worker's pick): the lane-stack skill says build OUTSIDE the
@@ -1994,7 +2017,27 @@ L69. **L61 follow-ups from PR #127's review (finding #15 + P3s #16-#26).**
     predecessor already received live (plan-review #10's rule). Worker's
     recommended fix: keep the `msg_` id in the delivered file name and show
     only messages still unread in Orca — changes #10's rule, operator's call.
+    DECIDED 2026-11-02 (operator): KEEP the 7-day re-show; #15 is closed as
+    "keep", no code change. Why: Orca's `read` flag does not prove a session
+    acted (inbox row `tab3@bath done: PR #305` has read=1, delivered_at
+    null), so "unread only" can lose the message #10 protects; each re-shown
+    file is labelled "delivered to <handle>, which is not live now", is shown
+    once, then acked; a shown message is never acted on before the operator
+    answers, and `gh pr merge` needs the operator's approval. Revisit only if
+    L63's roll-out makes re-shows noisy.
     #16-#26: `todos/review-2026-11-02-094119-feat-gain-coord-outbox.md`.
+
+L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
+    status: pending
+    severity: P2
+    owner: unassigned (each needs an operator design choice first)
+    Four items, filed by tab34@roles in
+    `memory/tasks.d/2026-11-02-fix-roles-gate-build-outside-lock.md`:
+    1 (P2) builds run outside both gate ceilings (no stack count, no RAM
+    check) — semaphore, MemAvailable check, or build only when missing;
+    2 (P2) setup holds the lock through migrations; 3 (P2) `up -d
+    --no-build` still pulls images and waits on health under the lock;
+    4 (P3) a lock-holder file so "lock busy" names the holder.
 
 ---
 
