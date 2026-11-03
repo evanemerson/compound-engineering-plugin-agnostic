@@ -2159,6 +2159,25 @@ L75. **`stack-gate.sh --build` never skips when compose lists pull-only images.*
     exist" check fails and every start builds. Safe (it builds under the
     lock), only slow. Fix: check only services that have a `build:` section.
 
+L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not check them.**
+    status: pending
+    severity: P2
+    owner: optimization (tab1@optimization)
+    Reported by dpc-pro-docs coord@main 2026-11-03 (msg_973360628a62):
+    with `hookSettings.commandSourcePolicy: "local-only"`, Orca runs the
+    LOCAL setup script (or none when it is empty) and ignores orca.yaml's
+    `scripts.setup` (renderer resolver, Orca 1.4.246); the CLI has no
+    setter. Read with `orca-ide repo show --repo id:<repoId> --json`.
+    Survey by coord@main 2026-11-03: local-only + `npm install` in
+    kcprimetime (its new lanes sprinter/suburban likely ran it; kcprimetime
+    told, msg_f3ff6e41d601) and artist360-docs; local-only + matching
+    script in dpc-pro-docs (operator set it); unset in artist360,
+    contexthub, dpc-pro, helm, compound-engineering. Unmeasured: a saved
+    `setupAgentStartupPolicy: start-immediately` (dpc-pro, kcprimetime,
+    artist360-docs) vs orca.yaml's `wait-for-setup` — which wins.
+    Fix (operator: "File + start now"): `orca-lane.sh create` and the
+    first prompt's step 2 read hookSettings and refuse / warn on a shadow.
+
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
@@ -2179,8 +2198,10 @@ All four pending prompts were drained once the operator poked the tabs.
 DONE: kcprimetime (msg_19eaeeb2a578; Run run_c169a95a45dd; sprinter,
 suburban; lane-a, lane-b removed; verified in Orca's worktree list).
 helm (msg_8809354c315e; Run run_cef0840e0fe1; PR helm#203 merged adb8c81;
-keel, cleat, bow; lane1-3 removed; verified). Open: dpc-pro, dpc-pro-docs,
-contexthub, artist360.
+keel, cleat, bow; lane1-3 removed; verified). dpc-pro-docs
+(msg_973360628a62; PR dpc-pro-docs#28 merged 77e1b84 adds orca.yaml;
+dossier, chronicle, manifest; billing, comms, patients, setup removed;
+verified). Open: dpc-pro, contexthub, artist360; kcprimetime re-check (L76).
 cepa itself: matrix, optimization, formulation created (parked 9c12f56);
 gain, integrity, roles removed via `orca-lane.sh rm` on the operator's
 answer. roles first refused on reflog c3273f0 (PR #87's pre-squash commit,
