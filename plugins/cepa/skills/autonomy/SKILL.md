@@ -1984,9 +1984,12 @@ limits.
      - **Orca's setup is the setup.** `create` runs the repo's `orca.yaml`
        `setup:` under the repo's own setup policy, and nobody runs it again.
        Orca reads that `setup:` from the new lane's own checkout (the base
-       ref), so it must be committed on `<base>`. A repo whose stack init is
-       not in `orca.yaml` names it in its own CLAUDE.md, and the main
-       coordinator runs it once, in the lane, after `create`. **Orca reports
+       ref), so it must be committed on `<base>`. `create` and `rm` refuse
+       when Orca's saved hook settings shadow `orca.yaml` (`orca-lane.sh`
+       header, H1); the operator fixes that in Orca's Settings. A repo
+       whose stack init is not in `orca.yaml` names it in its own
+       CLAUDE.md, and the main coordinator runs it once, in the lane, after
+       `create`. **Orca reports
        no setup result** (a setup that exits 1 still reads `"ok": true`), so
        the coordinator reads the lane's `Setup` tab before it starts a
        worker there.

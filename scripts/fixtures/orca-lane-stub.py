@@ -120,6 +120,13 @@ if verb == ["worktree", "create"]:
     if "freshbase" in MODE:
         # Orca fetches the base itself; here the fetch updates no
         # remote-tracking ref, so the caller's origin/<base> stays stale.
+        # Origin first moves on DURING the create, after the caller's own
+        # step-0 fetch, so only the park step's re-fetch can see the tip.
+        url = git("-C", repo["path"], "remote", "get-url", "origin").stdout.strip()
+        mv = os.path.join(st["ws"], ".mover-%d" % st["calls"])
+        git("clone", "-q", url, mv)
+        git("-C", mv, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "moved during create")
+        git("-C", mv, "push", "-q", "origin", "HEAD:" + base[len("origin/"):])
         git("-C", repo["path"], "fetch", "-q", "--refmap=", "origin", base[len("origin/"):])
         base = git("-C", repo["path"], "rev-parse", "FETCH_HEAD").stdout.strip()
     r = git("-C", repo["path"], "worktree", "add", "-q", "-b", br, p, base)

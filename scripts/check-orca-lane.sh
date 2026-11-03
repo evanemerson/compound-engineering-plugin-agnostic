@@ -64,6 +64,11 @@
 #            scalar, flow value or duplicate key refuse as unknown; a quoted scalar is
 #            read; no orca.yaml matches an empty local-only setup. rm: the
 #            same rule on scripts.archive from the main checkout's orca.yaml.
+#            PR #133 review: a BOM, a quoted top-level key, an indented
+#            document and a YAML null refuse as unknown; a local script that
+#            only JS trim keeps refuses; origin's current orca.yaml is read,
+#            not a stale local ref; a base origin lacks and a failed fetch
+#            refuse before any worktree read; a resume onto a shadow fails (exit 3).
 #   BLOCK  — §12b rule 2's lane block, extracted and run under `bash -e`:
 #            it runs `name`; shell text in a field runs nothing; with the
 #            script absent it prints the skipped line.
@@ -799,6 +804,63 @@ W.lane("r4")
 hook(hs("local-only", archive="make clean"))
 expect("HOOKS rm local-only matching archive removes", W.run(F(cli=CLI, action="rm", lane="r4")), rc=0,
        first="ORCA lane: removed r4")
+W.done()
+
+# ---- HOOKS, PR #133 review: shapes the reader must refuse, the JS trim set,
+# a stale local ref, a base origin lacks, a broken origin, and a resume.
+W = World("hooks2")
+open(os.path.join(W.main, "orca.yaml"), "w").write("scripts:\n  setup: make init\n")
+W.git("add", "orca.yaml")
+W.commit("orca.yaml")
+W.git("push", "-q", "origin", "main")
+W.git("fetch", "-q", "origin")
+for tag, lane, text in (("BOM", "k1", "\ufeffscripts:\n  setup: make init\n"),
+                        ("quoted top-level key", "k2", "\"scripts\":\n  setup: make init\n"),
+                        ("indented document", "k3", "  scripts:\n    setup: make init\n"),
+                        ("null value", "k4", "scripts:\n  setup: null\n")):
+    up = os.path.join(W.d, "up-" + lane)
+    sh("git", "clone", "-q", W.origin, up)
+    open(os.path.join(up, "orca.yaml"), "w", encoding="utf-8").write(text)
+    sh("git", "-C", up, "add", "orca.yaml")
+    W.commit(tag, cwd=up)
+    sh("git", "-C", up, "push", "-q", "origin", "HEAD:main")
+    hook(hs("local-only"))
+    expect("HOOKS orca.yaml %s refuses" % tag, W.run(F(cli=CLI, action="create", lane=lane, base="main")), rc=1,
+           first=UNK, verbs_lack=NOCREATE)
+# Restore a plain orca.yaml on origin; main's origin/main is left stale.
+up = os.path.join(W.d, "up-restore")
+sh("git", "clone", "-q", W.origin, up)
+open(os.path.join(up, "orca.yaml"), "w").write("scripts:\n  setup: make init\n")
+sh("git", "-C", up, "add", "orca.yaml")
+W.commit("restore", cwd=up)
+sh("git", "-C", up, "push", "-q", "origin", "HEAD:main")
+W.git("fetch", "-q", "origin")
+hook(hs(None, setup="\x85"))
+expect("HOOKS a local script Python would strip but JS keeps refuses",
+       W.run(F(cli=CLI, action="create", lane="k5", base="main")), rc=1,
+       first=SH + "commandSourcePolicy unset (Orca reads it as local-only", verbs_lack=NOCREATE)
+# Origin's orca.yaml changes; this checkout's origin/main does not see it.
+open(os.path.join(up, "orca.yaml"), "w").write("scripts:\n  setup: make init-v2\n")
+sh("git", "-C", up, "add", "orca.yaml")
+W.commit("setup v2", cwd=up)
+sh("git", "-C", up, "push", "-q", "origin", "HEAD:main")
+hook(hs("local-only", setup="make init"))
+expect("HOOKS checks origin's current orca.yaml, not a stale local ref",
+       W.run(F(cli=CLI, action="create", lane="k6", base="main")), rc=1,
+       first=SH + "commandSourcePolicy local-only runs the local setup script (differs)", verbs_lack=NOCREATE)
+expect("HOOKS a base origin lacks refuses", W.run(F(cli=CLI, action="create", lane="k7", base="nosuch")), rc=1,
+       first="ORCA lane: k7 unchanged — origin has no branch nosuch", verbs_lack=[["worktree", "list"], ["worktree", "create"]])
+W.git("remote", "set-url", "origin", os.path.join(W.d, "gone.git"))
+expect("HOOKS a failed fetch refuses", W.run(F(cli=CLI, action="create", lane="k8", base="main")), rc=1,
+       first="ORCA lane: k8 unchanged — git fetch of origin/main failed", verbs_lack=[["worktree", "list"], ["worktree", "create"]])
+W.git("remote", "set-url", "origin", W.origin)
+W.git("fetch", "-q", "origin")
+# A resume skipped the pre-create check: the lane's own orca.yaml is checked.
+pk = W.lane("k9", branch="chore/k9/park")
+W.git("-C", pk, "reset", "-q", "--hard", "origin/main")
+hook(hs("local-only", setup="make init"))
+expect("HOOKS a resume onto a shadow fails", W.run(F(cli=CLI, action="create", lane="k9", base="main")), rc=3,
+       first="ORCA lane failed: the lane is created and parked at " + pk + ", but Orca's saved hook settings shadow its orca.yaml")
 W.done()
 
 # ---- BLOCK

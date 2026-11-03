@@ -115,15 +115,10 @@ The contract, item by item:
 4. No `.worktreeinclude` file in the repo, and no `worktree.sharedDirectories`
    entry that holds per-branch state (`node_modules`, build output, `.env`).
    Orca never copies secret files (operator, 2026-10-31).
-5. **Orca's saved hook settings do not shadow this file.** Orca keeps a
-   per-repo `hookSettings` (Settings, the repo's hooks; read it with
-   `orca-ide repo show --repo id:<repoId> --json`). Its
-   `commandSourcePolicy` and saved local scripts can make Orca run a local
-   `setup` or `archive` instead of this file's, or none. The rule, its
-   evidence and its limits are the `H1` block in
-   `plugins/cepa/scripts/orca-lane.sh`'s header (punch-list L76).
-   `orca-lane.sh create` and `rm` refuse on a shadow. The CLI has no setter:
-   the operator fixes it in Orca's Settings.
+5. **Orca's saved hook settings do not shadow this file.** What a shadow is,
+   how to read the settings, and the evidence are the `H1` block in
+   `plugins/cepa/scripts/orca-lane.sh`'s header (punch-list L76). The
+   operator fixes a shadow in Orca's Settings.
 6. `make worktree branch=` (or any repo command that creates a worktree) is
    not named as an entry point anywhere: not in `orca.yaml`, the Makefile's
    help text, or the repo's CLAUDE.md. A repo may keep the target, but its
@@ -427,10 +422,9 @@ reaches a question, and record each strip.
    builds the same way, rebuilds on `make up BUILD=1` (`--rebuild`), and
    starts through the gate with `up -d --no-build`; a build that reads
    nothing from the lane's `.env`; no fixed `image:` on a built service;
-   one compose file builds each service; the `-wt-` project name. Also read
-   this repo's `hookSettings` with `orca-ide repo show --repo id:<repoId>
-   --json`: a saved setting that shadows `orca.yaml` (contract item 5) is a
-   gap the operator fixes in Orca's Settings. Show the gaps as a list.
+   one compose file builds each service; the `-wt-` project name; and
+   contract item 5, read with `repo show` as H1 says. Show the gaps as a
+   list.
 3. **Offer to fix the gaps** (skip this step when there are none). On the
    operator's yes, make the fix yourself on a short branch in the main
    checkout (no lane exists yet for a worker; the yes permits it). Open a PR,
