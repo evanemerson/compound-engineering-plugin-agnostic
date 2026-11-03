@@ -13,20 +13,43 @@
 # Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, HOOKS, BLOCK) has
 # at least one mutant here that only its own cases kill; the last control
 # asserts that, so a new leg that also kills an old leg's only mutant shows.
+# It reads each mutant's calibrated MISS set, not its run: every shard proves
+# its own mutants hit exactly that set, so all shards together prove the
+# ownership the sets show.
+#
+# `--shard I/N` runs only mutants I, I+N, I+2N, ... of the one list that holds
+# every script, skill and helper mutant in order (no argument means 1/1, every
+# mutant). Each shard still runs the unmutated copy and the partition control
+# first. CI runs shards 1/N to N/N as N parallel jobs, the same pattern as
+# check-orca-nudge-controls.sh (punch-list L42). Controls here fail unless
+# residual-integrity.yml runs each shard exactly once, one per job, never
+# disabled, and unless every shard of that N is non-empty; planted workflow
+# edits prove that check can fail. So a dropped job cannot silently drop
+# mutants. Cost history: 4m52s of the one hosted job's 10-minute bound on main
+# (run 41585965432); 12m06s with PR #133's HOOKS mutants (run 41588799781,
+# cancelled at the bound) — about 10.7s of hosted wall time per check run,
+# 4 at a time. The PR #133 body has the per-shard times.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case
 # list is complete.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
+shard=1/1
+if [[ $# -eq 2 && $1 == --shard ]]; then
+  shard=$2
+elif [[ $# -ne 0 ]]; then
+  echo "MISS usage: $0 [--shard I/N]"; exit 1
+fi
 
-python3 - <<'PY'
+CEPA_LANE_CONTROLS_SHARD=$shard python3 - <<'PY'
 import concurrent.futures, os, re, shutil, subprocess, sys, tempfile
 
 SCRIPT = "plugins/cepa/scripts/orca-lane.sh"
 SKILL = "plugins/cepa/skills/autonomy/SKILL.md"
 HELPER = "plugins/cepa/scripts/orca-lane-reflog.sh"
 CHECK = "scripts/check-orca-lane.sh"
+WORKFLOW = ".github/workflows/residual-integrity.yml"
 
 # (name, old, new, exact MISS case set)
 MUTANTS = [
@@ -259,6 +282,113 @@ def run_check(script, skill, helper=HELPER):
     return r.returncode, names
 
 
+jobs = [("script", m) for m in MUTANTS] + [("skill", m) for m in SKILL_MUTANTS] + \
+       [("helper", m) for m in HELPER_MUTANTS]
+spec = os.environ.get("CEPA_LANE_CONTROLS_SHARD", "1/1")
+sm = re.fullmatch(r"([1-9][0-9]?)/([1-9][0-9]?)", spec)
+if not sm or int(sm.group(1)) > int(sm.group(2)):
+    print("MISS --shard is %r, want I/N with 1 <= I <= N" % spec)
+    sys.exit(1)
+SHARD, NSHARDS = int(sm.group(1)), int(sm.group(2))
+
+
+def shard_of(i, n):
+    return i % n + 1
+
+
+# Names must be unique: each result, and each mutant's temp dir, is keyed by
+# name. Shard membership comes from the list index, not the name.
+mnames = [m[0] for _, m in jobs]
+dup = sorted({n for n in mnames if mnames.count(n) > 1})
+(ok if not dup else miss)("mutant names are unique" + ("" if not dup else ": %r" % dup[:3]))
+
+
+def shard_split(n):
+    """The mutant names each of shards 1..n runs, as a list of n lists."""
+    return [[x for i, x in enumerate(mnames) if shard_of(i, n) == s] for s in range(1, n + 1)]
+
+
+def wf_problems(wf):
+    """What is wrong with how the workflow text runs the shards; [] if sound.
+    Each `--shard I/N` run line must be the plain step form, in its own job,
+    with `if: always()` on the step, no job-level `if:`, and no
+    continue-on-error, and the lines must be 1/N..N/N, each once. Any other
+    non-comment line that names the controls script is a problem, so a block
+    scalar (`run: |`) or a quoted form fails closed instead of being skipped."""
+    probs, specs = [], []
+    body = wf.split("\njobs:\n", 1)[-1]
+    for job in re.split(r"(?m)^  (?=[A-Za-z0-9_-]+:[ \t]*$)", body)[1:]:
+        jname, lines = job.split(":", 1)[0], job.splitlines()
+        hits = []
+        for k, line in enumerate(lines):
+            if "check-orca-lane-controls.sh" not in line or line.lstrip().startswith("#"):
+                continue
+            m = re.fullmatch(r"        run: bash scripts/check-orca-lane-controls\.sh --shard (\S+)", line)
+            if not m:
+                probs.append("%s: unrecognized line %r" % (jname, line.strip()))
+                continue
+            hits.append(m.group(1))
+            step = k
+            while step > 0 and not lines[step].startswith("      - "):
+                step -= 1
+            if "        if: always()" not in lines[step:k]:
+                probs.append("%s: the --shard %s step has no `if: always()`" % (jname, m.group(1)))
+        if not hits:
+            continue
+        specs += hits
+        if len(hits) > 1:
+            probs.append("%s: runs %d shards in one job" % (jname, len(hits)))
+        if any(re.match(r"    if:", l) for l in lines):
+            probs.append("%s: job-level `if:`" % jname)
+        if any(re.match(r"\s+continue-on-error:", l) for l in lines):
+            probs.append("%s: continue-on-error" % jname)
+    want = ["%d/%d" % (i, len(specs)) for i in range(1, len(specs) + 1)]
+    if not specs or sorted(specs) != sorted(want):
+        probs.append("shards %r, want each of %r once" % (specs, want))
+    return probs, len(specs)
+
+
+# Without this, a deleted, disabled or merged CI job silently drops 1/N of the
+# mutants while every remaining job stays green.
+wf = open(WORKFLOW, encoding="utf-8").read()
+probs, want_n = wf_problems(wf)
+(ok if not probs else miss)("%s runs shards 1/%d to %d/%d, one per job, each once%s"
+                            % (WORKFLOW, want_n, want_n, want_n, "" if not probs else ": " + "; ".join(probs)))
+# The shards of that N and of this run's N each partition the mutants, and no
+# shard is empty: an empty shard passes on its baseline alone.
+for n in sorted({want_n or 1, NSHARDS}):
+    parts = shard_split(n)
+    (ok if sorted(sum(parts, [])) == sorted(mnames) and all(parts) else miss)(
+        "shards of N=%d partition the %d mutants, none empty: sizes %r" % (n, len(mnames), [len(x) for x in parts]))
+# Planted workflow edits, checked in process: each must make wf_problems red.
+J2, J4 = "\n  orca-lane-2:\n", "\n  orca-lane-4:\n"
+R4 = "        run: bash scripts/check-orca-lane-controls.sh --shard 4/4\n"
+WF_PLANTS = [
+    ("two shards in one job", J2, "\n"),
+    ("job-level if: false", J4, J4 + "    if: false\n"),
+    ("continue-on-error on a job", J4, J4 + "    continue-on-error: true\n"),
+    # From the shard 4 job header to the next job header, so the job goes
+    # and every other job stays.
+    ("shard 4 job deleted", (lambda a: wf[a:a + len(J4) + re.search(
+        r"(?m)^  (?=[A-Za-z0-9_-]+:[ \t]*$)|\Z", wf[a + len(J4):]).start()] if a >= 0 else J4)(wf.find(J4)), "\n"),
+    ("shard 4 run line commented out", R4, "        # run: bash scripts/check-orca-lane-controls.sh --shard 4/4\n"),
+    ("shard 4 run line in a block scalar", R4,
+     "        run: |\n          bash scripts/check-orca-lane-controls.sh --shard 4/4\n"),
+    ("shard 4 run line with || true", R4, R4[:-1] + " || true\n"),
+    ("a quoted mention beside the shard 4 run line", R4,
+     R4 + "      - run: echo bash scripts/check-orca-lane-controls.sh --shard 4/4\n"),
+    ("shard 2 step without if: always()",
+     "        if: always()\n        run: bash scripts/check-orca-lane-controls.sh --shard 2/4\n",
+     "        run: bash scripts/check-orca-lane-controls.sh --shard 2/4\n"),
+]
+for label, old, new in WF_PLANTS:
+    if wf.count(old) != 1:
+        miss("workflow plant %r: anchor found %d times, want 1" % (label, wf.count(old)))
+    else:
+        (ok if wf_problems(wf.replace(old, new))[0] else miss)("workflow plant goes red: %s" % label)
+
+# Every shard runs the unmutated copy first: a red mutant proves nothing in a
+# job whose own baseline is not clean.
 tmp = tempfile.mkdtemp(prefix="cepa-lane-controls-")
 rc, names = run_check(SCRIPT, SKILL)
 (ok if rc == 0 and not names else miss)("unmutated copy passes the check" + ("" if not names else ": %s" % sorted(names)))
@@ -280,12 +410,9 @@ def one(kind, m):
     return name, got, None if rc else "check stayed green", want
 
 
-jobs = [("script", m) for m in MUTANTS] + [("skill", m) for m in SKILL_MUTANTS] + \
-       [("helper", m) for m in HELPER_MUTANTS]
-results = {}
+mine = [j for i, j in enumerate(jobs) if shard_of(i, NSHARDS) == SHARD]
 with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as ex:
-    for name, got, why, want in ex.map(lambda j: one(*j), jobs):
-        results[name] = got
+    for name, got, why, want in ex.map(lambda j: one(*j), mine):
         if why:
             miss("%s: %s" % (name, why))
         elif got != want:
@@ -293,12 +420,16 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as e
         else:
             ok(name)
 
-# Each leg has a mutant that only its own cases kill.
+# Each leg has a mutant that only its own cases kill. Every shard reads the
+# calibrated sets of all mutants, so it runs the same in every shard; the run
+# above proves this shard's mutants hit exactly their sets.
+wants = {m[0]: (m[3] if m[3] is not None else EXPECT.get(m[0])) for _, m in jobs}
 for leg in LEGS:
-    own = [n for n, got in results.items() if got and all(c.startswith(leg + " ") for c in got)]
+    own = [n for n, want in wants.items() if want and all(c.startswith(leg + " ") for c in want)]
     (ok if own else miss)("leg %s has a mutant only its cases kill" % leg)
 
 shutil.rmtree(tmp, ignore_errors=True)
-print("-- %d/%d controls passed --" % (passed, passed + failed))
+print("-- shard %d/%d: %d of %d mutants; %d/%d controls passed --"
+      % (SHARD, NSHARDS, len(mine), len(jobs), passed, passed + failed))
 sys.exit(1 if failed else 0)
 PY
