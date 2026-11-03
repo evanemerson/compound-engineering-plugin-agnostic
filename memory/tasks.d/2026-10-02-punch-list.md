@@ -1978,6 +1978,27 @@ L63. **Each repo adopts L61 + L62 (hand-off to each repo's coord@main).**
     taussig, wright: keep names), helm 3, kcprimetime 2; dpc-pro-docs has no
     `orca.yaml`; kcprimetime #30 and farmtender #79 unmerged. farmtender
     keeps its no-stack setup.
+    SURVEY 2026-11-02 (coord@main; read from `orca-ide worktree list/ps`
+    and GitHub only, no other repo's directory touched):
+    - Rebuild after each repo's setup fix merges (no Docker repo's base
+      calls `stack-gate.sh` yet: Makefile on base + `gh search code`):
+      dpc-pro@dev apgar bath cori levi taussig wright (dpc-pro's L100, in
+      progress); artist360@dev cake jolene lambchop lucero sonvolt
+      waxahatchee; helm lane1-3; contexthub cassidy lorena (Orca-made, but
+      setup ran ungated).
+    - Non-Docker: kcprimetime lane-a lane-b (old-style, recreate);
+      dpc-pro-docs billing comms patients setup (add `orca.yaml` first;
+      rebuild only if its setup installs something). Keep artist360-docs
+      and compound-engineering lanes. No lanes: ci-ops-self-hosted,
+      dpc-insider-www, dpc-pro-www, hillberry-app, youtube, video-producer,
+      dpc-pro-marketing, farmtender.
+    - Notes: kcprimetime #30 MERGED 2026-11-01. farmtender #79 not found
+      on GitHub (`evanemerson/farmtender` is empty; local remote not read).
+    - OPERATOR DECISION 2026-11-02: recreate nothing until L70 #1 merges;
+      then fix the first-prompt template (L71) and send each repo's
+      coord@main its filled prompt via `coord:<repo>`. Order: dpc-pro,
+      kcprimetime, then contexthub / helm / artist360 one repo at a time,
+      then dpc-pro-docs. dpc-pro told to hold (`msg_90d984b3fe22`).
 
 L64. **Shared `worktree-init` code with a small per-repo config (later).**
     status: deferred
@@ -2038,6 +2059,23 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     2 (P2) setup holds the lock through migrations; 3 (P2) `up -d
     --no-build` still pulls images and waits on health under the lock;
     4 (P3) a lock-holder file so "lock busy" names the holder.
+    Item 1 IN FLIGHT 2026-11-02: operator chose A + C (one build at a time
+    under a separate build lock; skip the build when the lane's images
+    exist; explicit rebuild flag). tab35@roles, task `task_9518f22cafb9`,
+    dispatch `ctx_79f625f2566f`, branch `fix/roles/bounded-builds`.
+
+L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
+    status: pending
+    severity: P2
+    owner: unassigned (one small cepa PR, before the L63 prompts go out)
+    Found in the L63 survey 2026-11-02: (a) step 1 must create a Run named
+    `<repo> coord@main` when the named Run's objective does not start that
+    way (§12b rule 2), or `coord:<repo>` cannot reach it — this session hit
+    it (old Run "cepa coord@main"); (b) step 5 "lanes Orca cannot use"
+    misses Orca-made lanes whose setup ran before the fix merged
+    (contexthub cassidy, lorena): say "every lane whose setup ran before
+    the fix merged"; (c) drop the stale kcprimetime #30 / farmtender #79
+    notes wherever they are restated.
 
 ---
 
