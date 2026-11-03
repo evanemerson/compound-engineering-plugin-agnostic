@@ -2177,6 +2177,12 @@ L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not
     artist360-docs) vs orca.yaml's `wait-for-setup` — which wins.
     Fix (operator: "File + start now"): `orca-lane.sh create` and the
     first prompt's step 2 read hookSettings and refuse / warn on a shadow.
+    kcprimetime re-check DONE 2026-11-03 (msg_eafb874e9649): sprinter and
+    suburban ran `.git/worktrees/<lane>/orca/setup-runner.sh` = `set -e; npm
+    install` (the local script), not orca.yaml's; package-lock.json
+    unchanged, no worker had started, no rebuild. Operator clears local-only
+    in Orca Settings. Orca's generated setup-runner.sh is ground truth for
+    which setup ran (passed to tab1@optimization, msg_976d201f9a98).
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
