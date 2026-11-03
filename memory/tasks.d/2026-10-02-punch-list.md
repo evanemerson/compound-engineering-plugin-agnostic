@@ -2261,7 +2261,8 @@ coord@main (artist360, dpc-pro, helm, kcprimetime, contexthub,
 dpc-pro-docs, compound-engineering). artist360-docs is PENDING: its Runs are
 named `artist360-docs Wave N: ...`, with no `coord@main`; Orca has no
 rename, so it must `run-create --objective "artist360-docs coord@main"`
-(sent to term_154d488c, msg_57834872b936). Live round trip to
+(sent to term_154d488c, msg_57834872b936; DONE msg_c791643497fd: new Run
+run_6ff162481104, resolver now SENDs, 8/8). Live round trip to
 coord:compound-engineering: send stored msg_279ec2587061, `check --full`
 gave delivery_e9e22fa86b6c, ack emptied the inbox. All outboxes: 0 pending.
 contexthub now shows lane navigator in Orca (no report yet). Orca's own
