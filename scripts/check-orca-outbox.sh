@@ -314,6 +314,9 @@ resolve("a bad cursor is unreadable", state(mode=["runlist_badcursor"]), 6, "out
         want_line="the Run list could not be read")
 resolve("a failed run-list is unreadable", state(mode=["runlist_fail"]), 6, "outbox_unreadable",
         want_line="the Run list could not be read")
+# L72: Orca 1.4.246's run-list rows without --full hold no coordinator_handle.
+resolve("a run-list in the 1.4.246 short shape is unreadable", state(mode=["short"]), 6, "outbox_unreadable",
+        want_line="has a shape this reader does not know")
 resolve("a truncated terminal list is unreadable", state(mode=["tlist_trunc"]), 6, "outbox_unreadable")
 resolve("a failed worktree ps is unreadable", state(mode=["ps_fail"]), 6, "outbox_unreadable")
 UNC_DOT = "\\\\wsl.localhost\\U\\home\\x\\webapps\\dpc.pro"

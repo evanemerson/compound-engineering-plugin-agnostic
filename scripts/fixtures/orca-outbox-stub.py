@@ -9,7 +9,17 @@
 # result.{worktrees[{path (UNC), isMainWorktree, agents[{paneKey, state,
 # hasLivePty?}]}], truncated}. Env: STUB_STATE, STUB_LOG. Fault switches are
 # the state's "mode" list. Never reaches a real Orca.
-import json, os, sys
+#
+# L72: Orca 1.4.246 prints an orchestration read in a concise view unless the
+# call carries `--full`. So does this stub: an ok answer to such a read
+# without `--full` goes through orca-short-shape.py, beside this file. Inbox
+# rows carry `thread_id` and `created_at`, as a full 1.4.246 row does. Mode
+# "short" answers in the short shape even with `--full`.
+import importlib.util, json, os, sys
+_ss = importlib.util.spec_from_file_location(
+    "orca_short_shape", os.path.join(os.path.dirname(os.path.abspath(__file__)), "orca-short-shape.py"))
+_ssm = importlib.util.module_from_spec(_ss)
+_ss.loader.exec_module(_ssm)
 
 ST, LOG = os.environ["STUB_STATE"], os.environ["STUB_LOG"]
 argv = sys.argv[1:]
@@ -25,7 +35,10 @@ def opt(name):
 
 def out(obj, rc=0):
     json.dump(st, open(ST, "w"))
-    print(json.dumps(obj))
+    text = json.dumps(obj)
+    if argv[:1] == ["orchestration"] and ("--full" not in argv or "short" in MODE):
+        text = _ssm.short(argv[1] if len(argv) > 1 else "", text)
+    print(text)
     sys.exit(rc)
 
 
@@ -60,7 +73,8 @@ if verb == "orchestration send":
     to = opt("--to")
     n = len(st.setdefault("sent", [])) + 1
     m = {"id": "msg_%012x" % (0xabc000 + n), "to_handle": st.get("store_to", to), "from_handle": "term_" + "1" * 36,
-         "type": opt("--type"), "subject": opt("--subject"), "body": opt("--body")}
+         "type": opt("--type"), "subject": opt("--subject"), "body": opt("--body"),
+         "thread_id": None, "created_at": "2026-11-02 01:00:00"}
     st["sent"].append(m)
     out({"id": "x", "ok": True, "result": {"message": m}})
 if verb == "orchestration inbox":

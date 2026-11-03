@@ -75,6 +75,20 @@
 #   4  `ORCA rebind refused: <reason>` — a field or the environment failed
 #      its check. No Orca call was made.
 #
+# ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
+# 2026-11-02, read only, each read with and without `--full`. Without it,
+# every `orchestration` read prints a concise view: `run-list` rows hold only
+# `id` and `objective`; `run-show` holds `runId`, `objective`, `removedWork`
+# (no `run` object); `run-current` holds `runId`, `objective`; `worker-list`
+# rows have no `projection`; `worker-show` has no `dispatch`, `worker` or
+# `projection`; `inbox` rows name `from`/`to` (not `from_handle`/`to_handle`),
+# cut the body to 200 chars, and carry no `thread_id` or `created_at`. With
+# `--full` each prints the record this script reads. So every orchestration
+# read here passes `--json --full`, and a reply in the short shape reads as
+# a failed read (exit 3). `terminal`, `worktree` and `repo` reads have no `--full` flag
+# on 1.4.246 and still print the full record. Whether an older Orca (1.4.245
+# or before) accepts `--full` was not measured: none was at hand to run.
+#
 # Measured on Orca 1.4.245 (WSL), 2026-11-01: `run-use --help`, `run-current
 # --help`, `run-show --json` (result.run.{id, objective, coordinator_handle,
 # consumer_generation, legacy, created_at, updated_at}: no repo or worktree
@@ -220,7 +234,7 @@ print(i, h, g)
 ' "$@" 2>/dev/null
 }
 
-cepa_rb_orca "$cepa_rb_tmp/cur.json" 1 orchestration run-current --json || failed "run-current failed"
+cepa_rb_orca "$cepa_rb_tmp/cur.json" 1 orchestration run-current --json --full || failed "run-current failed"
 cepa_rb_cur=$(cepa_rb_read_run "$cepa_rb_tmp/cur.json") || failed "run-current returned a shape this reader does not know"
 cepa_rb_cur_id=${cepa_rb_cur% *} cepa_rb_cur_h=${cepa_rb_cur#* }
 [ -n "$cepa_rb_cur" ] || cepa_rb_cur_id= cepa_rb_cur_h=
@@ -247,7 +261,7 @@ if [ "$cepa_rb_cur_id" != "$cepa_rb_run" ] && [ "$cepa_rb_confirm" != "$cepa_rb_
     "say whether this session coordinates $cepa_rb_run (then it runs the re-bind again with a confirm: $cepa_rb_run line)"
 fi
 # The named Run's holder and generation, from run-show (exact by id).
-cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json \
+cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
   || failed "run-show for $cepa_rb_run failed"
 cepa_rb_shown=$(cepa_rb_read_run "$cepa_rb_tmp/show.json" gen) \
   || failed "run-show returned a shape this reader does not know"
@@ -284,7 +298,7 @@ case "$cepa_rb_live" in
 esac
 # The Run must not have moved while terminal list ran: another session that
 # re-bound it in that window is live now, and is never taken.
-cepa_rb_orca "$cepa_rb_tmp/recheck.json" 1 orchestration run-show --id "$cepa_rb_run" --json \
+cepa_rb_orca "$cepa_rb_tmp/recheck.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
   || failed "run-show for $cepa_rb_run failed on the recheck before run-use; nothing was changed"
 cepa_rb_recheck=$(cepa_rb_read_run "$cepa_rb_tmp/recheck.json" gen) \
   || failed "run-show returned a shape this reader does not know on the recheck before run-use; nothing was changed"
@@ -297,7 +311,7 @@ cepa_rb_use=0
 cepa_rb_orca "$cepa_rb_tmp/use.json" 0 orchestration run-use --id "$cepa_rb_run" --json || cepa_rb_use=$?
 # The proof is run-show: it reads the Run by id and names its holder and
 # generation.
-cepa_rb_orca "$cepa_rb_tmp/after-show.json" 1 orchestration run-show --id "$cepa_rb_run" --json \
+cepa_rb_orca "$cepa_rb_tmp/after-show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
   || failed "run-use ran (exit $cepa_rb_use) but the re-read of run-show failed, so whether one re-bind or two moved the Run is unproven"
 cepa_rb_gen_after=$(cepa_rb_read_run "$cepa_rb_tmp/after-show.json" gen) \
   || failed "run-use ran (exit $cepa_rb_use) but run-show then returned a shape this reader does not know"
