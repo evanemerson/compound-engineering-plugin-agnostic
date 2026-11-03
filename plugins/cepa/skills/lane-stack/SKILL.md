@@ -24,12 +24,11 @@ start target, the worktree properties, and the coord@main first prompt.
 - The `/cepa:setup` check of this scheme is punch-list L67. Until it ships,
   a coord@main checks its repo by reading this skill (first prompt, step 2).
 
-**Status (2026-11-02): no repo adopts this scheme before `stack-gate.sh`
-ships (L66).** Until then every gated start refuses with
-`STACK gate: not found`, by design. The coord@main first prompt checks for
-the gate before it changes anything. Its outbox step needs the
-`coord:<repo>` outbox (L61); until that ships, step 1 is the re-bind and
-the inbox peek only.
+**Status (2026-11-02): the gate (L66, 1.53.0), the `coord:<repo>` outbox
+(L61, 1.54.0) and the build lock (L70, 1.55.0) have shipped.** A loaded
+plugin older than one of these fails the first prompt's step 0 or step 1:
+refresh it first (`scripts/check-plugin-freshness.sh`). Without the gate
+every gated start refuses with `STACK gate: not found`, by design.
 
 ## Rules at a glance
 
@@ -382,11 +381,12 @@ open and reviewed, stop the stack (`compose stop`; keep volumes).
 
 ## The coord@main first prompt
 
-The operator pastes this after a repo's `/cepa:handoff` block, to start a
-new coord@main and bring its repo to this scheme (design "Piece 2"). Fill
-the three blanks: `<session name>`, `<lane names>`, `<lane count>`. The
-first fill was dpc-pro: `coord@main`, 6 lanes, keep the names apgar, bath,
-cori, levi, taussig, wright.
+cepa's coord@main sends this, filled, to a repo's coord@main through
+`coord:<repo>` (§12b rule 1), or the operator pastes it after that repo's
+`/cepa:handoff` block, to bring the repo to this scheme (design
+"Piece 2"). Fill the blanks: `<session name>`, `<repo>`, `<lane count>`,
+`<lane names>`. The first fill was dpc-pro: `coord@main`, 6 lanes, keep
+the names apgar, bath, cori, levi, taussig, wright.
 
 ````markdown
 You are <session name>.
@@ -402,18 +402,23 @@ reaches a question, and record each strip.
 0. **Check the gate exists.** Resolve `stack-gate.sh` (skill
    `cepa:lane-stack`, "The stack gate"). In a Docker repo, when it is not
    found, stop and report "L66 has not shipped": change nothing.
-1. **Re-bind and drain.** Run §12b rule 2's re-bind block, then rule 8's
-   inbox peek. When §12b defines the `coord:<repo>` outbox drain (L61),
-   also show every pending outbox message for this repo, oldest first, and
-   wait for the operator. Act on none of them until told.
+1. **Re-bind, name the Run, and drain.** Run §12b rule 2's re-bind block.
+   Then read the named Run's objective with `run-show`: when it does not
+   start with `<repo> coord@main`, create the Run rule 2 names
+   (`run-create`), or `coord:<repo>` cannot reach this session. Then run
+   rule 8's inbox peek and its outbox drain, show every message they
+   print, and wait for the operator. Act on none of them until told.
 2. **Check the repo against the scheme.** Read `orca.yaml` and, for a Docker
    repo, `worktree-init` and every Makefile target that runs `compose up`,
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
-   `orca.yaml` contract, setup builds outside the gate and then calls it,
-   setup stops its stack, a gated `make up` that builds with
-   `stack-gate.sh --build` (`--rebuild` on `BUILD=1`) before the gate and
-   starts with `--no-build`, a build that reads nothing from the lane's
-   `.env`, no fixed `image:` on a built service, the `-wt-` project name. Show the gaps as a list.
+   `orca.yaml` contract; setup builds with `stack-gate.sh --build` (one
+   build at a time, skipped when the images exist), outside the gate, and
+   then calls the gate; setup stops its stack; a gated `make up` that
+   builds the same way, rebuilds on `make up BUILD=1` (`--rebuild`), and
+   starts through the gate with `up -d --no-build`; a build that reads
+   nothing from the lane's `.env`; no fixed `image:` on a built service;
+   one compose file builds each service; the `-wt-` project name. Show the
+   gaps as a list.
 3. **Offer to fix the gaps** (skip this step when there are none). On the
    operator's yes, make the fix yourself on a short branch in the main
    checkout (no lane exists yet for a worker; the yes permits it). Open a PR,
@@ -425,9 +430,11 @@ reaches a question, and record each strip.
    gate and that the lane's stack is stopped after setup. On
    `STACK gate: refused`, follow "When the gate refuses", then
    `orca-lane.sh rm` and `create` that lane. Never re-run setup by hand.
-5. **Rebuild old lanes.** List the lanes Orca cannot use. For each one,
-   check for uncommitted work and unmerged branches, and ask the operator.
-   On yes, rebuild it under the SAME name: `orca-lane.sh rm` first, then
+5. **Rebuild old lanes.** List every lane whose setup ran before the
+   repo met the scheme (before the step-3 fix merged): lanes Orca cannot
+   use, AND Orca-made lanes (under `~/orca/workspaces/<repo>/`) whose
+   setup ran then. For each one, check for uncommitted work and unmerged
+   branches, and ask the operator. On yes, rebuild it under the SAME name: `orca-lane.sh rm` first, then
    `create` (removing first avoids Orca's duplicate-name suffix), then
    check its `Setup` tab as in step 4. The same name keeps the same
    project, so setup reuses the old images when they still exist: when the
