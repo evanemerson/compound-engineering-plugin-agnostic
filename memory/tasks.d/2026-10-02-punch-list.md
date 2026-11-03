@@ -1965,7 +1965,13 @@ L67. **`/cepa:setup` check for the lane & stack scheme (PR B2, after launch).**
     Scope per "Plan-review decisions" #20.
 
 L63. **Each repo adopts L61 + L62 (hand-off to each repo's coord@main).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-03 — all 8 repos on the scheme (farmtender excluded by
+    the operator). Last report: contexthub msg_285166ac1f8b (PRs
+    contexthub#102 fd8c594, #103 8446b0d; navigator, curator, translator
+    parked 8446b0d, each Setup tab gate ok + migrate + stopped; cassidy,
+    lorena removed on the operator's yes; verified in Orca's worktree list
+    2026-11-03). Follow-ups: L77, L78, L79.
     severity: P2
     owner: coord@main (hand-offs only; each repo's coord@main does the work)
     UNBLOCKED 2026-11-02 (1.54.0). dpc-pro told via `coord:dpc-pro`
@@ -2233,6 +2239,10 @@ L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f79
        is on `dev`, so after a dev-only orca.yaml change rm refuses until
        dev deploys to main. Same class as item 1: compare with the branch
        the main checkout tracks (the resolved trunk), not the default.
+    6. (contexthub, msg_285166ac1f8b) A pre-scheme lane's checkout lacks the
+       worktree-clean target, so the archive hook exits 2 and rm keeps the
+       lane. Work-around used: re-park the clean lane at origin/<base>, then
+       rm passes. Fix: the Ending line names that step.
 
 L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).**
     status: pending
@@ -2251,6 +2261,11 @@ L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).*
     2. The Setup tab appeared up to ~2 min after `orca-lane.sh create`
        returned (porch). The lane-stack "read the Setup tab" step must wait
        for it, not read it at once.
+    3. contexthub (msg_285166ac1f8b, contexthub#103) hit item 1's class with
+       `compose run` under `timeout` in setup: TTY setup stopped it until the
+       300 s kill. Fix there: `-T </dev/null`. Its probe: in a pty,
+       `timeout 4 stty raw` rc=124; with `</dev/null` rc=1. So the contract
+       rule is: under `timeout` in setup, `--foreground` or `-T </dev/null`.
 
 L79. **`orca-lane.sh create`: Orca's `runtime_timeout` is not a failed create; the re-run advice makes a duplicate lane.**
     status: pending
