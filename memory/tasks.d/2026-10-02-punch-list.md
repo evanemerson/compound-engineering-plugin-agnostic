@@ -2252,6 +2252,27 @@ L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).*
        returned (porch). The lane-stack "read the Setup tab" step must wait
        for it, not read it at once.
 
+L79. **`orca-lane.sh create`: Orca's `runtime_timeout` is not a failed create; the re-run advice makes a duplicate lane.**
+    status: pending
+    severity: P1
+    owner: unassigned
+    contexthub (msg_24a69bb1b3f8, cepa 1.55.4, Orca 1.4.246): `create
+    navigator` printed `worktree create failed (runtime_timeout)`; Orca's
+    list showed no lane right after, so per rule 2 it re-ran create, which
+    failed the same way. Minutes later Orca had finished BOTH: `navigator`
+    (on chore/navigator/park, steps 3-6 never ran) and `navigator-2` (on
+    park-2, sidebar name also "navigator"); both setups ran. Cleanup
+    needed a manual display-name change, an rm that first refused
+    (`worktree ps` briefly listed no contexthub rows; second try passed),
+    a hand `branch -D` of park-2 (Orca kept it), then a create re-run that
+    resumed and parked navigator. `runtime_timeout` is Orca's own error
+    (orca-lane.sh l.729 prints it from the JSON), so Orca keeps creating
+    after the CLI gives up. Fix: on runtime_timeout (or no JSON / killed by
+    the 180 s bound) poll `worktree list` for the lane for a bounded time,
+    resume steps 3-6 if it appears, and replace "run again as is" with
+    "re-check Orca's list; do not re-run create" until the poll ends.
+    Related: L77 (rm), L78 (Setup tab appears late).
+
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
@@ -2282,7 +2303,9 @@ Orca's list). artist360 DONE (msg_452caa830403; PRs artist360#851, #852,
 #853; prod = main = 1e6c1643; cake lucero sonvolt rebuilt, ozomatli porch
 neko new, all under ~/orca/workspaces/artist360/, setup gate ok + stopped;
 jolene lambchop waxahatchee removed; verified in Orca's worktree list
-2026-11-03, 6 lanes detached). Open: contexthub.
+2026-11-03, 6 lanes detached). Open: contexthub (2026-11-03: PRs contexthub#102, #103 merged;
+navigator parked 8446b0d, setup passed; curator listed in Orca; translator
+next; cassidy, lorena still present; L79 filed from its report).
 AUDIT 2026-11-03 14:35 UTC (Orca 1.4.246, cepa 1.55.4, main CI green):
 the coord resolver, dry-run on live reads, resolves 7/8 repos to their live
 coord@main (artist360, dpc-pro, helm, kcprimetime, contexthub,
