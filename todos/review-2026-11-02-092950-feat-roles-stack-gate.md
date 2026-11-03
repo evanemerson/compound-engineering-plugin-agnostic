@@ -193,7 +193,7 @@ The first start's command touches a sentinel; outside holders print `ready`
 under flock and the harness reads it. A timed-out run becomes a MISS.
 
 ### 7
-- status: deferred
+- status: applied
 - severity: P2
 - agent: reliability-reviewer, adversarial-reviewer
 - category: Lock scope
@@ -214,6 +214,9 @@ the stack is started: `up -d`, `start`, `restart`; never attached), and a
 waiting start prints one line. Deferred (design choice): build outside the
 gate, a holder file naming who holds the lock, or a separate exit code for
 "lock busy". Residual in `memory/tasks.d/2026-11-02-feat-roles-stack-gate.md`.
+Applied later by L68 (fix/roles/gate-build-outside-lock): the lane-stack
+skill builds outside the gate and gates only `up -d --no-build`; the gate
+header says the command is the start only.
 
 ### 8
 - status: applied

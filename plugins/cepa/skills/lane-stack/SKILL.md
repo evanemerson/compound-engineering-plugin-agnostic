@@ -1,6 +1,6 @@
 ---
 name: lane-stack
-description: The shared lane and stack scheme for every repo cepa coordinates under Orca — lanes made with orca-lane.sh, the orca.yaml contract, setup that calls the stack gate first and stops its stack at the end, one gated `make up` start target, the worktree properties updated for Orca, and the paste-ready first prompt for a new coord@main. Read by coord@main when it brings a repo onto the scheme.
+description: The shared lane and stack scheme for every repo cepa coordinates under Orca — lanes made with orca-lane.sh, the orca.yaml contract, setup that builds outside the stack gate, then calls it and stops its stack at the end, one gated `make up` start target, the worktree properties updated for Orca, and the paste-ready first prompt for a new coord@main. Read by coord@main when it brings a repo onto the scheme.
 ---
 
 # Lane & stack scheme
@@ -38,8 +38,9 @@ the inbox peek only.
 2. **A lane is made only by `orca-lane.sh create`** (coord@main, §12b
    rule 2). Never `git worktree add` by hand while Orca is present, and never
    a repo target that names the directory after a branch.
-3. **Setup calls the gate first, before it writes anything,** and runs the
-   whole stack init under the gate.
+3. **Setup builds outside the gate, then calls the gate before it writes
+   any lane file,** and runs the rest of the stack init under the gate. The
+   gate's lock covers the start, never a build (L68).
 4. **Setup ends by stopping its stack** (`compose stop`; volumes kept).
 5. **Every worktree stack start goes through the gate.** Each Docker repo
    has one gated start target, `make up`. A worker runs it before any target
@@ -84,8 +85,9 @@ A Docker repo's `orca.yaml`:
 
 ```yaml
 scripts:
-  # Calls the stack gate first, then initializes this lane's own stack
-  # under the gate's lock, then stops it. See "Setup" in cepa's lane-stack skill.
+  # Builds this lane's images outside the gate, then calls the stack gate and
+  # initializes this lane's own stack under the gate's lock, then stops it.
+  # See "Setup" in cepa's lane-stack skill.
   setup: env -u COMPOSE_PROJECT_NAME make worktree-init
   # Removes this lane's own stack and volumes. Refuses in the main checkout.
   archive: make worktree-clean
@@ -131,6 +133,14 @@ The contract a caller relies on (design "Builder-check answers" 6 and
   `key=value` lines, read and never sourced.
 - **The gate runs the start command itself, under its lock.** Two starts
   cannot both pass on the same count.
+- **The start command is the start only, never a build:** `compose up -d
+  --no-build`, `start` or `restart`. The gate holds one machine-wide lock
+  until the command returns. A cold build takes 5-8 minutes per lane, so
+  under the lock it makes every other lane's start wait, and at fleet launch
+  a third lane waits past `lock_wait_seconds` and is refused as "lock busy"
+  while capacity is free (L68). Build first, outside the gate:
+  `compose build` takes no lock and starts nothing. Pass `--no-build`,
+  because a plain `compose up -d` builds any image that is missing.
 - **Output:** one line, `STACK gate: ok — …` or `STACK gate: refused — …`.
 - **Exit:** `3` refused (the start command did not run); `2` usage; any
   other code is the start command's own exit code.
@@ -154,17 +164,24 @@ In order:
 1. **Prove the identity, read-only.** This is a linked worktree, not the
    main checkout (property 4). Derive the lane's `-wt-` project name
    (property 7). Write nothing yet.
-2. **Call the gate first** with that project name, and pass the rest of the
+2. **Build the lane's images, outside the gate:**
+   `COMPOSE_PROJECT_NAME="$PROJECT" compose build`. A build takes no lock,
+   starts no container and writes no lane file, so it does not need the
+   gate (see "The stack gate": the lock covers the start only). Use the
+   lane's own project name: images are tagged per project (property 10),
+   and the start in step 4 builds nothing, so it finds only images built
+   under that name. A failed build ends setup at once, with nothing started.
+3. **Call the gate** with that project name, and pass the rest of the
    init as its start command, for example
    `stack-gate.sh "$PROJECT" -- make worktree-init-stack`. The gate holds its
    lock while the init runs. On exit 3, setup fails at once, having written
-   nothing.
-3. **Under the gate:** set a trap that runs `compose stop` on ANY exit,
+   no lane file.
+4. **Under the gate:** set a trap that runs `compose stop` on ANY exit,
    so a setup that fails part-way still stops its stack. Then write this
    lane's `.env`, read back the isolation values from Compose's resolved
-   config (property 3), start the services that tests need, and run
-   migrations.
-4. **Stop the stack:** `compose stop` (the trap). Containers and volumes
+   config (property 3), start the services that tests need with
+   `compose up -d --no-build`, and run migrations.
+5. **Stop the stack:** `compose stop` (the trap). Containers and volumes
    stay. The lane is now warm but costs no RAM.
 
 A service that must keep running after setup is an exception the repo names
@@ -175,8 +192,9 @@ no setup result, so coord@main reads the lane's `Setup` tab (§12b rule 2).
 It sees `STACK gate: refused`, asks the stop question (below), and then runs
 `orca-lane.sh rm` and `create` for that lane. It never re-runs setup by hand.
 
-**When setup fails for another reason** (a migration, a build): the trap
-has stopped the stack. coord@main confirms no container of that lane's
+**When setup fails for another reason** (a build, a migration): a failed
+build started nothing, and after a failed migration the trap has stopped the
+stack. coord@main confirms no container of that lane's
 project is running (the probe under "The gated start target"), reports the
 Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 `create` for that lane after the cause is fixed.
@@ -184,14 +202,17 @@ Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 ## The gated start target: `make up`
 
 Each Docker repo has one start target that a lane uses, `make up`. In a
-lane it starts the stack only through the gate. In the main checkout it
+lane it builds first, outside the gate (no lock), and then starts the stack
+only through the gate, with `up -d --no-build` (see "The stack gate": a
+build under the lock blocks every other lane's start). In the main checkout it
 runs as before: the main stack has no `-wt-` name, and the gate does not
 count it.
 
 ```make
-# In a lane: start through cepa's stack gate (lane-stack skill). In the main
-# checkout: start directly. Default-deny: an unknown identity, a project name
-# without -wt-, or a missing gate each refuse, and nothing starts.
+# In a lane: build outside the gate, then start through cepa's stack gate
+# with --no-build (lane-stack skill). In the main checkout: start directly.
+# Default-deny: an unknown identity, a project name without -wt-, a missing
+# gate, or a failed build each refuse, and nothing starts.
 up: worktree-guard
 	@GD=$$(git rev-parse --absolute-git-dir) && \
 	  CD=$$(git rev-parse --path-format=absolute --git-common-dir) && \
@@ -209,7 +230,9 @@ up: worktree-guard
 	  done; \
 	  [ -n "$$CEPA_ROOT" ] && [ -f "$$CEPA_ROOT/scripts/stack-gate.sh" ] || { \
 	    echo "STACK gate: not found — this lane's stack was not started (set CEPA_PLUGIN_ROOT)"; exit 1; }; \
-	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d; \
+	  $(DEV_COMPOSE) build || { \
+	    echo "STACK build: failed — this lane's stack was not started"; exit 1; }; \
+	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --no-build; \
 	fi
 ```
 
@@ -334,8 +357,9 @@ reaches a question, and record each strip.
 2. **Check the repo against the scheme.** Read `orca.yaml` and, for a Docker
    repo, `worktree-init` and every Makefile target that runs `compose up`,
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
-   `orca.yaml` contract, setup calls the gate first, setup stops its stack,
-   a gated `make up`, the `-wt-` project name. Show the gaps as a list.
+   `orca.yaml` contract, setup builds outside the gate and then calls it,
+   setup stops its stack, a gated `make up` that builds before the gate and
+   starts with `--no-build`, the `-wt-` project name. Show the gaps as a list.
 3. **Offer to fix the gaps** (skip this step when there are none). On the
    operator's yes, make the fix yourself on a short branch in the main
    checkout (no lane exists yet for a worker; the yes permits it). Open a PR,
