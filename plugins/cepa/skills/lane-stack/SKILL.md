@@ -1,6 +1,6 @@
 ---
 name: lane-stack
-description: The shared lane and stack scheme for every repo cepa coordinates under Orca — lanes made with orca-lane.sh, the orca.yaml contract, setup that builds outside the stack gate, then calls it and stops its stack at the end, one gated `make up` start target, the worktree properties updated for Orca, and the paste-ready first prompt for a new coord@main. Read by coord@main when it brings a repo onto the scheme.
+description: The shared lane and stack scheme for every repo cepa coordinates under Orca — lanes made with orca-lane.sh, the orca.yaml contract, setup that builds on the one-at-a-time build lock (skipped when the lane's images exist) outside the stack gate, then calls it and stops its stack at the end, one gated `make up` start target with an explicit rebuild, the worktree properties updated for Orca, and the paste-ready first prompt for a new coord@main. Read by coord@main when it brings a repo onto the scheme.
 ---
 
 # Lane & stack scheme
@@ -40,7 +40,9 @@ the inbox peek only.
    a repo target that names the directory after a branch.
 3. **Setup builds outside the gate, then calls the gate before it writes
    any lane file,** and runs the rest of the stack init under the gate. The
-   gate's lock covers the start, never a build (L68).
+   gate's lock covers the start, never a build (L68). Builds go one at a
+   time on the machine-wide build lock, and are skipped when the lane's
+   images exist (L70).
 4. **Setup ends by stopping its stack** (`compose stop`; volumes kept).
 5. **Every worktree stack start goes through the gate.** Each Docker repo
    has one gated start target, `make up`. A worker runs it before any target
@@ -134,11 +136,25 @@ The contract a caller relies on (design "Builder-check answers" 6 and
 - **The gate runs the start command itself, under its lock.** Two starts
   cannot both pass on the same count.
 - **The start command is the start only, never a build:** `compose up -d
-  --no-build`, `start` or `restart`. Build first, outside the gate, with
-  `compose build`. Why, and what still runs under the lock, is the gate
-  header's (L68). A build outside the gate is outside both ceilings: builds
-  of several lanes run at the same time, with no stack count and no RAM
-  check, and a lane the gate then refuses keeps the images it built.
+  --no-build`, `start` or `restart`. Build first, outside the gate, with the
+  build mode below. Why, and what still runs under the lock, is the gate
+  header's (L68).
+- **Builds:** `stack-gate.sh --build <compose project name> -- <compose command…>`,
+  the compose command without a verb (L70). It builds one image set at a
+  time on this machine: a separate build lock, never the start lock, so a
+  start that does not build never waits on a build. When every image the
+  project's compose config lists already exists, it skips the build and
+  takes no lock (`STACK build: skipped — …`). A build that waits prints one
+  `waiting` line; the wait limit is the gate header's. Builds have no stack
+  count and no RAM check: one at a time is their bound. A lane the gate then
+  refuses keeps the images it built. Inside a gated command it refuses.
+- **Rebuild:** `stack-gate.sh --rebuild …`, `make up BUILD=1` in a lane,
+  always builds, on the same build lock. The skip looks only at whether an
+  image exists, never at what changed, so **run `make up BUILD=1` after any
+  change to a Dockerfile, a requirements or lock file the image installs, a
+  build arg, or the compose `build:` section** — on your branch, or merged
+  into the base after the lane's images were built. Without it the lane
+  keeps running the old image.
 - **Output:** one line, `STACK gate: ok — …` or `STACK gate: refused — …`.
 - **Exit:** `3` refused (the start command did not run); `2` usage; any
   other code is the start command's own exit code.
@@ -163,10 +179,14 @@ In order:
    main checkout (property 4). Derive the lane's `-wt-` project name
    (property 7). Write nothing yet.
 2. **Build the lane's images, outside the gate:**
-   `COMPOSE_PROJECT_NAME="$PROJECT" compose build`. A build takes no lock,
-   starts no container and writes no lane file, so it does not need the
-   gate (see "The stack gate"). A failed build ends setup at once, with
-   nothing started. Two preconditions, because the build and the start are
+   `stack-gate.sh --build "$PROJECT" -- <compose command>` (see "The stack
+   gate"). It skips when the images exist, and otherwise waits its turn on
+   the build lock. It takes no start lock, starts no container and writes
+   no lane file. A failed build ends setup at once, with nothing started.
+   A lane re-created under an old name keeps that name's project and its
+   images, so this step skips; when the base changed what the image
+   installs since, run `make up BUILD=1` in the lane before its first
+   test. Two preconditions, because the build and the start are
    now separate steps:
    - **The build reads nothing from the lane's `.env`.** That file does not
      exist yet (step 4 writes it). Every build arg and image name comes
@@ -213,17 +233,19 @@ Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 ## The gated start target: `make up`
 
 Each Docker repo has one start target that a lane uses, `make up`. In a
-lane it builds first, outside the gate (no lock), and then starts the stack
-only through the gate, with `up -d --no-build` (see "The stack gate"). A
-warm lane's build is a cache hit; after a source edit it rebuilds the layers
-below the copy. A start that fails with `No such image` means the build
+lane it builds first, through the gate's build mode (outside the start
+lock), and then starts the stack only through the gate, with
+`up -d --no-build` (see "The stack gate"). When the lane's images exist the
+build is skipped, so a source edit alone never rebuilds; `make up BUILD=1`
+always rebuilds (when to use it: "The stack gate", **Rebuild**). A start that fails with `No such image` means the build
 used another project name (see "Setup", step 2). In the main checkout it
 runs as before: the main stack has no `-wt-` name, and the gate does not
 count it.
 
 ```make
-# In a lane: build outside the gate, then start through cepa's stack gate
-# with --no-build (lane-stack skill). In the main checkout: start directly.
+# In a lane: build through the gate's build lock (skipped when the images
+# exist; BUILD=1 always builds), then start through cepa's stack gate with
+# --no-build (lane-stack skill). In the main checkout: start directly.
 # Default-deny: an unknown identity, a project name without -wt-, a missing
 # gate, or a failed build each refuse, and nothing starts.
 up: worktree-guard
@@ -232,7 +254,7 @@ up: worktree-guard
 	  [ -n "$$GD" ] && [ -n "$$CD" ] || { \
 	    echo "STACK gate: checkout identity unknown — the stack was not started"; exit 1; }; \
 	if [ "$$GD" = "$$CD" ]; then \
-	  $(DEV_COMPOSE) up -d; \
+	  $(DEV_COMPOSE) up -d $(if $(BUILD),--build); \
 	else \
 	  case "$$COMPOSE_PROJECT_NAME" in *-wt-*) ;; *) \
 	    echo "STACK gate: COMPOSE_PROJECT_NAME has no -wt- — this lane's stack was not started"; exit 1;; esac; \
@@ -243,7 +265,7 @@ up: worktree-guard
 	  done; \
 	  [ -n "$$CEPA_ROOT" ] && [ -f "$$CEPA_ROOT/scripts/stack-gate.sh" ] || { \
 	    echo "STACK gate: not found — this lane's stack was not started (set CEPA_PLUGIN_ROOT)"; exit 1; }; \
-	  $(DEV_COMPOSE) build || { \
+	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(BUILD),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \
 	    echo "STACK build: failed — this lane's stack was not started"; exit 1; }; \
 	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --no-build; \
 	fi
@@ -323,7 +345,8 @@ properties are guidance: most cannot be read reliably from a static file.
 8. **Resource ceilings are the gate,** host-wide: running `-wt-` stacks under
    the limit and free RAM over the minimum, both from one config file that
    overrides the defaults. The count is a proxy for RAM; the RAM floor is the
-   real boundary. Both bound starts, not builds (see "The stack gate").
+   real boundary. Both bound starts, not builds; builds are bounded by the
+   build lock, one at a time (see "The stack gate").
 9. **`_HOST_PORT` names are never read by the app.** Every variable that
    only isolates a host port uses that suffix.
 10. **Image tags are scoped per compose project,** never shared with the
@@ -336,7 +359,10 @@ carries this step before any test or migration:
 
 ```markdown
 Start this lane's stack with `make up` before any `compose exec` target
-(`make test`, `make migrate`). If it prints `STACK gate: refused`, stop and
+(`make test`, `make migrate`). Use `make up BUILD=1` instead when your branch,
+or the base since the lane was built, changes a Dockerfile, a requirements or
+lock file, a build arg or a compose `build:` section: plain `make up` keeps
+the old image. If it prints `STACK gate: refused`, stop and
 `ask` your coordinator; do not start the stack another way. When your PR is
 open and reviewed, stop the stack (`compose stop`; keep volumes).
 ```
@@ -371,7 +397,8 @@ reaches a question, and record each strip.
    repo, `worktree-init` and every Makefile target that runs `compose up`,
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
    `orca.yaml` contract, setup builds outside the gate and then calls it,
-   setup stops its stack, a gated `make up` that builds before the gate and
+   setup stops its stack, a gated `make up` that builds with
+   `stack-gate.sh --build` (`--rebuild` on `BUILD=1`) before the gate and
    starts with `--no-build`, a build that reads nothing from the lane's
    `.env`, no fixed `image:` on a built service, the `-wt-` project name. Show the gaps as a list.
 3. **Offer to fix the gaps** (skip this step when there are none). On the

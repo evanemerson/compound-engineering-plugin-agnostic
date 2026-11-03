@@ -13,8 +13,8 @@
 # exact set of cases each mutant breaks. Every refused or usage case also
 # asserts the start command did not run. Legs:
 #   USAGE     — no arguments, no `--`, no command, a project without `-wt-`
-#               or with shell text, `--count` with an argument, HOME unset:
-#               exit 2.
+#               or with shell text, `--count` with an argument, `--build`
+#               with no compose command, HOME unset: exit 2.
 #   CONFIG    — defaults (6 / 2048); a value is read; `010` is ten, not
 #               octal eight; a bad, 7-digit or unknown entry WARNs and keeps
 #               the default; shell text in the file never runs; a file that
@@ -41,6 +41,15 @@
 #               label prints as `?`; a failed `docker inspect` is said.
 #   COUNTMODE — `--count` prints its one line, exits 1 when docker fails or
 #               the config cannot be read, takes no lock, creates nothing.
+#   BUILD     — `--build` (L70 item 1) skips, with no lock, when every image
+#               the project lists exists, read with the project name; it
+#               builds when one is missing, the list is empty or cannot be
+#               read; `--rebuild` always builds; the build's exit code comes
+#               through; two builds run one at a time, and the waiting one
+#               says so with the 3600 s default; a held build lock refuses
+#               after build_wait_seconds; the build lock and the start lock
+#               never wait on each other; a process the build leaves does not
+#               hold the lock; a build inside a gated command refuses.
 #
 # The stub is strict where the gate depends on docker's behavior: unknown ps
 # flags exit 64, ids are 12 characters without --no-trunc, `label=` and
@@ -94,7 +103,7 @@ def ok():
 
 
 class Env:
-    def __init__(self, containers=(), conf=None, mem_mib=8000, meminfo=None):
+    def __init__(self, containers=(), conf=None, mem_mib=8000, meminfo=None, images=(), listed=""):
         self.root = tempfile.mkdtemp(prefix="cepa-sg-")
         DIRS.append(self.root)
         self.home = os.path.join(self.root, "home")
@@ -125,6 +134,28 @@ class Env:
                         STUB_DOCKER_STATE=self.state, STUB_DOCKER_LOG=self.log,
                         CEPA_STACK_GATE_MEMINFO=self.meminfo)
         self.env.pop("CEPA_STACK_GATE_CONF", None)
+        self.env.pop("CEPA_STACK_GATE_HELD", None)
+        self.images = os.path.join(self.root, "images.json")
+        with open(self.images, "w") as f:
+            json.dump(list(images), f)
+        self.blog = os.path.join(self.root, "builds")
+        self.env.update(STUB_DOCKER_IMAGES=self.images, STUB_COMPOSE_IMAGES=listed,
+                        STUB_BUILD_LOG=self.blog)
+
+    def builds(self):
+        if not os.path.exists(self.blog):
+            return []
+        return [l.split() for l in open(self.blog).read().splitlines()]
+
+    def hold_build_lock(self, secs):
+        lockdir = os.path.join(self.home, ".config", "cepa")
+        os.makedirs(lockdir, exist_ok=True)
+        pr = subprocess.Popen(["flock", os.path.join(lockdir, "build.lock"), "sh", "-c",
+                               f"echo ready; exec sleep {secs}"], stdout=subprocess.PIPE, text=True)
+        PROCS.append(pr)
+        if pr.stdout.readline().strip() != "ready":
+            raise SystemExit("MISS harness: build lock holder never took the lock")
+        return pr
 
     def touch_cmd(self):
         return ["touch", self.marker]
@@ -132,7 +163,7 @@ class Env:
     def ran(self):
         return os.path.exists(self.marker)
 
-    def run(self, args, extra_env=None, timeout=60, unset=()):
+    def run(self, args, extra_env=None, timeout=60, unset=(), stdin=None):
         env = dict(self.env, **(extra_env or {}))
         for k in unset:
             env.pop(k, None)
@@ -221,6 +252,7 @@ for case, args in [
     ("USAGE project without -wt-", ["dpcpro", "--", "TOUCH"]),
     ("USAGE project with shell text", ["a-wt-$(id)", "--", "TOUCH"]),
     ("USAGE --count with argument", ["--count", "x"]),
+    ("USAGE --build with no command", ["--build", "a-wt-b", "--"]),
 ]:
     e = Env()
     args = [a if a != "TOUCH" else "touch" for a in args] + ([e.marker] if "TOUCH" in args else [])
@@ -430,6 +462,107 @@ e = Env(stacks(1))
 r = e.run(["--count"])
 if r.returncode != 0 or os.path.exists(os.path.join(e.home, ".config")):
     miss("COUNTMODE creates nothing", f"rc {r.returncode}, .config exists: {os.path.exists(os.path.join(e.home, '.config'))}")
+else:
+    ok()
+
+# ---------------- BUILD ----------------
+COMPOSE = ["docker", "compose", "-f", "dev.yml"]
+LISTED = "{p}-web,{p}-worker,postgres:16"
+
+
+def bargs(proj="n-wt-x", mode="--build"):
+    return [mode, proj, "--"] + COMPOSE
+
+
+def built(e, proj="n-wt-x"):
+    return [b for b in e.builds() if b[0] == "start" and b[1] == proj]
+
+
+have = ["n-wt-x-web", "n-wt-x-worker", "postgres:16"]
+e = Env(images=have, listed=LISTED)
+e.hold_build_lock(8)
+t0 = time.time()
+r = e.run(bargs())
+if (r.returncode != 0 or time.time() - t0 > 4 or built(e)
+        or r.stdout != "STACK build: skipped — n-wt-x: all 3 images exist (--rebuild builds anyway)\n"):
+    miss("BUILD skip when every image exists, no lock", f"rc {r.returncode}, {time.time() - t0:.1f}s, builds {e.builds()}, out {r.stdout!r}")
+else:
+    ok()
+for case, imgs, listed, env in [
+    ("BUILD a missing image builds", have[:2], LISTED, None),
+    ("BUILD an empty image list builds", have, "", None),
+    ("BUILD an unreadable image list builds", have, LISTED, {"STUB_DOCKER_FAIL": "config"}),
+]:
+    e = Env(images=imgs, listed=listed)
+    r = e.run(bargs(), env)
+    if r.returncode != 0 or len(built(e)) != 1 or not r.stdout.startswith("STACK build: building — n-wt-x: "):
+        miss(case, f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r} err {r.stderr!r}")
+    else:
+        ok()
+e = Env(images=have, listed=LISTED)
+r = e.run(bargs(mode="--rebuild"))
+if r.returncode != 0 or len(built(e)) != 1 or "STACK build: building — n-wt-x: rebuild asked" not in r.stdout:
+    miss("BUILD --rebuild always builds", f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
+else:
+    ok()
+e = Env(listed=LISTED)
+r = e.run(bargs(), {"STUB_BUILD_RC": "5"})
+if r.returncode != 5 or len(built(e)) != 1:
+    miss("BUILD exit code comes through", f"rc {r.returncode}, want 5; builds {e.builds()}")
+else:
+    ok()
+# Two builds of different lanes: the second starts only after the first ends.
+e = Env(listed=LISTED)
+e.env["STUB_BUILD_SLEEP"] = "2"
+pa = e.popen(bargs("a-wt-a"))
+PROCS.append(pa)
+deadline = time.time() + 30
+while not built(e, "a-wt-a") and time.time() < deadline:
+    time.sleep(0.05)
+pb = e.popen(bargs("b-wt-b"))
+PROCS.append(pb)
+try:
+    oa, ob = pa.communicate(timeout=60), pb.communicate(timeout=60)
+except subprocess.TimeoutExpired:
+    oa = ob = ("timed out", "")
+ev = {(b[0], b[1]): float(b[2]) for b in e.builds()}
+if (pa.returncode != 0 or pb.returncode != 0 or len(ev) != 4
+        or ev[("start", "b-wt-b")] < ev[("end", "a-wt-a")]):
+    miss("BUILD two builds run one at a time", f"rc {pa.returncode}/{pb.returncode}, builds {e.builds()}")
+else:
+    ok()
+if "STACK build: waiting up to 3600s for another build's lock" not in ob[1]:
+    miss("BUILD a waiting build says so, default 3600 s", f"no waiting line: {ob[1]!r}")
+else:
+    ok()
+e = Env(listed=LISTED, conf="build_wait_seconds=1\n")
+e.hold_build_lock(6)
+r = e.run(bargs())
+if r.returncode != 3 or built(e) or not r.stdout.startswith("STACK build: refused — lock busy"):
+    miss("BUILD held build lock refuses after the wait", f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
+else:
+    ok()
+e = Env(listed=LISTED, conf="lock_wait_seconds=1\nbuild_wait_seconds=1\n")
+e.hold_lock(6)
+r = e.run(bargs())
+e2 = Env(conf="lock_wait_seconds=1\nbuild_wait_seconds=1\n")
+e2.hold_build_lock(6)
+r2 = e2.run(["n-wt-x", "--"] + e2.touch_cmd())
+if r.returncode != 0 or len(built(e)) != 1 or r2.returncode != 0 or not e2.ran():
+    miss("BUILD build lock and start lock are separate", f"build rc {r.returncode} {r.stdout!r}; start rc {r2.returncode} {r2.stdout!r}")
+else:
+    ok()
+e = Env(listed=LISTED, conf="build_wait_seconds=2\n")
+r1 = e.run(bargs("a-wt-a"), {"STUB_BUILD_BG": "8"})
+r2 = e.run(bargs("b-wt-b", "--rebuild"))
+if r1.returncode != 0 or r2.returncode != 0 or len(built(e, "b-wt-b")) != 1:
+    miss("BUILD lock not held by a process the build leaves", f"rc {r1.returncode}/{r2.returncode}; {r2.stdout!r}")
+else:
+    ok()
+e = Env(listed=LISTED)
+r = e.run(bargs(), {"CEPA_STACK_GATE_HELD": "n-wt-x"})
+if r.returncode != 3 or e.builds() or not r.stdout.startswith("STACK build: refused — inside a gated command"):
+    miss("BUILD inside a gated command refuses", f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
 else:
     ok()
 

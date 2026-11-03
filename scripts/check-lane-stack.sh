@@ -15,15 +15,19 @@
 #             (the only two values that parser accepts are listed there).
 #   GATE      inside the `## The stack gate` section, the gate is cited by
 #             path, config path, call shape, output line and exit codes
-#             (design "Builder-check answers" 6), and the start command
-#             is the start only, never a build (L68). Scoped to that section
+#             (design "Builder-check answers" 6), the start command
+#             is the start only, never a build (L68), and the build mode,
+#             its skip and the `make up BUILD=1` rebuild are stated (L70).
+#             Scoped to that section
 #             so a sentence elsewhere cannot satisfy a needle.
 #   MAKE      the `make up` example block is RUN in throwaway git repos with
 #             a stub gate and a stub compose: the main checkout starts
-#             directly; a lane builds first, outside the gate (L68), then
-#             starts only through the gate, with
-#             `<project> -- <compose> up -d --no-build`; a failed build
-#             starts nothing and never reaches the gate; a gate refusal
+#             directly; a lane builds first through the gate's build mode
+#             (`--build <project> -- <compose>`, L68/L70), then starts only
+#             through the gate, with `<project> -- <compose> up -d
+#             --no-build`; `BUILD=1` passes `--rebuild` in a lane and
+#             `--build` to compose in the main checkout; a failed build
+#             starts nothing and never reaches the start gate; a gate refusal
 #             (exit 3) fails make; and each default-deny refusal builds and
 #             starts nothing: a lane with no gate, a lane whose project name
 #             is unset or lacks `-wt-`, and a severed lane (its main repo
@@ -112,6 +116,9 @@ for name, needle in [
     ("GATE runs start under lock", "runs the start command itself, under its lock"),
     ("GATE counts running only", "at least one running container (stopped\n  stacks do not count)"),
     ("GATE start is never a build", "**The start command is the start only, never a build:**"),
+    ("GATE build mode call shape", "`stack-gate.sh --build <compose project name> -- <compose command…>`"),
+    ("GATE build skipped when images exist", "it skips the build and\n  takes no lock"),
+    ("GATE rebuild with BUILD=1", "**run `make up BUILD=1` after any\n  change to a Dockerfile"),
 ]:
     case(name, needle in gsec, "the stack gate section no longer says %r" % needle)
 
@@ -120,7 +127,7 @@ MAKE_CASES = ("MAKE main starts directly", "MAKE lane starts through gate",
               "MAKE lane builds before the gate", "MAKE lane build failure starts nothing",
               "MAKE lane gate refusal propagates", "MAKE lane without gate refuses",
               "MAKE lane unset project refuses", "MAKE lane non-wt project refuses",
-              "MAKE severed lane refuses")
+              "MAKE severed lane refuses", "MAKE BUILD=1 rebuilds")
 ms = blocks("make")
 tools = [t for t in ("git", "make") if not shutil.which(t)]
 if len(ms) != 1 or tools:
@@ -143,6 +150,7 @@ else:
             f.write("#!/usr/bin/env bash\necho %s\n" % root)
         with open(os.path.join(root, "scripts", "stack-gate.sh"), "w") as f:
             f.write('#!/usr/bin/env bash\necho "GATE $*"\n'
+                    'case "$1" in --build|--rebuild) shift 3; "$@" build; exit $?;; esac\n'
                     'if [ -n "${STUB_REFUSE:-}" ]; then echo "STACK gate: refused — stub"; exit 3; fi\n'
                     'shift 2\n"$@"\n')
         # A caller's GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (a hook) would
@@ -180,6 +188,7 @@ else:
             proj = "x-wt-lane-1"
             up = "START up -d --no-build"
             gate_line = "GATE %s -- %s up -d --no-build" % (proj, comp)
+            build_line = "GATE --build %s -- %s" % (proj, comp)
             def lines(r):
                 return r.stdout.splitlines()
             def nothing(r):  # nothing built, nothing started, gate never called
@@ -193,12 +202,12 @@ else:
                  r.returncode == 0 and gate_line in ls and up in ls
                  and ls.index(up) == ls.index(gate_line) + 1, show(r))
             case("MAKE lane builds before the gate",
-                 "START build" in ls and gate_line in ls
-                 and ls.index("START build") < ls.index(gate_line), show(r))
+                 build_line in ls and "START build" in ls and gate_line in ls
+                 and ls.index(build_line) + 1 == ls.index("START build") < ls.index(gate_line), show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_BUILD_FAIL="1")
             case("MAKE lane build failure starts nothing",
                  r.returncode != 0 and "START build" in lines(r)
-                 and not any(l.startswith(("START up", "GATE")) for l in lines(r))
+                 and not any(l.startswith(("START up", "GATE " + proj)) for l in lines(r))
                  and "STACK build: failed" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_REFUSE="1")
             case("MAKE lane gate refusal propagates",
@@ -212,6 +221,14 @@ else:
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME="x")
             case("MAKE lane non-wt project refuses",
                  r.returncode != 0 and nothing(r) and "has no -wt-" in r.stdout, show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, BUILD="1")
+            rm = make(main, CEPA_PLUGIN_ROOT=root, BUILD="1")
+            ls = lines(r)
+            case("MAKE BUILD=1 rebuilds",
+                 r.returncode == 0 and ("GATE --rebuild %s -- %s" % (proj, comp)) in ls
+                 and build_line not in ls and gate_line in ls
+                 and rm.returncode == 0 and rm.stdout.strip() == "START up -d --build",
+                 show(r) + " main " + show(rm))
             r = make(sev_lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
             case("MAKE severed lane refuses",
                  r.returncode != 0 and nothing(r) and "checkout identity unknown" in r.stdout, show(r))
