@@ -2059,10 +2059,17 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     2 (P2) setup holds the lock through migrations; 3 (P2) `up -d
     --no-build` still pulls images and waits on health under the lock;
     4 (P3) a lock-holder file so "lock busy" names the holder.
-    Item 1 IN FLIGHT 2026-11-02: operator chose A + C (one build at a time
-    under a separate build lock; skip the build when the lane's images
-    exist; explicit rebuild flag). tab35@roles, task `task_9518f22cafb9`,
-    dispatch `ctx_79f625f2566f`, branch `fix/roles/bounded-builds`.
+    Item 1 DONE 2026-11-02: PR #129 merged `2db0812` (1.55.0) on the
+    operator's "merge it when ci is green". Operator chose A + C:
+    `stack-gate.sh --build` holds a machine-wide build lock (one build at a
+    time, build_wait_seconds 3600), skips with no lock when every image
+    exists, `make up BUILD=1` always rebuilds. tab35@roles done (head
+    7ba45a8 = Handoff); coord@main ran update-branch → 9524b14, CI 15/15
+    green. roles parked, branch deleted, worker tab closed, loaded plugin
+    1.55.0 (freshness rc=0). Deferred, operator's call:
+    `memory/tasks.d/2026-11-02-fix-roles-bounded-builds.md` — #16 (P2) skip
+    on a build-input hash so base drift rebuilds; #17 (P2) a build time
+    limit; #18-#19 (P3). Items 2-4 above stay open.
 
 L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
     status: pending
