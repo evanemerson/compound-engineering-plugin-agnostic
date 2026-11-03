@@ -2255,6 +2255,18 @@ verified). dpc-pro DONE (msg_63a0545fc0de; PR dpc-pro#308 merged 51336e16,
 deployed; apgar bath cori levi taussig wright rebuilt under
 ~/orca/workspaces/dpc-pro/, each Setup tab gate ok + stopped; verified in
 Orca's list). Open: contexthub, artist360.
+AUDIT 2026-11-03 14:35 UTC (Orca 1.4.246, cepa 1.55.4, main CI green):
+the coord resolver, dry-run on live reads, resolves 7/8 repos to their live
+coord@main (artist360, dpc-pro, helm, kcprimetime, contexthub,
+dpc-pro-docs, compound-engineering). artist360-docs is PENDING: its Runs are
+named `artist360-docs Wave N: ...`, with no `coord@main`; Orca has no
+rename, so it must `run-create --objective "artist360-docs coord@main"`
+(sent to term_154d488c, msg_57834872b936). Live round trip to
+coord:compound-engineering: send stored msg_279ec2587061, `check --full`
+gave delivery_e9e22fa86b6c, ack emptied the inbox. All outboxes: 0 pending.
+contexthub now shows lane navigator in Orca (no report yet). Orca's own
+prompt text still says `check --run <run>` without `--full` (Orca-side;
+CLAUDE.md overrides it).
 cepa itself: matrix, optimization, formulation created (parked 9c12f56);
 gain, integrity, roles removed via `orca-lane.sh rm` on the operator's
 answer. roles first refused on reflog c3273f0 (PR #87's pre-squash commit,
