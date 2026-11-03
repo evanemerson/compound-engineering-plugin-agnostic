@@ -75,13 +75,18 @@ def find(sel):
     err("worktree_not_found", "worktree_not_found")
 
 
+# The 1.4.246 `repo list` hookSettings shape for a repo with no saved script
+# (L76). A state repo's "hook" key replaces it, so the HOOKS leg can stub
+# every shape.
+HOOK = {"mode": "auto", "setupRunPolicy": "run-by-default", "setupAgentStartupPolicy": "start-immediately",
+        "scripts": {"setup": "", "archive": ""}}
 verb = argv[:2]
 if argv[:2] == ["repo", "list"]:
     if "repofail" in MODE:
         sys.exit(1)
     out({"id": "x", "ok": True, "result": {"repos": [
         {"id": r["id"], "path": unc(r["path"]), "displayName": os.path.basename(r["path"]),
-         "hookSettings": {"setupRunPolicy": "run-by-default", "setupAgentStartupPolicy": "start-immediately"}}
+         "hookSettings": r.get("hook", HOOK)}
         for r in st["repos"]]}})
 if verb == ["worktree", "list"]:
     st["lists"] = st.get("lists", 0) + 1

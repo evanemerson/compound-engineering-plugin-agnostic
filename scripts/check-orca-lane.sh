@@ -54,6 +54,16 @@
 #            patch on the default branch are removed. The main checkout's
 #            orca.yaml (#16): untracked, unpushed, or edited under
 #            skip-worktree keeps the lane; pushed to the default is removed.
+#   HOOKS  — L76: Orca's saved hookSettings (stubbed per case) against
+#            orca.yaml. create: unset, shared-only, local-only matching, and
+#            run-both with no local script create; local-only differing or
+#            empty, unset with a local script (Orca reads it as local-only),
+#            and run-both with a local script refuse before `worktree
+#            create`; an unknown policy, a missing scripts map or
+#            hookSettings, a non-string script, and an orca.yaml block
+#            scalar, flow value or duplicate key refuse as unknown; a quoted scalar is
+#            read; no orca.yaml matches an empty local-only setup. rm: the
+#            same rule on scripts.archive from the main checkout's orca.yaml.
 #   BLOCK  — §12b rule 2's lane block, extracted and run under `bash -e`:
 #            it runs `name`; shell text in a field runs nothing; with the
 #            script absent it prints the skipped line.
@@ -684,6 +694,111 @@ expect("RM main orca.yaml edited under skip-worktree", W.run(F(cli=CLI, action="
 W.git("update-index", "--no-skip-worktree", "orca.yaml")
 W.git("checkout", "--", "orca.yaml")
 expect("RM main orca.yaml pushed", W.run(F(cli=CLI, action="rm", lane="y4")), rc=0, first="ORCA lane: removed y4")
+W.done()
+
+# ---- HOOKS (L76): Orca's saved hook settings can shadow orca.yaml. The
+# stub serves each hookSettings shape; orca.yaml is pushed to origin/main.
+W = World("hooks")
+open(os.path.join(W.main, "orca.yaml"), "w").write(
+    "# lane config\nscripts:\n  setup: make init  # builds\n  archive: 'make clean'\nsetupAgentStartupPolicy: wait-for-setup\n")
+W.git("add", "orca.yaml")
+W.commit("orca.yaml")
+W.git("push", "-q", "origin", "main")
+W.git("fetch", "-q", "origin")
+
+
+def hook(h):
+    W.load()
+    W.st["repos"][0]["hook"] = h
+    W.save()
+
+
+def hs(policy=None, setup="", archive="", start="start-immediately"):
+    h = {"mode": "auto", "setupRunPolicy": "run-by-default", "setupAgentStartupPolicy": start,
+         "scripts": {"setup": setup, "archive": archive}}
+    if policy is not None:
+        h["commandSourcePolicy"] = policy
+    return h
+
+
+SH = "ORCA lane: not created — Orca's saved hook settings shadow orca.yaml: "
+UNK = "ORCA lane: not created — Orca's saved hook settings for this repo, or orca.yaml's scripts.setup, have a shape"
+NOCREATE = [["worktree", "create"]]
+hook(hs())
+expect("HOOKS unset creates", W.run(F(cli=CLI, action="create", lane="h1", base="main")), rc=0,
+       first="ORCA lane: created h1")
+hook(hs(policy="shared-only", setup="npm install"))
+expect("HOOKS shared-only with a local script creates", W.run(F(cli=CLI, action="create", lane="h2", base="main")),
+       rc=0, first="ORCA lane: created h2")
+hook(hs("local-only", setup="  make init\n"))
+expect("HOOKS local-only matching creates", W.run(F(cli=CLI, action="create", lane="h3", base="main")), rc=0,
+       first="ORCA lane: created h3")
+hook(hs("local-only", setup="npm install"))
+got = W.run(F(cli=CLI, action="create", lane="h4", base="main"))
+expect("HOOKS local-only differing refuses", got, rc=1,
+       first=SH + "commandSourcePolicy local-only runs the local setup script (differs), not the orca.yaml one (present)",
+       has=("Needed from you: in Orca, open Settings",), verbs_lack=NOCREATE)
+hook(hs("local-only", setup=""))
+expect("HOOKS local-only empty refuses", W.run(F(cli=CLI, action="create", lane="h5", base="main")), rc=1,
+       first=SH + "commandSourcePolicy local-only runs the local setup script (empty)", verbs_lack=NOCREATE)
+hook(hs(None, setup="npm install"))
+expect("HOOKS unset with a local script refuses", W.run(F(cli=CLI, action="create", lane="h6", base="main")), rc=1,
+       first=SH + "commandSourcePolicy unset (Orca reads it as local-only", verbs_lack=NOCREATE)
+hook(hs("run-both", setup="npm install"))
+expect("HOOKS run-both with a local script refuses", W.run(F(cli=CLI, action="create", lane="h7", base="main")), rc=1,
+       first=SH + "commandSourcePolicy run-both runs the local setup script as well", verbs_lack=NOCREATE)
+hook(hs("run-both"))
+expect("HOOKS run-both with no local script creates", W.run(F(cli=CLI, action="create", lane="h8", base="main")),
+       rc=0, first="ORCA lane: created h8")
+# One lane per case, so a mutant that lets one create through cannot change
+# what a later case sees.
+for tag, lane, h in (("unknown policy", "u1", hs("local-first")), ("no scripts map", "u2", {"mode": "auto"}),
+                     ("hookSettings missing", "u3", None), ("non-string script", "u4", hs(setup=["npm"]))):
+    hook(h)
+    expect("HOOKS %s refuses" % tag, W.run(F(cli=CLI, action="create", lane=lane, base="main")), rc=1, first=UNK,
+           verbs_lack=NOCREATE)
+# orca.yaml shapes: a block scalar is unknown under local-only; a quoted
+# scalar is read; with no orca.yaml, an empty local-only setup matches.
+for tag, lane, text, want_rc, first in (
+        ("block scalar", "hb", "scripts:\n  setup: |\n    make init\n", 1, UNK),
+        ("flow value", "hf", "scripts:\n  setup: [make init]\n", 1, UNK),
+        ("quoted match", "hq", "scripts:\n  setup: \"make init\"\n", 0, "ORCA lane: created hq"),
+        ("duplicate key", "hd", "scripts:\n  setup: make init\n  setup: make init\n", 1, UNK)):
+    open(os.path.join(W.main, "orca.yaml"), "w").write(text)
+    W.git("add", "orca.yaml")
+    W.commit(tag)
+    W.git("push", "-q", "origin", "main")
+    hook(hs("local-only", setup="make init"))
+    expect("HOOKS orca.yaml %s" % tag, W.run(F(cli=CLI, action="create", lane=lane, base="main")), rc=want_rc,
+           first=first)
+W.git("rm", "-q", "orca.yaml")
+W.commit("no orca.yaml")
+W.git("push", "-q", "origin", "main")
+hook(hs("local-only"))
+expect("HOOKS no orca.yaml and empty local-only creates", W.run(F(cli=CLI, action="create", lane="hn", base="main")),
+       rc=0, first="ORCA lane: created hn")
+# rm: Orca reads scripts.archive from the main checkout's orca.yaml.
+open(os.path.join(W.main, "orca.yaml"), "w").write("scripts:\n  archive: make clean\n")
+W.git("add", "orca.yaml")
+W.commit("archive")
+W.git("push", "-q", "origin", "main")
+W.git("fetch", "-q", "origin")
+NORM = [["worktree", "rm"]]
+for tag, lane, h, first in (
+        ("local-only empty archive refuses", "r1", hs("local-only"),
+         "Orca's saved hook settings shadow orca.yaml: commandSourcePolicy local-only runs the local archive script (empty)"),
+        ("unset with a local archive refuses", "r2", hs(None, archive="echo bye"),
+         "Orca's saved hook settings shadow orca.yaml: commandSourcePolicy unset"),
+        ("unknown shape refuses", "r3", hs("sometimes"),
+         "Orca's saved hook settings for this repo, or orca.yaml's scripts.archive")):
+    W.lane(lane)
+    hook(h)
+    expect("HOOKS rm %s" % tag, W.run(F(cli=CLI, action="rm", lane=lane)), rc=1,
+           first="ORCA lane: kept %s — %s" % (lane, first), verbs_lack=NORM)
+W.lane("r4")
+hook(hs("local-only", archive="make clean"))
+expect("HOOKS rm local-only matching archive removes", W.run(F(cli=CLI, action="rm", lane="r4")), rc=0,
+       first="ORCA lane: removed r4")
 W.done()
 
 # ---- BLOCK

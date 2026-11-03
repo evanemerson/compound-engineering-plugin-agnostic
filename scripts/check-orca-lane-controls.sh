@@ -10,7 +10,7 @@
 # never a skip: the shipped script changed shape and the mutant needs
 # re-reading.
 #
-# Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, BLOCK) has
+# Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, HOOKS, BLOCK) has
 # at least one mutant here that only its own cases kill; the last control
 # asserts that, so a new leg that also kills an old leg's only mutant shows.
 #
@@ -97,6 +97,17 @@ MUTANTS = [
     ("name-dup-ok", 'if grep -qxF -- "$w_base" <<<', 'if false && grep -qxF -- "$w_base" <<<', None),
     ("create-displayname-ok", '[ "$w_base" = "$cepa_ln_lane" ] || [ "$w_name" = "$cepa_ln_lane" ] || continue',
      '[ "$w_base" = "$cepa_ln_lane" ] || continue', None),
+    # HOOKS (L76)
+    ("hook-unset-implicit-off", 'eff = pol or ("local-only" if loc else "shared-only")', 'eff = pol or "shared-only"', None),
+    ("hook-run-both-ok", 'if eff == "run-both" and loc:', 'if False:', None),
+    ("hook-local-compare-off", 'elif eff == "local-only" and loc != y:', 'elif False:', None),
+    ("hook-unknown-policy-ok", 'if pol is not None and pol not in ("local-only", "run-both", "shared-only"):', 'if False:', None),
+    ("hook-yaml-block-ok", 'elif v[0] in "|>[{&*!@`%":', 'elif False:', None),
+    ("hook-yaml-dup-ok", "            if found is not None:\n                sys.exit(1)", "            if False:\n                sys.exit(1)", None),
+    ("create-hook-unchecked", "|| kept \"not created — Orca's saved hook settings shadow orca.yaml:",
+     "|| true \"not created — Orca's saved hook settings shadow orca.yaml:", None),
+    ("rm-hook-unchecked", "|| kept \"kept $cepa_ln_lane — Orca's saved hook settings shadow orca.yaml:",
+     "|| true \"kept $cepa_ln_lane — Orca's saved hook settings shadow orca.yaml:", None),
     ("hook-output-relayed", 'print(code, x if type(x) is int else "?")',
      'print(code, x if type(x) is int else "?", (data.get("output") or "")[:80])', None),
 ]
@@ -113,7 +124,7 @@ HELPER_MUTANTS = [
     ("helper-no-default-patch", 'patch_in "refs/remotes/origin/$dflt" "$s" || {', 'false || {', None),
     ("helper-gh-failure-ok", '    || { echo "unknown — gh pr list failed for branch $b"; exit 3; }', '    || true', None),
 ]
-LEGS = ["FIELDS", "SCOPE", "READS", "CREATE", "NAME", "RM", "BLOCK"]
+LEGS = ["FIELDS", "SCOPE", "READS", "CREATE", "NAME", "RM", "HOOKS", "BLOCK"]
 
 # Calibrated sets for the mutants written None above (kept apart so each
 # mutant line stays readable). Measured by running this file, then read.
@@ -174,6 +185,20 @@ EXPECT = {
     "name-dup-ok": {"NAME skips a name another lane shows"},
     "create-displayname-ok": {"CREATE name taken as a display name only"},
     "hook-output-relayed": {"RM archive hook fails"},
+    "hook-unset-implicit-off": {"HOOKS unset with a local script refuses", "HOOKS rm unset with a local archive refuses"},
+    "hook-run-both-ok": {"HOOKS run-both with a local script refuses"},
+    # An unset policy with a local script is local-only, so its cases go red too.
+    "hook-local-compare-off": {"HOOKS local-only differing refuses", "HOOKS local-only empty refuses",
+                               "HOOKS unset with a local script refuses", "HOOKS rm local-only empty archive refuses",
+                               "HOOKS rm unset with a local archive refuses"},
+    "hook-unknown-policy-ok": {"HOOKS unknown policy refuses", "HOOKS rm unknown shape refuses"},
+    # A block scalar is also caught by the continuation-line check; only a
+    # flow value reaches this guard alone.
+    "hook-yaml-block-ok": {"HOOKS orca.yaml flow value"},
+    "hook-yaml-dup-ok": {"HOOKS orca.yaml duplicate key"},
+    "create-hook-unchecked": {"HOOKS local-only differing refuses", "HOOKS local-only empty refuses",
+                              "HOOKS unset with a local script refuses", "HOOKS run-both with a local script refuses"},
+    "rm-hook-unchecked": {"HOOKS rm local-only empty archive refuses", "HOOKS rm unset with a local archive refuses"},
     "block-unquoted": {"BLOCK shell text in the lane runs nothing", "BLOCK runs name",
                        "BLOCK quoted heredoc holds cli, action, lane, base, confirm"},
 }
