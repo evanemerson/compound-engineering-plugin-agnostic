@@ -2227,6 +2227,30 @@ L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f79
        The operator's session ran `git restore`, then rm passed. Fix: after
        a runtime_error, report the deleted tracked paths as Orca's partial
        removal, not as operator changes.
+    5. (artist360, msg_452caa830403) rm's orca.yaml check compares the main
+       checkout's orca.yaml with origin's DEFAULT branch (orca-lane.sh ~l.870,
+       `symbolic-ref refs/remotes/origin/HEAD`). artist360's main checkout
+       is on `dev`, so after a dev-only orca.yaml change rm refuses until
+       dev deploys to main. Same class as item 1: compare with the branch
+       the main checkout tracks (the resolved trunk), not the default.
+
+L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).**
+    status: pending
+    severity: P2
+    owner: unassigned
+    1. A setup step `timeout <cmd>` that reads stdin hangs in Orca's Setup
+       tab: `timeout` puts its child in a background process group, the
+       child gets SIGTTIN on the tab's terminal and stops (state T), and
+       timeout's TERM never ends it (artist360 ozomatli hung 21 min; fixed
+       in artist360#852 with `timeout --foreground -k 30 ... </dev/null`).
+       Fix: the lane-stack `orca.yaml` contract requires `--foreground` and
+       `</dev/null` for any `timeout` in setup; tell each repo's coord@main
+       to check its worktree-init. cepa's own stack-gate.sh runs no such
+       `timeout` (grep 2026-11-03: `grep -n 'timeout ' stack-gate.sh` hits
+       a comment only).
+    2. The Setup tab appeared up to ~2 min after `orca-lane.sh create`
+       returned (porch). The lane-stack "read the Setup tab" step must wait
+       for it, not read it at once.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
@@ -2254,7 +2278,11 @@ dossier, chronicle, manifest; billing, comms, patients, setup removed;
 verified). dpc-pro DONE (msg_63a0545fc0de; PR dpc-pro#308 merged 51336e16,
 deployed; apgar bath cori levi taussig wright rebuilt under
 ~/orca/workspaces/dpc-pro/, each Setup tab gate ok + stopped; verified in
-Orca's list). Open: contexthub, artist360.
+Orca's list). artist360 DONE (msg_452caa830403; PRs artist360#851, #852,
+#853; prod = main = 1e6c1643; cake lucero sonvolt rebuilt, ozomatli porch
+neko new, all under ~/orca/workspaces/artist360/, setup gate ok + stopped;
+jolene lambchop waxahatchee removed; verified in Orca's worktree list
+2026-11-03, 6 lanes detached). Open: contexthub.
 AUDIT 2026-11-03 14:35 UTC (Orca 1.4.246, cepa 1.55.4, main CI green):
 the coord resolver, dry-run on live reads, resolves 7/8 repos to their live
 coord@main (artist360, dpc-pro, helm, kcprimetime, contexthub,
