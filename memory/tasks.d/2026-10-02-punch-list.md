@@ -2072,9 +2072,17 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     limit; #18-#19 (P3). Items 2-4 above stay open.
 
 L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #130 merged `8502288` (1.55.1) on the operator's
+    AskUserQuestion "Merge #130". tab36@roles done (head 5be0eb3 = Handoff,
+    CI 15/15, branch contained main). Step 1 names the Run (run-show →
+    run-create, cites §12b rule 2); step 2 states the 1.55.0 build
+    contract; step 5 covers every lane whose setup ran before the fix. The
+    skill held no kcprimetime/farmtender note, so (c) removed nothing.
+    Review: 6 P3, 4 applied (`todos/review-2026-11-02-194955-docs-roles-coord-first-prompt-fixes.md`).
+    roles parked, branch deleted, worker tab closed, plugin 1.55.1 (rc=0).
     severity: P2
-    owner: unassigned (one small cepa PR, before the L63 prompts go out)
+    owner: roles (tab36@roles)
     Found in the L63 survey 2026-11-02: (a) step 1 must create a Run named
     `<repo> coord@main` when the named Run's objective does not start that
     way (§12b rule 2), or `coord:<repo>` cannot reach it — this session hit
