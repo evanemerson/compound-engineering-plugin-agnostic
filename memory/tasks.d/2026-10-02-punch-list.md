@@ -2117,9 +2117,18 @@ L72. **Orca 1.4.246 returns a short form from run-list/run-show/run-current; cep
     L63 prompts (operator: "fix first").
 
 L73. **`orchestration check` also returns a short form on Orca 1.4.246.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-03 — PR #132 merged `1145fbe` (1.55.3) on the operator's
+    AskUserQuestion "Merge #132". tab1@matrix done (head 6f5c5f6 = Handoff,
+    CI 15/15). `--full` on every check / peek / drain / --wait in autonomy
+    §12b rules 1, 5, 8 and in orca-nudge.sh's typed text. Measured: a
+    `check --full` drain marks its batch read itself (deliveryAcknowledged
+    true), so --ack after it is a no-op. The operator's ~/.claude/CLAUDE.md
+    lines 267 and 269 now say `--full` too (backup
+    ~/.claude/CLAUDE.md.bak-2026-11-03-check-full). Plugin 1.55.3 (rc=0),
+    matrix parked, worker tab closed. Follow-ups: L74, L75.
     severity: P2
-    owner: unassigned (follow-up to L72; the #131 worker could not measure it)
+    owner: matrix (tab1@matrix)
     Measured by coord@main 2026-11-03 ~04:00 UTC on a real message
     (`msg_c4179f7118ad`): `check --run <run> --json` returned the message
     with `from_handle` and `created_at` null and NO `deliveryId`, and it
@@ -2128,6 +2137,27 @@ L73. **`orchestration check` also returns a short form on Orca 1.4.246.**
     rule 8 `check` and `check --peek` in autonomy §12b, the nudge text that
     tells a session to run `check`, and any script that reads `check`
     output need `--full`. Until then, coord@main runs `check ... --full`.
+
+L74. **A `check --full` drain marks its batch read at once, so a lost drain output loses the batch.**
+    status: pending
+    severity: P2
+    owner: unassigned (a §12b rule 8 change; operator's call)
+    Measured by tab1@matrix on Orca 1.4.246 (PR #132, review finding 3,
+    deferred): `check --full` returns `deliveryAcknowledged: true`. A bound
+    Run's coordinator that drains and then loses the output (crash, context
+    end) has lost those messages. Option: every session processes from a
+    peek first and drains only after it acted, as unbound sessions already
+    do. `memory/tasks.d/2026-11-03-fix-matrix-check-full.md` item 5.
+
+L75. **`stack-gate.sh --build` never skips when compose lists pull-only images.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    Reported by helm coord@main 2026-11-03 (msg_8809354c315e; helm residual
+    #18): `compose config --images` lists pull-only images (nginx, mailpit)
+    that are never built, so on a machine without them the "all images
+    exist" check fails and every start builds. Safe (it builds under the
+    lock), only slow. Fix: check only services that have a `build:` section.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
@@ -2145,6 +2175,12 @@ prompt + per-repo notes (lane names, old lanes to remove after setup,
 `check --full`) via `coord:<repo>`: contexthub delivered msg_8441e2479a42;
 artist360 delivered msg_e6addc839f98; dpc-pro, kcprimetime, helm,
 dpc-pro-docs PENDING in their outboxes (no live coord@main resolved).
+All four pending prompts were drained once the operator poked the tabs.
+DONE: kcprimetime (msg_19eaeeb2a578; Run run_c169a95a45dd; sprinter,
+suburban; lane-a, lane-b removed; verified in Orca's worktree list).
+helm (msg_8809354c315e; Run run_cef0840e0fe1; PR helm#203 merged adb8c81;
+keel, cleat, bow; lane1-3 removed; verified). Open: dpc-pro, dpc-pro-docs,
+contexthub, artist360.
 cepa itself: matrix, optimization, formulation created (parked 9c12f56);
 gain, integrity, roles removed via `orca-lane.sh rm` on the operator's
 answer. roles first refused on reflog c3273f0 (PR #87's pre-squash commit,
