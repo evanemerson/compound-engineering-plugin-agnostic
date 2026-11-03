@@ -26,8 +26,9 @@ start target, the worktree properties, and the coord@main first prompt.
 
 **Status (2026-11-02): the gate (L66, 1.53.0), the `coord:<repo>` outbox
 (L61, 1.54.0) and the build lock (L70, 1.55.0) have shipped.** A loaded
-plugin older than one of these fails the first prompt's step 0 or step 1:
-refresh it first (`scripts/check-plugin-freshness.sh`). Without the gate
+plugin older than one of these fails the first prompt's step 0, its
+step 1 outbox drain, or its step 2 build checks: refresh it first
+(`scripts/check-plugin-freshness.sh`). Without the gate
 every gated start refuses with `STACK gate: not found`, by design.
 
 ## Rules at a glance
@@ -431,11 +432,11 @@ reaches a question, and record each strip.
    `STACK gate: refused`, follow "When the gate refuses", then
    `orca-lane.sh rm` and `create` that lane. Never re-run setup by hand.
 5. **Rebuild old lanes.** List every lane whose setup ran before the
-   repo met the scheme (before the step-3 fix merged): lanes Orca cannot
-   use, AND Orca-made lanes (under `~/orca/workspaces/<repo>/`) whose
+   repo met the scheme (before the step-3 fix merged, if step 3 ran):
+   lanes Orca cannot use, AND Orca-made lanes (under `~/orca/workspaces/<repo>/`) whose
    setup ran then. For each one, check for uncommitted work and unmerged
-   branches, and ask the operator. On yes, rebuild it under the SAME name: `orca-lane.sh rm` first, then
-   `create` (removing first avoids Orca's duplicate-name suffix), then
+   branches, and ask the operator. On yes, rebuild it under the SAME
+   name: `orca-lane.sh rm` first, then `create` (removing first avoids Orca's duplicate-name suffix), then
    check its `Setup` tab as in step 4. The same name keeps the same
    project, so setup reuses the old images when they still exist: when the
    base changed what an image installs, the lane's first worker runs

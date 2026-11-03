@@ -269,7 +269,7 @@ def step(n):
 # L71: each step carries the contract it was fixed for, inside that step.
 for name, n, needles in [
     ("TEMPLATE step 1 names the Run", 1,
-     ("`run-show`", "start with `<repo> coord@main`", "(`run-create`)", "outbox drain")),
+     ("`run-show`", "does not start with `<repo> coord@main`", "(`run-create`)", "outbox drain")),
     ("TEMPLATE step 2 build contract", 2,
      ("`stack-gate.sh --build` (one build at a time, skipped when the images exist)",
       "`make up BUILD=1` (`--rebuild`)", "`up -d --no-build`")),
