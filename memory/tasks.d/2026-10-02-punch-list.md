@@ -2220,6 +2220,13 @@ L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f79
        orphaned PTY does not block, or the Ending line lists the handles.
     Also seen once: rm "worktree rm failed (runtime_error)" on taussig; a
     retry removed it.
+    4. (msg_63a0545fc0de) Orca's `worktree rm` returned runtime_error on 3
+       of 6 dpc-pro lanes (taussig, apgar, cori). On apgar and cori the
+       failed rm had already DELETED 1-2 tracked files (migration .py)
+       before it stopped; the retry then refused "it has changes ( D ...)".
+       The operator's session ran `git restore`, then rm passed. Fix: after
+       a runtime_error, report the deleted tracked paths as Orca's partial
+       removal, not as operator changes.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
@@ -2244,7 +2251,10 @@ helm (msg_8809354c315e; Run run_cef0840e0fe1; PR helm#203 merged adb8c81;
 keel, cleat, bow; lane1-3 removed; verified). dpc-pro-docs
 (msg_973360628a62; PR dpc-pro-docs#28 merged 77e1b84 adds orca.yaml;
 dossier, chronicle, manifest; billing, comms, patients, setup removed;
-verified). Open: dpc-pro, contexthub, artist360; kcprimetime re-check (L76).
+verified). dpc-pro DONE (msg_63a0545fc0de; PR dpc-pro#308 merged 51336e16,
+deployed; apgar bath cori levi taussig wright rebuilt under
+~/orca/workspaces/dpc-pro/, each Setup tab gate ok + stopped; verified in
+Orca's list). Open: contexthub, artist360.
 cepa itself: matrix, optimization, formulation created (parked 9c12f56);
 gain, integrity, roles removed via `orca-lane.sh rm` on the operator's
 answer. roles first refused on reflog c3273f0 (PR #87's pre-squash commit,
