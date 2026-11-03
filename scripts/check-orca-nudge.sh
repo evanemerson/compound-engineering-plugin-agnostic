@@ -250,7 +250,7 @@ STUB = os.path.join(BIN, "orca-ide")
 # `terminal send`) makes the first STUB_ERR_TIMES calls of that verb print
 # STUB_ERR to stderr and exit STUB_ERR_RC (default 1). STUB_ERR is printed
 # with %b, so `\\0` in it becomes a NUL byte.
-# L72: Orca 1.4.246 answers an orchestration read WITHOUT `--full` in its
+# L72: Orca 1.4.246 answers an orchestration read or send WITHOUT `--full` in its
 # concise view. So does the stub: such a call re-runs the stub once
 # (STUB_SHORT_INNER, logged once) and passes the answer through
 # scripts/fixtures/orca-short-shape.py. Only that path starts python3, so a
@@ -259,7 +259,7 @@ STUB = os.path.join(BIN, "orca-ide")
 open(STUB, "w").write(r'''#!/usr/bin/env bash
 [ -n "${STUB_SHORT_INNER-}" ] || printf '%s\0' "$#" "$@" >>"$STUB_LOG"
 case "$1 $2" in
-  "orchestration inbox"|"orchestration run-current"|"orchestration run-show"|"orchestration run-list"|"orchestration worker-list"|"orchestration worker-show")
+  "orchestration inbox"|"orchestration run-current"|"orchestration run-show"|"orchestration run-list"|"orchestration worker-list"|"orchestration worker-show"|"orchestration send"|"orchestration reply")
     full=0; for a in "$@"; do [ "$a" != --full ] || full=1; done
     if [ "$full" = 0 ] && [ -z "${STUB_SHORT_INNER-}" ]; then
       o=$(STUB_SHORT_INNER=1 "$0" "$@"); rc=$?
@@ -634,7 +634,7 @@ if LEGS in ("all", "send"):
     STDIN = SUBJ + "\n" + BODY + "\n"
     HEREDOC_MSG = "the heredoc holds a message after its fields; the message goes in the file the file: field names"
     OSEND_ARGV = ["orchestration", "send", "--to", H, "--type", "question", "--subject", SUBJ,
-                  "--body", BODY, "--retry-request", "<uuid>", "--json"]
+                  "--body", BODY, "--retry-request", "<uuid>", "--json", "--full"]
     UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
     import re as _re
 
@@ -787,6 +787,9 @@ if LEGS in ("all", "send"):
           [NOSTORE + "the reply has no result.message.id", PASTE], osend_json=osend(message=False, warnings=False))
     store("STORE warning-only result", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
           osend_json=osend(message=False))
+    # L72: Orca 1.4.246's concise send output ({messageId, warnings}) is never "stored".
+    store("STORE send output in the 1.4.246 short shape", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
+          osend_json=SHORT("send", osend()))
     store("STORE ok false", 5, [NOSTORE + 'Orca did not return "ok": true (missing_task_id)', PASTE],
           osend_rc=1, osend_json=json.dumps({"id": "local", "ok": False,
                                              "error": {"code": "missing_task_id", "message": "worker_done requires taskId."}}))
@@ -870,8 +873,8 @@ if LEGS in ("all", "send"):
     calls = store("REPLY stored then nudged the asker", 0, [STORED, "Orca nudge sent to " + H],
                   argv=RARGS, stdin=RBODY, osend_json=oreply())
     rc_ = [c for c in calls if c[:2] == ["orchestration", "reply"]]
-    check = len(rc_) == 1 and len(rc_[0]) == 9 and rc_[0][:6] == ["orchestration", "reply", "--id", QID, "--body", BODY] \
-        and rc_[0][6] == "--retry-request" and _re.fullmatch(UUID_RE, rc_[0][7] or "") and rc_[0][8:] == ["--json"] \
+    check = len(rc_) == 1 and len(rc_[0]) == 10 and rc_[0][:6] == ["orchestration", "reply", "--id", QID, "--body", BODY] \
+        and rc_[0][6] == "--retry-request" and _re.fullmatch(UUID_RE, rc_[0][7] or "") and rc_[0][8:] == ["--json", "--full"] \
         and sends(calls) == [SEND_ARGV]
     (ok if check else miss)("REPLY argv" if check else "REPLY argv: %r" % calls)
     calls = store("REPLY no-nudge stores only", 0, [STORED], argv=["orca-ide", QID, "reply", "no-nudge"],
@@ -950,10 +953,10 @@ if LEGS in ("all", "send"):
     WINBOX = inbox({"id": MID, "to_handle": RUN})
     calls = store("WDONE stored", 0, [WSTORED], argv=WARGS, osend_json=owd(), inbox_json=WINBOX)
     oc = [c for c in calls if c[:2] == ["orchestration", "send"]]
-    check = len(oc) == 1 and len(oc[0]) == 17 and oc[0][:16] == ["orchestration", "send", "--type", "worker_done", "--subject", SUBJ,
+    check = len(oc) == 1 and len(oc[0]) == 18 and oc[0][:16] == ["orchestration", "send", "--type", "worker_done", "--subject", SUBJ,
                                             "--body", BODY, "--task-id", TID, "--dispatch-id", DID,
                                             "--outcome", "succeeded", "--retry-request", oc[0][15]] \
-        and _re.fullmatch(UUID_RE, oc[0][15]) and oc[0][16:] == ["--json"] and not sends(calls)
+        and _re.fullmatch(UUID_RE, oc[0][15]) and oc[0][16:] == ["--json", "--full"] and not sends(calls)
     (ok if check else miss)("WDONE argv, no nudge" if check else "WDONE argv, no nudge: %r" % calls)
     store("WDONE failed outcome", 0, [WSTORED], argv=WARGS[:3] + ["failed", TID],
           osend_json=owd(action="failed"), inbox_json=WINBOX)
@@ -1198,7 +1201,7 @@ if LEGS in ("all", "send"):
             "STUB_OSEND": osend(), "STUB_OSEND_RC": "0", "STUB_INBOX": inbox()})
         oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
         want = [["orchestration", "send", "--to", H, "--type", "status", "--subject", SUBJ, "--body", hbody,
-                 "--retry-request", "<uuid>", "--json"]]
+                 "--retry-request", "<uuid>", "--json", "--full"]]
         why = []
         if rc_ != 0 or out != [STORED]:
             why.append("rc=%s out=%r" % (rc_, out[:4]))

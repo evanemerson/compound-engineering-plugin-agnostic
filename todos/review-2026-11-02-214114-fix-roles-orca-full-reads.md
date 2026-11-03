@@ -8,14 +8,14 @@ agents:
   - silent-failure-hunter
   - pr-test-analyzer
 summary:
-  total: 10
-  p1: 0
+  total: 11
+  p1: 1
   p2: 2
   p3: 8
   pending: 0
   ready: 0
   skipped: 1
-  applied: 3
+  applied: 4
   deferred: 6
   completed: 0
 agents_skipped:
@@ -65,6 +65,30 @@ cepa_local_md: "missing — the stack was inferred (bash scripts + Python test t
 # Review Findings — 2026-11-02 21:41
 
 ## Findings
+
+### 11
+- status: applied
+- severity: P1
+- agent: tab37@roles (live worker_done send, after the agent review)
+- category: Fail-open delivery
+- confidence: 95
+- action_class: mechanical
+- file: plugins/cepa/scripts/orca-send.sh
+- lines: 768-779
+- title: orchestration send and reply print a concise view too, so every send reported "no message stored"
+
+**Problem:**
+This worker's own worker_done through orca-send.sh exited 5 ("the reply
+has no result.message.id") while Orca stored it (msg_c4179f7118ad). A
+measured send without `--full` prints `{"messageId", "warnings"}`, so
+every send on 1.4.246 reads as failed and asks the session to paste a
+duplicate.
+
+**Fix:**
+`--json --full` on the send, worker_done and reply calls (send measured
+with one self-addressed message replayed under the same request id; reply
+on its `--help` alone). New case `STORE send output in the 1.4.246 short
+shape` and three drop-`--full` mutants.
 
 ### 1
 - status: applied

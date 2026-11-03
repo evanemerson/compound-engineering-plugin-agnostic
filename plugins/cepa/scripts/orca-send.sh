@@ -229,6 +229,15 @@
 # `check --peek` was read only on an empty batch (its concise view drops
 # `runId`, `dispatchId`, `count`, `acknowledged`); its message rows were not
 # measured, and no script here reads `check`.
+# The WRITES print a concise view too. `send` without `--full` printed
+# `{"messageId": "msg_…", "warnings": ["<text>"]}` (no `message` object, so
+# every send read "no result.message.id" and exit 5 though Orca stored it);
+# with `--full` it prints `{message: {id, to_handle, …}, warnings, mutation:
+# {requestId, replayed}}` (measured 2026-11-02 by one send to this worker's
+# own terminal, replayed with `--full` under the same `--retry-request`: one
+# message stored). `reply` documents the same `--full` in its `--help`; its
+# output was not measured (no question to answer), so it passes `--full` on
+# that evidence alone.
 #
 # STATED LIMITS:
 #   - The outbox is on this machine, and every session runs as one user, so
@@ -767,16 +776,16 @@ fi
 case "$cepa_send_type" in
   reply)
     cepa_send_orca "$cepa_send_tmp/send.json" orchestration reply --id "$cepa_send_target" \
-      --body "$cepa_send_body" --retry-request "$cepa_send_req" --json ;;
+      --body "$cepa_send_body" --retry-request "$cepa_send_req" --json --full ;;
   worker_done)
     cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --type worker_done \
       --subject "$cepa_send_subject" --body "$cepa_send_body" --task-id "$cepa_send_task" \
       --dispatch-id "${cepa_send_target#dispatch:}" --outcome "$cepa_send_outcome_arg" \
-      --retry-request "$cepa_send_req" --json ;;
+      --retry-request "$cepa_send_req" --json --full ;;
   *)
 cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --to "$cepa_send_target" \
   --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \
-  --retry-request "$cepa_send_req" --json ;;
+  --retry-request "$cepa_send_req" --json --full ;;
 esac
 
 # Prints `<msg id> <recipient>`, or `FAIL <reason>`. The reason holds no Orca

@@ -19,6 +19,8 @@
 #   inbox        messages[{id, type, from, to, subject, handled, body (200
 #                chars), payload}]                 (no from_handle, to_handle,
 #                thread_id, created_at)
+#   send, reply  {messageId, warnings[str]}        (no message object; `send`
+#                measured, `reply` assumed to match it)
 #
 # Use: `short(verb, text)` returns the short text, or `text` unchanged when it
 # is not JSON, not an object with `"ok": true`, or not one of these verbs (a
@@ -28,7 +30,7 @@
 # As a program: `orca-short-shape.py <verb>` filters stdin to stdout.
 import json, sys
 
-VERBS = ("run-list", "run-show", "run-current", "worker-list", "worker-show", "inbox")
+VERBS = ("run-list", "run-show", "run-current", "worker-list", "worker-show", "inbox", "send", "reply")
 
 
 def _run(r):
@@ -62,6 +64,10 @@ def _short(verb, d):
                "state": wk.get("state"), "stage": wk.get("stage"),
                "liveness": (p.get("liveness") or {}).get("verdict"),
                "terminal": wk.get("agentTerminalHandle")}
+    elif verb in ("send", "reply"):
+        m = r["message"]
+        out = {"messageId": m.get("id") if isinstance(m, dict) else None,
+               "warnings": [w.get("message", "") if isinstance(w, dict) else w for w in r.get("warnings") or []]}
     else:
         out = {"messages": [{"id": m.get("id"), "type": m.get("type"), "from": m.get("from_handle"),
                              "to": m.get("to_handle"), "subject": m.get("subject"), "handled": m.get("read"),
