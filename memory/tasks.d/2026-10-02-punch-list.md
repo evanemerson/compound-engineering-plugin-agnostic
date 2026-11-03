@@ -2092,6 +2092,33 @@ L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.*
     the fix merged"; (c) drop the stale kcprimetime #30 / farmtender #79
     notes wherever they are restated.
 
+L72. **Orca 1.4.246 returns a short form from run-list/run-show/run-current; cepa reads the old form.**
+    status: pending
+    severity: P1
+    owner: roles (tab37@roles)
+    Measured 2026-11-02 ~02:15 UTC, `orca-ide --version` 1.4.246 (was
+    1.4.245 earlier the same day). Without `--full`: `run-list` rows hold
+    only `id`, `objective`; `run-show --id` returns `runId`, `objective`,
+    `removedWork` (no `run` object, no `coordinator_handle`, no
+    `consumer_generation`); `run-current` returns `runId`, `objective`.
+    With `--full` the old shape returns. Impact: `orca-send.sh`'s `coord:`
+    resolver (`run-list --limit 100 --json`) sees no handle, so every
+    `coord:<repo>` send goes pending; `orca-rebind.sh` and `orca-health.sh`
+    read `run-show`/`run-current` for the holder and generation. Blocks the
+    L63 prompts (operator: "fix first").
+
+L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
+1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
+(rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
+porch neko (new), remove jolene lambchop waxahatchee; helm keel cleat bow,
+remove lane1-3; contexthub navigator curator translator, remove cassidy
+lorena; kcprimetime sprinter suburban, remove lane-a lane-b; dpc-pro-docs
+dossier chronicle manifest, remove billing comms patients setup;
+artist360-docs no change; compound-engineering matrix optimization
+formulation, remove roles integrity gain (after L72). Old lanes are removed
+only AFTER the new ones pass setup, each one asked per lane. Sends go via
+`coord:<repo>` after L72 even where no coord@main is live (outbox holds).
+
 ---
 
 ## How this list is used
