@@ -1,0 +1,7 @@
+# Residuals — fix/roles/gate-build-outside-lock (PR #128, punch-list L68)
+
+## Undone Items from fix/roles/gate-build-outside-lock (2026-11-02)
+1. [P2] Builds run outside both gate ceilings: several lanes build at once with no stack count and no RAM check, and every `make up` runs a build. Choices: a build semaphore, a MemAvailable check before `compose build`, or build only when the image is missing. `plugins/cepa/skills/lane-stack/SKILL.md` "The stack gate". `todos/review-2026-11-02-181131-fix-roles-gate-build-outside-lock.md` #3, #13.
+2. [P2] Setup holds the gate lock through its migrations (`plugins/cepa/skills/lane-stack/SKILL.md` Setup step 4). Choice: gate only `up -d --no-build` and run migrations after the gate (the stop trap must still cover them). Same file, #5.
+3. [P2] `up -d --no-build` still pulls missing pull-only images and waits on `depends_on` health under the lock (`plugins/cepa/scripts/stack-gate.sh` header). Choice: pre-pull outside the gate (`compose pull --ignore-buildable`, verify the flag on the installed compose). Same file, #6.
+4. [P3] A holder file naming who holds the gate lock (the third choice of `memory/tasks.d/2026-11-02-feat-roles-stack-gate.md` item 1), so a "lock busy" refusal names the holder.

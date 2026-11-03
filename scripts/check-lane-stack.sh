@@ -15,12 +15,16 @@
 #             (the only two values that parser accepts are listed there).
 #   GATE      inside the `## The stack gate` section, the gate is cited by
 #             path, config path, call shape, output line and exit codes
-#             (design "Builder-check answers" 6). Scoped to that section so
-#             a sentence elsewhere cannot satisfy a needle.
+#             (design "Builder-check answers" 6), and the start command
+#             is the start only, never a build (L68). Scoped to that section
+#             so a sentence elsewhere cannot satisfy a needle.
 #   MAKE      the `make up` example block is RUN in throwaway git repos with
-#             a stub gate: the main checkout starts directly; a lane starts
-#             only through the gate, with `<project> -- <start>`; a gate
-#             refusal (exit 3) fails make; and each default-deny refusal
+#             a stub gate and a stub compose: the main checkout starts
+#             directly; a lane builds first, outside the gate (L68), then
+#             starts only through the gate, with
+#             `<project> -- <compose> up -d --no-build`; a failed build
+#             starts nothing and never reaches the gate; a gate refusal
+#             (exit 3) fails make; and each default-deny refusal builds and
 #             starts nothing: a lane with no gate, a lane whose project name
 #             is unset or lacks `-wt-`, and a severed lane (its main repo
 #             moved, so git cannot resolve it). A missing `git` or `make`,
@@ -37,7 +41,9 @@
 # Orca's parser on one date; a later Orca can add keys, and this check will
 # not see that. The MAKE leg runs the example as written with stubs; it does
 # not prove any repo's real Makefile is gated (that is L67's /cepa:setup
-# check). The TEMPLATE leg checks anchors, not the meaning of each step.
+# check). No leg checks the Setup section: its order (build, then the gate,
+# then `.env` and migrations under it) and its two build preconditions are
+# prose only. The TEMPLATE leg checks anchors, not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SKILL="$(realpath "${1:-plugins/cepa/skills/lane-stack/SKILL.md}")" python3 - <<'PY'
@@ -105,11 +111,13 @@ for name, needle in [
     ("GATE exit 2 usage", "`2` usage"),
     ("GATE runs start under lock", "runs the start command itself, under its lock"),
     ("GATE counts running only", "at least one running container (stopped\n  stacks do not count)"),
+    ("GATE start is never a build", "**The start command is the start only, never a build:**"),
 ]:
     case(name, needle in gsec, "the stack gate section no longer says %r" % needle)
 
 # MAKE
 MAKE_CASES = ("MAKE main starts directly", "MAKE lane starts through gate",
+              "MAKE lane builds before the gate", "MAKE lane build failure starts nothing",
               "MAKE lane gate refusal propagates", "MAKE lane without gate refuses",
               "MAKE lane unset project refuses", "MAKE lane non-wt project refuses",
               "MAKE severed lane refuses")
@@ -121,8 +129,14 @@ if len(ms) != 1 or tools:
 else:
     with tempfile.TemporaryDirectory() as d:
         mk = os.path.join(d, "Makefile")
+        # The compose stub prints `START <args>`; STUB_BUILD_FAIL fails a build.
+        comp = os.path.join(d, "compose")
+        with open(comp, "w") as f:
+            f.write('#!/usr/bin/env bash\necho "START $*"\n'
+                    'if [ -n "${STUB_BUILD_FAIL:-}" ] && [ "${1:-}" = build ]; then exit 1; fi\n')
+        os.chmod(comp, 0o755)
         with open(mk, "w") as f:
-            f.write("DEV_COMPOSE = echo START\nworktree-guard:\n\t@true\n" + ms[0])
+            f.write("DEV_COMPOSE = %s\nworktree-guard:\n\t@true\n" % comp + ms[0])
         root = os.path.join(d, "root")
         os.makedirs(os.path.join(root, "scripts"))
         with open(os.path.join(root, "scripts", "resolve-plugin-root.sh"), "w") as f:
@@ -164,28 +178,43 @@ else:
             def show(r):
                 return "rc=%d out=%r" % (r.returncode, r.stdout + r.stderr)
             proj = "x-wt-lane-1"
+            up = "START up -d --no-build"
+            gate_line = "GATE %s -- %s up -d --no-build" % (proj, comp)
+            def lines(r):
+                return r.stdout.splitlines()
+            def nothing(r):  # nothing built, nothing started, gate never called
+                return not any(l.startswith(("START", "GATE")) for l in lines(r))
             r = make(main, CEPA_PLUGIN_ROOT=root)
             case("MAKE main starts directly",
                  r.returncode == 0 and r.stdout.strip() == "START up -d", show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
+            ls = lines(r)
             case("MAKE lane starts through gate",
-                 r.returncode == 0 and r.stdout.splitlines() == ["GATE %s -- echo START up -d" % proj, "START up -d"],
-                 show(r))
+                 r.returncode == 0 and gate_line in ls and up in ls
+                 and ls.index(up) == ls.index(gate_line) + 1, show(r))
+            case("MAKE lane builds before the gate",
+                 "START build" in ls and gate_line in ls
+                 and ls.index("START build") < ls.index(gate_line), show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_BUILD_FAIL="1")
+            case("MAKE lane build failure starts nothing",
+                 r.returncode != 0 and "START build" in lines(r)
+                 and not any(l.startswith(("START up", "GATE")) for l in lines(r))
+                 and "STACK build: failed" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_REFUSE="1")
             case("MAKE lane gate refusal propagates",
-                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "STACK gate: refused" in r.stdout, show(r))
+                 r.returncode != 0 and up not in lines(r) and "STACK gate: refused" in r.stdout, show(r))
             r = make(lane, COMPOSE_PROJECT_NAME=proj)
             case("MAKE lane without gate refuses",
-                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "STACK gate: not found" in r.stdout, show(r))
+                 r.returncode != 0 and nothing(r) and "STACK gate: not found" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root)
             case("MAKE lane unset project refuses",
-                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "GATE" not in r.stdout, show(r))
+                 r.returncode != 0 and nothing(r) and "has no -wt-" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME="x")
             case("MAKE lane non-wt project refuses",
-                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "GATE" not in r.stdout, show(r))
+                 r.returncode != 0 and nothing(r) and "has no -wt-" in r.stdout, show(r))
             r = make(sev_lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
             case("MAKE severed lane refuses",
-                 r.returncode != 0 and "START up -d" not in r.stdout.splitlines() and "GATE" not in r.stdout, show(r))
+                 r.returncode != 0 and nothing(r) and "checkout identity unknown" in r.stdout, show(r))
 
 # TEMPLATE
 ts = blocks("markdown", "````")

@@ -21,11 +21,22 @@
 #     when the gate passes, while the gate still holds its lock. The lock is
 #     released when the command returns; the command does not inherit the
 #     lock's file descriptor, so a process it leaves running never holds it.
-#     The lock is held for the command's WHOLE run, so the command must
-#     return once the stack is started (`compose up -d`, `start`, `restart`),
-#     never a foreground `compose up` or a long one-off `compose run`: every
-#     other lane's start waits behind it and is refused after
-#     lock_wait_seconds. A gate killed by SIGTERM or SIGKILL leaves its
+#     The lock is held for the command's WHOLE run, so the command must be
+#     the start ONLY and return once the stack is started: `compose up -d
+#     --no-build`, `start`, `restart`. Never a build, a foreground
+#     `compose up`, or a long one-off `compose run`: every other lane's start
+#     waits behind it and is refused after lock_wait_seconds as "lock busy",
+#     while capacity is free. A cold build takes 5-8 minutes per lane, so at
+#     fleet launch a third lane would wait past the 600 s default (L68).
+#     Build first, OUTSIDE the gate (`compose build`: no lock, no container
+#     started), and pass `--no-build`, because a plain `compose up -d` builds
+#     any image that is missing. The gate does not inspect the command; the
+#     caller (the lane-stack skill's `make up` and setup) owns this. What
+#     still runs under the lock: `--no-build` still pulls a missing
+#     pull-only image and waits on `depends_on` health conditions, and a
+#     gated setup init runs its migrations here. A build outside the gate is
+#     outside both ceilings too (no count, no MemAvailable check).
+#     A gate killed by SIGTERM or SIGKILL leaves its
 #     command running without the lock (Ctrl-C reaches both); the next start
 #     may then count before that stack is up. Stated, not handled.
 #     A start that waits prints one `waiting` line on stderr first.
