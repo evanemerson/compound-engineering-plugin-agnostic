@@ -2140,6 +2140,15 @@ artist360-docs no change; compound-engineering matrix optimization
 formulation, remove roles integrity gain (after L72). Old lanes are removed
 only AFTER the new ones pass setup, each one asked per lane. Sends go via
 `coord:<repo>` after L72 even where no coord@main is live (outbox holds).
+L63 SENT 2026-11-03 ~04:16 UTC (cepa 1.55.2, after L72): filled first
+prompt + per-repo notes (lane names, old lanes to remove after setup,
+`check --full`) via `coord:<repo>`: contexthub delivered msg_8441e2479a42;
+artist360 delivered msg_e6addc839f98; dpc-pro, kcprimetime, helm,
+dpc-pro-docs PENDING in their outboxes (no live coord@main resolved).
+cepa itself: matrix, optimization, formulation created (parked 9c12f56);
+gain, integrity, roles removed via `orca-lane.sh rm` on the operator's
+answer. roles first refused on reflog c3273f0 (PR #87's pre-squash commit,
+landed as c5b0932): its HEAD reflog was expired and re-parked, then removed.
 
 ---
 
