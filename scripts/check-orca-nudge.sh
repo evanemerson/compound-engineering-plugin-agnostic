@@ -1620,6 +1620,7 @@ if LEGS in ("all", "health"):
     health("HEALTH inbox in the 1.4.246 short shape", 1, unread("inbox"), inbox_json=SHORT("inbox", hinbox(q(QA, 20))))
     health("HEALTH inbox row missing created_at", 1, unread("inbox"),
            inbox_json=hinbox({k: v for k, v in q(QA, 20).items() if k != "created_at"}))
+    health("HEALTH inbox row that is not an object", 1, unread("inbox"), inbox_json=hinbox("msg_x", q(QA, 20)))
     health("HEALTH inbox with no messages field", 1, unread("inbox"), inbox_json=json.dumps({"ok": True, "result": {}}))
     calls = health("HEALTH a timed-out call stops the rest", 1,
                    unread("worker-list")[:1] + unread("inbox")[:1] +

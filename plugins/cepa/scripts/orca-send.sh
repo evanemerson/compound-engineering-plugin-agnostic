@@ -214,7 +214,7 @@
 #
 # ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
 # 2026-11-02, read only, each read with and without `--full`. Without it,
-# every `orchestration` read prints a concise view: `run-list` rows hold only
+# each of these `orchestration` reads prints a concise view: `run-list` rows hold only
 # `id` and `objective`; `run-show` holds `runId`, `objective`, `removedWork`
 # (no `run` object); `run-current` holds `runId`, `objective`; `worker-list`
 # rows have no `projection`; `worker-show` has no `dispatch`, `worker` or
@@ -226,6 +226,9 @@
 # unconfirmed send). `terminal`, `worktree` and `repo` reads have no `--full` flag
 # on 1.4.246 and still print the full record. Whether an older Orca (1.4.245
 # or before) accepts `--full` was not measured: none was at hand to run.
+# `check --peek` was read only on an empty batch (its concise view drops
+# `runId`, `dispatchId`, `count`, `acknowledged`); its message rows were not
+# measured, and no script here reads `check`.
 #
 # STATED LIMITS:
 #   - The outbox is on this machine, and every session runs as one user, so

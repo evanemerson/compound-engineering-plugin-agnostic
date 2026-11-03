@@ -21,7 +21,10 @@
 #                thread_id, created_at)
 #
 # Use: `short(verb, text)` returns the short text, or `text` unchanged when it
-# is not an ok full record of that verb (a stub's fault output stays a fault).
+# is not JSON, not an object with `"ok": true`, or not one of these verbs (a
+# stub's fault output stays a fault). An ok record of one of these verbs that
+# it cannot shorten raises, so a broken fixture fails its checker loudly
+# instead of reaching a script in the full shape (PR #131 review).
 # As a program: `orca-short-shape.py <verb>` filters stdin to stdout.
 import json, sys
 
@@ -70,11 +73,11 @@ def _short(verb, d):
 def short(verb, text):
     try:
         d = json.loads(text)
-        if verb not in VERBS or not isinstance(d, dict) or d.get("ok") is not True:
-            return text
-        return json.dumps(_short(verb, d))
-    except Exception:
+    except ValueError:
         return text
+    if verb not in VERBS or not isinstance(d, dict) or d.get("ok") is not True:
+        return text
+    return json.dumps(_short(verb, d))
 
 
 if __name__ == "__main__":

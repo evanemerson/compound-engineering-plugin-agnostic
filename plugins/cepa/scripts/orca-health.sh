@@ -31,7 +31,7 @@
 #
 # ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
 # 2026-11-02, read only, each read with and without `--full`. Without it,
-# every `orchestration` read prints a concise view: `run-list` rows hold only
+# each of these `orchestration` reads prints a concise view: `run-list` rows hold only
 # `id` and `objective`; `run-show` holds `runId`, `objective`, `removedWork`
 # (no `run` object); `run-current` holds `runId`, `objective`; `worker-list`
 # rows have no `projection`; `worker-show` has no `dispatch`, `worker` or
@@ -42,6 +42,9 @@
 # an `orca-unreadable` alert, never `ok`. `terminal`, `worktree` and `repo` reads have no `--full` flag
 # on 1.4.246 and still print the full record. Whether an older Orca (1.4.245
 # or before) accepts `--full` was not measured: none was at hand to run.
+# `check --peek` was read only on an empty batch (its concise view drops
+# `runId`, `dispatchId`, `count`, `acknowledged`); its message rows were not
+# measured, and no script here reads `check`.
 #
 # WHAT IS AN ALERT. Each source and bound below was measured on Orca 1.4.245
 # (WSL), 2026-10-31, on Run run_bf28fea0ea31's 16 settled dispatches and on
@@ -687,11 +690,12 @@ rows = (inbox.get("result") or {}).get("messages") if inbox else None
 if not isinstance(rows, list):
     unreadable("inbox")
     rows = []
-rows = [x for x in rows if isinstance(x, dict)]
 # A row in Orca 1.4.246's concise shape (no --full: `from`/`to`, no
 # created_at or thread_id) would skip every question check and read `ok`
-# (L72). Any row without the full fields makes the inbox unreadable.
-if any(not all(k in x for k in ("id", "type", "from_handle", "to_handle", "thread_id", "created_at"))
+# (L72). Any row that is not an object with the full fields makes the inbox
+# unreadable.
+if any(not isinstance(x, dict)
+       or not all(k in x for k in ("id", "type", "from_handle", "to_handle", "thread_id", "created_at"))
        for x in rows):
     unreadable("inbox")
     rows = []
