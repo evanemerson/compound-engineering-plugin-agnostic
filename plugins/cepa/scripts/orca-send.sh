@@ -226,9 +226,8 @@
 # unconfirmed send). `terminal`, `worktree` and `repo` reads have no `--full` flag
 # on 1.4.246 and still print the full record. Whether an older Orca (1.4.245
 # or before) accepts `--full` was not measured: none was at hand to run.
-# `check --peek` was read only on an empty batch (its concise view drops
-# `runId`, `dispatchId`, `count`, `acknowledged`); its message rows were not
-# measured, and no script here reads `check`.
+# No script here reads `check`. Its short form, message rows included, is
+# measured in `cepa:autonomy` §12b rule 8 (punch-list L73).
 # The WRITES print a concise view too. `send` without `--full` printed
 # `{"messageId": "msg_…", "warnings": ["<text>"]}` (no `message` object, so
 # every send read "no result.message.id" and exit 5 though Orca stored it);

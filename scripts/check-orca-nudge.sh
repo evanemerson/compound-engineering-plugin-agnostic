@@ -235,7 +235,7 @@ if LEGS not in ("all", "nudge", "send", "health"):
 H = "term_5c81eb74-a55a-4a1e-b450-81e09827d825"
 OTHER = "term_00000000-0000-0000-0000-000000000000"
 KEY = "tab-1:leaf-1"
-TEXT = "You have 1 orchestration message. Run orca-ide orchestration check --peek --json"
+TEXT = "You have 1 orchestration message. Run orca-ide orchestration check --peek --full --json"
 SEND_ARGV = ["terminal", "send", "--terminal", H, "--text", TEXT, "--enter", "--json"]
 
 TMP = tempfile.mkdtemp(prefix="cepa-nudge-chk-")
