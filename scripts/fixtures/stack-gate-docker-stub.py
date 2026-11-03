@@ -20,8 +20,18 @@ Strict like real docker where the gate depends on it:
           id; a 12-char prefix resolves. $STUB_DOCKER_FAIL=inspect exits 1.
   add <project> <wd> <id>   (not docker) appends a running container; the
           check's start command uses it to model a stack coming up.
+  compose [<flag> <value>…] config --images   prints $STUB_COMPOSE_IMAGES
+          (comma-separated), each `{p}` replaced by $COMPOSE_PROJECT_NAME, so
+          an image list read without the project name finds nothing.
+          $STUB_DOCKER_FAIL=config exits 1.
+  compose [<flag> <value>…] build   appends `start <project> <time>` and
+          `end <project> <time>` to $STUB_BUILD_LOG around a sleep of
+          $STUB_BUILD_SLEEP seconds, adds the listed images to the image
+          store, and exits $STUB_BUILD_RC (default 0).
+  image inspect [--format <t>] [--] <ref…>   exits 1 unless every ref is in
+          the JSON list in $STUB_DOCKER_IMAGES (a missing file is empty).
 """
-import json, os, re, sys, fcntl
+import json, os, re, sys, time, fcntl
 
 STATE = os.environ["STUB_DOCKER_STATE"]
 LOG = os.environ.get("STUB_DOCKER_LOG")
@@ -99,6 +109,64 @@ if argv and argv[0] == "inspect":
             sys.exit(1)
         print(f'{hit[0]["id"]} {hit[0]["started"]}')
     sys.exit(0)
+
+IMAGES = os.environ.get("STUB_DOCKER_IMAGES", "")
+
+
+def images():
+    if IMAGES and os.path.exists(IMAGES):
+        with open(IMAGES) as f:
+            return json.load(f)
+    return []
+
+
+if argv[:1] == ["compose"]:
+    proj = os.environ.get("COMPOSE_PROJECT_NAME", "")
+    listed = [x.replace("{p}", proj) for x in os.environ.get("STUB_COMPOSE_IMAGES", "").split(",") if x]
+    rest = argv[1:]
+    while rest and rest[0].startswith("-"):
+        rest = rest[2:]
+    if rest == ["config", "--images"]:
+        if FAIL == "config":
+            print("config failed", file=sys.stderr)
+            sys.exit(1)
+        for x in listed:
+            print(x)
+        sys.exit(0)
+    if rest == ["build"]:
+        blog = os.environ.get("STUB_BUILD_LOG")
+        def note(w):
+            if blog:
+                with open(blog, "a") as f:
+                    f.write(f"{w} {proj} {time.time():.3f}\n")
+        note("start")
+        time.sleep(float(os.environ.get("STUB_BUILD_SLEEP", "0")))
+        if IMAGES:
+            have = images()
+            with open(IMAGES, "w") as f:
+                json.dump(sorted(set(have) | set(listed)), f)
+        note("end")
+        sys.exit(int(os.environ.get("STUB_BUILD_RC", "0")))
+    print(f"stub docker: unsupported compose {argv}", file=sys.stderr)
+    sys.exit(64)
+
+if argv[:2] == ["image", "inspect"]:
+    refs, i, a = [], 2, argv
+    while i < len(a):
+        if a[i] == "--format":
+            i += 2
+        elif a[i] == "--":
+            i += 1
+        else:
+            refs.append(a[i]); i += 1
+    have = images()
+    miss = [r for r in refs if r not in have]
+    for r in refs:
+        if r in have:
+            print("sha256:" + r)
+    for r in miss:
+        print(f"Error response from daemon: No such image: {r}", file=sys.stderr)
+    sys.exit(1 if miss or not refs else 0)
 
 print(f"stub docker: unsupported {argv}", file=sys.stderr)
 sys.exit(64)

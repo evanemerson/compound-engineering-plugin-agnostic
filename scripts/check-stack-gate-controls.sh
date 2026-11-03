@@ -11,7 +11,7 @@
 # the mutant needs re-reading.
 #
 # Every leg of the check (USAGE, CONFIG, COUNT, MEM, RUN, LOCK, LIST,
-# COUNTMODE) has at least one mutant here whose exact case set lies inside
+# COUNTMODE, BUILD) has at least one mutant here whose exact case set lies inside
 # that leg alone; the last control asserts that, so a new leg that also kills
 # an old leg's only mutant shows.
 #
@@ -46,7 +46,7 @@ MUTANTS = [
      '. "$cepa_sg_conf" 2>/dev/null; cepa_sg_read_conf || cepa_sg_refuse "cannot read the config',
      {"CONFIG shell text never runs"}),
     ("conf-unreadable-ok", 'is not a readable file"\n    return 1', 'is not a readable file"\n    return 0',
-     {"CONFIG unreadable file refuses", "COUNTMODE unreadable config is unknown"}),
+     {"BUILD unreadable config refuses", "CONFIG unreadable file refuses", "COUNTMODE unreadable config is unknown"}),
     ("unknown-key-silent",
      '*) echo "STACK gate: WARN — $cepa_sg_conf line $n: unknown key $key; ignored" >&2; continue ;;',
      "*) continue ;;", {"CONFIG unknown key warns"}),
@@ -103,6 +103,49 @@ MUTANTS = [
     ("count-unknown-exit0", 'if ! cepa_sg_read_running; then\n    echo "STACK count: running=unknown limit=$cepa_sg_max — $cepa_sg_err"\n    exit 1',
      'if ! cepa_sg_read_running; then\n    echo "STACK count: running=unknown limit=$cepa_sg_max — $cepa_sg_err"\n    exit 0',
      {"COUNTMODE docker failure is unknown"}),
+    # BUILD (L70 item 1)
+    ("build-never-skips", 'elif why=$(cepa_sg_images_exist "$@"); then',
+     'elif why=$(cepa_sg_images_exist "$@"; false); then',
+     {"BUILD a failed build is built again, a success clears it", "BUILD skip when every image exists, no lock"}),
+    ("build-checks-first-only", '--format \'{{.Id}}\' -- "${imgs[@]}"', '--format \'{{.Id}}\' -- "${imgs[0]}"',
+     {"BUILD a missing image builds"}),
+    ("build-skip-on-empty", '''    echo "compose listed no images"
+    return 1''', '''    echo "compose listed no images"
+    return 0''', {"BUILD an empty image list builds"}),
+    ("build-skip-on-unreadable", '''    echo "the image list cannot be read (config --images failed)"
+    return 1''', '''    echo "the image list cannot be read (config --images failed)"
+    return 0''', {"BUILD an unreadable image list builds"}),
+    ("build-probe-no-project", 'out=$(COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout', 'out=$(COMPOSE_PROJECT_NAME= timeout',
+     {"BUILD a failed build is built again, a success clears it", "BUILD a waiter skips once the same project was built", "BUILD skip when every image exists, no lock"}),
+    ("rebuild-skips", 'if [ "$cepa_sg_mode" = --rebuild ]; then', 'if false; then',
+     {"BUILD --rebuild always builds", "BUILD a failed build is built again, a success clears it"}),
+    ("build-exit-0", '  exit "$brc"\n}', '  exit 0\n}',
+     {"BUILD exit code comes through", "BUILD a failed build is built again, a success clears it"}),
+    ("build-no-lock", 'flock -w "$cepa_sg_bwait" "$cepa_sg_bfd"\n', "true\n",
+     {"BUILD a waiter skips once the same project was built", "BUILD held build lock refuses after the wait", "BUILD lock outlives a gate killed mid-build", "BUILD two builds run one at a time"}),
+    ("build-wait-silent", 'echo "STACK build: waiting up to', 'true "STACK build: waiting up to',
+     {"BUILD a waiting build says so, default 3600 s"}),
+    ("build-wait-600", "cepa_sg_bwait=3600", "cepa_sg_bwait=600",
+     {"BUILD a waiting build says so, default 3600 s"}),
+    ("build-on-start-lock", 'exec {cepa_sg_bfd}>>"$cepa_sg_block"', 'exec {cepa_sg_bfd}<"$cepa_sg_dir"',
+     {"BUILD build lock and start lock are separate", "BUILD held build lock refuses after the wait"}),
+    ("build-lock-not-inherited", 'command "$@" build\n', 'command "$@" build {cepa_sg_bfd}>&-\n',
+     {"BUILD lock outlives a gate killed mid-build"}),
+    ("build-marker-ignored", 'elif [ -e "$cepa_sg_bmark" ]; then', 'elif false; then',
+     {"BUILD a failed build is built again, a success clears it"}),
+    ("build-marker-after", ': >"$cepa_sg_bmark" 2>/dev/null ||', 'true ||',
+     {"BUILD a killed build leaves its marker", "BUILD a failed build is built again, a success clears it"}),
+    ("build-waiter-no-recheck", 'if [ "$waited" = yes ] && [ "$cepa_sg_mode" = --build ]', 'if false',
+     {"BUILD a waiter skips once the same project was built"}),
+    ("build-plain-ref-skipped", 'echo "an image name is not a plain reference"\n      return 1',
+     'echo "an image name is not a plain reference"\n      continue',
+     {"BUILD a name that is not a plain reference builds"}),
+    ("build-conf-ignored", 'cepa_sg_read_conf || cepa_sg_build_refuse', 'true || cepa_sg_build_refuse',
+     {"BUILD held build lock refuses after the wait", "BUILD lock outlives a gate killed mid-build", "BUILD unreadable config refuses"}),
+    ("build-under-gate-ok", 'if [ -n "${CEPA_STACK_GATE_HELD:-}" ]; then\n    cepa_sg_build_refuse',
+     'if false; then\n    cepa_sg_build_refuse', {"BUILD inside a gated command refuses"}),
+    ("build-wait-key-ignored", "      build_wait_seconds) cepa_sg_bwait=$val ;;\n", "",
+     {"BUILD held build lock refuses after the wait", "BUILD lock outlives a gate killed mid-build"}),
 ]
 
 src = open(SCRIPT).read()
@@ -159,7 +202,7 @@ for name, (want, (rc, cases, out)) in results.items():
     else:
         passed += 1
 
-LEGS = ["USAGE", "CONFIG", "COUNT", "MEM", "RUN", "LOCK", "LIST", "COUNTMODE"]
+LEGS = ["USAGE", "CONFIG", "COUNT", "MEM", "RUN", "LOCK", "LIST", "COUNTMODE", "BUILD"]
 for leg in LEGS:
     own = [n for n, (w, _) in results.items()
            if w and all(c.split(" ", 1)[0] == leg for c in w) and results[n][1][1] == w]

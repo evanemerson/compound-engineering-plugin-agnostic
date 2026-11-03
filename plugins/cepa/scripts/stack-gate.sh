@@ -28,24 +28,62 @@
 #     waits behind it and is refused after lock_wait_seconds as "lock busy",
 #     while capacity is free. A cold build takes 5-8 minutes per lane, so at
 #     fleet launch a third lane would wait past the 600 s default (L68).
-#     Build first, OUTSIDE the gate (`compose build`: no lock, no container
-#     started), and pass `--no-build`, because a plain `compose up -d` builds
-#     any image that is missing. The gate does not inspect the command; the
-#     caller (the lane-stack skill's `make up` and setup) owns this. What
-#     still runs under the lock: `--no-build` still pulls a missing
-#     pull-only image and waits on `depends_on` health conditions, and a
-#     gated setup init runs its migrations here. A build outside the gate is
-#     outside both ceilings too (no count, no MemAvailable check).
+#     Build first, OUTSIDE the gate, with `--build` below (the build lock,
+#     not this one; no container started), and pass `--no-build`, because a
+#     plain `compose up -d` builds any image that is missing. The gate does
+#     not inspect the command; the caller (the lane-stack skill's `make up`
+#     and setup) owns this. What still runs under the lock: `--no-build`
+#     still pulls a missing pull-only image and waits on `depends_on` health
+#     conditions, and a gated setup init runs its migrations here.
 #     A gate killed by SIGTERM or SIGKILL leaves its
 #     command running without the lock (Ctrl-C reaches both); the next start
 #     may then count before that stack is up. Stated, not handled.
 #     A start that waits prints one `waiting` line on stderr first.
 #     Nesting: the command runs with CEPA_STACK_GATE_HELD=<project>; a gate
-#     for the same project inside it runs at once (no lock, no count), so
-#     setup can gate `make up` while `make up` is gated too. A gate for a
-#     different project inside it waits like any other start.
+#     for the same project inside it runs at once (no lock, no count), so a
+#     gated setup can call a start-only target that is gated too. A gate for
+#     a different project inside it waits like any other start. `--build`
+#     inside it refuses, so a gated setup never calls `make up` (it builds):
+#     it starts with `compose up -d --no-build`.
 #     The lock follows $HOME: a start under another HOME (sudo, another WSL
 #     distro on the same Docker) takes a different lock. Stated, not handled.
+#   stack-gate.sh --build <project> -- <compose command…>
+#   stack-gate.sh --rebuild <project> -- <compose command…>
+#     One image build at a time on this machine (punch-list L70 item 1). The
+#     compose command is given WITHOUT a verb (`docker compose -f dev.yml`);
+#     the gate adds `config --images` and `build`, and runs both with
+#     COMPOSE_PROJECT_NAME=<project>. <project> is checked as above.
+#     --build first lists the project's images (`config --images`) and
+#     checks them with `docker image inspect`. When the list is not empty,
+#     every name is a plain image reference and every image exists, it
+#     prints `STACK build: skipped — …`, exits 0, and takes no lock. The list
+#     holds every service's image, pull-only ones too, so a missing pull-only
+#     image also builds: a wasted cache-hit build, never a wrong skip. A
+#     failed or empty list builds. --rebuild always builds: the skip keeps
+#     an old image after a Dockerfile, requirements or build-arg change.
+#     A build runs `<compose…> build` under the BUILD lock,
+#     ~/.config/cepa/build.lock (flock), never the start lock above, so a
+#     start that does not build never waits on a build, and a build never
+#     waits on a start. Builds from every lane and every repo under this
+#     HOME queue on it. A build that waits prints one `waiting` line on
+#     stderr first, and once it holds the lock --build checks the images
+#     again (skipped when the build it waited for made them). flock does
+#     not wake waiters in order: a lane can lose the race to a later one,
+#     so `lock busy` is retryable, and the wait limit below is a sizing,
+#     not a promise.
+#     The build INHERITS the lock's descriptor, unlike a start: the lock
+#     lasts as long as the build, so a gate killed mid-build (SIGTERM,
+#     SIGKILL, a tool timeout) never lets a second build start beside it.
+#     The cost: a process the build leaves running holds the lock too.
+#     The build has no time limit of its own; a hung build holds the lock
+#     until it is stopped. Stated, not handled.
+#     Before each build the gate writes ~/.config/cepa/build-failed.<project>
+#     and removes it only when the build exits 0. While it exists, --build
+#     never skips, so a failed, partial or killed build is built again.
+#     Inside a gated command (CEPA_STACK_GATE_HELD set) it refuses: a build
+#     there would hold the start lock for the whole build.
+#     It reads no stack count and no MemAvailable: the bound is one build at
+#     a time, not a memory check.
 #   stack-gate.sh --count
 #     Read-only, for the coordinator health check (`stacks:over:<n>`): takes
 #     no lock, creates nothing, runs nothing. Prints exactly one line:
@@ -88,7 +126,9 @@
 # Config WARN lines go to stderr.
 #
 # Exit: 3 refused (the command was not run), 2 usage, otherwise the start
-# command's own exit code. --count: 0, or 1 when unreadable. The command can
+# command's own exit code. --count: 0, or 1 when unreadable. --build and
+# --rebuild: 0 skipped, 3 refused (lock busy, cannot lock, inside a gate),
+# 2 usage, otherwise the build's own exit code. The command can
 # itself exit 2 or 3 (`make` exits 2 on any error; a nested gate exits 3), so
 # the `STACK gate:` line, not the exit code, says whether the gate refused.
 #
@@ -102,7 +142,13 @@
 #   min_available_mib=2048 free memory (MemAvailable) a start needs
 #   lock_wait_seconds=600  how long a start waits for another start's lock;
 #                          at the end it refuses ("lock busy")
-# The lock is flock(1) on the config directory itself, created if absent.
+#   build_wait_seconds=3600 how long a build waits for the build lock. A cold
+#                          build takes 5-8 min; when 6 lanes build at once
+#                          the last waits for 5, about 40 min at 8 min each,
+#                          so 60 min leaves half again as slack. At the end
+#                          it refuses ("lock busy").
+# The start lock is flock(1) on the config directory itself, created if
+# absent; the build lock is the file build.lock inside it.
 #
 # Requires: bash, docker, flock, timeout, date (GNU). No jq.
 set -u
@@ -116,11 +162,13 @@ cepa_sg_conf="$cepa_sg_dir/stack-gate.conf"
 cepa_sg_max=6
 cepa_sg_min=2048
 cepa_sg_wait=600
+cepa_sg_bwait=3600
+cepa_sg_block="$cepa_sg_dir/build.lock"
 cepa_sg_meminfo=${CEPA_STACK_GATE_MEMINFO:-/proc/meminfo}
 
 cepa_sg_usage() {
   echo "STACK gate: usage — $1" >&2
-  echo "usage: stack-gate.sh <project> -- <start command…> | stack-gate.sh --count" >&2
+  echo "usage: stack-gate.sh [--build|--rebuild] <project> -- <command…> | stack-gate.sh --count" >&2
   exit 2
 }
 
@@ -148,7 +196,7 @@ cepa_sg_read_conf() { # returns 1 when the file exists but cannot be read
     val="${BASH_REMATCH[2]}"
     val="${val%"${val##*[![:space:]]}"}"
     case "$key" in
-      max_running|min_available_mib|lock_wait_seconds) ;;
+      max_running|min_available_mib|lock_wait_seconds|build_wait_seconds) ;;
       *) echo "STACK gate: WARN — $cepa_sg_conf line $n: unknown key $key; ignored" >&2; continue ;;
     esac
     if [[ ! $val =~ ^[0-9]{1,6}$ ]]; then
@@ -160,6 +208,7 @@ cepa_sg_read_conf() { # returns 1 when the file exists but cannot be read
       max_running) cepa_sg_max=$val ;;
       min_available_mib) cepa_sg_min=$val ;;
       lock_wait_seconds) cepa_sg_wait=$val ;;
+      build_wait_seconds) cepa_sg_bwait=$val ;;
     esac
   done <"$cepa_sg_conf"
 }
@@ -286,18 +335,105 @@ cepa_sg_refuse() {
   exit 3
 }
 
+# --build: prints why, and returns 0 only when the project's image list is
+# readable, not empty, all plain references, and every image exists.
+cepa_sg_images_exist() {
+  local out img
+  local -a imgs=()
+  if ! out=$(COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout --foreground -k 2 60 "$@" config --images 2>/dev/null); then
+    echo "the image list cannot be read (config --images failed)"
+    return 1
+  fi
+  while IFS= read -r img; do
+    [ -n "$img" ] || continue
+    if [[ ! $img =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]]; then
+      echo "an image name is not a plain reference"
+      return 1
+    fi
+    imgs+=("$img")
+  done <<<"$out"
+  if [ "${#imgs[@]}" -eq 0 ]; then
+    echo "compose listed no images"
+    return 1
+  fi
+  if ! timeout --foreground -k 2 60 docker image inspect --format '{{.Id}}' -- "${imgs[@]}" >/dev/null 2>&1; then
+    echo "at least one of its ${#imgs[@]} images is missing, or docker image inspect failed"
+    return 1
+  fi
+  echo "all ${#imgs[@]} images exist (--rebuild builds anyway)"
+}
+
+cepa_sg_build_refuse() {
+  echo "STACK build: refused — $1"
+  exit 3
+}
+
+# --build / --rebuild: one build at a time, on the build lock (L70 item 1).
+cepa_sg_build_mode() {
+  local why brc waited=no cepa_sg_bmark="$cepa_sg_dir/build-failed.$cepa_sg_proj"
+  if [ -n "${CEPA_STACK_GATE_HELD:-}" ]; then
+    cepa_sg_build_refuse "inside a gated command (the start lock for $(cepa_sg_clean "$CEPA_STACK_GATE_HELD") is held); build before the gate, never under it"
+  fi
+  if [ "$cepa_sg_mode" = --rebuild ]; then
+    why="rebuild asked"
+  elif [ -e "$cepa_sg_bmark" ]; then
+    why="the last build of this project failed or was stopped ($cepa_sg_bmark)"
+  elif why=$(cepa_sg_images_exist "$@"); then
+    echo "STACK build: skipped — $cepa_sg_proj: $why"
+    exit 0
+  fi
+  cepa_sg_read_conf || cepa_sg_build_refuse "cannot read the config — $cepa_sg_err"
+  mkdir -p -m 700 "$cepa_sg_dir" 2>/dev/null || cepa_sg_build_refuse "cannot create $cepa_sg_dir for the build lock"
+  exec {cepa_sg_bfd}>>"$cepa_sg_block" || cepa_sg_build_refuse "cannot open $cepa_sg_block for the build lock"
+  if flock -n "$cepa_sg_bfd"; then
+    brc=0
+  else
+    echo "STACK build: waiting up to ${cepa_sg_bwait}s for another build's lock on $cepa_sg_block" >&2
+    flock -w "$cepa_sg_bwait" "$cepa_sg_bfd"
+    brc=$?
+    waited=yes
+  fi
+  case "$brc" in
+    0) ;;
+    1) cepa_sg_build_refuse "lock busy — another build held $cepa_sg_block for ${cepa_sg_bwait}s" ;;
+    *) cepa_sg_build_refuse "cannot lock $cepa_sg_block — flock exited $brc" ;;
+  esac
+  # A build that waited re-checks: the build it waited for may have been
+  # this project's own (setup and a `make up` of one lane).
+  if [ "$waited" = yes ] && [ "$cepa_sg_mode" = --build ] && [ ! -e "$cepa_sg_bmark" ] &&
+    why=$(cepa_sg_images_exist "$@"); then
+    echo "STACK build: skipped — $cepa_sg_proj: $why (built while this one waited)"
+    exit 0
+  fi
+  # The marker is written BEFORE the build and removed only when it exits 0,
+  # so a failed, partial or killed build never lets the next --build skip.
+  : >"$cepa_sg_bmark" 2>/dev/null || cepa_sg_build_refuse "cannot write $cepa_sg_bmark"
+  echo "STACK build: building — $cepa_sg_proj: $why"
+  # The build INHERITS the lock's descriptor, so the lock lives as long as
+  # the build: a gate killed mid-build (SIGTERM, SIGKILL) frees nothing
+  # while its build still runs.
+  COMPOSE_PROJECT_NAME="$cepa_sg_proj" command "$@" build
+  brc=$?
+  [ "$brc" != 0 ] || rm -f "$cepa_sg_bmark"
+  exit "$brc"
+}
+
 # --- arguments ---
 [ $# -ge 1 ] || cepa_sg_usage "no arguments"
 if [ "$1" = --count ]; then shift; cepa_sg_count_mode "$@"; fi
-cepa_sg_proj="$1"; shift
+cepa_sg_mode=start
+case "$1" in --build|--rebuild) cepa_sg_mode="$1"; shift ;; esac
+cepa_sg_proj="${1:-}"; [ $# -ge 1 ] && shift
 [[ $cepa_sg_proj =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]] || cepa_sg_usage "project is not a compose project name"
 [[ $cepa_sg_proj == *-wt-* ]] || cepa_sg_usage "project $cepa_sg_proj has no -wt- (the gate is for worktree stacks)"
 [ "${1:-}" = -- ] || cepa_sg_usage "expected -- after the project"
 shift
 [ $# -ge 1 ] || cepa_sg_usage "no start command after --"
+[ "$cepa_sg_mode" = start ] || cepa_sg_build_mode "$@"
 
-# A gated target that calls another gated target for the SAME project (setup
-# runs `stack-gate.sh p -- make up`, and `make up` is gated too) would wait on
+# A gated target that calls another gated start-only target for the SAME
+# project (setup runs `stack-gate.sh p -- make start`, and that is gated
+# too; never `make up`, whose --build refuses in here) would wait on
 # the lock its own parent holds and be refused as "lock busy". The outer gate
 # exports CEPA_STACK_GATE_HELD=<project> to its command; an inner gate for
 # that project runs its command without taking the lock or counting again.
