@@ -29,6 +29,23 @@
 #   An ack prints `ORCA ack: <key>` per key and exits 0; 1 when a marker could
 #   not be written or an alert file is gone; 4 on a bad key.
 #
+# ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
+# 2026-11-02, read only, each read with and without `--full`. Without it,
+# each of these `orchestration` reads prints a concise view: `run-list` rows hold only
+# `id` and `objective`; `run-show` holds `runId`, `objective`, `removedWork`
+# (no `run` object); `run-current` holds `runId`, `objective`; `worker-list`
+# rows have no `projection`; `worker-show` has no `dispatch`, `worker` or
+# `projection`; `inbox` rows name `from`/`to` (not `from_handle`/`to_handle`),
+# cut the body to 200 chars, and carry no `thread_id` or `created_at`. With
+# `--full` each prints the record this script reads. So every orchestration
+# read here passes `--json --full`, and a reply in the short shape reads as
+# an `orca-unreadable` alert, never `ok`. `terminal`, `worktree` and `repo` reads have no `--full` flag
+# on 1.4.246 and still print the full record. Whether an older Orca (1.4.245
+# or before) accepts `--full` was not measured: none was at hand to run.
+# `check --peek` was read only on an empty batch (its concise view drops
+# `runId`, `dispatchId`, `count`, `acknowledged`); its message rows were not
+# measured, and no script here reads `check`.
+#
 # WHAT IS AN ALERT. Each source and bound below was measured on Orca 1.4.245
 # (WSL), 2026-10-31, on Run run_bf28fea0ea31's 16 settled dispatches and on
 # probe terminals in the `roles` worktree (PR body, punch-list L34):
@@ -245,7 +262,7 @@ cepa_h_orca() {
 # id; it must be there and be that Run.
 cepa_h_run=
 if [ -n "$cepa_h_want" ]; then
-  if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-show --id "$cepa_h_want" --json; then
+  if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-show --id "$cepa_h_want" --json --full; then
     cepa_h_run=$(python3 -I -c '
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -260,7 +277,7 @@ print(r["id"])
 else
   # No Run named: this pane's run-current Run counts only when this
   # terminal holds it. Another holder is noted, never checked.
-  if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-current --json; then
+  if cepa_h_orca "$cepa_h_tmp/run.json" orchestration run-current --json --full; then
     cepa_h_run=$(python3 -I -c '
 import json, re, sys
 d = json.load(open(sys.argv[1]))
@@ -285,7 +302,7 @@ fi
 mkdir -p "$cepa_h_tmp/show"
 if [ -n "$cepa_h_run" ]; then
   cepa_h_ids=
-  if cepa_h_orca "$cepa_h_tmp/workers.json" orchestration worker-list --run "$cepa_h_run" --json \
+  if cepa_h_orca "$cepa_h_tmp/workers.json" orchestration worker-list --run "$cepa_h_run" --json --full \
       && cepa_h_ids=$(python3 -I -c '
 import json, re, sys
 d = json.load(open(sys.argv[1]))
@@ -305,14 +322,14 @@ if len(ids) > 20 or (isinstance(page, dict) and page.get("hasMore") is not False
 print(" ".join(ids[:20]))
 ' "$cepa_h_tmp/workers.json" "$cepa_h_tmp/capped" 2>/dev/null); then
     for d in $cepa_h_ids; do
-      cepa_h_orca "$cepa_h_tmp/show/$d.json" orchestration worker-show --dispatch "$d" --json \
+      cepa_h_orca "$cepa_h_tmp/show/$d.json" orchestration worker-show --dispatch "$d" --json --full \
         || : >"$cepa_h_tmp/show/$d.fail"
     done
   else
     : >"$cepa_h_tmp/workers.fail"
   fi
 fi
-cepa_h_orca "$cepa_h_tmp/inbox.json" orchestration inbox --limit 200 --json || : >"$cepa_h_tmp/inbox.fail"
+cepa_h_orca "$cepa_h_tmp/inbox.json" orchestration inbox --limit 200 --json --full || : >"$cepa_h_tmp/inbox.fail"
 
 cepa_h_obox=${CEPA_ORCA_OUTBOX_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/outbox}
 python3 -I - "$cepa_h_tmp" "$cepa_h_dir" "$cepa_h_now" "$cepa_h_run" "$cepa_h_repo" \
@@ -673,7 +690,15 @@ rows = (inbox.get("result") or {}).get("messages") if inbox else None
 if not isinstance(rows, list):
     unreadable("inbox")
     rows = []
-rows = [x for x in rows if isinstance(x, dict)]
+# A row in Orca 1.4.246's concise shape (no --full: `from`/`to`, no
+# created_at or thread_id) would skip every question check and read `ok`
+# (L72). Any row that is not an object with the full fields makes the inbox
+# unreadable.
+if any(not isinstance(x, dict)
+       or not all(k in x for k in ("id", "type", "from_handle", "to_handle", "thread_id", "created_at"))
+       for x in rows):
+    unreadable("inbox")
+    rows = []
 if len(rows) >= 200:
     notes.append("inbox window full: questions older than 200 rows not read")
 if not me:

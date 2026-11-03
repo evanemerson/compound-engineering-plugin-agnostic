@@ -793,8 +793,9 @@ the operator actually pastes into a fresh session. Requirements:
 - **A coordinator's prompt carries its Orca Run** (punch-list L45). Under
   Orca, a coordinator (§10) writes its named Run, as `cepa:autonomy` §12b
   rule 2 defines it. When it has no `Orca Run:` line, created Run or
-  confirmed Run, it runs `<cli> orchestration run-current --json` (`<cli>`
-  the §12a `cli=` value) and takes `result.run.id` only when
+  confirmed Run, it runs `<cli> orchestration run-current --json --full`
+  (`<cli>` the §12a `cli=` value; Orca 1.4.246 prints no `run` object
+  without `--full`, punch-list L72) and takes `result.run.id` only when
   `result.run.coordinator_handle` equals `ORCA_TERMINAL_HANDLE`: `run-current`
   is per pane, so a Run another terminal holds is never written (L46). When
   the id matches `run_[A-Za-z0-9_]{1,64}` exactly, the block carries the line

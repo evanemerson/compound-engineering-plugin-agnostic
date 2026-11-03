@@ -222,6 +222,12 @@ SEND_SCRIPT = os.path.abspath(os.environ["CEPA_SEND_SCRIPT"])
 HEALTH_SCRIPT = os.path.abspath(os.environ["CEPA_HEALTH_SCRIPT"])
 REBIND_SCRIPT = os.path.abspath(os.environ["CEPA_REBIND_SCRIPT"])
 SKILL_FILE = os.path.abspath(os.environ["CEPA_SKILL_FILE"])
+# L72: the Orca 1.4.246 short form of a full record, for the cases below.
+import importlib.util
+_ss = importlib.util.spec_from_file_location("orca_short_shape", os.path.join(os.getcwd(), "scripts/fixtures/orca-short-shape.py"))
+_ssm = importlib.util.module_from_spec(_ss)
+_ss.loader.exec_module(_ssm)
+SHORT = _ssm.short
 LEGS = os.environ.get("CEPA_NUDGE_CHECK_LEGS", "all")
 if LEGS not in ("all", "nudge", "send", "health"):
     print("MISS CEPA_NUDGE_CHECK_LEGS is %r, want nudge, send or health" % LEGS)
@@ -244,8 +250,23 @@ STUB = os.path.join(BIN, "orca-ide")
 # `terminal send`) makes the first STUB_ERR_TIMES calls of that verb print
 # STUB_ERR to stderr and exit STUB_ERR_RC (default 1). STUB_ERR is printed
 # with %b, so `\\0` in it becomes a NUL byte.
+# L72: Orca 1.4.246 answers an orchestration read or send WITHOUT `--full` in its
+# concise view. So does the stub: such a call re-runs the stub once
+# (STUB_SHORT_INNER, logged once) and passes the answer through
+# scripts/fixtures/orca-short-shape.py. Only that path starts python3, so a
+# script that passes `--full` costs nothing more; one that drops it reads the
+# short shape and its cases fail.
 open(STUB, "w").write(r'''#!/usr/bin/env bash
-printf '%s\0' "$#" "$@" >>"$STUB_LOG"
+[ -n "${STUB_SHORT_INNER-}" ] || printf '%s\0' "$#" "$@" >>"$STUB_LOG"
+case "$1 $2" in
+  "orchestration inbox"|"orchestration run-current"|"orchestration run-show"|"orchestration run-list"|"orchestration worker-list"|"orchestration worker-show"|"orchestration send"|"orchestration reply")
+    full=0; for a in "$@"; do [ "$a" != --full ] || full=1; done
+    if [ "$full" = 0 ] && [ -z "${STUB_SHORT_INNER-}" ]; then
+      o=$(STUB_SHORT_INNER=1 "$0" "$@"); rc=$?
+      printf '%s' "$o" | ''' + "'%s' -I '%s'" % (sys.executable, os.path.join(os.getcwd(), "scripts/fixtures/orca-short-shape.py")) + r''' "$2"
+      exit "$rc"
+    fi ;;
+esac
 if [ "$1 $2" = "${STUB_ERR_VERB-}" ]; then
   read -r n <"$STUB_LOG.err"; n=$((n + 1)); echo "$n" >"$STUB_LOG.err"
   if [ "$n" -le "$STUB_ERR_TIMES" ]; then
@@ -348,6 +369,10 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
     if "CEPA_ORCA_ALERT_DIR" not in (env_extra or {}):
         env["CEPA_ORCA_ALERT_DIR"] = ALERTS
         shutil.rmtree(ALERTS, ignore_errors=True)
+    # Nor the real outbox: orca-health.sh reads it, so a pending file from a
+    # live session showed up in HEALTH cases (2026-11-02, L72 run).
+    if "CEPA_ORCA_OUTBOX_DIR" not in (env_extra or {}):
+        env["CEPA_ORCA_OUTBOX_DIR"] = os.path.join(TMP, "no-outbox")
     if path is not None:
         env["PATH"] = path
     for f in ("err", "ps", "rc", "rs"):
@@ -609,7 +634,7 @@ if LEGS in ("all", "send"):
     STDIN = SUBJ + "\n" + BODY + "\n"
     HEREDOC_MSG = "the heredoc holds a message after its fields; the message goes in the file the file: field names"
     OSEND_ARGV = ["orchestration", "send", "--to", H, "--type", "question", "--subject", SUBJ,
-                  "--body", BODY, "--retry-request", "<uuid>", "--json"]
+                  "--body", BODY, "--retry-request", "<uuid>", "--json", "--full"]
     UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
     import re as _re
 
@@ -621,7 +646,7 @@ if LEGS in ("all", "send"):
             if i < len(c) and _re.fullmatch(UUID_RE, c[i]):
                 c[i] = "<uuid>"
         return c
-    INBOX_ARGV = ["orchestration", "inbox", "--limit", "200", "--json"]
+    INBOX_ARGV = ["orchestration", "inbox", "--limit", "200", "--json", "--full"]
     WARN = [{"code": "legacy_terminal_recipient", "recipient": H}]
 
     def osend(mid=MID, to=H, ok=True, warnings=True, message=True, **extra):
@@ -762,6 +787,9 @@ if LEGS in ("all", "send"):
           [NOSTORE + "the reply has no result.message.id", PASTE], osend_json=osend(message=False, warnings=False))
     store("STORE warning-only result", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
           osend_json=osend(message=False))
+    # L72: Orca 1.4.246's concise send output ({messageId, warnings}) is never "stored".
+    store("STORE send output in the 1.4.246 short shape", 5, [NOSTORE + "the reply has no result.message.id", PASTE],
+          osend_json=SHORT("send", osend()))
     store("STORE ok false", 5, [NOSTORE + 'Orca did not return "ok": true (missing_task_id)', PASTE],
           osend_rc=1, osend_json=json.dumps({"id": "local", "ok": False,
                                              "error": {"code": "missing_task_id", "message": "worker_done requires taskId."}}))
@@ -791,6 +819,9 @@ if LEGS in ("all", "send"):
           inbox_json="not json")
     store("STORE inbox wrong shape", 5, [NOSTORE + "the inbox could not be parsed, so %s is unconfirmed" % MID, PASTE],
           inbox_json=json.dumps({"ok": True, "result": {}}))
+    # L72: Orca 1.4.246's concise inbox (`to`, not `to_handle`) is unparsed, never "not stored".
+    store("STORE inbox in the 1.4.246 short shape", 5,
+          [NOSTORE + "the inbox could not be parsed, so %s is unconfirmed" % MID, PASTE], inbox_json=SHORT("inbox", inbox()))
     # Bytes, not characters: 14,000 two-byte characters plus a 1-byte subject.
     store("SENDREF cap counts bytes", 4,
           ["Orca send refused: " + "subject and body are 28001 bytes; the limit is 28000 (WSL command-line limit)", PASTE],
@@ -842,8 +873,8 @@ if LEGS in ("all", "send"):
     calls = store("REPLY stored then nudged the asker", 0, [STORED, "Orca nudge sent to " + H],
                   argv=RARGS, stdin=RBODY, osend_json=oreply())
     rc_ = [c for c in calls if c[:2] == ["orchestration", "reply"]]
-    check = len(rc_) == 1 and len(rc_[0]) == 9 and rc_[0][:6] == ["orchestration", "reply", "--id", QID, "--body", BODY] \
-        and rc_[0][6] == "--retry-request" and _re.fullmatch(UUID_RE, rc_[0][7] or "") and rc_[0][8:] == ["--json"] \
+    check = len(rc_) == 1 and len(rc_[0]) == 10 and rc_[0][:6] == ["orchestration", "reply", "--id", QID, "--body", BODY] \
+        and rc_[0][6] == "--retry-request" and _re.fullmatch(UUID_RE, rc_[0][7] or "") and rc_[0][8:] == ["--json", "--full"] \
         and sends(calls) == [SEND_ARGV]
     (ok if check else miss)("REPLY argv" if check else "REPLY argv: %r" % calls)
     calls = store("REPLY no-nudge stores only", 0, [STORED], argv=["orca-ide", QID, "reply", "no-nudge"],
@@ -922,10 +953,10 @@ if LEGS in ("all", "send"):
     WINBOX = inbox({"id": MID, "to_handle": RUN})
     calls = store("WDONE stored", 0, [WSTORED], argv=WARGS, osend_json=owd(), inbox_json=WINBOX)
     oc = [c for c in calls if c[:2] == ["orchestration", "send"]]
-    check = len(oc) == 1 and len(oc[0]) == 17 and oc[0][:16] == ["orchestration", "send", "--type", "worker_done", "--subject", SUBJ,
+    check = len(oc) == 1 and len(oc[0]) == 18 and oc[0][:16] == ["orchestration", "send", "--type", "worker_done", "--subject", SUBJ,
                                             "--body", BODY, "--task-id", TID, "--dispatch-id", DID,
                                             "--outcome", "succeeded", "--retry-request", oc[0][15]] \
-        and _re.fullmatch(UUID_RE, oc[0][15]) and oc[0][16:] == ["--json"] and not sends(calls)
+        and _re.fullmatch(UUID_RE, oc[0][15]) and oc[0][16:] == ["--json", "--full"] and not sends(calls)
     (ok if check else miss)("WDONE argv, no nudge" if check else "WDONE argv, no nudge: %r" % calls)
     store("WDONE failed outcome", 0, [WSTORED], argv=WARGS[:3] + ["failed", TID],
           osend_json=owd(action="failed"), inbox_json=WINBOX)
@@ -1170,7 +1201,7 @@ if LEGS in ("all", "send"):
             "STUB_OSEND": osend(), "STUB_OSEND_RC": "0", "STUB_INBOX": inbox()})
         oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
         want = [["orchestration", "send", "--to", H, "--type", "status", "--subject", SUBJ, "--body", hbody,
-                 "--retry-request", "<uuid>", "--json"]]
+                 "--retry-request", "<uuid>", "--json", "--full"]]
         why = []
         if rc_ != 0 or out != [STORED]:
             why.append("rc=%s out=%r" % (rc_, out[:4]))
@@ -1375,9 +1406,10 @@ if LEGS in ("all", "health"):
     HOK = "ORCA health: ok — Run %s checked" % RUN
     HSUM1 = ["ORCA health: 1 alert — ask the operator (§12b rule 8)",
              "Ending first line: Needed from you: check the Orca alerts below"]
-    HCALLS = [["orchestration", "run-show", "--id", RUN, "--json"], ["orchestration", "worker-list", "--run", RUN, "--json"],
-              ["orchestration", "worker-show", "--dispatch", D1, "--json"],
-              ["orchestration", "inbox", "--limit", "200", "--json"]]
+    HCALLS = [["orchestration", "run-show", "--id", RUN, "--json", "--full"],
+              ["orchestration", "worker-list", "--run", RUN, "--json", "--full"],
+              ["orchestration", "worker-show", "--dispatch", D1, "--json", "--full"],
+              ["orchestration", "inbox", "--limit", "200", "--json", "--full"]]
 
     def health(name, rc, want, runcur=HRUN, wlist=None, shows=None, inbox_json=None, files=None, acked=(),
                args=None, me=H, env_extra=None, calls_want=None, keep=False, cwd=HWT, prep=None):
@@ -1422,7 +1454,7 @@ if LEGS in ("all", "health"):
     health("HEALTH quiet Run is ok", 0, [HOK], calls_want=HCALLS)
     # L46: with no Run named, this pane's run-current Run is checked only when
     # this terminal holds it (run-current is per pane).
-    HRCUR = ["orchestration", "run-current", "--json"]
+    HRCUR = ["orchestration", "run-current", "--json", "--full"]
     def hrun_cur(holder):
         return json.dumps({"ok": True, "result": {"run": {"id": RUN, "coordinator_handle": holder}}})
     health("HEALTH no Run named and none held here", 0,
@@ -1579,6 +1611,19 @@ if LEGS in ("all", "health"):
     health("HEALTH worker-show with a bad date", 1, unread("worker-show"),
            shows={D1: hshow(started_s="2026-13-01 00:00:00")})
     health("HEALTH inbox fails", 1, unread("inbox"), env_extra={"STUB_INBOX_RC": "1"})
+    # L72: each read in Orca 1.4.246's short shape (what a call without
+    # --full returns) is unreadable, never ok. The inbox one read `ok` before
+    # L72: its rows carry no created_at, so every question was skipped.
+    health("HEALTH run-show in the 1.4.246 short shape", 1, unread("run-show"), runcur=SHORT("run-show", HRUN))
+    health("HEALTH run-current in the 1.4.246 short shape", 1, unread("run-current"), args=["orca-ide"],
+           env_extra={"STUB_RUNCUR": SHORT("run-current", hrun_cur(H))})
+    health("HEALTH worker-list in the 1.4.246 short shape", 1, unread("worker-list"),
+           wlist=SHORT("worker-list", hwl((D1, "in_progress"))))
+    health("HEALTH worker-show in the 1.4.246 short shape", 1, unread("worker-show"), shows={D1: SHORT("worker-show", hshow())})
+    health("HEALTH inbox in the 1.4.246 short shape", 1, unread("inbox"), inbox_json=SHORT("inbox", hinbox(q(QA, 20))))
+    health("HEALTH inbox row missing created_at", 1, unread("inbox"),
+           inbox_json=hinbox({k: v for k, v in q(QA, 20).items() if k != "created_at"}))
+    health("HEALTH inbox row that is not an object", 1, unread("inbox"), inbox_json=hinbox("msg_x", q(QA, 20)))
     health("HEALTH inbox with no messages field", 1, unread("inbox"), inbox_json=json.dumps({"ok": True, "result": {}}))
     calls = health("HEALTH a timed-out call stops the rest", 1,
                    unread("worker-list")[:1] + unread("inbox")[:1] +
@@ -1660,9 +1705,9 @@ if LEGS in ("all", "health"):
                                                   "truncated": trunc,
                                                   "hostScope": {"hostIds": ["local"], "omittedHostIds": list(omitted)}}})
     NORUN = json.dumps({"ok": True, "result": {"run": None}})
-    RCUR = ["orchestration", "run-current", "--json"]
+    RCUR = ["orchestration", "run-current", "--json", "--full"]
     RUSE = ["orchestration", "run-use", "--id", RB_RUN, "--json"]
-    RSHOW = ["orchestration", "run-show", "--id", RB_RUN, "--json"]
+    RSHOW = ["orchestration", "run-show", "--id", RB_RUN, "--json", "--full"]
     TLIST = ["terminal", "list", "--json"]
     FULL = [RCUR, RSHOW, TLIST, RSHOW, RUSE, RSHOW]
     TO_LIST = [RCUR, RSHOW, TLIST]
@@ -1800,6 +1845,12 @@ if LEGS in ("all", "health"):
            calls_want=FULL)
     rebind("REBIND run-current fails", 3, ["ORCA rebind failed: run-current failed", FAILEND],
            env_extra={"STUB_RUNCUR_RC": "1"}, calls_want=[RCUR])
+    rebind("REBIND run-current in the 1.4.246 short shape fails", 3,
+           ["ORCA rebind failed: run-current returned a shape this reader does not know", FAILEND],
+           cur=SHORT("run-current", rrun(RB_RUN, DEAD)), calls_want=[RCUR])
+    rebind("REBIND run-show in the 1.4.246 short shape fails", 3,
+           ["ORCA rebind failed: run-show returned a shape this reader does not know", FAILEND],
+           cur=rrun(RB_RUN, DEAD), show=SHORT("run-show", rrun(RB_RUN, DEAD)), calls_want=[RCUR, RSHOW])
     rebind("REBIND run-current bad shape fails", 3,
            ["ORCA rebind failed: run-current returned a shape this reader does not know", FAILEND],
            cur=rrun(RB_RUN, "term_x; id"), calls_want=[RCUR])

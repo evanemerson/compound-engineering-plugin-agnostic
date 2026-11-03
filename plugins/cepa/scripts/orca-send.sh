@@ -212,6 +212,33 @@
 #     sender never puts patient data in a coordinator message.
 #   - The resolved handle then follows the nudge rules of a `term_` target.
 #
+# ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
+# 2026-11-02, read only, each read with and without `--full`. Without it,
+# each of these `orchestration` reads prints a concise view: `run-list` rows hold only
+# `id` and `objective`; `run-show` holds `runId`, `objective`, `removedWork`
+# (no `run` object); `run-current` holds `runId`, `objective`; `worker-list`
+# rows have no `projection`; `worker-show` has no `dispatch`, `worker` or
+# `projection`; `inbox` rows name `from`/`to` (not `from_handle`/`to_handle`),
+# cut the body to 200 chars, and carry no `thread_id` or `created_at`. With
+# `--full` each prints the record this script reads. So every orchestration
+# read here passes `--json --full`, and a reply in the short shape reads as
+# unreadable (`outbox_unreadable`, or an
+# unconfirmed send). `terminal`, `worktree` and `repo` reads have no `--full` flag
+# on 1.4.246 and still print the full record. Whether an older Orca (1.4.245
+# or before) accepts `--full` was not measured: none was at hand to run.
+# `check --peek` was read only on an empty batch (its concise view drops
+# `runId`, `dispatchId`, `count`, `acknowledged`); its message rows were not
+# measured, and no script here reads `check`.
+# The WRITES print a concise view too. `send` without `--full` printed
+# `{"messageId": "msg_…", "warnings": ["<text>"]}` (no `message` object, so
+# every send read "no result.message.id" and exit 5 though Orca stored it);
+# with `--full` it prints `{message: {id, to_handle, …}, warnings, mutation:
+# {requestId, replayed}}` (measured 2026-11-02 by one send to this worker's
+# own terminal, replayed with `--full` under the same `--retry-request`: one
+# message stored). `reply` documents the same `--full` in its `--help`; its
+# output was not measured (no question to answer), so it passes `--full` on
+# that evidence alone.
+#
 # STATED LIMITS:
 #   - The outbox is on this machine, and every session runs as one user, so
 #     a file's sender is a claim, never proven (review residual risk).
@@ -231,7 +258,8 @@
 #     "unconfirmed" or names the exit): a pasted copy then duplicates it. A duplicate is the accepted
 #     cost; a lost message is not.
 #   - The flags are from `orchestration send --help` and `inbox --help`
-#     (Orca 1.4.245). If Orca changes them, the send fails loudly here.
+#     (Orca 1.4.245; `--full` from 1.4.246, see above). If Orca changes them,
+#     the send fails loudly here.
 set -u
 
 cepa_send_cli= cepa_send_target= cepa_send_type= cepa_send_mode= cepa_send_task=
@@ -645,10 +673,10 @@ if [ -n "$cepa_send_coord" ]; then
   while :; do
     cepa_send_pg=$((cepa_send_pg + 1))
     if [ -z "$cepa_send_cur" ]; then
-      cepa_send_orca "$cepa_send_tmp/runs.$cepa_send_pg.json" orchestration run-list --limit 100 --json
+      cepa_send_orca "$cepa_send_tmp/runs.$cepa_send_pg.json" orchestration run-list --limit 100 --json --full
     else
       cepa_send_orca "$cepa_send_tmp/runs.$cepa_send_pg.json" orchestration run-list --limit 100 \
-        --cursor "$cepa_send_cur" --json
+        --cursor "$cepa_send_cur" --json --full
     fi || pending outbox_unreadable "the Run list could not be read"
     cepa_send_cur=$(python3 -I - "$cepa_send_tmp/runs.$cepa_send_pg.json" <<'PY' 2>/dev/null
 import json, re, sys
@@ -748,16 +776,16 @@ fi
 case "$cepa_send_type" in
   reply)
     cepa_send_orca "$cepa_send_tmp/send.json" orchestration reply --id "$cepa_send_target" \
-      --body "$cepa_send_body" --retry-request "$cepa_send_req" --json ;;
+      --body "$cepa_send_body" --retry-request "$cepa_send_req" --json --full ;;
   worker_done)
     cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --type worker_done \
       --subject "$cepa_send_subject" --body "$cepa_send_body" --task-id "$cepa_send_task" \
       --dispatch-id "${cepa_send_target#dispatch:}" --outcome "$cepa_send_outcome_arg" \
-      --retry-request "$cepa_send_req" --json ;;
+      --retry-request "$cepa_send_req" --json --full ;;
   *)
 cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --to "$cepa_send_target" \
   --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \
-  --retry-request "$cepa_send_req" --json ;;
+  --retry-request "$cepa_send_req" --json --full ;;
 esac
 
 # Prints `<msg id> <recipient>`, or `FAIL <reason>`. The reason holds no Orca
@@ -824,7 +852,7 @@ cepa_send_to=${cepa_send_got#* }
 [ -n "$cepa_send_to" ] && [ "$cepa_send_to" != "$cepa_send_got" ] || fail "the send output could not be read"
 
 # THE RE-READ.
-cepa_send_orca "$cepa_send_tmp/inbox.json" orchestration inbox --limit 200 --json \
+cepa_send_orca "$cepa_send_tmp/inbox.json" orchestration inbox --limit 200 --json --full \
   || fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"
 cepa_send_q=
 [ "$cepa_send_type" = reply ] && cepa_send_q=$cepa_send_target
@@ -834,6 +862,11 @@ import json, re, sys
 try:
     d = json.load(open(sys.argv[1]))
     rows = d["result"]["messages"] if d.get("ok") is True else []
+    # Orca 1.4.246's concise inbox (no --full) names `to`, not `to_handle`
+    # (L72): a row without `to_handle` is a shape this reader does not know,
+    # never "not stored".
+    if not isinstance(rows, list) or not all(isinstance(x, dict) and "to_handle" in x for x in rows):
+        sys.exit(2)
     found = any(isinstance(x, dict) and x.get("id") == sys.argv[2] and x.get("to_handle") == sys.argv[3]
                 for x in rows)
     # A reply answers the sender of the message it names. It came back here
