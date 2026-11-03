@@ -15,8 +15,8 @@ summary:
   pending: 0
   ready: 0
   skipped: 1
-  applied: 4
-  deferred: 6
+  applied: 5
+  deferred: 5
   completed: 0
 agents_skipped:
   - agent: security-sentinel
@@ -150,7 +150,7 @@ Rule 2 now says once that every orchestration read whose fields a session
 uses passes `--json --full` (L72), citing the scripts' headers.
 
 ### 4
-- status: deferred
+- status: applied
 - severity: P2
 - agent: adversarial-reviewer, pr-test-analyzer
 - category: Measurement gap

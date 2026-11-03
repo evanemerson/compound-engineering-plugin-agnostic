@@ -413,10 +413,9 @@ MUTANTS += [
     ("full-rule8-wait", "skill", "\n     `check --wait --full` is already reading", "\n     `check --wait` is already reading",
      {"PEEK: rule 8 holds A coordinator blocked in rule 5's `check --wait --full` is already reading its inbox.",
       "FULL: the skill's `check --wait` passes --full"}),
-    # Stated limit: a bare `check` span is a prose reference, so FULL cannot
-    # see a dropped --full there. This mutant stays green on purpose.
+    # A bare `check` span is a prose reference FULL cannot see; PEEK pins it.
     ("full-unbound-check", "skill", "Its plain `check --full` returns no `deliveryId`", "Its plain `check` returns no `deliveryId`",
-     set()),
+     {"PEEK: rule 8 holds Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once,"}),
     ("full-unbound-mark", "skill", "plain `check --full` to mark them read.", "plain `check --peek` to mark them read.",
      {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read.",
       "FULL: the skill's `check --peek` passes --full"}),
@@ -427,6 +426,16 @@ MUTANTS += [
      {"FULL: the skill's `orca-ide orchestration check --wait --json` passes --full"}),
     # `check --help` prints help, not messages: it needs no --full.
     ("full-help-exempt", "skill", "\n## 7.", "\nSee `check --help`.\n\n## 7.", set()),
+    ("full-help-long-exempt", "skill", "\n## 7.", "\nSee `<cli> orchestration check --help`.\n\n## 7.", set()),
+    # #132 review: a span wrapped between `check` and its flag.
+    ("full-wrapped-site", "skill", "\n## 7.", "\nRun `<cli> orchestration check\n     --wait --json` here.\n\n## 7.",
+     {"FULL: the skill's `<cli> orchestration check --wait --json` passes --full"}),
+    # #132 review: an earlier span must not shift the pairing onto prose.
+    ("full-desync", "skill", "\n## 7.", "\nSee `x`, then run check --full here and `check --wait` there.\n\n## 7.",
+     {"FULL: the skill's `check --wait` passes --full"}),
+    # A fenced command line counts too.
+    ("full-fenced-site", "skill", "\n## 7.", "\n```bash\norca-ide orchestration check --peek --json\n```\n\n## 7.",
+     {"FULL: the skill's `orca-ide orchestration check --peek --json` passes --full"}),
     ("full-note-gone", "skill", "   - **Every `check` passes `--full`** (rule 2's", "   - **Every `check` may pass `--full`** (rule 2's",
      {"PEEK: rule 8 holds **Every `check` passes `--full`** (rule 2's `--json --full` sentence, applied to `check`)."}),
     ("peek-uncited-in-rule-7", "skill", "\n       Until the answer arrives, the asker peeks for it (rule 8).", "",

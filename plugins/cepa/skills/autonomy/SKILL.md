@@ -2767,7 +2767,12 @@ limits.
    - **Stated limit.** The bound-Run drain is the procedure in `check --help`
      on Orca 1.4.245. A wrong `--ack` id returns `"ok": true` and acks
      nothing (measured L35), so the batch replays: a duplicate, never a
-     loss.
+     loss. On Orca 1.4.246 that no longer holds: a drain marks its batch
+     read itself (the **Every `check` passes `--full`** bullet above; a wait
+     without `--full` did too), so a drain whose output is
+     lost loses its batch, as for a session with no bound Run. Whether
+     every session should then process from its peek first is open
+     (punch-list L73).
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 

@@ -38,12 +38,14 @@
 #              PEEK_CMD exactly once and each phrase in PEEK_HAS; rule 7's
 #              coordinator kind (not rule 7 at large) cites it (PEEK_CITE).
 #   FULL     — every code span in the skill that runs `check` with a flag
-#              (`check --…`, `<cli> orchestration check --…`), except
-#              `check --help`, holds `--full` (punch-list L73: without it
-#              Orca 1.4.246 prints a short form with no `deliveryId`). It
-#              reads the whole file, fences included, so a new site is
-#              caught, not only the known ones. Each failing span is its own
-#              MISS line, named by its text.
+#              (`check --…`, `<cli> orchestration check --…`, also wrapped
+#              over two lines), except a `--help` call, holds `--full`
+#              (punch-list L73: without it Orca 1.4.246 prints a short form
+#              with no `deliveryId`). Spans pair as CommonMark pairs
+#              them (equal backtick runs, one paragraph), outside fences;
+#              inside a fence each line counts. It reads the whole
+#              file, so a new site is caught, not only the known ones. Each
+#              failing span is its own MISS line, named by its text.
 #   CITES    — each command in SITES carries CITE exactly once outside fenced
 #              blocks, and that once is inside the heading SITES names: the
 #              step where its run ends.
@@ -59,7 +61,7 @@
 # STATED LIMITS — a green run does not mean:
 #   - every `check` passes `--full`. FULL reads only spans with a flag; a
 #     bare `check` span is a prose reference, so one that lost `--full`
-#     (a mutant of the control suite shows it) stays green.
+#     stays green unless PEEK_HAS pins its sentence.
 #   - an agent follows rule 7. This tests the text and its citations, not the
 #     model that reads them. The live probe (three throwaway sessions under
 #     Orca) is the operator's coordinator's to run after merge.
@@ -241,6 +243,7 @@ PEEK_HAS = ["a rule 7 question, a hand-off from a session that stays live after 
             # L35: an unbound session's plain check marks read and never replays.
             "**A session with no bound Run drains from its peek.**",
             "So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read.",
+            "Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once,",
             # L73: Orca 1.4.246 prints a short `check` with no deliveryId.
             "**Every `check` passes `--full`** (rule 2's `--json --full` sentence, applied to `check`).",
             "a drain has no `deliveryId` though it still marks the batch read, so its answer cannot be acked or traced (punch-list L73,",
@@ -347,9 +350,44 @@ check(r7 == "" or (r7.count(PEEK_CITE) == 1 and PEEK_CITE in r7c),
 
 # --- FULL ---
 # L73: every `check` with a flag names `--full`, anywhere in the skill, so a
-# new site is caught too. `check --help` prints help, not messages.
-for span in re.findall(r"`([^`]*\bcheck --[^`]*)`", skill):
-    if fold(span) != "check --help":
+# new site is caught too. A help call prints help, not messages. Spans are
+# paired as CommonMark pairs them, outside fences (a `check` and its flag may
+# sit on two wrapped lines); inside a fence each line is read whole (#132
+# review).
+CHECK_RUN = re.compile(r"\bcheck\s+--")
+
+def fenced_lines(s):
+    out, fence = [], None
+    for line in s.split("\n"):
+        m = re.match(r"\s*(`{3,}|~{3,})", line)
+        if fence is None and m:
+            fence = m.group(1)
+        elif fence is not None and m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
+                and line.strip() == m.group(1):
+            fence = None
+        elif fence is not None:
+            out.append(line)
+    return out
+
+def code_spans(s):
+    # CommonMark pairing: a run of N backticks closes at the next run of
+    # exactly N in the same paragraph, so a `` ` `` span cannot shift it.
+    out = []
+    for para in re.split(r"\n\s*\n", s):
+        runs = list(re.finditer(r"`+", para))
+        i = 0
+        while i < len(runs):
+            n = len(runs[i].group())
+            j = next((k for k in range(i + 1, len(runs)) if len(runs[k].group()) == n), None)
+            if j is None:
+                i += 1
+                continue
+            out.append(para[runs[i].end():runs[j].start()])
+            i = j + 1
+    return out
+
+for span in code_spans(unfenced(skill)) + fenced_lines(skill):
+    if CHECK_RUN.search(span) and "--help" not in span.split():
         check("--full" in span.split(), "FULL: the skill's `%s` passes --full" % fold(span))
 
 # --- REPORT (skill half; the command half runs with CITES below) ---

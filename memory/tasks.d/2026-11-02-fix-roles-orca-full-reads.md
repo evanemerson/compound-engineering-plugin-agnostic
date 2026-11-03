@@ -4,7 +4,7 @@
 
 Source: `todos/review-2026-11-02-214114-fix-roles-orca-full-reads.md`.
 
-1. [P2] `orchestration check` message rows not measured with and without `--full`; rules 5/8 and the nudge text pass none (finding 4) — `plugins/cepa/skills/autonomy/SKILL.md:2213`
+1. ~~[P2] `orchestration check` message rows not measured with and without `--full`; rules 5/8 and the nudge text pass none (finding 4) — `plugins/cepa/skills/autonomy/SKILL.md:2213`~~ — closed by fix/matrix/check-full (PR #132, punch-list L73)
 2. [P3] Send re-read guard rejects the whole window on one row without `to_handle` (finding 5) — `plugins/cepa/scripts/orca-send.sh:853`
 3. [P3] Health inbox guard requires possibly-nullable `thread_id`/`created_at` keys (finding 6) — `plugins/cepa/scripts/orca-health.sh:691`
 4. [P3] Inbox re-read with `ok: false` reads "not stored", not "unconfirmed" (finding 7) — `plugins/cepa/scripts/orca-send.sh:851`
