@@ -2093,7 +2093,16 @@ L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.*
     notes wherever they are restated.
 
 L72. **Orca 1.4.246 returns a short form from run-list/run-show/run-current; cepa reads the old form.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-02 — PR #131 merged `2fbb903` (1.55.2) on the operator's
+    re-approval at head 80d0e03 (first approval was at 222333f; the worker
+    then pushed 80d0e03, so the head check stopped the merge, as designed).
+    `--full` on the 13 Orca orchestration reads AND on send / worker_done /
+    reply: on 1.4.246 `send` printed `{messageId, warnings}`, so every
+    orca-send.sh send reported exit 5 though Orca stored it (a second P1).
+    orca-health.sh had printed `ok` on the short inbox; it now raises
+    `orca-unreadable:inbox`. CI 15/15. Plugin 1.55.2 (rc=0). Deferred:
+    `memory/tasks.d/2026-11-02-fix-roles-orca-full-reads.md`; `check`: L73.
     severity: P1
     owner: roles (tab37@roles)
     Measured 2026-11-02 ~02:15 UTC, `orca-ide --version` 1.4.246 (was
@@ -2106,6 +2115,19 @@ L72. **Orca 1.4.246 returns a short form from run-list/run-show/run-current; cep
     `coord:<repo>` send goes pending; `orca-rebind.sh` and `orca-health.sh`
     read `run-show`/`run-current` for the holder and generation. Blocks the
     L63 prompts (operator: "fix first").
+
+L73. **`orchestration check` also returns a short form on Orca 1.4.246.**
+    status: pending
+    severity: P2
+    owner: unassigned (follow-up to L72; the #131 worker could not measure it)
+    Measured by coord@main 2026-11-03 ~04:00 UTC on a real message
+    (`msg_c4179f7118ad`): `check --run <run> --json` returned the message
+    with `from_handle` and `created_at` null and NO `deliveryId`, and it
+    consumed the message (a later `check --peek --full` showed 0), so it
+    could not be acked. `check --full` returns `deliveryId`. Every rule 5 /
+    rule 8 `check` and `check --peek` in autonomy §12b, the nudge text that
+    tells a session to run `check`, and any script that reads `check`
+    output need `--full`. Until then, coord@main runs `check ... --full`.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
