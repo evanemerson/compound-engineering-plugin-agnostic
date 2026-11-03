@@ -2177,6 +2177,37 @@ L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not
     artist360-docs) vs orca.yaml's `wait-for-setup` — which wins.
     Fix (operator: "File + start now"): `orca-lane.sh create` and the
     first prompt's step 2 read hookSettings and refuse / warn on a shadow.
+    kcprimetime re-check DONE 2026-11-03 (msg_eafb874e9649): sprinter and
+    suburban ran `.git/worktrees/<lane>/orca/setup-runner.sh` = `set -e; npm
+    install` (the local script), not orca.yaml's; package-lock.json
+    unchanged, no worker had started, no rebuild. Operator clears local-only
+    in Orca Settings. Orca's generated setup-runner.sh is ground truth for
+    which setup ran (passed to tab1@optimization, msg_976d201f9a98).
+    kcprimetime follow-up (msg_e2fcd4f416ab): after the operator's change,
+    `repo show` reads wait-for-setup but still local-only with an EMPTY local
+    setup, while the Settings UI shows "orca.yaml - shared with your team"
+    and no source control. UI and CLI disagree; local-only + empty runs no
+    setup per the resolver read. Passed to the worker.
+
+L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f7942).**
+    status: pending
+    severity: P2
+    owner: unassigned
+    1. `orca-lane-reflog.sh` rule 1 vouches only for PRs merged into the
+       repo's DEFAULT branch. dpc-pro's default is main but every PR merges
+       into dev, so squash-merged lane commits (apgar 7173f874 in #303, cori
+       b347553a in #307, bath ceadc545 amended into 72a5f5e1 in #302) read
+       "unlanded" and rm keeps the lane. Fix: accept a PR merged into the
+       resolved trunk (autonomy §8). Same shape as cepa's own roles/c3273f0.
+    2. After a reflog expire, rm reads the empty HEAD reflog as "unreadable".
+       Fail-closed is right; the Ending line should say "re-park at
+       origin/<base> to write a landed entry, then ask again".
+    3. rm keeps a lane when `worktree ps` lists finished agents (state done,
+       orphaned PTYs). A coordinator in auto mode cannot close another
+       session's terminal, so the operator must. Fix: a done agent with an
+       orphaned PTY does not block, or the Ending line lists the handles.
+    Also seen once: rm "worktree rm failed (runtime_error)" on taussig; a
+    retry removed it.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
