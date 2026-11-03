@@ -31,7 +31,12 @@
 #     Build first, OUTSIDE the gate (`compose build`: no lock, no container
 #     started), and pass `--no-build`, because a plain `compose up -d` builds
 #     any image that is missing. The gate does not inspect the command; the
-#     caller (the lane-stack skill's `make up` and setup) owns this. A gate killed by SIGTERM or SIGKILL leaves its
+#     caller (the lane-stack skill's `make up` and setup) owns this. What
+#     still runs under the lock: `--no-build` still pulls a missing
+#     pull-only image and waits on `depends_on` health conditions, and a
+#     gated setup init runs its migrations here. A build outside the gate is
+#     outside both ceilings too (no count, no MemAvailable check).
+#     A gate killed by SIGTERM or SIGKILL leaves its
 #     command running without the lock (Ctrl-C reaches both); the next start
 #     may then count before that stack is up. Stated, not handled.
 #     A start that waits prints one `waiting` line on stderr first.

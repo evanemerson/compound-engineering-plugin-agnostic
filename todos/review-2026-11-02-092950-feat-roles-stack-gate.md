@@ -15,8 +15,8 @@ summary:
   pending: 0
   ready: 0
   skipped: 0
-  applied: 22
-  deferred: 7
+  applied: 23
+  deferred: 6
   completed: 0
 agents_skipped:
   - agent: python-reviewer

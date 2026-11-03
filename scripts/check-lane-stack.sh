@@ -41,7 +41,9 @@
 # Orca's parser on one date; a later Orca can add keys, and this check will
 # not see that. The MAKE leg runs the example as written with stubs; it does
 # not prove any repo's real Makefile is gated (that is L67's /cepa:setup
-# check). The TEMPLATE leg checks anchors, not the meaning of each step.
+# check). No leg checks the Setup section: its order (build, then the gate,
+# then `.env` and migrations under it) and its two build preconditions are
+# prose only. The TEMPLATE leg checks anchors, not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SKILL="$(realpath "${1:-plugins/cepa/skills/lane-stack/SKILL.md}")" python3 - <<'PY'
@@ -205,11 +207,14 @@ else:
             case("MAKE lane without gate refuses",
                  r.returncode != 0 and nothing(r) and "STACK gate: not found" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root)
-            case("MAKE lane unset project refuses", r.returncode != 0 and nothing(r), show(r))
+            case("MAKE lane unset project refuses",
+                 r.returncode != 0 and nothing(r) and "has no -wt-" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME="x")
-            case("MAKE lane non-wt project refuses", r.returncode != 0 and nothing(r), show(r))
+            case("MAKE lane non-wt project refuses",
+                 r.returncode != 0 and nothing(r) and "has no -wt-" in r.stdout, show(r))
             r = make(sev_lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
-            case("MAKE severed lane refuses", r.returncode != 0 and nothing(r), show(r))
+            case("MAKE severed lane refuses",
+                 r.returncode != 0 and nothing(r) and "checkout identity unknown" in r.stdout, show(r))
 
 # TEMPLATE
 ts = blocks("markdown", "````")

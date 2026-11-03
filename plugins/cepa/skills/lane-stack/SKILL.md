@@ -134,13 +134,11 @@ The contract a caller relies on (design "Builder-check answers" 6 and
 - **The gate runs the start command itself, under its lock.** Two starts
   cannot both pass on the same count.
 - **The start command is the start only, never a build:** `compose up -d
-  --no-build`, `start` or `restart`. The gate holds one machine-wide lock
-  until the command returns. A cold build takes 5-8 minutes per lane, so
-  under the lock it makes every other lane's start wait, and at fleet launch
-  a third lane waits past `lock_wait_seconds` and is refused as "lock busy"
-  while capacity is free (L68). Build first, outside the gate:
-  `compose build` takes no lock and starts nothing. Pass `--no-build`,
-  because a plain `compose up -d` builds any image that is missing.
+  --no-build`, `start` or `restart`. Build first, outside the gate, with
+  `compose build`. Why, and what still runs under the lock, is the gate
+  header's (L68). A build outside the gate is outside both ceilings: builds
+  of several lanes run at the same time, with no stack count and no RAM
+  check, and a lane the gate then refuses keeps the images it built.
 - **Output:** one line, `STACK gate: ok — …` or `STACK gate: refused — …`.
 - **Exit:** `3` refused (the start command did not run); `2` usage; any
   other code is the start command's own exit code.
@@ -167,10 +165,20 @@ In order:
 2. **Build the lane's images, outside the gate:**
    `COMPOSE_PROJECT_NAME="$PROJECT" compose build`. A build takes no lock,
    starts no container and writes no lane file, so it does not need the
-   gate (see "The stack gate": the lock covers the start only). Use the
-   lane's own project name: images are tagged per project (property 10),
-   and the start in step 4 builds nothing, so it finds only images built
-   under that name. A failed build ends setup at once, with nothing started.
+   gate (see "The stack gate"). A failed build ends setup at once, with
+   nothing started. Two preconditions, because the build and the start are
+   now separate steps:
+   - **The build reads nothing from the lane's `.env`.** That file does not
+     exist yet (step 4 writes it). Every build arg and image name comes
+     from the committed compose file and the project name given here.
+   - **No built service has a fixed `image:`** (property 10). Images must
+     be tagged by project, so one lane's build cannot replace the image
+     another lane is about to start.
+
+   A repo that breaks either one is a gap the coord@main first prompt
+   lists (step 2). A step-4 start that fails with `No such image` means
+   the build ran under another project name or other values: fix the
+   repo, then rebuild the lane.
 3. **Call the gate** with that project name, and pass the rest of the
    init as its start command, for example
    `stack-gate.sh "$PROJECT" -- make worktree-init-stack`. The gate holds its
@@ -180,7 +188,10 @@ In order:
    so a setup that fails part-way still stops its stack. Then write this
    lane's `.env`, read back the isolation values from Compose's resolved
    config (property 3), start the services that tests need with
-   `compose up -d --no-build`, and run migrations.
+   `compose up -d --no-build` (never `make up`: its build would run under
+   this lock), and run migrations. The lock is held through the
+   migrations, so setup is the one gated command that is not the start
+   only. Its hold is minutes, not a cold build.
 5. **Stop the stack:** `compose stop` (the trap). Containers and volumes
    stay. The lane is now warm but costs no RAM.
 
@@ -203,8 +214,10 @@ Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 
 Each Docker repo has one start target that a lane uses, `make up`. In a
 lane it builds first, outside the gate (no lock), and then starts the stack
-only through the gate, with `up -d --no-build` (see "The stack gate": a
-build under the lock blocks every other lane's start). In the main checkout it
+only through the gate, with `up -d --no-build` (see "The stack gate"). A
+warm lane's build is a cache hit; after a source edit it rebuilds the layers
+below the copy. A start that fails with `No such image` means the build
+used another project name (see "Setup", step 2). In the main checkout it
 runs as before: the main stack has no `-wt-` name, and the gate does not
 count it.
 
@@ -310,7 +323,7 @@ properties are guidance: most cannot be read reliably from a static file.
 8. **Resource ceilings are the gate,** host-wide: running `-wt-` stacks under
    the limit and free RAM over the minimum, both from one config file that
    overrides the defaults. The count is a proxy for RAM; the RAM floor is the
-   real boundary.
+   real boundary. Both bound starts, not builds (see "The stack gate").
 9. **`_HOST_PORT` names are never read by the app.** Every variable that
    only isolates a host port uses that suffix.
 10. **Image tags are scoped per compose project,** never shared with the
@@ -359,7 +372,8 @@ reaches a question, and record each strip.
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
    `orca.yaml` contract, setup builds outside the gate and then calls it,
    setup stops its stack, a gated `make up` that builds before the gate and
-   starts with `--no-build`, the `-wt-` project name. Show the gaps as a list.
+   starts with `--no-build`, a build that reads nothing from the lane's
+   `.env`, no fixed `image:` on a built service, the `-wt-` project name. Show the gaps as a list.
 3. **Offer to fix the gaps** (skip this step when there are none). On the
    operator's yes, make the fix yourself on a short branch in the main
    checkout (no lane exists yet for a worker; the yes permits it). Open a PR,
