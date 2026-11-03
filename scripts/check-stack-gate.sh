@@ -48,8 +48,13 @@
 #               through; two builds run one at a time, and the waiting one
 #               says so with the 3600 s default; a held build lock refuses
 #               after build_wait_seconds; the build lock and the start lock
-#               never wait on each other; a process the build leaves does not
-#               hold the lock; a build inside a gated command refuses.
+#               never wait on each other; the lock outlives a gate killed
+#               mid-build; a build inside a gated command refuses; a failed
+#               or killed build leaves a marker so the next --build builds,
+#               and a success clears it; a build that waited for the same
+#               project's build skips; an image name that is not a plain
+#               reference builds and never reaches `docker image inspect`;
+#               an unreadable config refuses (skipped as root).
 #
 # The stub is strict where the gate depends on docker's behavior: unknown ps
 # flags exit 64, ids are 12 characters without --no-trunc, `label=` and
@@ -552,13 +557,74 @@ if r.returncode != 0 or len(built(e)) != 1 or r2.returncode != 0 or not e2.ran()
     miss("BUILD build lock and start lock are separate", f"build rc {r.returncode} {r.stdout!r}; start rc {r2.returncode} {r2.stdout!r}")
 else:
     ok()
-e = Env(listed=LISTED, conf="build_wait_seconds=2\n")
-r1 = e.run(bargs("a-wt-a"), {"STUB_BUILD_BG": "8"})
-r2 = e.run(bargs("b-wt-b", "--rebuild"))
-if r1.returncode != 0 or r2.returncode != 0 or len(built(e, "b-wt-b")) != 1:
-    miss("BUILD lock not held by a process the build leaves", f"rc {r1.returncode}/{r2.returncode}; {r2.stdout!r}")
+# A gate killed mid-build: its build still runs, so the lock must stay held.
+e = Env(listed=LISTED, conf="build_wait_seconds=1\n")
+e.env["STUB_BUILD_SLEEP"] = "5"
+pa = e.popen(bargs("a-wt-a"))
+PROCS.append(pa)
+deadline = time.time() + 30
+while not built(e, "a-wt-a") and time.time() < deadline:
+    time.sleep(0.05)
+pa.kill()
+pa.wait()
+e.env["STUB_BUILD_SLEEP"] = "0"
+r2 = e.run(bargs("b-wt-b"))
+if r2.returncode != 3 or built(e, "b-wt-b") or "lock busy" not in r2.stdout:
+    miss("BUILD lock outlives a gate killed mid-build", f"rc {r2.returncode}, builds {e.builds()}, out {r2.stdout!r}")
 else:
     ok()
+if not os.path.exists(os.path.join(e.home, ".config", "cepa", "build-failed.a-wt-a")):
+    miss("BUILD a killed build leaves its marker", "no build-failed marker after the gate was killed")
+else:
+    ok()
+# A failed rebuild (which still tagged images) must not let the next --build skip.
+e = Env(images=have, listed=LISTED)
+r1 = e.run(bargs(mode="--rebuild"), {"STUB_BUILD_RC": "5"})
+r2 = e.run(bargs())
+r3 = e.run(bargs())
+if (r1.returncode != 5 or r2.returncode != 0 or len(built(e)) != 2
+        or "last build of this project failed" not in r2.stdout or not r3.stdout.startswith("STACK build: skipped")):
+    miss("BUILD a failed build is built again, a success clears it",
+         f"rc {r1.returncode}/{r2.returncode}/{r3.returncode}, builds {e.builds()}, out2 {r2.stdout!r} out3 {r3.stdout!r}")
+else:
+    ok()
+# Two --build calls for ONE project: the second waits, then finds the images.
+e = Env(listed=LISTED)
+e.env["STUB_BUILD_SLEEP"] = "2"
+pa = e.popen(bargs())
+PROCS.append(pa)
+deadline = time.time() + 30
+while not built(e) and time.time() < deadline:
+    time.sleep(0.05)
+pb = e.popen(bargs())
+PROCS.append(pb)
+try:
+    oa, ob = pa.communicate(timeout=60), pb.communicate(timeout=60)
+except subprocess.TimeoutExpired:
+    ob = ("timed out", "")
+if pa.returncode != 0 or pb.returncode != 0 or len(built(e)) != 1 or "built while this one waited" not in ob[0]:
+    miss("BUILD a waiter skips once the same project was built", f"rc {pa.returncode}/{pb.returncode}, builds {e.builds()}, out {ob[0]!r}")
+else:
+    ok()
+# An image name that is not a plain reference builds, even when it "exists".
+e = Env(images=have + ["-x", "a b", "/web:"], listed=LISTED + ",-x,a b,/web:")
+r = e.run(bargs())
+inspected = [a for a in (json.loads(l) for l in open(e.log)) if a[:2] == ["image", "inspect"]] if os.path.exists(e.log) else []
+if r.returncode != 0 or len(built(e)) != 1 or "not a plain reference" not in r.stdout or inspected:
+    miss("BUILD a name that is not a plain reference builds", f"rc {r.returncode}, builds {e.builds()}, inspected {inspected}, out {r.stdout!r}")
+else:
+    ok()
+e = Env(listed=LISTED, conf="build_wait_seconds=5\n")
+cf = os.path.join(e.home, ".config", "cepa", "stack-gate.conf")
+os.chmod(cf, 0)
+if os.access(cf, os.R_OK):
+    ok()  # running as root: an unreadable file cannot be made
+else:
+    r = e.run(bargs())
+    if r.returncode != 3 or built(e) or "STACK build: refused — cannot read the config" not in r.stdout:
+        miss("BUILD unreadable config refuses", f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
+    else:
+        ok()
 e = Env(listed=LISTED)
 r = e.run(bargs(), {"CEPA_STACK_GATE_HELD": "n-wt-x"})
 if r.returncode != 3 or e.builds() or not r.stdout.startswith("STACK build: refused — inside a gated command"):

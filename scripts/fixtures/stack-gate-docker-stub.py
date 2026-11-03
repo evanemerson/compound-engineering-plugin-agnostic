@@ -27,12 +27,11 @@ Strict like real docker where the gate depends on it:
   compose [<flag> <value>…] build   appends `start <project> <time>` and
           `end <project> <time>` to $STUB_BUILD_LOG around a sleep of
           $STUB_BUILD_SLEEP seconds, adds the listed images to the image
-          store, and exits $STUB_BUILD_RC (default 0). $STUB_BUILD_BG=<s>
-          leaves a `sleep <s>` running that inherits its descriptors.
+          store, and exits $STUB_BUILD_RC (default 0).
   image inspect [--format <t>] [--] <ref…>   exits 1 unless every ref is in
           the JSON list in $STUB_DOCKER_IMAGES (a missing file is empty).
 """
-import json, os, re, subprocess, sys, time, fcntl
+import json, os, re, sys, time, fcntl
 
 STATE = os.environ["STUB_DOCKER_STATE"]
 LOG = os.environ.get("STUB_DOCKER_LOG")
@@ -141,9 +140,6 @@ if argv[:1] == ["compose"]:
                 with open(blog, "a") as f:
                     f.write(f"{w} {proj} {time.time():.3f}\n")
         note("start")
-        if os.environ.get("STUB_BUILD_BG"):
-            subprocess.Popen(["sleep", os.environ["STUB_BUILD_BG"]], close_fds=False,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(float(os.environ.get("STUB_BUILD_SLEEP", "0")))
         if IMAGES:
             have = images()

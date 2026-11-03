@@ -26,7 +26,8 @@
 #             (`--build <project> -- <compose>`, L68/L70), then starts only
 #             through the gate, with `<project> -- <compose> up -d
 #             --no-build`; `BUILD=1` passes `--rebuild` in a lane and
-#             `--build` to compose in the main checkout; a failed build
+#             `--build` to compose in the main checkout, and only the
+#             exact value 1 does (`BUILD=0` builds as usual); a failed build
 #             starts nothing and never reaches the start gate; a gate refusal
 #             (exit 3) fails make; and each default-deny refusal builds and
 #             starts nothing: a lane with no gate, a lane whose project name
@@ -127,7 +128,8 @@ MAKE_CASES = ("MAKE main starts directly", "MAKE lane starts through gate",
               "MAKE lane builds before the gate", "MAKE lane build failure starts nothing",
               "MAKE lane gate refusal propagates", "MAKE lane without gate refuses",
               "MAKE lane unset project refuses", "MAKE lane non-wt project refuses",
-              "MAKE severed lane refuses", "MAKE BUILD=1 rebuilds")
+              "MAKE severed lane refuses", "MAKE BUILD=1 rebuilds",
+              "MAKE BUILD=0 does not rebuild")
 ms = blocks("make")
 tools = [t for t in ("git", "make") if not shutil.which(t)]
 if len(ms) != 1 or tools:
@@ -180,7 +182,8 @@ else:
         else:
             def make(cwd, **env):
                 e = dict(base, CEPA_PLUGIN_ROOT="")
-                e.pop("COMPOSE_PROJECT_NAME", None)
+                for k in ("COMPOSE_PROJECT_NAME", "BUILD", "MAKEFLAGS", "MAKELEVEL", "CEPA_STACK_GATE_HELD"):
+                    e.pop(k, None)
                 e.update(env)
                 return run(["make", "-s", "-f", mk, "up"], cwd, e)
             def show(r):
@@ -229,6 +232,9 @@ else:
                  and build_line not in ls and gate_line in ls
                  and rm.returncode == 0 and rm.stdout.strip() == "START up -d --build",
                  show(r) + " main " + show(rm))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, BUILD="0")
+            case("MAKE BUILD=0 does not rebuild",
+                 r.returncode == 0 and build_line in lines(r), show(r))
             r = make(sev_lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj)
             case("MAKE severed lane refuses",
                  r.returncode != 0 and nothing(r) and "checkout identity unknown" in r.stdout, show(r))

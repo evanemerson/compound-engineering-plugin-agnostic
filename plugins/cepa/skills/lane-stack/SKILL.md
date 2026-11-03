@@ -141,23 +141,33 @@ The contract a caller relies on (design "Builder-check answers" 6 and
   header's (L68).
 - **Builds:** `stack-gate.sh --build <compose project name> -- <compose command…>`,
   the compose command without a verb (L70). It builds one image set at a
-  time on this machine: a separate build lock, never the start lock, so a
-  start that does not build never waits on a build. When every image the
-  project's compose config lists already exists, it skips the build and
-  takes no lock (`STACK build: skipped — …`). A build that waits prints one
-  `waiting` line; the wait limit is the gate header's. Builds have no stack
-  count and no RAM check: one at a time is their bound. A lane the gate then
-  refuses keeps the images it built. Inside a gated command it refuses.
+  time on this machine, on a build lock that a start never waits on. When
+  every image the project's compose config lists already exists, it skips the build and
+  takes no lock (`STACK build: skipped — …`). After a failed or stopped
+  build it never skips. How it locks, waits and marks a failed build is the
+  gate header's. A lane the gate then refuses keeps the images it built.
+  The skip trusts the image tag, so it relies on Setup step 2's two
+  preconditions, plus one: **one compose file builds a given service per
+  project** (a second file that builds `web` under the lane's project name
+  tags `<project>-web` too, and the skip would start that image).
+  A build can wait a long time for the lock: a caller runs `make up`
+  where a wait of up to the header's limit is not killed (in the
+  background, or with a long timeout).
 - **Rebuild:** `stack-gate.sh --rebuild …`, `make up BUILD=1` in a lane,
   always builds, on the same build lock. The skip looks only at whether an
   image exists, never at what changed, so **run `make up BUILD=1` after any
   change to a Dockerfile, a requirements or lock file the image installs, a
   build arg, or the compose `build:` section** — on your branch, or merged
   into the base after the lane's images were built. Without it the lane
-  keeps running the old image.
+  keeps running the old image. Only the exact value `1` rebuilds
+  (`BUILD=0` does not); a repo Makefile that already uses `BUILD` for
+  something else renames this switch in its own `make up`.
 - **Output:** one line, `STACK gate: ok — …` or `STACK gate: refused — …`.
+  The build mode prints `STACK build: …` lines instead (the header lists
+  them).
 - **Exit:** `3` refused (the start command did not run); `2` usage; any
-  other code is the start command's own exit code.
+  other code is the start command's own exit code. The build mode's exit
+  codes are the header's; `make up` treats any non-zero as a failed build.
 
 **Every worktree project name contains `-wt-`.** The gate counts only those
 names, so a lane stack named any other way is a stack the gate cannot see.
@@ -208,8 +218,8 @@ In order:
    so a setup that fails part-way still stops its stack. Then write this
    lane's `.env`, read back the isolation values from Compose's resolved
    config (property 3), start the services that tests need with
-   `compose up -d --no-build` (never `make up`: its build would run under
-   this lock), and run migrations. The lock is held through the
+   `compose up -d --no-build` (never `make up`: its build step refuses
+   inside a gated command), and run migrations. The lock is held through the
    migrations, so setup is the one gated command that is not the start
    only. Its hold is minutes, not a cold build.
 5. **Stop the stack:** `compose stop` (the trap). Containers and volumes
@@ -254,7 +264,7 @@ up: worktree-guard
 	  [ -n "$$GD" ] && [ -n "$$CD" ] || { \
 	    echo "STACK gate: checkout identity unknown — the stack was not started"; exit 1; }; \
 	if [ "$$GD" = "$$CD" ]; then \
-	  $(DEV_COMPOSE) up -d $(if $(BUILD),--build); \
+	  $(DEV_COMPOSE) up -d $(if $(filter 1,$(BUILD)),--build); \
 	else \
 	  case "$$COMPOSE_PROJECT_NAME" in *-wt-*) ;; *) \
 	    echo "STACK gate: COMPOSE_PROJECT_NAME has no -wt- — this lane's stack was not started"; exit 1;; esac; \
@@ -265,7 +275,7 @@ up: worktree-guard
 	  done; \
 	  [ -n "$$CEPA_ROOT" ] && [ -f "$$CEPA_ROOT/scripts/stack-gate.sh" ] || { \
 	    echo "STACK gate: not found — this lane's stack was not started (set CEPA_PLUGIN_ROOT)"; exit 1; }; \
-	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(BUILD),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \
+	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \
 	    echo "STACK build: failed — this lane's stack was not started"; exit 1; }; \
 	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --no-build; \
 	fi
@@ -362,7 +372,10 @@ Start this lane's stack with `make up` before any `compose exec` target
 (`make test`, `make migrate`). Use `make up BUILD=1` instead when your branch,
 or the base since the lane was built, changes a Dockerfile, a requirements or
 lock file, a build arg or a compose `build:` section: plain `make up` keeps
-the old image. If it prints `STACK gate: refused`, stop and
+the old image. After a failed build, the next `make up` builds again. A
+build can wait a long time for another lane's build: run `make up` in the
+background or with a long timeout. If it prints `STACK gate: refused`,
+`STACK build: refused` or `STACK build: failed`, stop and
 `ask` your coordinator; do not start the stack another way. When your PR is
 open and reviewed, stop the stack (`compose stop`; keep volumes).
 ```
@@ -416,7 +429,10 @@ reaches a question, and record each strip.
    check for uncommitted work and unmerged branches, and ask the operator.
    On yes, rebuild it under the SAME name: `orca-lane.sh rm` first, then
    `create` (removing first avoids Orca's duplicate-name suffix), then
-   check its `Setup` tab as in step 4.
+   check its `Setup` tab as in step 4. The same name keeps the same
+   project, so setup reuses the old images when they still exist: when the
+   base changed what an image installs, the lane's first worker runs
+   `make up BUILD=1`.
 
 In every worker prompt for a lane, include the skill's worker-prompt step:
 start the stack with `make up` before exec targets.
