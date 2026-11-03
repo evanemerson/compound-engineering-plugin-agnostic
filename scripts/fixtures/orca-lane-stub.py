@@ -75,13 +75,18 @@ def find(sel):
     err("worktree_not_found", "worktree_not_found")
 
 
+# The 1.4.246 `repo list` hookSettings shape for a repo with no saved script
+# (L76). A state repo's "hook" key replaces it, so the HOOKS leg can stub
+# every shape.
+HOOK = {"mode": "auto", "setupRunPolicy": "run-by-default", "setupAgentStartupPolicy": "start-immediately",
+        "scripts": {"setup": "", "archive": ""}}
 verb = argv[:2]
 if argv[:2] == ["repo", "list"]:
     if "repofail" in MODE:
         sys.exit(1)
     out({"id": "x", "ok": True, "result": {"repos": [
         {"id": r["id"], "path": unc(r["path"]), "displayName": os.path.basename(r["path"]),
-         "hookSettings": {"setupRunPolicy": "run-by-default", "setupAgentStartupPolicy": "start-immediately"}}
+         "hookSettings": r.get("hook", HOOK)}
         for r in st["repos"]]}})
 if verb == ["worktree", "list"]:
     st["lists"] = st.get("lists", 0) + 1
@@ -115,6 +120,13 @@ if verb == ["worktree", "create"]:
     if "freshbase" in MODE:
         # Orca fetches the base itself; here the fetch updates no
         # remote-tracking ref, so the caller's origin/<base> stays stale.
+        # Origin first moves on DURING the create, after the caller's own
+        # step-0 fetch, so only the park step's re-fetch can see the tip.
+        url = git("-C", repo["path"], "remote", "get-url", "origin").stdout.strip()
+        mv = os.path.join(st["ws"], ".mover-%d" % st["calls"])
+        git("clone", "-q", url, mv)
+        git("-C", mv, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "moved during create")
+        git("-C", mv, "push", "-q", "origin", "HEAD:" + base[len("origin/"):])
         git("-C", repo["path"], "fetch", "-q", "--refmap=", "origin", base[len("origin/"):])
         base = git("-C", repo["path"], "rev-parse", "FETCH_HEAD").stdout.strip()
     r = git("-C", repo["path"], "worktree", "add", "-q", "-b", br, p, base)

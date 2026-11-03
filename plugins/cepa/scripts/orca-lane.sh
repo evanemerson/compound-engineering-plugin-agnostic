@@ -48,7 +48,11 @@
 # form is UNKNOWN.
 #
 # What each action does, in order:
-#   create  1. Refuse when a worktree of this repo (Orca's list or `git
+#   create  0. Re-fetch origin/<base> (60 s bound; review finding #28 and
+#              L76), before the lists are read. A failure refuses: the lane's
+#              orca.yaml and base would be unknown; `ls-remote --exit-code`
+#              (10 s bound) tells a missing base from a network fault.
+#           1. Refuse when a worktree of this repo (Orca's list or `git
 #              worktree list`) already has the basename or display name
 #              <lane>, or `refs/heads/chore/<lane>/park` exists: Orca does
 #              not refuse a taken name, it suffixes the path and the branch
@@ -57,7 +61,12 @@
 #              <lane>, in `git worktree list`, its own toplevel, with branch
 #              chore/<lane>/park present and the lane either on it or
 #              detached at its tip — a create that stopped in step 4 or 5.
-#              A resume skips steps 2 and 3.
+#              A resume skips steps 1b, 2 and 3; it still runs step 0, so
+#              it needs the network.
+#          1b. L76: read origin/<base>'s orca.yaml. Refuse when the repo's
+#              saved hook settings (the `repo list` row's `hookSettings`)
+#              shadow its `scripts.setup` (H1 below). A read or shape this
+#              script does not know refuses (default-deny).
 #           2. `worktree create --repo id:<repoId> --name <lane> --branch
 #              chore/<lane>/park --base-branch origin/<base> --no-parent
 #              --setup inherit --json` (review finding #18: the repo's own
@@ -66,13 +75,18 @@
 #              (finding #14), the display name <lane> and fixed. Then
 #              `symbolic-ref` must read chore/<lane>/park (finding #6).
 #              A mismatch stops here with the lane kept for the operator.
-#           4. Park: re-fetch origin/<base> (60 s bound; review finding #28:
-#              Orca fetched it itself, so the local ref can be older than
-#              the lane; a failed fetch keeps the old ref, which fails
-#              closed). The branch must have no commit beyond origin/<base>;
+#           4. Park: re-fetch origin/<base> again (60 s bound; review finding
+#              #28: Orca fetched it itself after step 0, so the local ref can
+#              be older than the lane; a failed fetch keeps the old ref, which
+#              fails closed). The branch must have no commit beyond
+#              origin/<base>;
 #              detach at the lane's own HEAD commit (the same commit, so no
 #              file changes under a running setup); delete that branch.
 #           5. `worktree show` by id must report the fixed name <lane>.
+#           6. L76 (PR #133 review): re-run 1b's check against the orca.yaml
+#              the parked lane holds — Orca's fetch can be newer than step
+#              0's, and a resume skipped 1b. The setup has already run, so a
+#              shadow or unknown shape here is a failure (exit 3).
 #   name    For each non-main worktree of this repo whose displayNameMode is
 #           not `fixed`: `worktree set --display-name <basename>` by id. A
 #           basename that is not a <wt> name is skipped. Then re-list: each
@@ -100,8 +114,11 @@
 #              symlink, and, when present, byte-equal to origin's default
 #              branch's copy (review finding #16; hashing the file also
 #              sees an edit `skip-worktree` hides from status). The default
-#              is origin/HEAD, else `git ls-remote --symref` (10 s bound). List the ignored files and directories it will
-#              delete (the operator's #4 decision: list them, then remove).
+#              is origin/HEAD, else `git ls-remote --symref` (10 s bound).
+#          5b. L76: refuse when the saved hook settings shadow that orca.yaml's
+#              `scripts.archive` (H1 below); an unknown shape refuses. List the
+#              ignored files and directories it will delete (the operator's #4
+#              decision: list them, then remove).
 #           6. `worktree rm --worktree id:<id> --run-hooks --json`. Never
 #              `--force`, never `--allow-failed-archive-hook`.
 #           7. Removed only when absent from Orca's list (a complete read)
@@ -151,7 +168,52 @@
 #   - `worktree list --repo path:<linux path>` returns `repo_not_found`;
 #     `--repo id:<repoId>` works.
 #
+# H1 — L76, read on Orca 1.4.246 (WSL), 2026-11-03, in Orca's installed code
+# (resources/app.asar.unpacked/out/shared/hook-command-source-policy.js,
+# orca-hook-setup-config.js, setup-agent-startup-policy.js; app.asar
+# out/main/index.js functions `To`, `ide`, `ade`, `Kde`), read-only. No Orca
+# setting was changed.
+#   - Each script (setup, archive) resolves on its own. The source policy is
+#     hookSettings.commandSourcePolicy when it is `local-only`, `run-both` or
+#     `shared-only`. When it is UNSET and the saved local script for that hook
+#     is non-empty after trim, it is `local-only`. Otherwise `shared-only`.
+#   - `local-only` runs the trimmed local script, or nothing when it is empty;
+#     orca.yaml's script never runs. `run-both` runs orca.yaml's, then the
+#     local one. `shared-only` runs orca.yaml's only.
+#   - So a shadow is: resolved `local-only` with a local script that differs
+#     from orca.yaml's (after trim; both empty is no shadow, as nothing runs
+#     either way), or `run-both` with a non-empty local script.
+#   - Start policy: the setup runner waits when
+#     `[saved, orca.yaml].includes("wait-for-setup")`. Either side's
+#     `wait-for-setup` wins, so a saved `start-immediately` never overrides
+#     orca.yaml's `wait-for-setup`. No check for it is needed.
+#   - `repo show --repo id:<repoId> --json` returns the same `hookSettings`
+#     object as the `repo list` row this script reads (compared for this repo).
+#     Every one of the 16 `repo list` rows read on 2026-11-03 carried
+#     `hookSettings.scripts`, so a row without it is refused, not defaulted.
+#   - The check decides from what the CLI returns. Orca's Settings UI can show
+#     a different source: kcprimetime's showed "orca.yaml" while `repo show`
+#     still read `commandSourcePolicy: local-only` with an empty local setup
+#     (reported by its coord@main). After a create, the proof of what ran is
+#     `.git/worktrees/<lane>/orca/setup-runner.sh` (absent when nothing ran).
+#     The CLI has no setter (`repo set` takes only
+#     --external-worktree-visibility): the fix is in Orca's Settings.
+#   - Field evidence (reported, not measured here): kcprimetime's lanes had
+#     `set -e; npm install` (the local script) in
+#     `.git/worktrees/<lane>/orca/setup-runner.sh`. This repo has no setup in
+#     either source, so its lanes have no runner file to compare.
+#
 # STATED LIMITS:
+#   - H1 is read from minified code of one Orca version. A later Orca can
+#     change the rule: re-read it when Orca updates. The orca.yaml reader takes
+#     only plain, single- or double-quoted scalars under a block `scripts:`
+#     map; any other shape refuses. It does not detect YAML that Orca rejects
+#     as a whole (Orca then runs no orca.yaml script).
+#   - Under resolved `local-only`, Orca also runs no `defaultTabs` command from
+#     orca.yaml (H1, `ode`). A matching local setup passes here anyway; the
+#     tabs open without their commands.
+#   - The settings are read before `create`; an operator who edits them
+#     during the create is not seen.
 #   - The setup result is not proved (above). A worker started with
 #     `worker-start` under a `wait-for-setup` policy waits for it; under
 #     `start-immediately` it does not. The summary names the policy.
@@ -344,6 +406,112 @@ if mode == "repo":
         sys.exit(1)
     pol = ((hit[0].get("hookSettings") or {}).get("setupRunPolicy"))
     print(rid, pol if isinstance(pol, str) and re.fullmatch(r"[a-z-]{1,40}", pol) else "unknown")
+elif mode == "hook":
+    # L76: does Orca run the orca.yaml scripts.<which>, or a saved local one?
+    # the Orca 1.4.246 resolver (header, H1) is mirrored here. Any shape it
+    # does not name exits 1: UNKNOWN, so the caller refuses.
+    main, distro, which, yf = args
+    if not isinstance(r, dict) or not isinstance(r.get("repos"), list):
+        sys.exit(1)
+    hit = [x for x in r["repos"] if isinstance(x, dict) and linux(x.get("path"), distro) == main]
+    if len(hit) != 1:
+        sys.exit(1)
+    hs = hit[0].get("hookSettings")
+    if not isinstance(hs, dict) or not isinstance(hs.get("scripts"), dict):
+        sys.exit(1)
+    loc = hs["scripts"].get(which, "")
+    if not isinstance(loc, str):
+        sys.exit(1)
+    # Orca trims with JS String.prototype.trim; Python strip() takes another
+    # set (it strips \x1c-\x1f and \x85, keeps \ufeff), so use JS set.
+    JS_WS = "\t\n\x0b\x0c\r \xa0\u1680\u2028\u2029\u202f\u205f\u3000\ufeff" + "".join(map(chr, range(0x2000, 0x200b)))
+    loc = loc.strip(JS_WS)
+    pol = hs.get("commandSourcePolicy")
+    if pol is not None and pol not in ("local-only", "run-both", "shared-only"):
+        sys.exit(1)
+    eff = pol or ("local-only" if loc else "shared-only")
+    if eff == "shared-only":
+        print("ok")
+        sys.exit(0)
+
+    def ymlscript(text):
+        # Only the plain shapes the lane-stack contract uses. Anything else
+        # (block scalar, flow map, continuation, duplicate, tab, a YAML
+        # null/bool/number, and any top-level line that is not a plain key,
+        # so a BOM, a quoted key and an indented document) is UNKNOWN: a
+        # skipped spelling must never read as "no script" (PR #133 review).
+        found, inside, child, seen, top = None, False, None, False, False
+        for l in text.split("\n"):
+            l = l.rstrip("\r")
+            if len(l) > 4096:
+                sys.exit(1)
+            s = l.strip()
+            if not s or s.startswith("#"):
+                continue
+            ind = len(l) - len(l.lstrip(" "))
+            if l[ind:ind + 1] == "\t":
+                sys.exit(1)
+            if ind == 0:
+                inside = False
+                if s == "---" and not top:
+                    continue
+                if not re.match(r"[A-Za-z_][A-Za-z0-9_-]*\s*:(\s|$)", s):
+                    sys.exit(1)
+                top = True
+                if re.match(r"scripts\s*:", s):
+                    rest = s.split(":", 1)[1].strip()
+                    if seen or (rest and not rest.startswith("#")):
+                        sys.exit(1)
+                    seen, inside, child = True, True, None
+                continue
+            if not top:
+                sys.exit(1)
+            if not inside:
+                continue
+            child = ind if child is None else child
+            m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_-]*)\s*:(?:\s+(.*))?", s)
+            if ind != child or not m:
+                sys.exit(1)
+            if m.group(1) != which:
+                continue
+            if found is not None:
+                sys.exit(1)
+            v = (m.group(2) or "").strip()
+            if not v or v.startswith("#"):
+                found = ""
+            elif v[0] == "\x27":
+                q = re.fullmatch(r"\x27((?:[^\x27]|\x27\x27)*)\x27(?:\s+#.*)?", v)
+                if not q:
+                    sys.exit(1)
+                found = q.group(1).replace("\x27\x27", "\x27")
+            elif v[0] == "\"":
+                q = re.fullmatch(r"\"([^\"\\\\]*)\"(?:\s+#.*)?", v)
+                if not q:
+                    sys.exit(1)
+                found = q.group(1)
+            elif v[0] in "|>[{&*!@`%":
+                sys.exit(1)
+            else:
+                v = re.sub(r"\s+#.*$", "", v)
+                if ": " in v or v.endswith(":"):
+                    sys.exit(1)
+                if re.fullmatch(r"(?i)~|null|true|false|yes|no|on|off|[-+]?[0-9][0-9._eExXoObB+-]*|[-+]?\.(inf|nan)", v):
+                    sys.exit(1)
+                found = v
+        return (found or "").strip(JS_WS)
+
+    try:
+        y = ymlscript(open(yf, encoding="utf-8").read()) if yf else ""
+    except (OSError, UnicodeError):
+        sys.exit(1)
+    named = "commandSourcePolicy %s" % (pol or "unset (Orca reads it as local-only while a local %s script is saved)" % which)
+    if eff == "run-both" and loc:
+        print("shadow: %s runs the local %s script as well as the orca.yaml one" % (named, which))
+    elif eff == "local-only" and loc != y:
+        print("shadow: %s runs the local %s script (%s), not the orca.yaml one (%s)"
+              % (named, which, "empty" if not loc else "differs", "empty" if not y else "present"))
+    else:
+        print("ok")
 elif mode == "rows":
     rid, distro, main = args
     if not isinstance(r, dict):
@@ -472,6 +640,33 @@ if [ "$cepa_ln_action" = name ]; then
   exit 0
 fi
 
+# L76: the hook check of $2 (setup or archive) against the orca.yaml in
+# tree-ish $1. Prints `ok` or `shadow: …`; returns 1 when UNKNOWN. Absence is
+# read positively (PR #133 review): ls-tree must succeed, and an entry must be
+# a regular blob, so a failed read is never "no orca.yaml".
+cepa_ln_hookat() {
+  local t yf=
+  t=$(git ls-tree "$1" -- orca.yaml 2>/dev/null) || return 1
+  if [ -n "$t" ]; then
+    [[ $t == "100644 blob "*$'\t'orca.yaml ]] || return 1
+    yf="$cepa_ln_tmp/orca.yaml"
+    git cat-file blob "$1:orca.yaml" >"$yf" 2>/dev/null || return 1
+  fi
+  cepa_ln_py hook "$cepa_ln_tmp/repos.json" "$cepa_ln_main" "$cepa_ln_distro" "$2" "$yf"
+}
+
+# create step 0 (review finding #28 and L76): Orca fetches the base itself,
+# so the local origin/<base> can be older than the lane and its orca.yaml.
+# Fetched before the lists are read, so no slow fetch sits between those
+# reads and `worktree create` (PR #133 review).
+if [ "$cepa_ln_action" = create ]; then
+  timeout -k 2 60 git fetch -q origin "+refs/heads/$cepa_ln_base:refs/remotes/origin/$cepa_ln_base" </dev/null >/dev/null 2>&1 \
+    || { cepa_ln_lrc=0
+         timeout -k 2 10 git ls-remote -q --exit-code origin "refs/heads/$cepa_ln_base" </dev/null >/dev/null 2>&1 || cepa_ln_lrc=$?
+         [ "$cepa_ln_lrc" != 2 ] || kept "$cepa_ln_lane unchanged — origin has no branch $cepa_ln_base" "check the base field"
+         kept "$cepa_ln_lane unchanged — git fetch of origin/$cepa_ln_base failed, so the lane's orca.yaml and base are unknown" \
+              "check the network and the origin remote, then ask this session to run create again"; }
+fi
 cepa_ln_all=$(cepa_ln_rows) || kept "${cepa_ln_lane} unchanged — worktree list was not a complete read of this repo" \
   "check Orca's worktree list for this repo, then ask this session to run the block again"
 cepa_ln_gwl=$(git worktree list --porcelain 2>/dev/null) || kept "$cepa_ln_lane unchanged — git worktree list failed" \
@@ -521,6 +716,14 @@ if [ "$cepa_ln_action" = create ]; then
     ! git show-ref --verify -q "refs/heads/$cepa_ln_park" \
       || kept "not created — branch $cepa_ln_park already exists, and Orca would suffix the new one" \
               "delete branch $cepa_ln_park if it is a leftover, or choose another lane name"
+    # L76: Orca reads scripts.setup from the new lane's orca.yaml (the base's,
+    # U1), unless the repo's saved hook settings shadow it (H1).
+    cepa_ln_hook=$(cepa_ln_hookat "refs/remotes/origin/$cepa_ln_base" setup) \
+      || kept "not created — Orca's saved hook settings for this repo, or orca.yaml's scripts.setup, have a shape this reader does not know, so which setup Orca would run is unknown" \
+              "check Settings > Repositories > this repo's hooks in Orca, and orca.yaml's scripts.setup, then ask again"
+    [ "$cepa_ln_hook" = ok ] \
+      || kept "not created — Orca's saved hook settings shadow orca.yaml: ${cepa_ln_hook#shadow: }" \
+              "in Orca, open Settings > Repositories > this repo's hooks and make the setup command come from orca.yaml (or make the local setup equal orca.yaml's scripts.setup), then ask again"
     cepa_ln_orca "$cepa_ln_tmp/create.json" 0 180 worktree create --repo "id:$cepa_ln_rid" --name "$cepa_ln_lane" \
         --branch "$cepa_ln_park" --base-branch "origin/$cepa_ln_base" --no-parent --setup inherit --json \
       || failed "worktree create failed ($(cepa_ln_py err "$cepa_ln_tmp/create.json" || echo "no JSON error; it may have been killed by the 180 s bound, so a lane may exist"))" \
@@ -541,8 +744,8 @@ if [ "$cepa_ln_action" = create ]; then
     cepa_ln_head=$(git -C "$c_path" rev-parse --verify -q HEAD 2>/dev/null) || cepa_ln_head=
   fi
   [ -n "$cepa_ln_head" ] || failed "the new lane's HEAD is unreadable; it is kept at $c_path"
-  # Review finding #28: Orca fetched the base itself, so the local
-  # origin/<base> can be older than the lane. Re-read it first; a failed fetch
+  # Review finding #28: Orca fetched the base itself, after step 0, so the
+  # local origin/<base> can be older than the lane. Re-read it; a failed fetch
   # leaves the old ref, which can only fail closed (the lane is kept, and a
   # re-run resumes).
   cepa_ln_fetch=
@@ -568,6 +771,16 @@ if [ "$cepa_ln_action" = create ]; then
   [ "$cepa_ln_shown" = "$cepa_ln_lane fixed" ] \
     || failed "the lane is created and parked at $c_path, but worktree show reports '${cepa_ln_shown:-an unknown shape}', not '$cepa_ln_lane fixed'" \
               "check that lane $cepa_ln_lane shows its name in Orca's sidebar"
+  # PR #133 review: Orca used the lane's own orca.yaml (the base at Orca's
+  # fetch, U1), which differs from the one checked before create when origin
+  # moved in between; a resume never ran that check. Re-check the file the
+  # lane holds. Its setup has already run, so a shadow here is a failure.
+  cepa_ln_hook=$(cepa_ln_hookat "$cepa_ln_head" setup) \
+    || failed "the lane is created and parked at $c_path, but which setup Orca ran is unknown: Orca's saved hook settings, or the lane's orca.yaml scripts.setup, have a shape this reader does not know" \
+              "read the lane's Setup tab, and check Settings > Repositories > this repo's hooks in Orca"
+  [ "$cepa_ln_hook" = ok ] \
+    || failed "the lane is created and parked at $c_path, but Orca's saved hook settings shadow its orca.yaml: ${cepa_ln_hook#shadow: }" \
+              "fix the repo's hooks in Orca's Settings, then remove and re-create lane $cepa_ln_lane (orca-lane.sh rm, then create)"
   echo "ORCA lane: ${cepa_ln_resume:+resumed and }created $cepa_ln_lane at $c_path, parked detached at ${cepa_ln_head:0:12} (at or behind origin/$cepa_ln_base), named $cepa_ln_lane (fixed); setup policy $cepa_ln_policy — Orca reports no setup result, so read the lane's Setup tab before starting a worker"
   exit 0
 fi
@@ -670,6 +883,15 @@ if [ -e "$cepa_ln_main/orca.yaml" ]; then
     || kept "kept $cepa_ln_lane — the main checkout's orca.yaml is not the one origin/$cepa_ln_dflt holds; Orca would run an archive hook origin does not hold" \
             "push orca.yaml to $cepa_ln_dflt, or restore it in the main checkout, then ask again"
 fi
+# L76: the same saved hook settings decide whether that archive hook runs (H1).
+cepa_ln_yf=
+[ ! -e "$cepa_ln_main/orca.yaml" ] || cepa_ln_yf="$cepa_ln_main/orca.yaml"
+cepa_ln_hook=$(cepa_ln_py hook "$cepa_ln_tmp/repos.json" "$cepa_ln_main" "$cepa_ln_distro" archive "$cepa_ln_yf") \
+  || kept "kept $cepa_ln_lane — Orca's saved hook settings for this repo, or orca.yaml's scripts.archive, have a shape this reader does not know, so which archive hook Orca would run is unknown" \
+          "check Settings > Repositories > this repo's hooks in Orca, and orca.yaml's scripts.archive, then ask again"
+[ "$cepa_ln_hook" = ok ] \
+  || kept "kept $cepa_ln_lane — Orca's saved hook settings shadow orca.yaml: ${cepa_ln_hook#shadow: }" \
+          "in Orca, open Settings > Repositories > this repo's hooks and make the archive command come from orca.yaml (or make the local archive equal orca.yaml's scripts.archive), then ask again"
 cepa_ln_br=$(git -C "$r_path" symbolic-ref -q --short HEAD 2>/dev/null) || cepa_ln_br=
 cepa_ln_igs=$(git -C "$r_path" status --porcelain --ignored 2>/dev/null) \
   || kept "kept $cepa_ln_lane — git status --ignored failed, so the ignored files cannot be listed" "inspect $r_path"
