@@ -38,6 +38,12 @@
 #             prompt); line 1 is `You are <session name>.`; it carries the
 #             `<lane names>` and `<lane count>` blanks, steps 1-5 in order
 #             each with its anchor, and the `make up` worker-prompt step.
+#             Three steps must also carry, inside that step, what L71 fixed:
+#             step 1 makes a Run named `<repo> coord@main` when the named
+#             Run's is not (run-show, run-create) and drains the outbox;
+#             step 2 checks the 1.55.0 build contract (`--build`, its skip,
+#             `BUILD=1`, `--no-build`); step 5 lists every lane whose setup
+#             ran before the fix, Orca-made lanes included.
 #   ENTRY     every mention of `make worktree branch=` sits beside a word
 #             that forbids it (not, never, forbidden), so the skill never
 #             presents it as an entry point.
@@ -257,6 +263,22 @@ for n, anchor in ANCHORS:
         break
     pos = m.start()
 case("TEMPLATE steps 1-5 in order", order_ok, why)
+def step(n):
+    m = re.search(r"^%d\. (.*?)(?=^\d\. |^In every |\Z)" % n, t, re.S | re.M)
+    return re.sub(r"\s+", " ", m.group(1)) if m else ""
+# L71: each step carries the contract it was fixed for, inside that step.
+for name, n, needles in [
+    ("TEMPLATE step 1 names the Run", 1,
+     ("`run-show`", "does not start with `<repo> coord@main`", "(`run-create`)", "outbox drain")),
+    ("TEMPLATE step 2 build contract", 2,
+     ("`stack-gate.sh --build` (one build at a time, skipped when the images exist)",
+      "`make up BUILD=1` (`--rebuild`)", "`up -d --no-build`")),
+    ("TEMPLATE step 5 every pre-fix lane", 5,
+     ("every lane whose setup ran before", "Orca-made lanes (under `~/orca/workspaces/<repo>/`)")),
+]:
+    st = step(n)
+    gone = [x for x in needles if x not in st]
+    case(name, not gone, "step %d no longer says %s" % (n, gone))
 case("TEMPLATE worker step make up", "start the stack with `make up` before exec targets" in t,
      "the template does not carry the worker-prompt `make up` step")
 
