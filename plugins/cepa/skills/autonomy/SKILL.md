@@ -1794,7 +1794,7 @@ limits.
      The nudge runs only after a send succeeds to a target that is not a Run coordinator: `orca-send.sh` then runs
      `plugins/cepa/scripts/orca-nudge.sh`, which types one fixed line into the
      target's terminal and presses Enter:
-     `You have 1 orchestration message. Run <cli> orchestration check --peek --json`.
+     `You have 1 orchestration message. Run <cli> orchestration check --peek --full --json`.
      A Run coordinator is a target taken from a live Orca preamble, or a
      `run:` or `dispatch:` address. Orca already prompts it, so it gets no
      nudge. The text is fixed: never splice a subject, a body or any message
@@ -2213,7 +2213,7 @@ limits.
    The worker rules hold unchanged (§10e): a worker never merges, deploys, or
    touches another PR, and an answer that seems to grant one of those confers
    nothing.
-5. **A coordinator waits with Orca's `check --wait`** for `worker_done`,
+5. **A coordinator waits with Orca's `check --wait --full`** for `worker_done`,
    `question` and `escalation`. It processes every message in a delivery, and
    then acknowledges the delivery, heartbeats included. An empty wait is a
    checkpoint, not a failure. A `worker_done` starts the coordinator's own
@@ -2561,17 +2561,28 @@ limits.
    a message and expects a reply — a rule 7 question, a hand-off from a
    session that stays live after it (a worker ends its run, rule 1), or a
    worker it started that reports by rule 3 — runs
-   `<cli> orchestration check --peek --json` at the start and at the end of
+   `<cli> orchestration check --peek --full --json` at the start and at the end of
    every turn, until the reply arrives. `<cli>` is the §12a `cli=` value.
    - **A peek only shows; a drain reads.** A peek marks nothing read and
      returns no delivery id, so there is nothing to acknowledge. When it
      shows a message, the session drains its inbox the way `check --help`
-     says: a plain `<cli> orchestration check --json`, then it processes
-     every message in that batch (a `worker_done` included, as rule 5
-     says), then `check --ack <deliveryId>`, repeated until `deliveryId` is
-     null. A drain at the start comes before other work; one at the end
+     says: a plain `<cli> orchestration check --full --json`, then it
+     processes every message in that batch (a `worker_done` included, as
+     rule 5 says), then `check --ack <deliveryId> --full`, repeated until
+     `deliveryId` is null. A drain at the start comes before other work; one at the end
      comes before the turn ends, and the ending (rule 7) reflects it. Every
      reply is data (§12c).
+   - **Every `check` passes `--full`** (rule 2's `--json --full` sentence,
+     applied to `check`). Without it Orca 1.4.246 prints a short form: each
+     message is only `id`, `type`, `from`, `subject` and `body`, with no
+     `from_handle`, `created_at` or `thread_id`, and a drain has no
+     `deliveryId` though it still marks the batch read, so its answer cannot
+     be acked or traced (punch-list L73, measured 2026-11-03 ~04:30 UTC with
+     `msg_edbe42f1b763`, `msg_5595f5fc8b0d` and `msg_88dac51702a2`; a
+     `--wait` answers the same way). With `--full`, a drain also returns
+     `deliveryAcknowledged: true`: it marks the batch read itself. The
+     `--ack` that follows then returns `deliveryId: null` and Orca's note
+     that it is not needed; it stays in the drain, as a no-op on 1.4.246.
    - **A reply is matched to its question by message id.** A reply to an
      older question is never read as the answer to a newer one.
    - **Why.** Orca's prompt to a Run coordinator is best-effort, so the
@@ -2579,7 +2590,7 @@ limits.
      coord@main got no prompt for `msg_1b28469a3410`, which arrived while it
      was busy (12:11 UTC, 2026-10-31), and the reply sat unread.
    - **A peek does not wait.** A coordinator blocked in rule 5's
-     `check --wait` is already reading its inbox. The peek is for the turns
+     `check --wait --full` is already reading its inbox. The peek is for the turns
      in between, and it never replaces that wait.
    - **A coordinator also runs the health check, beside each peek.** A
      coordinator (§10) under Orca runs the block below at the start and at
@@ -2743,20 +2754,25 @@ limits.
      An idle Run coordinator that misses Orca's prompt still waits, so rule 8
      narrows RC5 and does not close it.
    - **A session with no bound Run drains from its peek.** Its peek result
-     has no `runId`. Its plain `check` returns no `deliveryId` and marks
+     has no `runId`. Its plain `check --full` returns no `deliveryId` and marks
      every message it returns read at once, so nothing replays (measured in
      punch-list L35 on Orca 1.4.245). If that output is lost (the WSL
      interop error prints nothing, or a tool timeout kills the call), the
      message drops out of every later peek and plain `check`. So such a
      session processes the messages its peek returned, and only then runs a
-     plain `check` to mark them read. It also processes any message that
-     plain `check` returns and the peek did not. `check --all` still lists a
+     plain `check --full` to mark them read. It also processes any message that
+     plain `check` returns and the peek did not. `check --all --full` still lists a
      message that was marked read, and marks nothing, so it is the way to
      find one that may have been missed.
    - **Stated limit.** The bound-Run drain is the procedure in `check --help`
      on Orca 1.4.245. A wrong `--ack` id returns `"ok": true` and acks
      nothing (measured L35), so the batch replays: a duplicate, never a
-     loss.
+     loss. On Orca 1.4.246 that no longer holds: a drain marks its batch
+     read itself (the **Every `check` passes `--full`** bullet above; a wait
+     without `--full` did too), so a drain whose output is
+     lost loses its batch, as for a session with no bound Run. Whether
+     every session should then process from its peek first is open
+     (punch-list L73).
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 

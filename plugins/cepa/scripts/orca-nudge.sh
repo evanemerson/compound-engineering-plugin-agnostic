@@ -218,7 +218,7 @@ fi
 [ "$cepa_nudge_state" = done ] || skip "$cepa_nudge_state"
 
 # The text is fixed. Only the checked cli is substituted into it.
-cepa_nudge_text="You have 1 orchestration message. Run $cepa_nudge_cli orchestration check --peek --json"
+cepa_nudge_text="You have 1 orchestration message. Run $cepa_nudge_cli orchestration check --peek --full --json"
 if ! cepa_nudge_orca "$cepa_nudge_tmp/send.json" terminal send --terminal "$cepa_nudge_term" \
      --text "$cepa_nudge_text" --enter --json; then
   fail "terminal send exited non-zero or timed out"

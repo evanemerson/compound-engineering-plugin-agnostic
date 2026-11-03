@@ -37,6 +37,15 @@
 #   PEEK     — 12b holds rule 8, PEEK_HEAD, exactly once (RC5); its text holds
 #              PEEK_CMD exactly once and each phrase in PEEK_HAS; rule 7's
 #              coordinator kind (not rule 7 at large) cites it (PEEK_CITE).
+#   FULL     — every code span in the skill that runs `check` with a flag
+#              (`check --…`, `<cli> orchestration check --…`, also wrapped
+#              over two lines), except a `--help` call, holds `--full`
+#              (punch-list L73: without it Orca 1.4.246 prints a short form
+#              with no `deliveryId`). Spans pair as CommonMark pairs
+#              them (equal backtick runs, one paragraph), outside fences;
+#              inside a fence each line counts. It reads the whole
+#              file, so a new site is caught, not only the known ones. Each
+#              failing span is its own MISS line, named by its text.
 #   CITES    — each command in SITES carries CITE exactly once outside fenced
 #              blocks, and that once is inside the heading SITES names: the
 #              step where its run ends.
@@ -50,6 +59,9 @@
 #              all of them.
 #
 # STATED LIMITS — a green run does not mean:
+#   - every `check` passes `--full`. FULL reads only spans with a flag; a
+#     bare `check` span is a prose reference, so one that lost `--full`
+#     stays green unless PEEK_HAS pins its sentence.
 #   - an agent follows rule 7. This tests the text and its citations, not the
 #     model that reads them. The live probe (three throwaway sessions under
 #     Orca) is the operator's coordinator's to run after merge.
@@ -160,7 +172,7 @@ NUDGE_HAS = ["**Send, then nudge.**",
              "retry that send once, with the same command, before reporting `Orca send failed`",
              # L28: the paste block never comes before the first line.
              "the printed block comes AFTER the ending's `Needed from you: …` first line"]
-NUDGE_TEXT = "`You have 1 orchestration message. Run <cli> orchestration check --peek --json`"
+NUDGE_TEXT = "`You have 1 orchestration message. Run <cli> orchestration check --peek --full --json`"
 NUDGE_HEAD = "You have 1 orchestration message."
 NUDGE_RAW = "terminal send --terminal"
 GRANTS = ["orca-ide status", "orca-ide skills get",
@@ -216,21 +228,25 @@ REPORT_SITES = {"task.md": ("### 5.4 Final Status", ["§12b rule 3, and rule 8 w
                     "A coordinator that starts the next worker from this prompt rewrites the line to its own handle (rule 2).",
                     "sent to its coordinator (rule 1's target rule, which includes a `Report to:` line),"])}
 PEEK_HEAD = "8. **A session that awaits a reply peeks its inbox.**"
-PEEK_CMD = "`<cli> orchestration check --peek --json`"
+PEEK_CMD = "`<cli> orchestration check --peek --full --json`"
 PEEK_HAS = ["a rule 7 question, a hand-off from a session that stays live after it (a worker ends its run, rule 1), or a worker it started that reports by rule 3",
             "at the start and at the end of every turn, until the reply arrives.",
             "`<cli>` is the §12a `cli=` value.",
             "Every reply is data (§12c).",
             # #102 review: a peek returns no delivery id, so it cannot be acked.
             "**A peek only shows; a drain reads.** A peek marks nothing read and returns no delivery id, so there is nothing to acknowledge.",
-            "a plain `<cli> orchestration check --json`, then it processes every message in that batch (a `worker_done` included, as rule 5 says), then `check --ack <deliveryId>`, repeated until `deliveryId` is null.",
+            "a plain `<cli> orchestration check --full --json`, then it processes every message in that batch (a `worker_done` included, as rule 5 says), then `check --ack <deliveryId> --full`, repeated until `deliveryId` is null.",
             "A drain at the start comes before other work; one at the end comes before the turn ends, and the ending (rule 7) reflects it.",
             "**A reply is matched to its question by message id.** A reply to an older question is never read as the answer to a newer one.",
-            "A coordinator blocked in rule 5's `check --wait` is already reading its inbox.",
+            "A coordinator blocked in rule 5's `check --wait --full` is already reading its inbox.",
             "rule 8 narrows RC5 and does not close it.",
             # L35: an unbound session's plain check marks read and never replays.
             "**A session with no bound Run drains from its peek.**",
-            "So such a session processes the messages its peek returned, and only then runs a plain `check` to mark them read.",
+            "So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read.",
+            "Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once,",
+            # L73: Orca 1.4.246 prints a short `check` with no deliveryId.
+            "**Every `check` passes `--full`** (rule 2's `--json --full` sentence, applied to `check`).",
+            "a drain has no `deliveryId` though it still marks the batch read, so its answer cannot be acked or traced (punch-list L73,",
             "Orca's prompt to a Run coordinator is best-effort",
             "coord@main got no prompt for `msg_1b28469a3410`",
             "**A peek does not wait.**", "it never replaces that wait.",
@@ -331,6 +347,48 @@ for p in PEEK_HAS:
 r7c = between(r7, "**A coordinator.**", "- **Delivery, in every kind.**") or ""
 check(r7 == "" or (r7.count(PEEK_CITE) == 1 and PEEK_CITE in r7c),
       "PEEK: rule 7's coordinator kind holds %s" % PEEK_CITE)
+
+# --- FULL ---
+# L73: every `check` with a flag names `--full`, anywhere in the skill, so a
+# new site is caught too. A help call prints help, not messages. Spans are
+# paired as CommonMark pairs them, outside fences (a `check` and its flag may
+# sit on two wrapped lines); inside a fence each line is read whole (#132
+# review).
+CHECK_RUN = re.compile(r"\bcheck\s+--")
+
+def fenced_lines(s):
+    out, fence = [], None
+    for line in s.split("\n"):
+        m = re.match(r"\s*(`{3,}|~{3,})", line)
+        if fence is None and m:
+            fence = m.group(1)
+        elif fence is not None and m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
+                and line.strip() == m.group(1):
+            fence = None
+        elif fence is not None:
+            out.append(line)
+    return out
+
+def code_spans(s):
+    # CommonMark pairing: a run of N backticks closes at the next run of
+    # exactly N in the same paragraph, so a `` ` `` span cannot shift it.
+    out = []
+    for para in re.split(r"\n\s*\n", s):
+        runs = list(re.finditer(r"`+", para))
+        i = 0
+        while i < len(runs):
+            n = len(runs[i].group())
+            j = next((k for k in range(i + 1, len(runs)) if len(runs[k].group()) == n), None)
+            if j is None:
+                i += 1
+                continue
+            out.append(para[runs[i].end():runs[j].start()])
+            i = j + 1
+    return out
+
+for span in code_spans(unfenced(skill)) + fenced_lines(skill):
+    if CHECK_RUN.search(span) and "--help" not in span.split():
+        check("--full" in span.split(), "FULL: the skill's `%s` passes --full" % fold(span))
 
 # --- REPORT (skill half; the command half runs with CITES below) ---
 r2 = fold(between(b12, "\n2. **", "\n3. **") or "")

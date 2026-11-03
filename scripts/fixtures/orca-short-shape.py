@@ -21,6 +21,16 @@
 #                thread_id, created_at)
 #   send, reply  {messageId, warnings[str]}        (no message object; `send`
 #                measured, `reply` assumed to match it)
+#   check        messages[{id, type, from, subject, body}], plus
+#                `acknowledged` and `next` on an `--ack` (no runId,
+#                dispatchId, deliveryId, count, from_handle, to_handle,
+#                thread_id, created_at). Measured 2026-11-03 ~04:30 UTC
+#                (punch-list L73), each of `--peek`, a drain, `--wait` and
+#                `--ack`. A drain still marks its batch read without
+#                `--full`, so its answer cannot be acked. No cepa script
+#                runs `check` today (autonomy §12b rule 8 has sessions run
+#                it), so no stub answers it yet; a script that starts to
+#                read it gets this shape here.
 #
 # Use: `short(verb, text)` returns the short text, or `text` unchanged when it
 # is not JSON, not an object with `"ok": true`, or not one of these verbs (a
@@ -30,7 +40,7 @@
 # As a program: `orca-short-shape.py <verb>` filters stdin to stdout.
 import json, sys
 
-VERBS = ("run-list", "run-show", "run-current", "worker-list", "worker-show", "inbox", "send", "reply")
+VERBS = ("run-list", "run-show", "run-current", "worker-list", "worker-show", "inbox", "send", "reply", "check")
 
 
 def _run(r):
@@ -68,6 +78,13 @@ def _short(verb, d):
         m = r["message"]
         out = {"messageId": m.get("id") if isinstance(m, dict) else None,
                "warnings": [w.get("message", "") if isinstance(w, dict) else w for w in r.get("warnings") or []]}
+    elif verb == "check":
+        out = {"messages": [{"id": m.get("id"), "type": m.get("type"), "from": m.get("from_handle"),
+                             "subject": m.get("subject"), "body": m.get("body")} for m in r["messages"]]}
+        if r.get("acknowledged") is not None:
+            out["acknowledged"] = r["acknowledged"]
+            if "next" in r:
+                out["next"] = r["next"]
     else:
         out = {"messages": [{"id": m.get("id"), "type": m.get("type"), "from": m.get("from_handle"),
                              "to": m.get("to_handle"), "subject": m.get("subject"), "handled": m.get("read"),

@@ -57,7 +57,11 @@ MUTANTS = [
     # SEND
     ("send-interrupt", '--enter --json; then', '--enter --interrupt --json; then',
      {"RETRY killed call not retried", "RETRY send retry target left done", "RETRY send vsock once", "RETRY send vsock twice", "SEND done", "SEND never --interrupt", "WAIT working then done sends"}),
-    ("send-content-spliced", 'check --peek --json"\n', 'check --peek --json $cepa_nudge_term"\n',
+    ("send-content-spliced", 'check --peek --full --json"\n', 'check --peek --full --json $cepa_nudge_term"\n',
+     {"RETRY killed call not retried", "RETRY send retry target left done", "RETRY send vsock once", "RETRY send vsock twice", "SEND cli path is ORCA_CLI_COMMAND", "SEND done", "SEND orca-dev", "SEND row in second worktree", "WAIT working then done sends"}),
+    # L73: the nudge names `check --full`, or the target reads Orca 1.4.246's
+    # short form, with no deliveryId to ack.
+    ("send-drops-full", 'check --peek --full --json"\n', 'check --peek --json"\n',
      {"RETRY killed call not retried", "RETRY send retry target left done", "RETRY send vsock once", "RETRY send vsock twice", "SEND cli path is ORCA_CLI_COMMAND", "SEND done", "SEND orca-dev", "SEND row in second worktree", "WAIT working then done sends"}),
     ("send-no-enter", '--text "$cepa_nudge_text" --enter --json', '--text "$cepa_nudge_text" --json', {"RETRY killed call not retried", "RETRY send retry target left done", "RETRY send vsock once", "RETRY send vsock twice", "SEND done", "WAIT working then done sends"}),
     # STATE

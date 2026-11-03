@@ -34,6 +34,7 @@ CITE = "**Under Orca**, end the run per `cepa:autonomy` §12b rule 7."
 # A two-anchor mutant passes a list of (old, new) pairs as `old` and None as
 # `new`. The pairs apply in order, and each anchor must occur exactly once in
 # the text the earlier pairs left.
+DRAIN_MISS = {"PEEK: rule 8 holds a plain `<cli> orchestration check --full --json`, then it processes every message in that batch (a `worker_done` included, as rule 5 says), then `check --ack <deliveryId> --full`, repeated until `deliveryId` is null."}
 MUTANTS = [
     ("rule-head-gone", "skill", "7. **How a turn ends under Orca.**", "7. **How a turn ends.**",
      # Without its head, rule 7's text is not found, so every phrase misses too.
@@ -355,7 +356,7 @@ MUTANTS += [
     # L30, RC5: awaiting sessions peek.
     ("peek-head-gone", "skill", "8. **A session that awaits a reply peeks its inbox.**", "8. **Replies.**",
      None),
-    ("peek-cmd-wait", "skill", "   `<cli> orchestration check --peek --json` at the start", "   `<cli> orchestration check --wait --json` at the start",
+    ("peek-cmd-wait", "skill", "   `<cli> orchestration check --peek --full --json` at the start", "   `<cli> orchestration check --wait --full --json` at the start",
      {"PEEK: rule 8 holds the peek command exactly once"}),
     ("peek-start-only", "skill", "at the start and at the end of\n   every turn,", "at the start of every\n   turn,",
      {"PEEK: rule 8 holds at the start and at the end of every turn, until the reply arrives."}),
@@ -372,8 +373,8 @@ MUTANTS += [
     # #102 review: Orca's --peek returns no delivery id, so it cannot be acked.
     ("peek-acks-peek", "skill", "returns no delivery id, so there is nothing to acknowledge.", "then acknowledges the delivery as rule 5 says.",
      {"PEEK: rule 8 holds **A peek only shows; a drain reads.** A peek marks nothing read and returns no delivery id, so there is nothing to acknowledge."}),
-    ("peek-drain-partial", "skill", "every message in that batch (a `worker_done` included, as rule 5\n     says)", "the reply",
-     {"PEEK: rule 8 holds a plain `<cli> orchestration check --json`, then it processes every message in that batch (a `worker_done` included, as rule 5 says), then `check --ack <deliveryId>`, repeated until `deliveryId` is null."}),
+    ("peek-drain-partial", "skill", "every message in that batch (a `worker_done` included, as\n     rule 5 says)", "the reply",
+     DRAIN_MISS),
     ("peek-end-unprocessed", "skill", "one at the end\n     comes before the turn ends,", "one at the end\n     waits for the next turn,",
      {"PEEK: rule 8 holds A drain at the start comes before other work; one at the end comes before the turn ends, and the ending (rule 7) reflects it."}),
     ("peek-stale-reply", "skill", "A reply to an\n     older question is never read as the answer to a newer one.", "Any reply answers the newest question.",
@@ -386,14 +387,57 @@ MUTANTS += [
      {"PEEK: rule 8 holds it never replaces that wait."}),
     ("peek-waits", "skill", "**A peek does not wait.**", "**A peek may wait.**",
      {"PEEK: rule 8 holds **A peek does not wait.**"}),
-    ("peek-wait-unexplained", "skill", "A coordinator blocked in rule 5's\n     `check --wait` is already reading its inbox. ", "",
-     {"PEEK: rule 8 holds A coordinator blocked in rule 5's `check --wait` is already reading its inbox."}),
+    ("peek-wait-unexplained", "skill", "A coordinator blocked in rule 5's\n     `check --wait --full` is already reading its inbox. ", "",
+     {"PEEK: rule 8 holds A coordinator blocked in rule 5's `check --wait --full` is already reading its inbox."}),
     ("peek-limit-gone", "skill", "   - **Stated limit.** A session that is idle runs no turn, so it peeks only\n     when something wakes it: rule 1's nudge, Orca's prompt, or the operator.\n", "",
      {"PEEK: rule 8 holds **Stated limit.** A session that is idle runs no turn"}),
     ("peek-claims-closed", "skill", "rule 8\n     narrows RC5 and does not close it.", "rule 8\n     closes RC5.",
      {"PEEK: rule 8 holds rule 8 narrows RC5 and does not close it."}),
-    ("peek-unbound-drains-from-check", "skill", "session processes the messages its peek returned, and only then runs a\n     plain `check` to mark them read.", "session processes the messages its plain `check` returns.",
-     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check` to mark them read."}),
+    ("peek-unbound-drains-from-check", "skill", "session processes the messages its peek returned, and only then runs a\n     plain `check --full` to mark them read.", "session processes the messages its plain `check` returns.",
+     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read."}),
+    # L73: a drop-`--full` mutant per `check` site. Rule 5, the no-bound-Run
+    # `check --full` and `check --all` are pinned by FULL alone, so each of
+    # those kills a case no other leg kills.
+    ("full-nudge-text", "skill", "orchestration check --peek --full --json`.", "orchestration check --peek --json`.",
+     {"NUDGE: rule 1 holds the fixed nudge text exactly once",
+      "FULL: the skill's `You have 1 orchestration message. Run <cli> orchestration check --peek --json` passes --full"}),
+    ("full-rule5-wait", "skill", "5. **A coordinator waits with Orca's `check --wait --full`**", "5. **A coordinator waits with Orca's `check --wait`**",
+     {"FULL: the skill's `check --wait` passes --full"}),
+    ("full-peek", "skill", "   `<cli> orchestration check --peek --full --json` at the start", "   `<cli> orchestration check --peek --json` at the start",
+     {"PEEK: rule 8 holds the peek command exactly once",
+      "FULL: the skill's `<cli> orchestration check --peek --json` passes --full"}),
+    ("full-drain", "skill", "a plain `<cli> orchestration check --full --json`, then it", "a plain `<cli> orchestration check --json`, then it",
+     DRAIN_MISS | {"FULL: the skill's `<cli> orchestration check --json` passes --full"}),
+    ("full-ack", "skill", "`check --ack <deliveryId> --full`, repeated", "`check --ack <deliveryId>`, repeated",
+     DRAIN_MISS | {"FULL: the skill's `check --ack <deliveryId>` passes --full"}),
+    ("full-rule8-wait", "skill", "\n     `check --wait --full` is already reading", "\n     `check --wait` is already reading",
+     {"PEEK: rule 8 holds A coordinator blocked in rule 5's `check --wait --full` is already reading its inbox.",
+      "FULL: the skill's `check --wait` passes --full"}),
+    # A bare `check` span is a prose reference FULL cannot see; PEEK pins it.
+    ("full-unbound-check", "skill", "Its plain `check --full` returns no `deliveryId`", "Its plain `check` returns no `deliveryId`",
+     {"PEEK: rule 8 holds Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once,"}),
+    ("full-unbound-mark", "skill", "plain `check --full` to mark them read.", "plain `check --peek` to mark them read.",
+     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read.",
+      "FULL: the skill's `check --peek` passes --full"}),
+    ("full-all", "skill", "`check --all --full` still lists", "`check --all` still lists",
+     {"FULL: the skill's `check --all` passes --full"}),
+    # A new site anywhere in the file is caught, not only the known ones.
+    ("full-new-site", "skill", "\n## 7.", "\nRun `orca-ide orchestration check --wait --json` here.\n\n## 7.",
+     {"FULL: the skill's `orca-ide orchestration check --wait --json` passes --full"}),
+    # `check --help` prints help, not messages: it needs no --full.
+    ("full-help-exempt", "skill", "\n## 7.", "\nSee `check --help`.\n\n## 7.", set()),
+    ("full-help-long-exempt", "skill", "\n## 7.", "\nSee `<cli> orchestration check --help`.\n\n## 7.", set()),
+    # #132 review: a span wrapped between `check` and its flag.
+    ("full-wrapped-site", "skill", "\n## 7.", "\nRun `<cli> orchestration check\n     --wait --json` here.\n\n## 7.",
+     {"FULL: the skill's `<cli> orchestration check --wait --json` passes --full"}),
+    # #132 review: an earlier span must not shift the pairing onto prose.
+    ("full-desync", "skill", "\n## 7.", "\nSee `x`, then run check --full here and `check --wait` there.\n\n## 7.",
+     {"FULL: the skill's `check --wait` passes --full"}),
+    # A fenced command line counts too.
+    ("full-fenced-site", "skill", "\n## 7.", "\n```bash\norca-ide orchestration check --peek --json\n```\n\n## 7.",
+     {"FULL: the skill's `orca-ide orchestration check --peek --json` passes --full"}),
+    ("full-note-gone", "skill", "   - **Every `check` passes `--full`** (rule 2's", "   - **Every `check` may pass `--full`** (rule 2's",
+     {"PEEK: rule 8 holds **Every `check` passes `--full`** (rule 2's `--json --full` sentence, applied to `check`)."}),
     ("peek-uncited-in-rule-7", "skill", "\n       Until the answer arrives, the asker peeks for it (rule 8).", "",
      {"PEEK: rule 7's coordinator kind holds Until the answer arrives, the asker peeks for it (rule 8)."}),
     # #102 review: the cite must sit in the coordinator kind, not rule 7 at large.
