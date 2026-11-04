@@ -2208,9 +2208,17 @@ L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not
     setup per the resolver read. Passed to the worker.
 
 L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f7942).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-04 — PR #134 merged `a63e434` (1.55.5) on the operator's
+    AskUserQuestion "Merge #134". Items 1-6 fixed. Item 3 took the
+    fail-closed form: the Ending line lists the terminal handles. Item 2: a
+    checkout that does not move HEAD writes no reflog entry, so at the tip
+    the Ending line hops through origin/<base>~1. Beyond the brief: an
+    unusable or unreadable `trunk:` override now refuses every rm in that
+    repo. Stubs only; no real row read `orphaned: true`. Residuals: shard
+    2026-11-04-fix-matrix-orca-lane-create-timeout-rm-defects.md.
     severity: P2
-    owner: tab2@matrix (fix/matrix/orca-lane-create-timeout-rm-defects, ctx_c8695129983a)
+    owner: matrix (tab2@matrix)
     1. `orca-lane-reflog.sh` rule 1 vouches only for PRs merged into the
        repo's DEFAULT branch. dpc-pro's default is main but every PR merges
        into dev, so squash-merged lane commits (apgar 7173f874 in #303, cori
@@ -2268,9 +2276,20 @@ L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).*
        rule is: under `timeout` in setup, `--foreground` or `-T </dev/null`.
 
 L79. **`orca-lane.sh create`: Orca's `runtime_timeout` is not a failed create; the re-run advice makes a duplicate lane.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-04 — PR #134 merged `a63e434` (1.55.5) on the operator's
+    AskUserQuestion "Merge #134". tab2@matrix done (head 21d0a51 = Handoff;
+    22/22 checks green on updated head 317fd7e). create step 2b reads Orca's
+    list for up to 120 s after a no-result code, resumes steps 3-6 if the
+    lane shows, and otherwise says a lane may still appear. "Run again as
+    is" is gone from the script and §12b rule 2. Review found the same class
+    in rm; fixed in the same PR. Orca-lane control shards 4 -> 8. Stubs
+    only: never run against a real Orca timeout. Plugin 1.55.5 (rc=0),
+    matrix parked, worker tab closed. Open for the operator: the shard's
+    drafted rule (learning 3): an Orca CLI failure after the request was
+    sent is no result, for every write verb.
     severity: P1
-    owner: tab2@matrix (fix/matrix/orca-lane-create-timeout-rm-defects, ctx_c8695129983a)
+    owner: matrix (tab2@matrix)
     contexthub (msg_24a69bb1b3f8, cepa 1.55.4, Orca 1.4.246): `create
     navigator` printed `worktree create failed (runtime_timeout)`; Orca's
     list showed no lane right after, so per rule 2 it re-ran create, which
