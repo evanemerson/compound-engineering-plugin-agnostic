@@ -34,6 +34,14 @@
 #            Resume (L58, #4): a lane left on its park branch, and one left
 #            detached at the park tip, are parked; a lane on another branch
 #            is not resumed. A stale local origin/<base> is re-fetched (#28).
+#            L79: a create with no result (runtime_timeout, also at exit 0;
+#            no JSON; a kill; no error code) reads Orca's list. A lane that
+#            shows is parked by steps 3-6, with one create call. A lane that
+#            never shows fails with exactly 12 reads, or fewer at the 120 s
+#            clock (`date` and `sleep` are stubs), and its text says a lane
+#            may appear and never says to run create. Two rows fail; a row
+#            not settled is read again; a definite error is not polled; a
+#            lane that shows after the poll ended is resumed.
 #   NAME   — only automatic, non-main lanes with a <wt> basename are renamed,
 #            by id; a second run renames none; a skip exits 1 with an Ending
 #            line (#30); a failed set and a set that does not stick are
@@ -54,6 +62,11 @@
 #            patch on the default branch are removed. The main checkout's
 #            orca.yaml (#16): untracked, unpushed, or edited under
 #            skip-worktree keeps the lane; pushed to the default is removed.
+#            L77 items 1 and 5: the trunk, from the main checkout's
+#            cepa.local.md, counts for a merged PR, an equal patch and the
+#            orca.yaml comparison; a PR into the default still counts; a
+#            malformed or doubled override is unknown. L77 items 2, 3, 4, 6:
+#            each Ending line, and the remedy each names is run for real.
 #   HOOKS  — L76: Orca's saved hookSettings (stubbed per case) against
 #            orca.yaml. create: unset, shared-only, local-only matching, and
 #            run-both with no local script create; local-only differing or
@@ -71,7 +84,8 @@
 #            refuse before any worktree read; a resume onto a shadow fails (exit 3).
 #   BLOCK  — §12b rule 2's lane block, extracted and run under `bash -e`:
 #            it runs `name`; shell text in a field runs nothing; with the
-#            script absent it prints the skipped line.
+#            script absent it prints the skipped line. L79: rule 2 and the
+#            script no longer tell a session to re-run a failed create.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
@@ -143,6 +157,13 @@ class World:
         os.makedirs(self.bin)
         os.symlink(STUB, os.path.join(self.bin, "orca-ide"))
         os.symlink(GHSTUB, os.path.join(self.bin, "gh"))
+        # `sleep` logs and returns; `date +%s` is a clock that moves
+        # STUB_DATE_STEP per read, so the poll's 120 s bound runs in no time.
+        for n, t in (("sleep", '#!/bin/sh\n[ -z "$STUB_SLEEP_LOG" ] || echo "$1" >>"$STUB_SLEEP_LOG"\n'),
+                     ("date", '#!/bin/sh\n[ -n "$STUB_DATE_STEP" ] || exec /usr/bin/env -i PATH=/usr/bin:/bin date "$@"\n'
+                              'n=$(cat "$STUB_CLOCK" 2>/dev/null || echo 0)\necho "$n"\necho $((n + STUB_DATE_STEP)) >"$STUB_CLOCK"\n')):
+            open(os.path.join(self.bin, n), "w").write(t)
+            os.chmod(os.path.join(self.bin, n), 0o755)
         self.gh = os.path.join(self.d, "gh.json")
         self.ghlog = os.path.join(self.d, "gh.log")
         json.dump({}, open(self.gh, "w"))
@@ -185,10 +206,15 @@ class World:
 
     def run(self, fields, mode="", cwd=None, args=(), env=None, script=None):
         open(self.log, "w").close()
+        self.sleeps = os.path.join(self.d, "sleeps.log")
+        open(self.sleeps, "w").close()
+        clock = os.path.join(self.d, "clock")
+        if os.path.exists(clock):
+            os.remove(clock)
         self.load(); self.st["lists"] = 0; self.save()
         e = dict(os.environ, PATH=self.bin + ":" + os.environ["PATH"], STUB_STATE=self.state, STUB_LOG=self.log,
                  STUB_MODE=mode, WSL_DISTRO_NAME=DISTRO, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
-                 STUB_GH=self.gh, STUB_GH_LOG=self.ghlog)
+                 STUB_GH=self.gh, STUB_GH_LOG=self.ghlog, STUB_SLEEP_LOG=self.sleeps, STUB_CLOCK=clock)
         e.pop("ORCA_CLI_COMMAND", None)
         e.update(env or {})
         r = subprocess.run(["bash", script or SCRIPT, *args], input=fields, cwd=cwd or self.main, capture_output=True,
@@ -397,6 +423,76 @@ expect("CREATE re-fetches a stale origin/base", W.run(F(cli=CLI, action="create"
        rc=0, first="ORCA lane: created nu1")
 W.done()
 
+# ---- CREATE, L79: Orca keeps creating after its CLI gives up. The first read
+# after the create sees no lane, so a single read would miss every one of these.
+W = World("poll")
+
+
+def lists(calls):
+    return len([c for c in calls if c[:2] == ["worktree", "list"]]) - 1  # the first is step 1's
+
+
+def creates(calls):
+    return len([c for c in calls if c[:2] == ["worktree", "create"]])
+
+
+def slept():
+    return [l.strip() for l in open(W.sleeps)]
+
+
+NORES = "ORCA lane: worktree create gave no result "
+got = W.run(F(cli=CLI, action="create", lane="p1", base="main"), mode="createlate")
+pp = os.path.join(W.ws, "repo", "p1")
+expect("CREATE timeout then the lane shows", got, rc=0, first=NORES + "(runtime_timeout)",
+       has=("ORCA lane: Orca's list shows p1 at " + pp, "ORCA lane: created p1 at " + pp, "named p1 (fixed)"))
+(ok if creates(got[2]) == 1 and lists(got[2]) == 2 and slept() == ["10"] else miss)(
+    "CREATE timeout makes one create and reads again: %d %d %r" % (creates(got[2]), lists(got[2]), slept()))
+(ok if not sh("git", "-C", W.main, "branch", "--list", "chore/p1/park")
+ and subprocess.run(["git", "-C", pp, "symbolic-ref", "-q", "HEAD"], capture_output=True).returncode == 1 else miss)(
+    "CREATE timeout parks detached and deletes the park branch")
+for tag, lane, m, why in (("no JSON", "p2", "createnojson", "(no JSON; the 180 s bound may have killed it)"),
+                          ("a kill", "p3", "createkilled", "(no JSON; the 180 s bound may have killed it)"),
+                          ("no error code", "p4", "createnocode", "(no error code)"),
+                          ("a timeout at exit 0", "p5", "create0timeout", "(runtime_timeout)")):
+    expect("CREATE %s is polled" % tag, W.run(F(cli=CLI, action="create", lane=lane, base="main"), mode=m), rc=0,
+           first=NORES + why, has=("ORCA lane: created %s at" % lane,))
+got = W.run(F(cli=CLI, action="create", lane="q1", base="main"), mode="createnever")
+expect("CREATE no lane after the poll", got, rc=3, first=NORES + "(runtime_timeout)",
+       has=("ORCA lane failed: worktree create gave no result (runtime_timeout), and Orca's list shows no lane q1",
+            "(12 of 12 reads complete)", "a lane may still appear"), lacks=("run create", "run again", "create again"))
+(ok if got[1][-1:] == ["Ending first line: Needed from you: do not start another create: re-check Orca's worktree list "
+                       "for q1 in a few minutes; when it lists q1, ask this session to resume it; if it stays absent, "
+                       "say how to proceed"] else miss)("CREATE no lane Ending line: %r" % got[1][-1:])
+(ok if creates(got[2]) == 1 and lists(got[2]) == 12 and slept() == ["10"] * 11 else miss)(
+    "CREATE poll is 12 reads, 10 s apart: %d %d %r" % (creates(got[2]), lists(got[2]), slept()))
+got = W.run(F(cli=CLI, action="create", lane="q2", base="main"), mode="createnever", env={"STUB_DATE_STEP": "40"})
+(ok if lists(got[2]) == 3 and "(3 of 3 reads complete)" in "\n".join(got[1]) else miss)(
+    "CREATE poll stops at the 120 s clock: %d reads" % lists(got[2]))
+expect("CREATE poll counts incomplete reads", W.run(F(cli=CLI, action="create", lane="q3", base="main"),
+       mode="createnever,listfail23"), rc=3, has=("(10 of 12 reads complete)",))
+got = W.run(F(cli=CLI, action="create", lane="q4", base="main"), mode="createdup")
+expect("CREATE two rows after a timeout", got, rc=3, has=("Orca's list now shows 2 worktrees named q4; all are kept",),
+       verbs_lack=[["worktree", "rm"]])
+(ok if os.path.isdir(os.path.join(W.ws, "repo", "q4")) and os.path.isdir(os.path.join(W.ws, "repo", "q4-2")) else miss)(
+    "CREATE two rows are left on disk")
+got = W.run(F(cli=CLI, action="create", lane="q5", base="main"), mode="createunsettled")
+expect("CREATE a row not settled is read again", got, rc=0, has=("ORCA lane: created q5 at",))
+(ok if lists(got[2]) == 4 else miss)("CREATE reads until the row settles: %d" % lists(got[2]))
+expect("CREATE a row that never settles goes to step 3", W.run(F(cli=CLI, action="create", lane="q6", base="main"),
+       mode="createstuck"), rc=3, has=("ORCA lane failed: the new lane's display name is 'q6' (automatic)",))
+got = W.run(F(cli=CLI, action="create", lane="q7", base="main"), mode="createfail")
+expect("CREATE a definite error is not polled", got, rc=3, first="ORCA lane failed: worktree create failed (runtime_error)",
+       has=("check Orca's worktree list for q7",))
+(ok if lists(got[2]) == 0 and not slept() else miss)("CREATE a definite error reads no list: %d" % lists(got[2]))
+# The lane shows only after the poll ended: the failure says to resume it.
+expect("CREATE lane later than the poll", W.run(F(cli=CLI, action="create", lane="q8", base="main"), mode="createverylate"),
+       rc=3, has=("a lane may still appear",))
+W.load(); W.st["pending"]["at"] = 1; W.save()
+got = W.run(F(cli=CLI, action="create", lane="q8", base="main"))
+expect("CREATE resumes a lane that showed after the poll", got, rc=0, first="ORCA lane: resumed and created q8",
+       verbs_lack=[["worktree", "create"]])
+W.done()
+
 # ---- NAME
 W = World("name")
 pa = W.lane("alpha", mode="automatic", where="claude")
@@ -516,7 +612,7 @@ W.done()
 W = World("reuse")
 
 
-def squashed(name, n=1, unpushed=0, detour=False):
+def squashed(name, n=1, unpushed=0, detour=False, base="main"):
     """A lane that worked on feat/<name>/work, pushed it, saw it squash-merged
     as one new commit on origin/main, deleted the branch and parked. Returns
     the lane, the branch, and the pushed head (the PR's headRefOid).
@@ -524,6 +620,7 @@ def squashed(name, n=1, unpushed=0, detour=False):
     `checkout HEAD~1` and back, which the reflog logs as typed."""
     p = W.lane(name)
     b = "feat/%s/work" % name
+    W.git("checkout", "-q", "--detach", "origin/" + base, cwd=p)
     W.git("checkout", "-q", "-b", b, cwd=p)
     for i in range(n):
         open(os.path.join(p, "%s%d.txt" % (name, i)), "w").write("x\n")
@@ -538,20 +635,20 @@ def squashed(name, n=1, unpushed=0, detour=False):
         open(os.path.join(p, "%s-late%d.txt" % (name, i)), "w").write("late\n")
         W.git("add", ".", cwd=p)
         W.commit("late %d" % i, cwd=p)
-    W.git("checkout", "-q", "main")
-    W.git("pull", "-q", "origin", "main")
+    W.git("checkout", "-q", base)
+    W.git("pull", "-q", "origin", base)
     W.git("merge", "-q", "--squash", "origin/" + b)
     W.commit("squash " + b)
-    W.git("push", "-q", "origin", "main")
+    W.git("push", "-q", "origin", base)
     W.git("push", "-q", "origin", "--delete", b)
     W.git("fetch", "-q", "--prune", "origin")
-    W.git("checkout", "-q", "--detach", "origin/main", cwd=p)
+    W.git("checkout", "-q", "--detach", "origin/" + base, cwd=p)
     W.git("branch", "-q", "-D", b)
     return p, b, head
 
 
-def gh(prs=None, fail=False):
-    json.dump({"prs": prs or {}, "default": "main", "fail": fail}, open(W.gh, "w"))
+def gh(prs=None, fail=False, default="main"):
+    json.dump({"prs": prs or {}, "default": default, "fail": fail}, open(W.gh, "w"))
 
 
 KEPT = "HEAD reflog holds a commit that is on no origin ref and not landed"
@@ -699,6 +796,201 @@ expect("RM main orca.yaml edited under skip-worktree", W.run(F(cli=CLI, action="
 W.git("update-index", "--no-skip-worktree", "orca.yaml")
 W.git("checkout", "--", "orca.yaml")
 expect("RM main orca.yaml pushed", W.run(F(cli=CLI, action="rm", lane="y4")), rc=0, first="ORCA lane: removed y4")
+W.done()
+
+# ---- RM, the resolved trunk (L77 items 1 and 5): a repo whose work lands on
+# dev while origin's default is main. cepa.local.md is the main checkout's.
+W = World("trunk")
+W.git("push", "-q", "origin", "main:dev")
+W.git("fetch", "-q", "origin")
+W.git("checkout", "-q", "-b", "dev", "origin/dev")
+
+
+def override(text):
+    open(os.path.join(W.main, "cepa.local.md"), "w").write(text)
+
+
+TRUNK = "# cepa\n\n## Conventions\n\n- trunk: dev\n\n## Other\n\ntrunk: nosuch\n"
+# One lane per case, so a mutant that lets one removal through cannot change
+# what a later case sees.
+p, b, h = squashed("t0", 2, base="dev")
+gh({b: [[19, "MERGED", "dev", h, False]]})
+expect("RM PR into dev with no override keeps the lane", W.run(F(cli=CLI, action="rm", lane="t0")), rc=1,
+       first="ORCA lane: kept t0 — " + KEPT, verbs_lack=[["worktree", "rm"]])
+override(TRUNK)
+p, b, h = squashed("t1", 2, base="dev")
+gh({b: [[20, "MERGED", "dev", h, False]]})
+expect("RM PR into the trunk lands", W.run(F(cli=CLI, action="rm", lane="t1")), rc=0, first="ORCA lane: removed t1",
+       has=("2 in a merged PR's head",))
+p, b, h = squashed("t2", 2, base="dev")
+gh({b: [[21, "MERGED", "main", h, False]]})
+expect("RM PR into the default still lands with a trunk set", W.run(F(cli=CLI, action="rm", lane="t2")), rc=0,
+       first="ORCA lane: removed t2")
+p, b, h = squashed("t3", 2, base="dev")
+gh({b: [[22, "MERGED", "feat/base/x", h, False]]})
+expect("RM PR into neither trunk nor default", W.run(F(cli=CLI, action="rm", lane="t3")), rc=1,
+       first="ORCA lane: kept t3 — " + KEPT, verbs_lack=[["worktree", "rm"]])
+p, b, h = squashed("t4", 2, base="dev")
+gh({b: [[23, "MERGED", "dev", h, False]]}, default="")
+expect("RM a trunk with no default read lands", W.run(F(cli=CLI, action="rm", lane="t4")), rc=0, first="ORCA lane: removed t4")
+# A detached commit cherry-picked onto dev: only the equal-patch rule lands it.
+p = W.lane("t5")
+open(os.path.join(p, "t5.txt"), "w").write("x\n")
+W.git("add", ".", cwd=p)
+W.commit("detached work", cwd=p)
+c = W.git("rev-parse", "HEAD", cwd=p)
+W.git("pull", "-q", "origin", "dev")
+W.commit("dev moved on")
+W.git("-c", "user.name=t", "-c", "user.email=t@t", "cherry-pick", c)
+W.git("push", "-q", "origin", "dev")
+W.git("fetch", "-q", "origin")
+W.git("checkout", "-q", "--detach", "origin/dev", cwd=p)
+gh()
+expect("RM equal patch on the trunk lands", W.run(F(cli=CLI, action="rm", lane="t5")), rc=0,
+       first="ORCA lane: removed t5", has=("1 by an equal patch on origin/dev or origin/main",))
+p, b, h = squashed("t6", 2, base="dev")
+gh({b: [[24, "MERGED", "dev", h, False]]})
+override("## Conventions\ntrunk: gone\n")
+expect("RM a trunk origin lacks is unknown", W.run(F(cli=CLI, action="rm", lane="t6")), rc=1,
+       first="ORCA lane: kept t6 — HEAD reflog holds a commit no origin ref has, and whether it landed is unknown",
+       has=("origin has no trunk branch gone",), verbs_lack=[["worktree", "rm"]])
+# orca.yaml: on dev only, with the main checkout on dev (artist360's shape).
+open(os.path.join(W.main, "orca.yaml"), "w").write("scripts:\n  archive: echo bye\n")
+W.git("add", "orca.yaml")
+W.commit("orca.yaml on dev")
+W.git("push", "-q", "origin", "dev")
+W.git("fetch", "-q", "origin")
+YK = "the main checkout's orca.yaml is not the one origin/main holds"
+TU = "the trunk is unknown"
+for tag, lane, text, rc_, first in (
+        ("no override compares the default", "y1", "", 1, "ORCA lane: kept y1 — " + YK),
+        ("override compares the trunk", "y2", TRUNK, 0, "ORCA lane: removed y2"),
+        ("override with origin/ and backticks", "y3", "## Conventions\n* `trunk`: `origin/dev`\n", 0, "ORCA lane: removed y3"),
+        ("override outside Conventions is not read", "y4", "## Other\ntrunk: dev\n", 1, "ORCA lane: kept y4 — " + YK),
+        ("malformed override is unknown", "y5", "## Conventions\ntrunk: a b\n", 1,
+         "ORCA lane: kept y5 — " + TU + " (cepa.local.md's trunk: is not a branch name)"),
+        ("doubled override is unknown", "y6", "## Conventions\ntrunk: dev\ntrunk: main\n", 1,
+         "ORCA lane: kept y6 — " + TU + " (cepa.local.md gives trunk: 2 times)")):
+    W.lane(lane)
+    override(text)
+    expect("RM orca.yaml %s" % tag, W.run(F(cli=CLI, action="rm", lane=lane)), rc=rc_, first=first)
+W.done()
+
+# ---- RM, Ending lines (L77 items 2, 3, 4, 6). Every remedy a line names is
+# run, so a line that cannot work goes red.
+W = World("end")
+W.commit("second")
+W.git("push", "-q", "origin", "main")
+W.git("fetch", "-q", "origin")
+
+
+def move_origin():
+    W.commit("origin moved on")
+    W.git("push", "-q", "origin", "main")
+    W.git("fetch", "-q", "origin")
+
+
+def expire(p):
+    W.git("reflog", "expire", "--expire=now", "--expire-unreachable=now", "HEAD", cwd=p)
+
+
+def remedy(out):
+    m = re.search(r"\((git -C .*?)\)", out[-1]) if out else None
+    for cmd in (m.group(1).split(", then ") if m else []):
+        subprocess.run(cmd.split(), capture_output=True, text=True, check=True)
+    return bool(m)
+
+
+p = W.lane("e1")
+expire(p)
+got = W.run(F(cli=CLI, action="rm", lane="e1"))
+expect("RM empty reflog at the tip", got, rc=1, first="ORCA lane: kept e1 — HEAD reflog is empty",
+       has=("re-park e1 at origin/main to write a landed entry", "checkout --detach origin/main~1, then git -C "),
+       verbs_lack=[["worktree", "rm"]])
+remedy(got[1])
+expect("RM the at-tip remedy clears an empty reflog", W.run(F(cli=CLI, action="rm", lane="e1")), rc=0, first="ORCA lane: removed e1")
+p = W.lane("e2")
+move_origin()
+expire(p)
+got = W.run(F(cli=CLI, action="rm", lane="e2"))
+expect("RM empty reflog behind the tip", got, rc=1, first="ORCA lane: kept e2 — HEAD reflog is empty",
+       has=("re-park e2 at origin/main",), lacks=("~1",), verbs_lack=[["worktree", "rm"]])
+remedy(got[1])
+expect("RM the behind-tip remedy clears an empty reflog", W.run(F(cli=CLI, action="rm", lane="e2")), rc=0, first="ORCA lane: removed e2")
+TERM = {"handle": "term_aaa", "tabId": "a", "leafId": "b", "orphaned": False}
+TERM2 = {"handle": "term_bbb", "tabId": "x", "leafId": "y", "orphaned": True}
+PLAIN = "term_ccc"
+
+
+def terms(lane, rows):
+    W.load(); W.st.setdefault("terms", {})[lane] = rows; W.save()
+
+
+AG = "ORCA lane: kept %s — 1 agent(s) on it in worktree ps"
+W.lane("a1")
+terms("a1", [TERM, {"handle": PLAIN, "tabId": "c", "leafId": "d", "orphaned": False}])
+got = W.run(F(cli=CLI, action="rm", lane="a1"), env={"STUB_AGENT_ON": "a1"})
+expect("RM done agent names its terminal", got, rc=1, first=AG % "a1",
+       has=("orca-ide terminal close --terminal <handle>: term_aaa; then ask again",), lacks=(PLAIN,),
+       verbs_lack=[["worktree", "rm"]])
+tl = [c for c in got[2] if c[:2] == ["terminal", "list"]]
+(ok if tl == [["terminal", "list", "--worktree", "id:" + W.wid(os.path.join(W.ws, "repo", "a1")), "--limit", "500", "--json"]] else miss)(
+    "RM terminal list by full id, no --full: %r" % tl)
+W.lane("a2")
+terms("a2", [TERM])
+expect("RM live agent keeps the plain advice", W.run(F(cli=CLI, action="rm", lane="a2"),
+       env={"STUB_AGENT_ON": "a2", "STUB_AGENT_STATE": "working"}), rc=1, first=AG % "a2",
+       has=("close the agent in a2, then ask again",), lacks=("term_aaa",), verbs_lack=[["worktree", "rm"]])
+W.lane("a3")
+expect("RM done agent with no terminal", W.run(F(cli=CLI, action="rm", lane="a3"), env={"STUB_AGENT_ON": "a3"}), rc=1,
+       first=AG % "a3", has=("clear the finished agent row(s) of a3 in Orca",), verbs_lack=[["worktree", "rm"]])
+W.lane("a4")
+terms("a4", [TERM, TERM2])
+expect("RM orphaned terminal is named", W.run(F(cli=CLI, action="rm", lane="a4"), env={"STUB_AGENT_ON": "a4"}), rc=1,
+       first=AG % "a4", has=("<handle>: term_aaa term_bbb; then ask again",), verbs_lack=[["worktree", "rm"]])
+W.lane("a5")
+terms("a5", [TERM])
+expect("RM done agents, one with no terminal", W.run(F(cli=CLI, action="rm", lane="a5"),
+       env={"STUB_AGENT_ON": "a5", "STUB_AGENT_PANES": "a:b,z:z"}), rc=1, first="ORCA lane: kept a5 — 2 agent(s)",
+       has=("term_aaa; also clear 1 agent row(s) with no terminal in Orca; then ask again",), verbs_lack=[["worktree", "rm"]])
+W.lane("a6")
+terms("a6", [TERM])
+expect("RM terminal read fails", W.run(F(cli=CLI, action="rm", lane="a6"), mode="termfail", env={"STUB_AGENT_ON": "a6"}), rc=1,
+       first=AG % "a6", has=("close the agent in a6, then ask again",), verbs_lack=[["worktree", "rm"]])
+p = W.lane("d1")
+got = W.run(F(cli=CLI, action="rm", lane="d1"), mode="rmpartial")
+expect("RM partial removal is Orca's", got, rc=3,
+       first="ORCA lane failed: worktree rm failed (runtime_error), and Orca's partial removal deleted 1 tracked path(s) in d1 (f.txt",
+       has=("these are not operator changes", "restore them (git -C " + p + " restore .), then ask again"))
+got = W.run(F(cli=CLI, action="rm", lane="d1"))
+expect("RM retry after a partial removal", got, rc=1,
+       first="ORCA lane: kept d1 — it has changes ( D f.txt), all of them deleted tracked files; after a failed rm, that is Orca's partial removal",
+       has=("restore the files (git -C " + p + " restore .), then ask again",), verbs_lack=[["worktree", "rm"]])
+remedy(got[1])
+expect("RM the partial-removal remedy clears the lane", W.run(F(cli=CLI, action="rm", lane="d1")), rc=0, first="ORCA lane: removed d1")
+W.lane("d2")
+expect("RM a failure with no deletion stays plain", W.run(F(cli=CLI, action="rm", lane="d2"), mode="rmerror"), rc=3,
+       first="ORCA lane failed: worktree rm failed (runtime_error); d2 may be kept", lacks=("partial removal",))
+p = W.lane("d3")
+os.remove(os.path.join(p, "f.txt"))
+open(os.path.join(p, "new.txt"), "w").write("x")
+expect("RM a mixed change is not called a partial removal", W.run(F(cli=CLI, action="rm", lane="d3")), rc=1,
+       first="ORCA lane: kept d3 — it has changes", lacks=("partial removal",), verbs_lack=[["worktree", "rm"]])
+HK = "ORCA lane failed: the archive hook failed (exit "
+p = W.lane("h1")
+move_origin()
+got = W.run(F(cli=CLI, action="rm", lane="h1"), mode="hookfail2")
+expect("RM hook exit 2 behind the tip names the re-park", got, rc=3, first=HK + "2;",
+       has=("re-park the clean lane (git -C " + p + " checkout --detach origin/main), then ask again",))
+remedy(got[1])
+expect("RM the re-park lets rm pass", W.run(F(cli=CLI, action="rm", lane="h1")), rc=0, first="ORCA lane: removed h1")
+W.lane("h2")
+expect("RM hook exit 2 at the tip stays plain", W.run(F(cli=CLI, action="rm", lane="h2"), mode="hookfail2"), rc=3,
+       first=HK + "2;", has=("fix the repo's archive hook",), lacks=("re-park",))
+W.lane("h3")
+move_origin()
+expect("RM hook exit 1 behind the tip stays plain", W.run(F(cli=CLI, action="rm", lane="h3"), mode="hookfail"), rc=3,
+       first=HK + "1;", lacks=("re-park",))
 W.done()
 
 # ---- HOOKS (L76): Orca's saved hook settings can shadow orca.yaml. The
@@ -911,6 +1203,11 @@ def run_block(name, t, rc_want, first, plugdir=plug):
     (miss if why else ok)("%s: %s" % (name, "; ".join(why)) if why else name)
 
 
+# L79: the advice that made a duplicate lane stays out of both owners.
+flat = " ".join(text.split())
+(ok if "run again as is" not in flat and "is not run again while the lane is absent" in flat else miss)(
+    "BLOCK rule 2 does not re-run a failed create")
+(ok if "run again as is" not in " ".join(open(SCRIPT).read().split()) else miss)("BLOCK the script does not re-run a failed create")
 run_block("BLOCK runs name", fill(), 0, "ORCA lane: named 0 lane(s)")
 run_block("BLOCK shell text in the lane runs nothing", fill(lane="x$(touch %s)" % mark, action="rm", confirm="x"), 0,
           "ORCA lane refused: the lane is not a <wt> name")

@@ -2025,11 +2025,16 @@ limits.
        a line break, and reports `ORCA lane skipped: a
        field value is not one line` without running the block. `create`
        parks the lane detached at the commit it was created on
-       (`origin/<base>` at that moment). A `failed` create is run again
-       as is: the script's header says which partial creates it resumes.
+       (`origin/<base>` at that moment). A `failed` create is not run again
+       while the lane is absent from Orca's list: Orca keeps creating after
+       its CLI gives up, and a second create makes `<wt>-2` (the script's
+       header, step 2b). Follow its `Ending first line: `. Create runs again
+       only to resume a lane Orca's list shows; the header says which
+       partial creates it resumes.
        ```bash
-       # Run with a tool timeout of 10 minutes: rm waits for the archive hook
-       # (the script's header states its worst case).
+       # Run with a tool timeout of 10 minutes: rm waits for the archive hook,
+       # and create reads Orca's list after a timeout (the script's header
+       # states each worst case).
        unset CEPA_ROOT
        for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
                 "${CLAUDE_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \

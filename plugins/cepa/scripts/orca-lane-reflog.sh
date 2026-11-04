@@ -10,17 +10,21 @@
 # commits stay only in the lane's reflog. Measured 2026-11-01: the integrity
 # lane held 49 such commits and the roles lane 100, all landed.
 #
-# Usage: orca-lane-reflog.sh <lane-path>
+# Usage: orca-lane-reflog.sh <lane-path> [<trunk>]
 #   Run it after `git fetch --prune origin`; it does not fetch.
 #   gh runs from <lane-path>, so it reads that repo's remote.
+#   <trunk> is the branch `cepa:autonomy` §8 resolved, as a name; orca-lane.sh
+#   resolves and passes it (L77 item 1: the override lives in the main
+#   checkout's gitignored cepa.local.md). Left out, only the default branch
+#   counts, which can only keep more lanes.
 #
 # A reflog commit C that origin lacks is LANDED when one of these holds, in
 # this order (PR #123 review: a merged PR alone does not prove C was in it):
 #   1. C is an ancestor of the final head (`headRefOid`) of a MERGED,
-#      same-repo PR into origin's default branch, whose head branch held C
-#      in the HEAD reflog. The squash landed exactly what that head reaches.
-#      (A PR into another base — a stacked PR whose base was later dropped —
-#      never vouches.)
+#      same-repo PR into <trunk> or origin's default branch, whose head
+#      branch held C in the HEAD reflog. The squash landed exactly what that
+#      head reaches. (A PR into another base — a stacked PR whose base was
+#      later dropped — never vouches.)
 #   2. `git cherry <that head> C` marks every commit C reaches that the head
 #      lacks `-` (an equal patch is in the head: C was rebased before it was
 #      pushed), and that range holds no merge commit (git cherry skips them).
@@ -28,10 +32,12 @@
 #      `commit (amend)`), and its replacement is landed. An amend discards the
 #      old version on purpose.
 #   4. A commit already landed by 1-3 reaches C.
-#   5. Patch identity on origin's default branch: rule 2 with the default
+#   5. Patch identity on <trunk> or origin's default branch: rule 2 with that
 #      branch in place of a PR head (a commit rebased or cherry-picked onto
 #      the trunk).
-#   The default branch is origin/HEAD, else `gh repo view`; unknown is exit 3.
+#   The default branch is origin/HEAD, else `gh repo view`. Unknown is exit 3
+#   unless a <trunk> was given; then the trunk alone counts. A <trunk> origin
+#   does not have is exit 3.
 #   Measured 2026-11-01 with rules 1, 2 and 3: integrity 42 by rule 1, 6 by
 #   rule 2, 1 by rule 3 (0755a97); roles 88 by rule 1, 12 by rule 2.
 #
@@ -69,14 +75,16 @@
 set -u
 LIMIT=60 BUDGET=35
 
-[ $# -eq 1 ] || { echo "refused: usage: orca-lane-reflog.sh <lane-path>"; exit 4; }
-lp=$1
+[ $# -eq 1 ] || [ $# -eq 2 ] || { echo "refused: usage: orca-lane-reflog.sh <lane-path> [<trunk>]"; exit 4; }
+lp=$1 trunk=${2:-}
 case "$lp" in /*) ;; *) echo "refused: the lane path is not absolute"; exit 4 ;; esac
 top=$(git -C "$lp" rev-parse --show-toplevel 2>/dev/null) || top=
 [ "$top" = "$lp" ] || { echo "refused: $lp is not its own git toplevel"; exit 4; }
 command -v python3 >/dev/null 2>&1 || { echo "unknown — no python3"; exit 3; }
 command -v timeout >/dev/null 2>&1 || { echo "unknown — no timeout command to bound gh"; exit 3; }
 brre='^[A-Za-z0-9_][A-Za-z0-9._/-]{0,199}$'
+[ -z "$trunk" ] || { [[ $trunk =~ $brre ]] && git check-ref-format "refs/heads/$trunk" 2>/dev/null; } \
+  || { echo "refused: the trunk is not a branch name"; exit 4; }
 
 refl=$(git -C "$lp" log -g --format='%H%x09%gs' HEAD 2>/dev/null) || { echo "unknown — the HEAD reflog is unreadable"; exit 3; }
 [ -n "$refl" ] || { echo "unknown — the HEAD reflog is empty"; exit 3; }
@@ -157,7 +165,13 @@ if [ -z "$dflt" ] && command -v gh >/dev/null 2>&1 && gh_left; then
 fi
 [[ $dflt =~ $brre ]] && git check-ref-format "refs/heads/$dflt" 2>/dev/null \
   && git -C "$lp" rev-parse -q --verify "refs/remotes/origin/$dflt^{commit}" >/dev/null 2>&1 \
-  || { echo "unknown — origin's default branch is unknown"; exit 3; }
+  || dflt=
+[ -n "$dflt" ] || [ -n "$trunk" ] || { echo "unknown — origin's default branch is unknown"; exit 3; }
+[ -z "$trunk" ] || git -C "$lp" rev-parse -q --verify "refs/remotes/origin/$trunk^{commit}" >/dev/null 2>&1 \
+  || { echo "unknown — origin has no trunk branch $trunk"; exit 3; }
+# The branches a landed PR or an equal patch may be on, trunk first.
+targets=$trunk
+[ -z "$dflt" ] || [ "$dflt" = "$trunk" ] || targets+="${targets:+ }$dflt"
 while IFS= read -r b; do
   [ -n "$b" ] || continue
   [[ $b =~ $brre ]] && git check-ref-format "refs/heads/$b" 2>/dev/null \
@@ -169,7 +183,7 @@ while IFS= read -r b; do
     || { echo "unknown — gh pr list failed for branch $b"; exit 3; }
   hs=
   while IFS=$'\t' read -r n st bb h x; do
-    [[ $n =~ ^[0-9]{1,7}$ && $st == MERGED && $bb == "$dflt" && $h =~ ^[0-9a-f]{40}$ && $x == false ]] || continue
+    [[ $n =~ ^[0-9]{1,7}$ && $st == MERGED && " $targets " == *" $bb "* && $h =~ ^[0-9a-f]{40}$ && $x == false ]] || continue
     git -C "$lp" cat-file -e "$h^{commit}" 2>/dev/null || continue
     hs+="$n:$h "
   done <<<"$out"
@@ -225,9 +239,11 @@ done
 
 for s in "${!why[@]}"; do
   [ -z "${ok[$s]:-}" ] || continue
-  patch_in "refs/remotes/origin/$dflt" "$s" || { echo "unlanded ${s:0:12} — ${why[$s]}"; exit 1; }
-  ok[$s]=5; n5=$((n5 + 1))
+  for t in $targets; do
+    if patch_in "refs/remotes/origin/$t" "$s"; then ok[$s]=5; n5=$((n5 + 1)); break; fi
+  done
+  [ -n "${ok[$s]:-}" ] || { echo "unlanded ${s:0:12} — ${why[$s]}"; exit 1; }
 done
 printf '%s' "$lines"
-echo "landed: $(grep -c . <<<"$need") reflog commit(s) origin lacks — $n1 in a merged PR's head, $n2 by an equal patch in one, $n3 replaced by a landed amend, $n4 reached by a landed commit, $n5 by an equal patch on origin/$dflt"
+echo "landed: $(grep -c . <<<"$need") reflog commit(s) origin lacks — $n1 in a merged PR's head, $n2 by an equal patch in one, $n3 replaced by a landed amend, $n4 reached by a landed commit, $n5 by an equal patch on origin/${targets// / or origin/}"
 exit 0
