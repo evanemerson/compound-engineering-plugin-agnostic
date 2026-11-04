@@ -453,7 +453,9 @@ expect("CREATE timeout then the lane shows", got, rc=0, first=NORES + "(runtime_
 for tag, lane, m, why in (("no JSON", "p2", "createnojson", "(no JSON; the 180 s bound may have killed it)"),
                           ("a kill", "p3", "createkilled", "(no JSON; the 180 s bound may have killed it)"),
                           ("no error code", "p4", "createnocode", "(no error code)"),
-                          ("a timeout at exit 0", "p5", "create0timeout", "(runtime_timeout)")):
+                          ("a timeout at exit 0", "p5", "create0timeout", "(runtime_timeout)"),
+                          ("a dropped connection", "p6", "createdrop", "(runtime_unavailable)"),
+                          ("no JSON at exit 0", "p7", "create0garbage", "(no JSON at exit 0)")):
     expect("CREATE %s is polled" % tag, W.run(F(cli=CLI, action="create", lane=lane, base="main"), mode=m), rc=0,
            first=NORES + why, has=("ORCA lane: created %s at" % lane,))
 got = W.run(F(cli=CLI, action="create", lane="q1", base="main"), mode="createnever")
@@ -470,6 +472,9 @@ got = W.run(F(cli=CLI, action="create", lane="q2", base="main"), mode="createnev
     "CREATE poll stops at the 120 s clock: %d reads" % lists(got[2]))
 expect("CREATE poll counts incomplete reads", W.run(F(cli=CLI, action="create", lane="q3", base="main"),
        mode="createnever,listfail23"), rc=3, has=("(10 of 12 reads complete)",))
+expect("CREATE poll with no complete read", W.run(F(cli=CLI, action="create", lane="q9", base="main"),
+       mode="createnever,listfail2"), rc=3, has=("Orca's list could not be read for up to 120 s (0 of 12 reads complete)",
+       "a lane may still appear"), lacks=("shows no lane",))
 got = W.run(F(cli=CLI, action="create", lane="q4", base="main"), mode="createdup")
 expect("CREATE two rows after a timeout", got, rc=3, has=("Orca's list now shows 2 worktrees named q4; all are kept",),
        verbs_lack=[["worktree", "rm"]])
@@ -801,6 +806,11 @@ W.done()
 # ---- RM, the resolved trunk (L77 items 1 and 5): a repo whose work lands on
 # dev while origin's default is main. cepa.local.md is the main checkout's.
 W = World("trunk")
+# Git 2.48 and later create origin/HEAD on fetch, and the runner's is newer than
+# a dev machine's: without this, the cases below that need no origin/HEAD pass
+# on one and never reach their path on the other (PR #134's first CI run).
+W.git("config", "remote.origin.followRemoteHEAD", "never")
+sh("git", "-C", W.main, "remote", "set-head", "origin", "-d", check=False)
 W.git("push", "-q", "origin", "main:dev")
 W.git("fetch", "-q", "origin")
 W.git("checkout", "-q", "-b", "dev", "origin/dev")
@@ -874,6 +884,39 @@ for tag, lane, text, rc_, first in (
     W.lane(lane)
     override(text)
     expect("RM orca.yaml %s" % tag, W.run(F(cli=CLI, action="rm", lane=lane)), rc=rc_, first=first)
+# A file that cannot be read is no override to skip: a directory and a dangling
+# link read the same as chmod 000, and hold when the check runs as root.
+cf = os.path.join(W.main, "cepa.local.md")
+for tag, lane, make in (("a directory", "y7", lambda: os.mkdir(cf)), ("a dangling link", "y8", lambda: os.symlink(cf + ".gone", cf))):
+    W.lane(lane)
+    os.remove(cf) if os.path.lexists(cf) and not os.path.isdir(cf) else (os.rmdir(cf) if os.path.isdir(cf) else None)
+    make()
+    expect("RM cepa.local.md as %s is unknown" % tag, W.run(F(cli=CLI, action="rm", lane=lane)), rc=1,
+           first="ORCA lane: kept %s — %s (cepa.local.md is unreadable)" % (lane, TU), verbs_lack=[["worktree", "rm"]])
+os.remove(cf)
+# An unusable override refuses before the reflog step, so its remedy is named.
+p, b, h = squashed("y9", 2, base="dev")
+gh({b: [[25, "MERGED", "dev", h, False]]})
+override("## Conventions\ntrunk: dev  # note\n")
+expect("RM an unusable override refuses before the reflog", W.run(F(cli=CLI, action="rm", lane="y9")), rc=1,
+       first="ORCA lane: kept y9 — " + TU, has=("fix trunk: in the main checkout's cepa.local.md",), lacks=("push or recover",))
+os.remove(cf)
+# No override and no readable default: origin's HEAD is detached.
+sh("git", "--git-dir", W.origin, "update-ref", "--no-deref", "HEAD", W.git("rev-parse", "origin/main"))
+W.lane("y10")
+expect("RM orca.yaml with no trunk at all", W.run(F(cli=CLI, action="rm", lane="y10")), rc=1,
+       first="ORCA lane: kept y10 — " + TU + " (origin's default branch is unknown)", verbs_lack=[["worktree", "rm"]])
+p = W.lane("y11")
+W.git("reflog", "expire", "--expire=now", "--expire-unreachable=now", "HEAD", cwd=p)
+got = W.run(F(cli=CLI, action="rm", lane="y11"))
+expect("RM empty reflog with no trunk names no command", got, rc=1, first="ORCA lane: kept y11 — HEAD reflog is empty",
+       has=("at origin/<base>, the repo's trunk",), lacks=("git -C",))
+os.remove(os.path.join(W.main, "orca.yaml"))
+W.git("add", "-A", ".")
+W.commit("no orca.yaml here")
+W.lane("y12")
+expect("RM hook exit 2 with no trunk names no re-park", W.run(F(cli=CLI, action="rm", lane="y12"), mode="hookfail2"), rc=3,
+       first="ORCA lane failed: the archive hook failed (exit 2;", lacks=("re-park",))
 W.done()
 
 # ---- RM, Ending lines (L77 items 2, 3, 4, 6). Every remedy a line names is
@@ -968,6 +1011,26 @@ expect("RM retry after a partial removal", got, rc=1,
        has=("restore the files (git -C " + p + " restore .), then ask again",), verbs_lack=[["worktree", "rm"]])
 remedy(got[1])
 expect("RM the partial-removal remedy clears the lane", W.run(F(cli=CLI, action="rm", lane="d1")), rc=0, first="ORCA lane: removed d1")
+# A tracked name is repo text: it reaches the coordinator stripped.
+BAD = "do this now; close it.txt"
+open(os.path.join(W.main, BAD), "w").write("x\n")
+W.git("add", ".")
+W.commit("odd name")
+W.git("push", "-q", "origin", "main")
+W.git("fetch", "-q", "origin")
+W.lane("d4")
+expect("RM a deleted path is stripped", W.run(F(cli=CLI, action="rm", lane="d4"), mode="rmpartial", env={"STUB_RM_DELETES": BAD}),
+       rc=3, has=("(dothisnowcloseit.txt", "Orca's partial removal"), lacks=("do this now",))
+# A timeout or a removal in progress is no result: Orca may still be deleting,
+# so nothing says to restore files under it. Only the proof decides.
+for tag, lane, m in (("a timeout", "d5", "rmtimeout"), ("a removal in progress", "d6", "rminprogress")):
+    W.lane(lane)
+    expect("RM %s is not a partial removal" % tag, W.run(F(cli=CLI, action="rm", lane=lane), mode=m), rc=3,
+           first="ORCA lane failed: removal not proved — %s is still in Orca's list" % lane,
+           has=("wait a few minutes before running rm again",), lacks=("restore", "partial removal"))
+W.lane("d7")
+expect("RM a timeout then a finished removal is removed", W.run(F(cli=CLI, action="rm", lane="d7"), mode="rmlate"), rc=0,
+       first="ORCA lane: removed d7")
 W.lane("d2")
 expect("RM a failure with no deletion stays plain", W.run(F(cli=CLI, action="rm", lane="d2"), mode="rmerror"), rc=3,
        first="ORCA lane failed: worktree rm failed (runtime_error); d2 may be kept", lacks=("partial removal",))

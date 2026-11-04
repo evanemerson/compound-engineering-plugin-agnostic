@@ -140,7 +140,7 @@ if verb == ["worktree", "create"]:
         err("runtime_error", 'Could not refresh base ref "%s" from "origin".' % opt("--base-branch"))
     rid = (opt("--repo") or "")[3:]
     LATE = MODE & {"createlate", "createverylate", "createnojson", "createkilled", "createnocode", "create0timeout",
-                   "createnever", "createdup", "createunsettled", "createstuck"}
+                   "createnever", "createdup", "createunsettled", "createstuck", "createdrop", "create0garbage"}
     if LATE:
         if "createnever" not in MODE:
             st["pending"] = {"rid": rid, "name": opt("--name"), "br": opt("--branch"), "base": opt("--base-branch"),
@@ -151,6 +151,10 @@ if verb == ["worktree", "create"]:
             save(); sys.exit(124)
         if "createnocode" in MODE:
             out({"id": "x", "ok": False, "error": {}}, 1)
+        if "create0garbage" in MODE:
+            save(); print("not json"); sys.exit(0)
+        if "createdrop" in MODE:
+            err("runtime_unavailable", "Orca closed the connection before responding.")
         err("runtime_timeout", "Timed out waiting for the Orca runtime to respond.", rc=0 if "create0timeout" in MODE else 1)
     repo = [r for r in st["repos"] if r["id"] == rid][0]
     name, br, base = opt("--name"), opt("--branch"), opt("--base-branch")
@@ -224,8 +228,11 @@ if verb == ["worktree", "rm"]:
         err("worktree_archive_hook_failed", "Archive hook failed", {"worktreePath": row(w)["path"], "outcome": "exited",
             "exitCode": 2 if "hookfail2" in MODE else 1, "output": "Command failed with exit code 1.\x1b[0m"})
     if "rmpartial" in MODE:  # L77 item 4: Orca deleted tracked files, then stopped
-        os.remove(os.path.join(w["path"], "f.txt"))
+        os.remove(os.path.join(w["path"], os.environ.get("STUB_RM_DELETES", "f.txt")))
         err("runtime_error", "worktree removal failed")
+    if "rmtimeout" in MODE or "rminprogress" in MODE:  # Orca keeps deleting after the CLI gives up
+        os.remove(os.path.join(w["path"], "f.txt"))
+        err("runtime_timeout" if "rmtimeout" in MODE else "worktree_removal_in_progress", "still removing")
     if "rmerror" in MODE:
         err("runtime_error", "worktree removal failed")
     if "rmnoop" in MODE:
@@ -240,5 +247,7 @@ if verb == ["worktree", "rm"]:
         on = git("-C", repo["path"], "for-each-ref", "--contains", tip, "refs/remotes/origin/").stdout.strip()
         if on:
             git("-C", repo["path"], "branch", "-D", br[len("refs/heads/"):])
+    if "rmlate" in MODE:  # the CLI gave up, and Orca finished anyway
+        err("runtime_timeout", "Timed out waiting for the Orca runtime to respond.")
     out({"id": "x", "ok": True, "result": {"removed": True}})
 err("unknown_verb", "stub does not know " + " ".join(argv[:2]))

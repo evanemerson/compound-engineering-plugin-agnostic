@@ -13,8 +13,8 @@
 # Usage: orca-lane-reflog.sh <lane-path> [<trunk>]
 #   Run it after `git fetch --prune origin`; it does not fetch.
 #   gh runs from <lane-path>, so it reads that repo's remote.
-#   <trunk> is the branch `cepa:autonomy` §8 resolved, as a name; orca-lane.sh
-#   resolves and passes it (L77 item 1: the override lives in the main
+#   <trunk> is the branch orca-lane.sh resolved, as a name (its
+#   `cepa_ln_trunk_read` owns how; L77 item 1: the override lives in the main
 #   checkout's gitignored cepa.local.md). Left out, only the default branch
 #   counts, which can only keep more lanes.
 #

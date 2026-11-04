@@ -75,8 +75,10 @@
 #              setup policy decides; the summary prints it).
 #          2b. L79: Orca keeps creating after its CLI gives up. Only a
 #              definite Orca error code is a failed create. `runtime_timeout`,
-#              no JSON (the 180 s bound's kill looks like this), or a non-zero
-#              exit with no code is NO RESULT: read `worktree list` at most 12
+#              `runtime_unavailable`, `invalid_runtime_response` (the request
+#              was sent; the answer was lost), no JSON (the 180 s bound's kill
+#              looks like this), or a non-zero exit with no code is NO RESULT:
+#              read `worktree list` at most 12
 #              times, 10 s apart, the last read starting before 120 s. A row
 #              with basename or display name <lane> that reads fixed and
 #              <lane> goes to step 3; a row that never settles goes to step 3
@@ -127,7 +129,8 @@
 #              too, and its Ending line gives the re-park that writes a
 #              landed entry. The resolved trunk is read here, after the fetch
 #              (`cepa_ln_trunk_read` owns how, and how it differs from §8),
-#              and passed to orca-lane-reflog.sh (L77 item 1).
+#              and passed to orca-lane-reflog.sh (L77 item 1). An override it
+#              cannot use refuses here, before the reflog test.
 #           4. Refuse when `worktree ps` shows an agent on the lane, or the
 #              read is not complete. A finished agent blocks as well (`done`
 #              also marks an idle live session, T1); when every agent is done,
@@ -146,8 +149,11 @@
 #           6. `worktree rm --worktree id:<id> --run-hooks --json`. Never
 #              `--force`, never `--allow-failed-archive-hook`. A failed hook
 #              that exits 2 on a lane not at origin/<base> names the re-park
-#              (L77 item 6). After any other failed rm, the tracked paths now
-#              deleted are reported as Orca's partial removal (L77 item 4).
+#              (L77 item 6). The codes that are no result (step 2b's, and
+#              `worktree_removal_in_progress`: Orca keeps deleting) go to step
+#              7's proof, like a kill. After any other failed rm, the tracked
+#              paths now deleted are reported as Orca's partial removal (L77
+#              item 4), their names stripped to plain characters.
 #           7. Removed only when absent from Orca's list (a complete read)
 #              AND from `git worktree list`. The branch the lane held is
 #              reported deleted or kept; Orca decides that (U1 below).
@@ -273,6 +279,11 @@
 #     create 182 s, step 2b 154 s (its last read starts before 120 s and is
 #     bounded at 2 x 17 s), the re-fetch 62 s, show 34 s; local git work comes
 #     on top. A new bounded call in create must be counted against this.
+#   - PR #134 review read Orca 1.4.246's installed code: the CLI's default
+#     reply timeout is 60 s, so `runtime_timeout` normally comes before the
+#     180 s bound; and Orca writes the lane's metadata after the worktree
+#     exists, so a row reading `fixed <lane>` means `git worktree add` ended.
+#     Step 2b's park can still meet a later Orca step; that fails closed.
 #   - Step 2b can end before Orca does (L79 saw "minutes"), and nothing stops
 #     a session that starts another create while the lane is absent: the
 #     Ending line is the only guard, and Orca then suffixes the second lane.
@@ -857,16 +868,20 @@ if [ "$cepa_ln_action" = create ]; then
       # nothing about the lane: step 2b reads Orca's list instead.
       cepa_ln_cerr=$(cepa_ln_py err "$cepa_ln_tmp/create.json") || cepa_ln_cerr=
       case "$cepa_ln_crc:$cepa_ln_cerr" in
-        *:runtime_timeout) cepa_ln_cwhy=runtime_timeout ;;
+        *:runtime_timeout|*:runtime_unavailable|*:invalid_runtime_response) cepa_ln_cwhy=$cepa_ln_cerr ;;
+        0:) cepa_ln_cwhy="no JSON at exit 0" ;;
         *:) cepa_ln_cwhy="no JSON; the 180 s bound may have killed it" ;;
         "1:?") cepa_ln_cwhy="no error code" ;;
         0:*) failed "worktree create returned a shape this reader does not know; the lane, if made, is kept" ;;
         *) failed "worktree create failed ($cepa_ln_cerr)" "check Orca's worktree list for $cepa_ln_lane, then say how to proceed" ;;
       esac
       echo "ORCA lane: worktree create gave no result ($cepa_ln_cwhy); Orca may still be creating $cepa_ln_lane, so reading its list for up to 120 s"
-      cepa_ln_poll \
-        || failed "worktree create gave no result ($cepa_ln_cwhy), and Orca's list shows no lane $cepa_ln_lane after up to 120 s ($cepa_ln_pgood of $cepa_ln_pn reads complete); a lane may still appear, because Orca keeps creating after its CLI gives up" \
-                  "do not start another create: re-check Orca's worktree list for $cepa_ln_lane in a few minutes; when it lists $cepa_ln_lane, ask this session to resume it; if it stays absent, say how to proceed"
+      if ! cepa_ln_poll; then
+        cepa_ln_saw="Orca's list shows no lane $cepa_ln_lane after up to 120 s"
+        [ "$cepa_ln_pgood" != 0 ] || cepa_ln_saw="Orca's list could not be read for up to 120 s"
+        failed "worktree create gave no result ($cepa_ln_cwhy), and $cepa_ln_saw ($cepa_ln_pgood of $cepa_ln_pn reads complete); a lane may still appear, because Orca keeps creating after its CLI gives up" \
+               "do not start another create: re-check Orca's worktree list for $cepa_ln_lane in a few minutes; when it lists $cepa_ln_lane, ask this session to resume it; if it stays absent, say how to proceed"
+      fi
       echo "ORCA lane: Orca's list shows $cepa_ln_lane at $c_path; resuming from step 3"
     fi
     [ "${c_path##*/}" = "$cepa_ln_lane" ] \
@@ -925,16 +940,21 @@ fi
 
 # ---------------------------------------------------------------- rm
 # The trunk rm compares with (L77 items 1 and 5), read after the fetch. §8's
-# rung 1 comes from the MAIN checkout's cepa.local.md, the only copy: the file
-# is gitignored. Rungs 2-3 are origin/HEAD, else `git ls-remote --symref` (10 s
-# bound). There is no rung 4: a guessed `main` is unknown here, and an override
-# this reader cannot use is unknown too, with no fallback to the default.
+# rung 1 as written, from the MAIN checkout's cepa.local.md, the only copy: the
+# file is gitignored. In place of rungs 2-4: origin/HEAD, else `git ls-remote
+# --symref` (10 s bound). There is no `gh` rung, and no rung 4: a guessed `main`
+# is unknown here. An override this reader cannot use, or cannot read, sets
+# cepa_ln_trunk_bad (rm then refuses), with no fallback to the default.
 # Sets cepa_ln_trunk (empty when unknown), cepa_ln_trunk_why, and cepa_ln_tip
 # and cepa_ln_tiprev for the Ending lines that name origin/<base>.
 cepa_ln_trunk_read() {
-  local f="$cepa_ln_main/cepa.local.md" sec= l v hits=0 val=
-  cepa_ln_trunk= cepa_ln_trunk_why="origin's default branch is unknown"
-  if [ -f "$f" ]; then
+  local f="$cepa_ln_main/cepa.local.md" sec= l v body hits=0 val= unread=
+  cepa_ln_trunk= cepa_ln_trunk_bad= cepa_ln_trunk_why="origin's default branch is unknown"
+  if [ -e "$f" ] || [ -L "$f" ]; then
+    # `$(<dir)` exits 0, so the type is tested first.
+    [ -f "$f" ] && [ -r "$f" ] && { body=$(<"$f"); } 2>/dev/null || unread=1
+  fi
+  if [ -n "${body:-}" ]; then
     while IFS= read -r l || [ -n "$l" ]; do
       l=${l%$'\r'}
       case "$l" in
@@ -947,15 +967,17 @@ cepa_ln_trunk_read() {
       v=${v%"${v##*[![:space:]]}"}
       v=${v#\`} v=${v%\`}
       hits=$((hits + 1)) val=${v#origin/}
-    done <"$f"
+    done <<<"$body"
   fi
-  if [ "$hits" -gt 1 ]; then
-    cepa_ln_trunk_why="cepa.local.md gives trunk: $hits times"
+  if [ -n "$unread" ]; then
+    cepa_ln_trunk_bad=1 cepa_ln_trunk_why="cepa.local.md is unreadable"
+  elif [ "$hits" -gt 1 ]; then
+    cepa_ln_trunk_bad=1 cepa_ln_trunk_why="cepa.local.md gives trunk: $hits times"
   elif [ "$hits" = 1 ]; then
     if [[ $val =~ ^[A-Za-z0-9._/-]+$ ]] && git check-ref-format "refs/heads/$val" 2>/dev/null; then
       cepa_ln_trunk=$val
     else
-      cepa_ln_trunk_why="cepa.local.md's trunk: is not a branch name"
+      cepa_ln_trunk_bad=1 cepa_ln_trunk_why="cepa.local.md's trunk: is not a branch name"
     fi
   else
     v=$(git -C "$cepa_ln_main" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || v=
@@ -1001,7 +1023,7 @@ cepa_ln_st=$(git -C "$r_path" status --porcelain --untracked-files=all 2>/dev/nu
 # and this run has no memory of it, so an all-deletions status names that case.
 if [ -n "$cepa_ln_st" ] && ! grep -qv '^ D ' <<<"$cepa_ln_st"; then
   kept "kept $cepa_ln_lane — it has changes (${cepa_ln_st%%$'\n'*}), all of them deleted tracked files; after a failed rm, that is Orca's partial removal, not an operator change" \
-    "if an earlier rm of $cepa_ln_lane failed, restore the files (git -C $r_path restore .), then ask again; if not, commit, push or discard the changes"
+    "if an earlier rm of $cepa_ln_lane failed or timed out, wait until Orca has stopped deleting, restore the files (git -C $r_path restore .), then ask again; if not, commit, push or discard the changes"
 fi
 [ -z "$cepa_ln_st" ] || kept "kept $cepa_ln_lane — it has changes (${cepa_ln_st%%$'\n'*})" \
   "commit, push or discard the changes in $cepa_ln_lane, then ask again"
@@ -1011,6 +1033,8 @@ timeout -k 2 60 git fetch -q --prune origin </dev/null >/dev/null 2>&1 \
   || kept "kept $cepa_ln_lane — git fetch --prune origin failed, so which commits origin holds is unknown" \
           "check the network and the origin remote, then ask again"
 cepa_ln_trunk_read
+[ -z "$cepa_ln_trunk_bad" ] || kept "kept $cepa_ln_lane — the trunk is unknown ($cepa_ln_trunk_why), so where its work landed cannot be judged" \
+  "fix trunk: in the main checkout's cepa.local.md, then ask again"
 # HEAD, then cepa:autonomy §11b's plain reflog test (owned there).
 cepa_ln_head=$(git -C "$r_path" rev-parse --verify -q HEAD 2>/dev/null) || cepa_ln_head=
 [ -n "$cepa_ln_head" ] || kept "kept $cepa_ln_lane — HEAD unreadable" "inspect $r_path"
@@ -1026,8 +1050,10 @@ if [ -z "$cepa_ln_refl" ]; then
   cepa_ln_step="git -C $r_path checkout --detach $cepa_ln_tip"
   [ "$cepa_ln_head" != "$cepa_ln_tiprev" ] \
     || cepa_ln_step="git -C $r_path checkout --detach $cepa_ln_tip~1, then $cepa_ln_step"
-  kept "kept $cepa_ln_lane — HEAD reflog is empty (expired?), so which commits it held is unknown" \
-    "re-park $cepa_ln_lane at $cepa_ln_tip to write a landed entry ($cepa_ln_step), then ask again"
+  cepa_ln_end="re-park $cepa_ln_lane at $cepa_ln_tip to write a landed entry ($cepa_ln_step), then ask again"
+  [ -n "$cepa_ln_tiprev" ] \
+    || cepa_ln_end="re-park $cepa_ln_lane at origin/<base>, the repo's trunk (this script could not resolve it), to write a landed entry, then ask again"
+  kept "kept $cepa_ln_lane — HEAD reflog is empty (expired?), so which commits it held is unknown" "$cepa_ln_end"
 fi
 # shellcheck disable=SC2086 # the reflog is a list of SHAs, one word each
 cepa_ln_lost=$(git rev-list $(sort -u <<<"$cepa_ln_refl") --not --remotes=origin 2>/dev/null) \
@@ -1089,7 +1115,7 @@ cepa_ln_oy=$(git -C "$cepa_ln_main" status --porcelain --untracked-files=all --i
 if [ -e "$cepa_ln_main/orca.yaml" ]; then
   [ -n "$cepa_ln_trunk" ] \
     || kept "kept $cepa_ln_lane — the trunk is unknown ($cepa_ln_trunk_why), so whether origin holds the main checkout's orca.yaml is unknown" \
-            "check trunk: in cepa.local.md, the network and the origin remote, then ask again"
+            "set trunk: in the main checkout's cepa.local.md, or check the network and the origin remote, then ask again"
   cepa_ln_yw=$(git -C "$cepa_ln_main" hash-object -- orca.yaml 2>/dev/null) || cepa_ln_yw=
   cepa_ln_yo=$(git -C "$cepa_ln_main" rev-parse -q --verify "refs/remotes/origin/$cepa_ln_trunk:orca.yaml" 2>/dev/null) || cepa_ln_yo=
   [ -n "$cepa_ln_yw" ] && [ "$cepa_ln_yw" = "$cepa_ln_yo" ] \
@@ -1119,29 +1145,31 @@ done <<<"$cepa_ln_ign"
 cepa_ln_orca "$cepa_ln_tmp/rm.json" 0 300 worktree rm --worktree "id:$r_id" --run-hooks --json || true
 cepa_ln_res=$(cepa_ln_py rmres "$cepa_ln_tmp/rm.json") || cepa_ln_res="unknown"
 case "$cepa_ln_res" in
-  removed|unknown) ;;
+  # Review of PR #134: these say nothing about the lane, as a kill says nothing,
+  # and Orca can still be deleting. Only the proof below decides.
+  removed|unknown|"runtime_timeout "*|"runtime_unavailable "*|"invalid_runtime_response "*|"worktree_removal_in_progress "*|"? "*) ;;
   "worktree_archive_hook_failed "*)
     read -r _ cepa_ln_x <<<"$cepa_ln_res"
     cepa_ln_end="fix the repo's archive hook and ask again; deleting anyway is the operator's own orca worktree rm --allow-failed-archive-hook, never this script's"
     # L77 item 6: a hook that exits 2 is often make with no such target, and
     # a pre-scheme lane's checkout lacks it. Moving to the tip can help only
     # a lane that is not there. The lane passed the clean and reflog guards.
-    [ "$cepa_ln_x" != 2 ] || [ "$cepa_ln_head" = "$cepa_ln_tiprev" ] \
+    [ "$cepa_ln_x" != 2 ] || [ -z "$cepa_ln_tiprev" ] || [ "$cepa_ln_head" = "$cepa_ln_tiprev" ] \
       || cepa_ln_end="exit 2 can mean this lane's checkout predates the hook's target: re-park the clean lane (git -C $r_path checkout --detach $cepa_ln_tip), then ask again; if it still exits 2, $cepa_ln_end"
     failed "the archive hook failed (exit $cepa_ln_x; its output is not relayed — read it in Orca); Orca removed nothing, and $cepa_ln_lane is kept" "$cepa_ln_end" ;;
   *)
     # L77 item 4: guard 2 read the lane clean, so a deletion now is Orca's.
     cepa_ln_gone=$(git -C "$r_path" status --porcelain 2>/dev/null | sed -n 's/^ D //p')
     [ -n "$cepa_ln_gone" ] || failed "worktree rm failed (${cepa_ln_res%% *}); $cepa_ln_lane may be kept" "check lane $cepa_ln_lane in Orca"
-    failed "worktree rm failed (${cepa_ln_res%% *}), and Orca's partial removal deleted $(grep -c . <<<"$cepa_ln_gone") tracked path(s) in $cepa_ln_lane ($(head -n 5 <<<"$cepa_ln_gone" | tr '\n' ' ' | cut -c1-300)); the lane was clean before rm, so these are not operator changes" \
+    failed "worktree rm failed (${cepa_ln_res%% *}), and Orca's partial removal deleted $(grep -c . <<<"$cepa_ln_gone") tracked path(s) in $cepa_ln_lane ($(head -n 5 <<<"$cepa_ln_gone" | tr -cd 'A-Za-z0-9._/\n-' | tr '\n' ' ' | cut -c1-300)); the lane was clean before rm, so these are not operator changes" \
            "restore them (git -C $r_path restore .), then ask again" ;;
 esac
 # The proof is absence, never the reply.
 cepa_ln_after=$(cepa_ln_rows) \
-  || failed "removal not proved — the re-list of Orca's worktrees was not complete (rm said: $cepa_ln_res; when unknown, the archive hook may still be running)" \
+  || failed "removal not proved — the re-list of Orca's worktrees was not complete (rm said: $cepa_ln_res; unless that is removed, Orca may still be working)" \
             "check Orca's worktree list for $cepa_ln_lane"
 while IFS=$'\t' read -r w_id w_rest; do
-  [ "$w_id" != "$r_id" ] || failed "removal not proved — $cepa_ln_lane is still in Orca's list (rm said: $cepa_ln_res; when unknown, the archive hook may still be running: wait a few minutes before running rm again)" \
+  [ "$w_id" != "$r_id" ] || failed "removal not proved — $cepa_ln_lane is still in Orca's list (rm said: $cepa_ln_res; unless that is removed, Orca may still be working: wait a few minutes before running rm again)" \
                                    "check lane $cepa_ln_lane in Orca"
 done <<<"$cepa_ln_after"
 cepa_ln_gwl=$(git worktree list --porcelain 2>/dev/null) \

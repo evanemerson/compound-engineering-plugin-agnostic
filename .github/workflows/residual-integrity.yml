@@ -229,11 +229,12 @@ jobs:
     # lane through Orca and proves each by a complete read. The check runs it
     # in throwaway git repos against a stub CLI and never reaches a real
     # Orca; the controls mutate it. About 30 seconds for the check. Headers
-    # own the legs and limits. The controls run as shards 1/4 to 4/4, one per
+    # own the legs and limits. The controls run as shards 1/8 to 8/8, one per
     # job (the orca-nudge pattern, punch-list L42): as one job they took
-    # 12m06s with PR #133's mutants and were cancelled at the bound. The
-    # controls fail unless each shard runs here exactly once. Static
-    # commands, no workflow-context interpolation.
+    # 12m06s with PR #133's mutants and were cancelled at the bound, and 4
+    # shards took up to 9m58s with PR #134's. The controls fail unless each
+    # shard runs here exactly once. Static commands, no workflow-context
+    # interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -241,39 +242,79 @@ jobs:
       - name: Check Orca lane
         if: always()
         run: bash scripts/check-orca-lane.sh
-      - name: Check Orca lane controls (shard 1/4)
+      - name: Check Orca lane controls (shard 1/8)
         if: always()
-        run: bash scripts/check-orca-lane-controls.sh --shard 1/4
+        run: bash scripts/check-orca-lane-controls.sh --shard 1/8
 
   orca-lane-2:
-    # Controls shard 2/4. Static command, no workflow-context interpolation.
+    # Controls shard 2/8. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca lane controls (shard 2/4)
+      - name: Check Orca lane controls (shard 2/8)
         if: always()
-        run: bash scripts/check-orca-lane-controls.sh --shard 2/4
+        run: bash scripts/check-orca-lane-controls.sh --shard 2/8
 
   orca-lane-3:
-    # Controls shard 3/4. Static command, no workflow-context interpolation.
+    # Controls shard 3/8. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca lane controls (shard 3/4)
+      - name: Check Orca lane controls (shard 3/8)
         if: always()
-        run: bash scripts/check-orca-lane-controls.sh --shard 3/4
+        run: bash scripts/check-orca-lane-controls.sh --shard 3/8
 
   orca-lane-4:
-    # Controls shard 4/4. Static command, no workflow-context interpolation.
+    # Controls shard 4/8. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca lane controls (shard 4/4)
+      - name: Check Orca lane controls (shard 4/8)
         if: always()
-        run: bash scripts/check-orca-lane-controls.sh --shard 4/4
+        run: bash scripts/check-orca-lane-controls.sh --shard 4/8
+
+  orca-lane-5:
+    # Controls shard 5/8. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca lane controls (shard 5/8)
+        if: always()
+        run: bash scripts/check-orca-lane-controls.sh --shard 5/8
+
+  orca-lane-6:
+    # Controls shard 6/8. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca lane controls (shard 6/8)
+        if: always()
+        run: bash scripts/check-orca-lane-controls.sh --shard 6/8
+
+  orca-lane-7:
+    # Controls shard 7/8. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca lane controls (shard 7/8)
+        if: always()
+        run: bash scripts/check-orca-lane-controls.sh --shard 7/8
+
+  orca-lane-8:
+    # Controls shard 8/8. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca lane controls (shard 8/8)
+        if: always()
+        run: bash scripts/check-orca-lane-controls.sh --shard 8/8
 
   stack-gate:
     # Every worktree Docker stack starts through
