@@ -2206,6 +2206,15 @@ L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not
     setup, while the Settings UI shows "orca.yaml - shared with your team"
     and no source control. UI and CLI disagree; local-only + empty runs no
     setup per the resolver read. Passed to the worker.
+    Correction from dpc-pro-docs 2026-11-04 (msg_f8169c3f6f27, corrects
+    msg_973360628a62; reported, not measured here): the local setup box is
+    not the best fix, as it keeps two copies of setup. Settings > Worktree
+    Hooks > Advanced (below Archive Script) > Command source = "orca.yaml
+    only", then empty the local box; this sets commandSourcePolicy to
+    shared-only. Its throwaway lane's setup-runner.sh held only the
+    orca.yaml command; lane removed. So the Settings page does have this
+    control, against both its earlier report and kcprimetime's "no source
+    control" above. The CLI still has no setter. Follow-up: L80.
 
 L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f7942).**
     status: completed
@@ -2306,6 +2315,17 @@ L79. **`orca-lane.sh create`: Orca's `runtime_timeout` is not a failed create; t
     resume steps 3-6 if it appears, and replace "run again as is" with
     "re-check Orca's list; do not re-run create" until the poll ends.
     Related: L77 (rm), L78 (Setup tab appears late).
+
+L80. **Name Orca's Command source control in the shadow fix text.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    `orca-lane.sh` H1 and its three shadow refusals, lane-stack §5 and
+    autonomy §12b rule 2 say only "the fix is in Orca's Settings". Name the
+    control from L76's correction: Worktree Hooks > Advanced > Command
+    source = "orca.yaml only", then empty the local box. Confirm it on one
+    repo first: the report comes from dpc-pro-docs alone. kcprimetime and
+    artist360-docs held local-only + `npm install` on 2026-11-03.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
