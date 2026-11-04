@@ -2210,7 +2210,7 @@ L76. **Orca's saved per-repo hook settings can shadow `orca.yaml`; cepa does not
 L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f7942).**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: tab2@matrix (fix/matrix/orca-lane-create-timeout-rm-defects, ctx_c8695129983a)
     1. `orca-lane-reflog.sh` rule 1 vouches only for PRs merged into the
        repo's DEFAULT branch. dpc-pro's default is main but every PR merges
        into dev, so squash-merged lane commits (apgar 7173f874 in #303, cori
@@ -2270,7 +2270,7 @@ L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).*
 L79. **`orca-lane.sh create`: Orca's `runtime_timeout` is not a failed create; the re-run advice makes a duplicate lane.**
     status: pending
     severity: P1
-    owner: unassigned
+    owner: tab2@matrix (fix/matrix/orca-lane-create-timeout-rm-defects, ctx_c8695129983a)
     contexthub (msg_24a69bb1b3f8, cepa 1.55.4, Orca 1.4.246): `create
     navigator` printed `worktree create failed (runtime_timeout)`; Orca's
     list showed no lane right after, so per rule 2 it re-ran create, which
