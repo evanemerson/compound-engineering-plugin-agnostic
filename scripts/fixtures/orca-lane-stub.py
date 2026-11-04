@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# Stub `orca-ide` for scripts/check-orca-lane.sh. It answers the five verbs
+# Stub `orca-ide` for scripts/check-orca-lane.sh. It answers the verbs
 # plugins/cepa/scripts/orca-lane.sh calls (repo list; worktree list, create,
-# show, set, ps, rm) from a JSON state file, makes and removes real git
+# show, set, ps, rm; terminal list) from a JSON state file, makes and removes real git
 # worktrees, and logs every argv as one JSON line. Shapes follow the Orca
 # 1.4.245 replies measured in L55's U1 (paths as Windows UNC, ids
 # `<repoId>::<UNC path>`, rm's worktree_archive_hook_failed error).
@@ -9,7 +9,13 @@
 # totalCount, truncated) matches a real `worktree ps --limit 500 --json` read
 # during the L55 build, which the script's reader parsed.
 # Env: STUB_STATE (state file), STUB_LOG (argv log), STUB_MODE (comma list of
-# fault switches, read below). Never reaches a real Orca.
+# fault switches, read below), STUB_AGENT_ON (lane basename), STUB_AGENT_STATE
+# (its agents' state), STUB_AGENT_PANES (their paneKeys, comma list). The
+# `terminal list` shape (terminals[].{handle, tabId, leafId, orphaned,
+# worktreeId}, hostScope, totalCount, truncated) follows a real read on Orca
+# 1.4.246, 2026-11-04. The late-create modes (L79) answer as Orca's CLI did:
+# the create call gives up, and the lane shows on a later `worktree list`.
+# Never reaches a real Orca.
 import json, os, subprocess, sys
 
 ST, LOG = os.environ["STUB_STATE"], os.environ["STUB_LOG"]
@@ -75,6 +81,19 @@ def find(sel):
     err("worktree_not_found", "worktree_not_found")
 
 
+def make_lane(rid, name, br, base):
+    repo = [r for r in st["repos"] if r["id"] == rid][0]
+    d = os.path.join(st["ws"], os.path.basename(repo["path"]))
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, name)
+    if os.path.exists(p):
+        p, br = p + "-2", br + "-2"
+    git("-C", repo["path"], "worktree", "add", "-q", "-b", br, p, base)
+    w = {"repoId": rid, "path": p, "name": name, "mode": "fixed", "main": False}
+    st["wts"].append(w)
+    return w
+
+
 # The 1.4.246 `repo list` hookSettings shape for a repo with no saved script
 # (L76). A state repo's "hook" key replaces it, so the HOOKS leg can stub
 # every shape.
@@ -90,8 +109,20 @@ if argv[:2] == ["repo", "list"]:
         for r in st["repos"]]}})
 if verb == ["worktree", "list"]:
     st["lists"] = st.get("lists", 0) + 1
-    if "listfail" in MODE or ("listfail2" in MODE and st["lists"] >= 2):
+    if "listfail" in MODE or ("listfail2" in MODE and st["lists"] >= 2) or ("listfail23" in MODE and st["lists"] in (2, 3)):
         save(); sys.exit(1)
+    pend = st.get("pending")
+    if pend and st["lists"] >= pend["at"]:
+        st.pop("pending")
+        w = make_lane(pend["rid"], pend["name"], pend["br"], pend["base"])
+        if "createdup" in MODE:
+            make_lane(pend["rid"], pend["name"], pend["br"], pend["base"])
+        if "createunsettled" in MODE or "createstuck" in MODE:
+            w["mode"] = "automatic"
+    if "createunsettled" in MODE and st["lists"] >= 5:
+        for w in st["wts"]:
+            if not w["main"]:
+                w["mode"] = "fixed"
     rid = (opt("--repo") or "")[3:]
     # Without --repo, Orca lists every repo's worktrees (measured in L55's U1).
     rows = [row(w) for w in st["wts"] if not rid or w["repoId"] == rid or "leak" in MODE]
@@ -108,6 +139,23 @@ if verb == ["worktree", "create"]:
     if "createfail" in MODE:
         err("runtime_error", 'Could not refresh base ref "%s" from "origin".' % opt("--base-branch"))
     rid = (opt("--repo") or "")[3:]
+    LATE = MODE & {"createlate", "createverylate", "createnojson", "createkilled", "createnocode", "create0timeout",
+                   "createnever", "createdup", "createunsettled", "createstuck", "createdrop", "create0garbage"}
+    if LATE:
+        if "createnever" not in MODE:
+            st["pending"] = {"rid": rid, "name": opt("--name"), "br": opt("--branch"), "base": opt("--base-branch"),
+                             "at": 99 if "createverylate" in MODE else 3}
+        if "createnojson" in MODE:
+            save(); sys.exit(1)
+        if "createkilled" in MODE:
+            save(); sys.exit(124)
+        if "createnocode" in MODE:
+            out({"id": "x", "ok": False, "error": {}}, 1)
+        if "create0garbage" in MODE:
+            save(); print("not json"); sys.exit(0)
+        if "createdrop" in MODE:
+            err("runtime_unavailable", "Orca closed the connection before responding.")
+        err("runtime_timeout", "Timed out waiting for the Orca runtime to respond.", rc=0 if "create0timeout" in MODE else 1)
     repo = [r for r in st["repos"] if r["id"] == rid][0]
     name, br, base = opt("--name"), opt("--branch"), opt("--base-branch")
     d = os.path.join(st["ws"], os.path.basename(repo["path"]))
@@ -157,17 +205,36 @@ if verb == ["worktree", "ps"]:
     for w in st["wts"]:
         if "psmissing" in MODE and not w["main"]:
             continue
-        ag = [{"paneKey": "a:b", "state": "done", "agentType": "claude"}] \
+        ag = [{"paneKey": k, "state": os.environ.get("STUB_AGENT_STATE", "done"), "agentType": "claude"}
+              for k in os.environ.get("STUB_AGENT_PANES", "a:b").split(",")] \
             if os.path.basename(w["path"]) == os.environ.get("STUB_AGENT_ON") else []
         rows.append({"worktreeId": row(w)["id"], "repoId": w["repoId"], "agents": ag})
     r = {"worktrees": rows, "hostScope": {"hostIds": ["local"], "omittedHostIds": []},
          "totalCount": len(rows), "truncated": "pspartial" in MODE}
     out({"id": "x", "ok": True, "result": r})
+if verb == ["terminal", "list"]:
+    if "--full" in argv:  # the real CLI refuses it (L72)
+        err("invalid_argument", "unknown flag --full")
+    if "termfail" in MODE:
+        sys.exit(1)
+    w = find(opt("--worktree"))
+    wid = row(w)["id"]
+    rows = [dict(t, worktreeId=wid) for t in st.get("terms", {}).get(os.path.basename(w["path"]), [])]
+    out({"id": "x", "ok": True, "result": {"terminals": rows, "hostScope": {"hostIds": ["local"], "omittedHostIds": []},
+                                           "totalCount": len(rows), "truncated": False}})
 if verb == ["worktree", "rm"]:
     w = find(opt("--worktree"))
-    if "hookfail" in MODE:
+    if "hookfail" in MODE or "hookfail2" in MODE:
         err("worktree_archive_hook_failed", "Archive hook failed", {"worktreePath": row(w)["path"], "outcome": "exited",
-            "exitCode": 1, "output": "Command failed with exit code 1.\x1b[0m"})
+            "exitCode": 2 if "hookfail2" in MODE else 1, "output": "Command failed with exit code 1.\x1b[0m"})
+    if "rmpartial" in MODE:  # L77 item 4: Orca deleted tracked files, then stopped
+        os.remove(os.path.join(w["path"], os.environ.get("STUB_RM_DELETES", "f.txt")))
+        err("runtime_error", "worktree removal failed")
+    if "rmtimeout" in MODE or "rminprogress" in MODE:  # Orca keeps deleting after the CLI gives up
+        os.remove(os.path.join(w["path"], "f.txt"))
+        err("runtime_timeout" if "rmtimeout" in MODE else "worktree_removal_in_progress", "still removing")
+    if "rmerror" in MODE:
+        err("runtime_error", "worktree removal failed")
     if "rmnoop" in MODE:
         out({"id": "x", "ok": True, "result": {"removed": True}})
     br = branch(w["path"])
@@ -180,5 +247,7 @@ if verb == ["worktree", "rm"]:
         on = git("-C", repo["path"], "for-each-ref", "--contains", tip, "refs/remotes/origin/").stdout.strip()
         if on:
             git("-C", repo["path"], "branch", "-D", br[len("refs/heads/"):])
+    if "rmlate" in MODE:  # the CLI gave up, and Orca finished anyway
+        err("runtime_timeout", "Timed out waiting for the Orca runtime to respond.")
     out({"id": "x", "ok": True, "result": {"removed": True}})
 err("unknown_verb", "stub does not know " + " ".join(argv[:2]))
