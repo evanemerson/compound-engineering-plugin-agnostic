@@ -2323,9 +2323,11 @@ L80. **Name Orca's Command source control in the shadow fix text.**
     `orca-lane.sh` H1 and its three shadow refusals, lane-stack §5 and
     autonomy §12b rule 2 say only "the fix is in Orca's Settings". Name the
     control from L76's correction: Worktree Hooks > Advanced > Command
-    source = "orca.yaml only", then empty the local box. Confirm it on one
-    repo first: the report comes from dpc-pro-docs alone. kcprimetime and
-    artist360-docs held local-only + `npm install` on 2026-11-03.
+    source = "orca.yaml only", then empty the local box. Confirmed
+    2026-11-04: the operator set it on all Node repos, and `repo list`
+    reads shared-only with an empty local setup on kcprimetime and
+    artist360-docs (no repo reads local-only). Both told:
+    msg_bcdcc7c62dd2, msg_646c462bcf39.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
