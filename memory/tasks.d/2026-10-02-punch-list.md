@@ -2330,9 +2330,21 @@ L80. **Name Orca's Command source control in the shadow fix text.**
     msg_bcdcc7c62dd2, msg_646c462bcf39.
 
 L81. **cepa refuses Linux Orca: `ORCA_CLI_COMMAND` ends in `/orca`.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-05 — PR #135 merged (1.55.6) on the operator's
+    AskUserQuestion "Merge #135". tab3@matrix done (head 2e34e26 = Handoff;
+    24/24 green on updated head 537774a). Item 1: Orca's absolute `orca`
+    path passes at all nine cli sites; a path test plus a first-line test
+    keeps the screen reader out. Item 3: rule 3 states it; confirmed from
+    Orca's installed code only. Item 2 not resolved: shard item 1 says an
+    `orca serve` coordinator with no named Run would see
+    orca-unreadable:run-current (read from the script, unverified). No run
+    on a real Linux Orca host: the first real session runs §12a and reports
+    `ORCA: present`. Residuals: shard
+    2026-11-05-fix-matrix-orca-cli-path-stale-alerts.md. Plugin 1.55.6,
+    matrix parked, worker tab closed.
     severity: P2
-    owner: tab3@matrix (fix/matrix/orca-cli-path-stale-alerts, ctx_0ab02ba4d9a7)
+    owner: matrix (tab3@matrix)
     orca-lab handoff 2026-11-05 (outbox 20261105T093839Z-9JNErQ53.md, Orca
     1.4.249, cepa 1.55.5; evidence named: orca-lab
     docs/upgrades/2026-11-05-1.4.246-to-1.4.249.md, not read here). It sat
@@ -2356,9 +2368,17 @@ L81. **cepa refuses Linux Orca: `ORCA_CLI_COMMAND` ends in `/orca`.**
        live terminal in the lane.
 
 L82. **Stale-worker alerts ask the operator for every long worker turn.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-05 — PR #135 merged (1.55.6), same approval. Stale alerts
+    count terminal output and a commit on the worker's branch as life; a
+    failed read is no life. Live comparison at 45 minutes with no heartbeat:
+    main alerted on a working session, the branch did not. Limit: a worker
+    hung in a turn whose timer redraws reads as live until the 180-minute
+    bound. The no-question ack shape was not built. A false alert on
+    tab3@matrix itself on 2026-11-05 (129 minutes, commit 6 minutes old)
+    showed the defect while it was being fixed.
     severity: P2
-    owner: tab3@matrix (fix/matrix/orca-cli-path-stale-alerts, ctx_0ab02ba4d9a7)
+    owner: matrix (tab3@matrix)
     dpc-pro coord 2026-11-05 (msg_c153682cd3e5, Run run_11d22a5bc5fc):
     every worker raised `stale:ctx_…` after 30 minutes while its screen
     showed live work (a 26-minute suite, a 200-repeat run), because a
