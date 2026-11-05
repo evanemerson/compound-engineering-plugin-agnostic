@@ -2158,7 +2158,7 @@ L74. **A `check --full` drain marks its batch read at once, so a lost drain outp
 L75. **`stack-gate.sh --build` never skips when compose lists pull-only images.**
     status: pending
     severity: P3
-    owner: unassigned
+    owner: tab3@optimization (fix/optimization/setup-timeout-gate-pull-only, ctx_b2b1310875a1)
     Reported by helm coord@main 2026-11-03 (msg_8809354c315e; helm residual
     #18): `compose config --images` lists pull-only images (nginx, mailpit)
     that are never built, so on a machine without them the "all images
@@ -2264,7 +2264,7 @@ L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f79
 L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: tab3@optimization (fix/optimization/setup-timeout-gate-pull-only, ctx_b2b1310875a1)
     1. A setup step `timeout <cmd>` that reads stdin hangs in Orca's Setup
        tab: `timeout` puts its child in a background process group, the
        child gets SIGTTIN on the tab's terminal and stops (state T), and
