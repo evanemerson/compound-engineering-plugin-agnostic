@@ -47,14 +47,21 @@
 #   ENTRY     every mention of `make worktree branch=` sits beside a word
 #             that forbids it (not, never, forbidden), so the skill never
 #             presents it as an entry point.
+#   SETUP     L78. Inside the `orca.yaml` contract section, the `timeout`
+#             rule names both safe forms and the why. No line of a yaml or
+#             make example runs `timeout` without one of them. Inside the
+#             Setup section, "Reading the `Setup` tab" says how long to wait
+#             and what to do when the tab never shows; first-prompt step 4
+#             cites it, and step 2 checks contract item 7.
 #
 # STATED LIMITS: the YAML leg checks the key set against a list copied from
 # Orca's parser on one date; a later Orca can add keys, and this check will
 # not see that. The MAKE leg runs the example as written with stubs; it does
 # not prove any repo's real Makefile is gated (that is L67's /cepa:setup
-# check). No leg checks the Setup section: its order (build, then the gate,
-# then `.env` and migrations under it) and its two build preconditions are
-# prose only. The TEMPLATE leg checks anchors, not the meaning of each step.
+# check). The SETUP leg reads this skill only, never a repo's `worktree-init`,
+# and it does not run the hang (the pty probe is in L78). No leg checks the
+# Setup order (build, then the gate, then `.env` and migrations under it) or
+# its two build preconditions: they are prose only. The TEMPLATE leg checks anchors, not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SKILL="$(realpath "${1:-plugins/cepa/skills/lane-stack/SKILL.md}")" python3 - <<'PY'
@@ -290,6 +297,29 @@ for m in re.finditer(r"make worktree branch=", text):
         bad.append(m.start())
 case("ENTRY make worktree branch= only as forbidden", not bad,
      "mention at offset(s) %s with no forbidding word nearby" % bad)
+
+# SETUP (L78)
+cm = re.search(r"^## The `orca\.yaml` contract\n(.*?)(?=^## )", text, re.S | re.M)
+csec = re.sub(r"\s+", " ", cm.group(1)) if cm else ""
+gone = [x for x in ("uses `timeout --foreground`", "`compose run`, `-T </dev/null`",
+                    "background process group") if x not in csec]
+case("SETUP timeout rule in the contract", not gone, "the contract no longer says %s" % gone)
+bare = [l.strip() for b in blocks("yaml") + blocks("make") for l in b.splitlines()
+        if re.search(r"\btimeout\b", l)
+        and "--foreground" not in l and not ("-T" in l and "</dev/null" in l)]
+case("SETUP examples run no bare timeout", not bare, "example line(s) %s" % bare)
+sm = re.search(r"^\*\*Reading the `Setup` tab\*\*(.*?)(?=^\*\*When setup is refused)", text, re.S | re.M)
+ssec = re.sub(r"\s+", " ", sm.group(1)) if sm else ""
+gone = [x for x in ("for up to 5 minutes after `create` returned", "No tab yet is no result",
+                    "`scripts.setup`") if x not in ssec]
+case("SETUP tab wait stated", not gone, "the Setup tab step no longer says %s" % gone)
+gone = [x for x in ("**When the tab never shows:**", "start no worker", "do not run `create` again",
+                    "tell the operator") if x not in ssec]
+case("SETUP tab that never shows stated", not gone, "the Setup tab step no longer says %s" % gone)
+case("SETUP first prompt cites the wait", 'the skill\'s "Reading the `Setup` tab"' in step(4),
+     "first-prompt step 4 does not cite the wait")
+case("SETUP first prompt checks item 7", "contract item 7" in step(2),
+     "first-prompt step 2 does not check contract item 7")
 
 sys.exit(1 if misses else 0)
 PY

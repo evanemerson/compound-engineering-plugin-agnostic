@@ -123,6 +123,11 @@ The contract, item by item:
    not named as an entry point anywhere: not in `orca.yaml`, the Makefile's
    help text, or the repo's CLAUDE.md. A repo may keep the target, but its
    help line says to use `orca-lane.sh create` instead.
+7. **Anything setup runs under `timeout` uses `timeout --foreground`, or, for
+   `compose run`, `-T </dev/null`.** This covers `scripts.setup` and every
+   target it calls. Why: `timeout` puts its child in a background process
+   group, so a child that touches the Setup tab's terminal stops, and the
+   step hangs (punch-list L78 has the evidence).
 
 ## The stack gate
 
@@ -146,8 +151,10 @@ The contract a caller relies on (design "Builder-check answers" 6 and
 - **Builds:** `stack-gate.sh --build <compose project name> -- <compose command…>`,
   the compose command without a verb (L70). It builds one image set at a
   time on this machine, on a build lock that a start never waits on. When
-  every image the project's compose config lists already exists, it skips the build and
-  takes no lock (`STACK build: skipped — …`). After a failed or stopped
+  every image the project builds already exists, it skips the build and
+  takes no lock (`STACK build: skipped — …`). Only services with a `build:`
+  section count: a missing pull-only image never builds (L75), and the
+  start pulls it. After a failed or stopped
   build it never skips. How it locks, waits and marks a failed build is the
   gate header's. A lane the gate then refuses keeps the images it built.
   The skip trusts the image tag, so it relies on Setup step 2's two
@@ -232,9 +239,24 @@ In order:
 A service that must keep running after setup is an exception the repo names
 in its own CLAUDE.md, with the reason. None is known today.
 
-**When setup is refused** (design "Plan-review decisions" #14): Orca reports
-no setup result, so coord@main reads the lane's `Setup` tab (§12b rule 2).
-It sees `STACK gate: refused`, asks the stop question (below), and then runs
+**Reading the `Setup` tab** (punch-list L78). This section owns the step that
+§12b rule 2 and `orca-lane.sh create` name. Orca reports no setup result, and
+the tab can appear late: about 2 minutes after `create` returned, once
+measured. So wait for it:
+
+- First confirm the lane's `orca.yaml` has `scripts.setup`. With none there is
+  no tab to wait for.
+- Run `orca-ide terminal list --worktree 'id:<full id>' --json` every 15
+  seconds, for up to 5 minutes after `create` returned, until a row shows the
+  tab. No live lane has confirmed its `title`, so read each new row's `preview`
+  too.
+- No tab yet is no result, never a pass.
+- **When the tab never shows:** start no worker in that lane, do not run setup
+  by hand, and do not run `create` again. Check contract item 5. Then tell the
+  operator the lane, the time waited and what item 5 showed.
+
+**When setup is refused** (design "Plan-review decisions" #14): coord@main
+reads the lane's `Setup` tab as above. It sees `STACK gate: refused`, asks the stop question (below), and then runs
 `orca-lane.sh rm` and `create` for that lane. It never re-runs setup by hand.
 
 **When setup fails for another reason** (a build, a migration): a failed
@@ -423,8 +445,8 @@ reaches a question, and record each strip.
    starts through the gate with `up -d --no-build`; a build that reads
    nothing from the lane's `.env`; no fixed `image:` on a built service;
    one compose file builds each service; the `-wt-` project name; and
-   contract item 5, read with `repo show` as H1 says. Show the gaps as a
-   list.
+   contract item 5, read with `repo show` as H1 says; and contract item 7,
+   in `worktree-init` and every target it runs. Show the gaps as a list.
 3. **Offer to fix the gaps** (skip this step when there are none). On the
    operator's yes, make the fix yourself on a short branch in the main
    checkout (no lane exists yet for a worker; the yes permits it). Open a PR,
@@ -432,7 +454,8 @@ reaches a question, and record each strip.
    no lane until the fix is merged: Orca reads `setup:` from the lane's base.
 4. **Create the lanes** whose names no existing lane holds, one at a time,
    with `orca-lane.sh create` (§12b rule 2). A name an old lane holds goes
-   through step 5 instead. After each, read the lane's `Setup` tab. Confirm setup passed the
+   through step 5 instead. After each, wait for and read the lane's `Setup`
+   tab (the skill's "Reading the `Setup` tab"). Confirm setup passed the
    gate and that the lane's stack is stopped after setup. On
    `STACK gate: refused`, follow "When the gate refuses", then
    `orca-lane.sh rm` and `create` that lane. Never re-run setup by hand.

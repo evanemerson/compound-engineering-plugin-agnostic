@@ -106,17 +106,36 @@ MUTANTS = [
     # BUILD (L70 item 1)
     ("build-never-skips", 'elif why=$(cepa_sg_images_exist "$@"); then',
      'elif why=$(cepa_sg_images_exist "$@"; false); then',
-     {"BUILD a failed build is built again, a success clears it", "BUILD skip when every image exists, no lock"}),
+     {"BUILD a failed build is built again, a success clears it", "BUILD a missing pull-only image does not build",
+      "BUILD skip when every image exists, no lock"}),
     ("build-checks-first-only", '--format \'{{.Id}}\' -- "${imgs[@]}"', '--format \'{{.Id}}\' -- "${imgs[0]}"',
-     {"BUILD a missing image builds"}),
-    ("build-skip-on-empty", '''    echo "compose listed no images"
-    return 1''', '''    echo "compose listed no images"
+     {"BUILD a missing image builds", "BUILD a missing pull-only image does not build",
+      "BUILD a service\'s image key is the name read"}),
+    ("build-skip-on-empty", '''    echo "no service has a build: section"
+    return 1''', '''    echo "no service has a build: section"
     return 0''', {"BUILD an empty image list builds"}),
-    ("build-skip-on-unreadable", '''    echo "the image list cannot be read (config --images failed)"
-    return 1''', '''    echo "the image list cannot be read (config --images failed)"
-    return 0''', {"BUILD an unreadable image list builds"}),
-    ("build-probe-no-project", 'out=$(COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout', 'out=$(COMPOSE_PROJECT_NAME= timeout',
-     {"BUILD a failed build is built again, a success clears it", "BUILD a waiter skips once the same project was built", "BUILD skip when every image exists, no lock"}),
+    ("build-skip-on-unreadable", '''    echo "the image list cannot be read (compose config or python3 failed)"
+    return 1''', '''    echo "the image list cannot be read (compose config or python3 failed)"
+    return 0''', {"BUILD an unreadable image list builds", "BUILD a read that fails after its output builds",
+                   "BUILD no python3 builds", "BUILD output that is not JSON builds", "BUILD no project name builds",
+                   "BUILD no services key builds", "BUILD a service that is not a mapping builds"}),
+    # L75: only services with a `build:` section, by their real names.
+    ("build-lists-pull-only", 'if "build" in body.keys():', 'if True:',
+     {"BUILD a failed build is built again, a success clears it", "BUILD a missing pull-only image does not build", "BUILD a waiter skips once the same project was built",
+      "BUILD an empty image list builds", "BUILD skip when every image exists, no lock"}),
+    ("build-only-fixed-images", 'if "build" in body.keys():', 'if "build" in body.keys() and body.get("image"):',
+     {"BUILD a default name with pull-only images present builds", "BUILD a failed build is built again, a success clears it", "BUILD a missing pull-only image does not build", "BUILD a waiter skips once the same project was built", "BUILD skip when every image exists, no lock"}),
+    ("build-no-pipefail", 'set -o pipefail\n', 'true\n', {"BUILD a read that fails after its output builds"}),
+    ("build-image-key-ignored", 'print(body.get("image") or name + "-" + service)', 'print(name + "-" + service)',
+     {"BUILD a missing pull-only image does not build", "BUILD a name that is not a plain reference builds",
+      "BUILD a service's image key is the name read"}),
+    ("build-default-name-wrong", 'name + "-" + service', 'name + "_" + service',
+     {"BUILD a failed build is built again, a success clears it", "BUILD a missing pull-only image does not build", "BUILD a waiter skips once the same project was built", "BUILD skip when every image exists, no lock"}),
+    ("build-non-mapping-passes", '"build" in body.keys()', '"build" in body',
+     {"BUILD a service that is not a mapping builds"}),
+    ("build-probe-no-project", '    COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout --foreground -k 2 60 "$@" config', '    COMPOSE_PROJECT_NAME= timeout --foreground -k 2 60 "$@" config',
+     {"BUILD a failed build is built again, a success clears it", "BUILD a missing pull-only image does not build",
+      "BUILD a waiter skips once the same project was built", "BUILD skip when every image exists, no lock"}),
     ("rebuild-skips", 'if [ "$cepa_sg_mode" = --rebuild ]; then', 'if false; then',
      {"BUILD --rebuild always builds", "BUILD a failed build is built again, a success clears it"}),
     ("build-exit-0", '  exit "$brc"\n}', '  exit 0\n}',

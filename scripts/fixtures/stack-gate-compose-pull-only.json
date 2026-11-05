@@ -1,0 +1,79 @@
+{
+  "name": "{p}",
+  "networks": {
+    "default": {
+      "name": "{p}_default",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "db": {
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "POSTGRES_DB": "x"
+      },
+      "image": "postgres:16",
+      "networks": {
+        "default": null
+      }
+    },
+    "mail": {
+      "command": null,
+      "entrypoint": null,
+      "image": "axllent/mailpit",
+      "networks": {
+        "default": null
+      }
+    },
+    "nobuildnoimage": {
+      "command": null,
+      "entrypoint": null,
+      "image": "axllent/mailpit",
+      "networks": {
+        "default": null
+      }
+    },
+    "shared": {
+      "command": null,
+      "entrypoint": null,
+      "image": "myorg/worker:dev",
+      "networks": {
+        "default": null
+      }
+    },
+    "web": {
+      "build": {
+        "context": "/app/app",
+        "dockerfile": "Dockerfile"
+      },
+      "command": null,
+      "depends_on": {
+        "db": {
+          "condition": "service_started",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "NOTE": "line\n    build: fake\n",
+        "SECRET": "not-a-secret"
+      },
+      "networks": {
+        "default": null
+      }
+    },
+    "worker": {
+      "build": {
+        "context": "/app/app",
+        "dockerfile": "Dockerfile"
+      },
+      "command": null,
+      "entrypoint": null,
+      "image": "myorg/worker:dev",
+      "networks": {
+        "default": null
+      }
+    }
+  }
+}

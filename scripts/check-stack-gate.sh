@@ -42,9 +42,15 @@
 #   COUNTMODE — `--count` prints its one line, exits 1 when docker fails or
 #               the config cannot be read, takes no lock, creates nothing.
 #   BUILD     — `--build` (L70 item 1) skips, with no lock, when every image
-#               the project lists exists, read with the project name; it
+#               the project builds exists, read with the project name; it
 #               builds when one is missing, the list is empty or cannot be
-#               read; `--rebuild` always builds; the build's exit code comes
+#               read. Only services with a `build:` section are checked
+#               (L75), on a real `compose config --format json` capture
+#               (scripts/fixtures/stack-gate-compose-pull-only.json): the
+#               inspect call is asserted name by name, an `image:` on a built
+#               service is the name read, and a read that fails late, has no
+#               python3, or holds a shape it does not know builds.
+#               `--rebuild` always builds; the build's exit code comes
 #               through; two builds run one at a time, and the waiting one
 #               says so with the 3600 s default; a held build lock refuses
 #               after build_wait_seconds; the build lock and the start lock
@@ -118,7 +124,7 @@ class Env:
         # A wrapper, not a symlink: a stub that lost its exec bit would let
         # PATH fall through to the real docker and count this machine's stacks.
         with open(os.path.join(bindir, "docker"), "w") as f:
-            f.write(f'#!/bin/sh\nexec python3 "{STUB}" "$@"\n')
+            f.write(f'#!/bin/sh\nexec "{sys.executable}" "{STUB}" "$@"\n')
         os.chmod(os.path.join(bindir, "docker"), 0o755)
         self.state = os.path.join(self.root, "state.json")
         with open(self.state, "w") as f:
@@ -483,20 +489,22 @@ def built(e, proj="n-wt-x"):
     return [b for b in e.builds() if b[0] == "start" and b[1] == proj]
 
 
-have = ["n-wt-x-web", "n-wt-x-worker", "postgres:16"]
+# postgres:16 is listed and pull-only, and never in the store (L75).
+have = ["n-wt-x-web", "n-wt-x-worker"]
 e = Env(images=have, listed=LISTED)
 e.hold_build_lock(8)
 t0 = time.time()
 r = e.run(bargs())
 if (r.returncode != 0 or time.time() - t0 > 4 or built(e)
-        or r.stdout != "STACK build: skipped — n-wt-x: all 3 images exist (--rebuild builds anyway)\n"):
+        or r.stdout != "STACK build: skipped — n-wt-x: all 2 built images exist (--rebuild builds anyway)\n"):
     miss("BUILD skip when every image exists, no lock", f"rc {r.returncode}, {time.time() - t0:.1f}s, builds {e.builds()}, out {r.stdout!r}")
 else:
     ok()
 for case, imgs, listed, env in [
-    ("BUILD a missing image builds", have[:2], LISTED, None),
-    ("BUILD an empty image list builds", have, "", None),
+    ("BUILD a missing image builds", have[:1], LISTED, None),
+    ("BUILD an empty image list builds", have + ["postgres:16"], "postgres:16", None),
     ("BUILD an unreadable image list builds", have, LISTED, {"STUB_DOCKER_FAIL": "config"}),
+    ("BUILD a read that fails after its output builds", have, LISTED, {"STUB_DOCKER_FAIL": "config-late"}),
 ]:
     e = Env(images=imgs, listed=listed)
     r = e.run(bargs(), env)
@@ -607,13 +615,59 @@ if pa.returncode != 0 or pb.returncode != 0 or len(built(e)) != 1 or "built whil
 else:
     ok()
 # An image name that is not a plain reference builds, even when it "exists".
-e = Env(images=have + ["-x", "a b", "/web:"], listed=LISTED + ",-x,a b,/web:")
+e = Env(images=have + ["-x", "a b", "/web:"], listed=LISTED + ",build=-x,build=a b,build=/web:")
 r = e.run(bargs())
 inspected = [a for a in (json.loads(l) for l in open(e.log)) if a[:2] == ["image", "inspect"]] if os.path.exists(e.log) else []
 if r.returncode != 0 or len(built(e)) != 1 or "not a plain reference" not in r.stdout or inspected:
     miss("BUILD a name that is not a plain reference builds", f"rc {r.returncode}, builds {e.builds()}, inspected {inspected}, out {r.stdout!r}")
 else:
     ok()
+# L75, on a real capture: web has no image:, worker has one, and shared uses
+# worker's image with no build:. db, mail and nobuildnoimage are pull-only.
+PULL_ONLY = os.path.join(os.getcwd(), "scripts/fixtures/stack-gate-compose-pull-only.json")
+capture = {"STUB_COMPOSE_JSON": PULL_ONLY}
+built_names = ["n-wt-x-web", "myorg/worker:dev"]
+e = Env(images=built_names)
+r = e.run(bargs(), capture)
+inspected = [a for a in (json.loads(l) for l in open(e.log)) if a[:2] == ["image", "inspect"]]
+refs = [x for a in inspected for x in a[a.index("--", 2) + 1:]]
+if r.returncode != 0 or built(e) or sorted(refs) != sorted(built_names) or "all 2 built images exist" not in r.stdout:
+    miss("BUILD a missing pull-only image does not build", f"rc {r.returncode}, builds {e.builds()}, inspected {refs}, out {r.stdout!r}")
+else:
+    ok()
+for case, imgs in [("BUILD a service's image key is the name read", ["n-wt-x-web", "n-wt-x-worker"]),
+                   ("BUILD a default name with pull-only images present builds",
+                    ["myorg/worker:dev", "postgres:16", "axllent/mailpit"])]:
+    e = Env(images=imgs)
+    r = e.run(bargs(), capture)
+    if r.returncode != 0 or len(built(e)) != 1:
+        miss(case, f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
+    else:
+        ok()
+# No python3 means no list: the bin dir shadows it, and the stub keeps its own.
+e = Env(images=have, listed=LISTED)
+with open(os.path.join(e.root, "bin", "python3"), "w") as f:
+    f.write("#!/bin/sh\nexit 127\n")
+os.chmod(os.path.join(e.root, "bin", "python3"), 0o755)
+r = e.run(bargs())
+if r.returncode != 0 or len(built(e)) != 1 or "the image list cannot be read" not in r.stdout:
+    miss("BUILD no python3 builds", f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
+else:
+    ok()
+for case, doc in [("BUILD output that is not JSON builds", "not json"),
+                  ("BUILD no project name builds", '{"services": {"web": {"build": {}}}}'),
+                  ("BUILD no services key builds", '{"name": "{p}"}'),
+                  ("BUILD a service that is not a mapping builds",
+                   '{"name": "{p}", "services": {"web": {"build": {}}, "odd": "text"}}')]:
+    e = Env(images=have)
+    bad = os.path.join(e.root, "config.json")
+    with open(bad, "w") as f:
+        f.write(doc)
+    r = e.run(bargs(), {"STUB_COMPOSE_JSON": bad})
+    if r.returncode != 0 or len(built(e)) != 1 or "the image list cannot be read" not in r.stdout:
+        miss(case, f"rc {r.returncode}, builds {e.builds()}, out {r.stdout!r}")
+    else:
+        ok()
 e = Env(listed=LISTED, conf="build_wait_seconds=5\n")
 cf = os.path.join(e.home, ".config", "cepa", "stack-gate.conf")
 os.chmod(cf, 0)
