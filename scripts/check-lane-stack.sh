@@ -49,10 +49,11 @@
 #             presents it as an entry point.
 #   SETUP     L78. Inside the `orca.yaml` contract section, the `timeout`
 #             rule names both safe forms and the why. No line of a yaml or
-#             make example runs `timeout` without one of them. Inside the
-#             Setup section, "Reading the `Setup` tab" says how long to wait
-#             and what to do when the tab never shows; first-prompt step 4
-#             cites it, and step 2 checks contract item 7.
+#             make example runs `timeout` without one of them. The paragraph
+#             "Reading the `Setup` tab" (it ends at "When setup is refused")
+#             says how long to wait, what to do when the tab never shows, and
+#             that a running tab is no result; first-prompt step 4 cites it,
+#             and step 2 checks contract item 7.
 #
 # STATED LIMITS: the YAML leg checks the key set against a list copied from
 # Orca's parser on one date; a later Orca can add keys, and this check will
@@ -316,6 +317,9 @@ case("SETUP tab wait stated", not gone, "the Setup tab step no longer says %s" %
 gone = [x for x in ("**When the tab never shows:**", "start no worker", "do not run `create` again",
                     "tell the operator") if x not in ssec]
 case("SETUP tab that never shows stated", not gone, "the Setup tab step no longer says %s" % gone)
+gone = [x for x in ("`orca-ide terminal read", "**A tab still running is no result:**",
+                    "shell prompt returns") if x not in ssec]
+case("SETUP running tab is no result", not gone, "the Setup tab step no longer says %s" % gone)
 case("SETUP first prompt cites the wait", 'the skill\'s "Reading the `Setup` tab"' in step(4),
      "first-prompt step 4 does not cite the wait")
 case("SETUP first prompt checks item 7", "contract item 7" in step(2),

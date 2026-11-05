@@ -127,7 +127,9 @@ The contract, item by item:
    `compose run`, `-T </dev/null`.** This covers `scripts.setup` and every
    target it calls. Why: `timeout` puts its child in a background process
    group, so a child that touches the Setup tab's terminal stops, and the
-   step hangs (punch-list L78 has the evidence).
+   step hangs (punch-list L78 has the evidence). `--foreground` signals only
+   the direct child, so a grandchild can outlive the bound: add `-k <n>` and
+   `</dev/null`, as L78's fix did.
 
 ## The stack gate
 
@@ -242,7 +244,7 @@ in its own CLAUDE.md, with the reason. None is known today.
 **Reading the `Setup` tab** (punch-list L78). This section owns the step that
 §12b rule 2 and `orca-lane.sh create` name. Orca reports no setup result, and
 the tab can appear late: about 2 minutes after `create` returned, once
-measured. So wait for it:
+measured. So wait for the tab, and then for setup to end:
 
 - First confirm the lane's `orca.yaml` has `scripts.setup`. With none there is
   no tab to wait for.
@@ -253,11 +255,20 @@ measured. So wait for it:
 - No tab yet is no result, never a pass.
 - **When the tab never shows:** start no worker in that lane, do not run setup
   by hand, and do not run `create` again. Check contract item 5. Then tell the
-  operator the lane, the time waited and what item 5 showed.
+  operator the lane, the time waited and what item 5 showed. A tab that closes
+  before it is read counts as never shown.
+- Read the whole tab with `orca-ide terminal read --terminal <handle>`, never
+  `preview` alone: a `STACK gate: refused` line is longer than it.
+- **A tab still running is no result:** no worker starts yet. Setup has ended
+  when the tab's shell prompt returns; only then does its output show a pass
+  or a failure. A `STACK build: waiting` line can last up to
+  `build_wait_seconds` (the gate header). With no such line and no new output
+  (the row's `lastOutputAt`) for 15 minutes, act as if the tab never showed.
 
 **When setup is refused** (design "Plan-review decisions" #14): coord@main
-reads the lane's `Setup` tab as above. It sees `STACK gate: refused`, asks the stop question (below), and then runs
-`orca-lane.sh rm` and `create` for that lane. It never re-runs setup by hand.
+reads the lane's `Setup` tab as above. It sees `STACK gate: refused`, asks
+the stop question (below), and then runs `orca-lane.sh rm` and `create` for
+that lane. It never re-runs setup by hand.
 
 **When setup fails for another reason** (a build, a migration): a failed
 build started nothing, and after a failed migration the trap has stopped the

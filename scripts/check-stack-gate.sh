@@ -43,8 +43,9 @@
 #               the config cannot be read, takes no lock, creates nothing.
 #   BUILD     — `--build` (L70 item 1) skips, with no lock, when every image
 #               the project builds exists, read with the project name; it
-#               builds when one is missing, the list is empty or cannot be
-#               read. Only services with a `build:` section are checked
+#               builds when one is missing, the project has no services or
+#               the list cannot be read; a project that builds nothing skips
+#               with no lock. Only services with a `build:` section are checked
 #               (L75), on a real `compose config --format json` capture
 #               (scripts/fixtures/stack-gate-compose-pull-only.json): the
 #               inspect call is asserted name by name, an `image:` on a built
@@ -502,7 +503,7 @@ else:
     ok()
 for case, imgs, listed, env in [
     ("BUILD a missing image builds", have[:1], LISTED, None),
-    ("BUILD an empty image list builds", have + ["postgres:16"], "postgres:16", None),
+    ("BUILD an empty image list builds", have, "", None),
     ("BUILD an unreadable image list builds", have, LISTED, {"STUB_DOCKER_FAIL": "config"}),
     ("BUILD a read that fails after its output builds", have, LISTED, {"STUB_DOCKER_FAIL": "config-late"}),
 ]:
@@ -620,6 +621,15 @@ r = e.run(bargs())
 inspected = [a for a in (json.loads(l) for l in open(e.log)) if a[:2] == ["image", "inspect"]] if os.path.exists(e.log) else []
 if r.returncode != 0 or len(built(e)) != 1 or "not a plain reference" not in r.stdout or inspected:
     miss("BUILD a name that is not a plain reference builds", f"rc {r.returncode}, builds {e.builds()}, inspected {inspected}, out {r.stdout!r}")
+else:
+    ok()
+# Services and no build: section: nothing to build, so no build lock either.
+e = Env(listed="postgres:16")
+e.hold_build_lock(8)
+t0 = time.time()
+r = e.run(bargs())
+if r.returncode != 0 or time.time() - t0 > 4 or built(e) or "nothing to build" not in r.stdout:
+    miss("BUILD a project with nothing to build skips, no lock", f"rc {r.returncode}, {time.time() - t0:.1f}s, builds {e.builds()}, out {r.stdout!r}")
 else:
     ok()
 # L75, on a real capture: web has no image:, worker has one, and shared uses

@@ -51,15 +51,16 @@
 #   stack-gate.sh --rebuild <project> -- <compose command…>
 #     One image build at a time on this machine (punch-list L70 item 1). The
 #     compose command is given WITHOUT a verb (`docker compose -f dev.yml`);
-#     the gate adds `config --format json` and `build`, and runs both with
+#     the gate adds `config --no-env-resolution --format json` and `build`,
+#     and runs both with
 #     COMPOSE_PROJECT_NAME=<project>. <project> is checked as above.
 #     --build first lists the images the project BUILDS and checks them with
-#     `docker image inspect`. When the list is not empty, every name is a
-#     plain image reference and every image exists, it prints
-#     `STACK build: skipped — …`, exits 0, and takes no lock. A failed read
-#     or an empty list builds, so a project with no `build:` section runs a
-#     build that does nothing. --rebuild always builds: the skip keeps an old
-#     image after a Dockerfile, requirements or build-arg change.
+#     `docker image inspect`. When every name is a plain image reference and
+#     every image exists, it prints `STACK build: skipped — …`, exits 0, and
+#     takes no lock. A project with services and no `build:` section has
+#     nothing to build, so it skips the same way. A failed read, or a project
+#     with no services, builds. --rebuild always builds: the skip keeps an
+#     old image after a Dockerfile, requirements or build-arg change.
 #     The list holds only services that have a `build:` section (L75): a
 #     missing pull-only image is not a reason to build, and `up -d
 #     --no-build` pulls it. `config --images` cannot give this list: it
@@ -68,9 +69,11 @@
 #     `config --format json`, as other cepa scripts read JSON; no jq. A
 #     service's image is its `image:`, else Compose's default
 #     `<name>-<service>`, written here: if Compose changes that default, the
-#     name is not found and --build builds. No python3 also builds. The JSON
-#     holds the project's resolved environment, so it goes down a pipe and
-#     is never stored or printed.
+#     name is not found and --build builds. No python3 also builds.
+#     --no-env-resolution because setup reads this before it writes `.env`,
+#     and a missing `env_file` fails the read; a Compose without the flag
+#     fails the read too, and builds. The JSON still holds `environment:`
+#     values, so it goes down a pipe and is never stored or printed.
 #     A build runs `<compose…> build` under the BUILD lock,
 #     ~/.config/cepa/build.lock (flock), never the start lock above, so a
 #     start that does not build never waits on a build, and a build never
@@ -347,25 +350,29 @@ cepa_sg_refuse() {
 }
 
 # stdin: `compose config --format json`. stdout: one image name per service
-# that has a `build:` section. Any other shape exits non-zero: unknown, so the
-# caller builds. `.keys()` so a service that is not a mapping raises.
+# that has a `build:` section, nothing when none has. No services, or any
+# other shape, exits non-zero: unknown, so the caller builds. `.keys()` so a
+# service that is not a mapping raises.
 cepa_sg_built_py='
 import json, sys
 c = json.load(sys.stdin)
 name = c["name"]
+if not c["services"]:
+    sys.exit(1)
 for service, body in c["services"].items():
     if "build" in body.keys():
         print(body.get("image") or name + "-" + service)
 '
 
 # --build: prints why, and returns 0 only when the list of images the project
-# builds is readable, not empty, all plain references, and every image exists.
+# builds is readable, all plain references, and every image exists, or when
+# the project builds nothing.
 cepa_sg_images_exist() {
   local out img
   local -a imgs=()
   # pipefail: a compose that prints its JSON and then fails is a failed read.
   if ! out=$(set -o pipefail
-    COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout --foreground -k 2 60 "$@" config --format json 2>/dev/null |
+    COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout --foreground -k 2 60 "$@" config --no-env-resolution --format json 2>/dev/null |
       python3 -I -c "$cepa_sg_built_py" 2>/dev/null); then
     echo "the image list cannot be read (compose config or python3 failed)"
     return 1
@@ -379,8 +386,8 @@ cepa_sg_images_exist() {
     imgs+=("$img")
   done <<<"$out"
   if [ "${#imgs[@]}" -eq 0 ]; then
-    echo "no service has a build: section"
-    return 1
+    echo "no service has a build: section, so there is nothing to build"
+    return 0
   fi
   if ! timeout --foreground -k 2 60 docker image inspect --format '{{.Id}}' -- "${imgs[@]}" >/dev/null 2>&1; then
     echo "at least one of its ${#imgs[@]} built images is missing, or docker image inspect failed"

@@ -20,16 +20,17 @@ Strict like real docker where the gate depends on it:
           id; a 12-char prefix resolves. $STUB_DOCKER_FAIL=inspect exits 1.
   add <project> <wd> <id>   (not docker) appends a running container; the
           check's start command uses it to model a stack coming up.
-  compose [<flag> <value>…] config --format json   prints the project as JSON,
+  compose [<flag> <value>…] config --no-env-resolution --format json   prints
+          the project as JSON,
           with Compose's shape: top-level `name` ($COMPOSE_PROJECT_NAME, so a
           read without the project name finds nothing) and `services`.
           $STUB_COMPOSE_IMAGES is comma-separated: `{p}-web` is a service
           `web` with a `build:` section and no `image:`; `build=<image>` has
           both; any other entry is a pull-only `image:`.
           $STUB_COMPOSE_JSON, when set, is a file printed instead, with
-          `{p}` replaced as above. Only `--format json`: `--images` exits 64,
+          `{p}` replaced as above. Only this exact form: `--images` exits 64,
           so a gate back on that list goes red.
-          $STUB_DOCKER_FAIL=config exits 1 with no output;
+          $STUB_DOCKER_FAIL=config exits 1 with no stdout;
           $STUB_DOCKER_FAIL=config-late prints the JSON, then exits 1.
   compose [<flag> <value>…] build   appends `start <project> <time>` and
           `end <project> <time>` to $STUB_BUILD_LOG around a sleep of
@@ -143,7 +144,7 @@ if argv[:1] == ["compose"]:
     rest = argv[1:]
     while rest and rest[0].startswith("-"):
         rest = rest[2:]
-    if rest == ["config", "--format", "json"]:
+    if rest == ["config", "--no-env-resolution", "--format", "json"]:
         if FAIL == "config":
             print("config failed", file=sys.stderr)
             sys.exit(1)
