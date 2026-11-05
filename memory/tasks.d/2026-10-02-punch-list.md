@@ -2329,6 +2329,46 @@ L80. **Name Orca's Command source control in the shadow fix text.**
     artist360-docs (no repo reads local-only). Both told:
     msg_bcdcc7c62dd2, msg_646c462bcf39.
 
+L81. **cepa refuses Linux Orca: `ORCA_CLI_COMMAND` ends in `/orca`.**
+    status: pending
+    severity: P2
+    owner: tab3@matrix (fix/matrix/orca-cli-path-stale-alerts, ctx_0ab02ba4d9a7)
+    orca-lab handoff 2026-11-05 (outbox 20261105T093839Z-9JNErQ53.md, Orca
+    1.4.249, cepa 1.55.5; evidence named: orca-lab
+    docs/upgrades/2026-11-05-1.4.246-to-1.4.249.md, not read here). It sat
+    pending ("no live coord@main could take it"); cause unknown.
+    1. When Orca runs on Linux, the cli is an absolute path with basename
+       `orca`: Linux desktop app in WSL ~/.config/orca/linux-orca-cli-shim/orca,
+       `orca serve` ~/.config/orca/cli/bin/orca. cepa's check refuses both,
+       "bare orca on Linux is the screen reader", rc=4. Read by coord@main
+       2026-11-05: `grep -n 'screen reader' plugins/cepa/scripts/*.sh` hits
+       7 scripts; the check tests the basename. Also in autonomy §12a and
+       rule 6's title block (reported). The sender reports the Linux app is
+       the first WSL route with native chat and images, and that the
+       scripts passed with ORCA_CLI_COMMAND=orca-ide set by hand. Fix idea,
+       untested by the sender: accept an absolute path equal to
+       ORCA_CLI_COMMAND when its basename is orca.
+    2. Not resolved: on `orca serve`, run-show returned
+       `coordinator_handle: null` (Windows baseline: a string).
+    3. Not in cepa's docs (reported): Orca resumes a finished worker that
+       has unread mail (settled-worker-follow-through.ts). A worker that
+       only peeks gets a follow-up dispatch: a second worker_done and a
+       live terminal in the lane.
+
+L82. **Stale-worker alerts ask the operator for every long worker turn.**
+    status: pending
+    severity: P2
+    owner: tab3@matrix (fix/matrix/orca-cli-path-stale-alerts, ctx_0ab02ba4d9a7)
+    dpc-pro coord 2026-11-05 (msg_c153682cd3e5, Run run_11d22a5bc5fc):
+    every worker raised `stale:ctx_…` after 30 minutes while its screen
+    showed live work (a 26-minute suite, a 200-repeat run), because a
+    worker sends no heartbeat during a long shell job. Rule 8 made each one
+    an AskUserQuestion. The operator answered 4 in one night, all "Ignore",
+    and asked why they have to press 1. Rule read by coord@main:
+    orca-health.sh HB_STALE=30. Proposal: count recent terminal output or a
+    commit as life; or a coordinator ack with no question after it reads
+    live work on the screen. Worker told to build the first shape.
+
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
