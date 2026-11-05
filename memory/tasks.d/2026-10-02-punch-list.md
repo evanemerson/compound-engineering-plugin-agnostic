@@ -2156,9 +2156,15 @@ L74. **A `check --full` drain marks its batch read at once, so a lost drain outp
     do. `memory/tasks.d/2026-11-03-fix-matrix-check-full.md` item 5.
 
 L75. **`stack-gate.sh --build` never skips when compose lists pull-only images.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-05 — PR #136 merged `2312e5f` (1.55.7). `stack-gate.sh
+    --build` reads `build:` sections from `config --no-env-resolution
+    --format json` with python3; a failed read still builds. Beyond the
+    brief, approved at merge: a project with no `build:` section skips with
+    no lock. No real image build ran. Residuals: shard
+    2026-11-05-fix-optimization-setup-timeout-gate-pull-only.md.
     severity: P3
-    owner: tab3@optimization (fix/optimization/setup-timeout-gate-pull-only, ctx_b2b1310875a1)
+    owner: optimization (tab3@optimization)
     Reported by helm coord@main 2026-11-03 (msg_8809354c315e; helm residual
     #18): `compose config --images` lists pull-only images (nginx, mailpit)
     that are never built, so on a machine without them the "all images
@@ -2262,9 +2268,23 @@ L77. **`orca-lane.sh rm` defects found by dpc-pro's lane rebuild (msg_4bd3088f79
        rm passes. Fix: the Ending line names that step.
 
 L78. **Orca Setup-tab lessons from artist360's lane rebuild (msg_452caa830403).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-05 — PR #136 merged `2312e5f` (1.55.7) on the operator's
+    AskUserQuestion "Merge, send warning". tab3@optimization done (head
+    405380f = Handoff; coord@main re-bumped 1.55.6 -> 1.55.7 as c9f432e after
+    #135 took 1.55.6; 24/24 green). lane-stack contract item 7 owns the
+    `timeout` rule; "Reading the `Setup` tab" owns the wait. Unmeasured: no
+    real create or Setup-tab hang ran; the 5-minute bound rests on one
+    measurement, the 15-minute quiet bound on none. Follow-up: L83.
+    Told 2026-11-05: artist360-docs msg_f5f2e96146b9, ci-ops-self-hosted
+    msg_9313c88b9010, dpc-pro msg_3243ab7ce306, dpc-pro-docs
+    msg_6c6a4bb054a1, helm msg_34c84e235bec, kcprimetime msg_097465e8d3d1.
+    Pending in their outboxes (no live coord@main): dpc-pro-www,
+    dpc-insider-www, farmtender-laravel, hillberry-app. Not sent: artist360
+    and contexthub (found and fixed it). Plugin 1.55.7 (rc=0), optimization
+    parked, worker tab gone.
     severity: P2
-    owner: tab3@optimization (fix/optimization/setup-timeout-gate-pull-only, ctx_b2b1310875a1)
+    owner: optimization (tab3@optimization)
     1. A setup step `timeout <cmd>` that reads stdin hangs in Orca's Setup
        tab: `timeout` puts its child in a background process group, the
        child gets SIGTTIN on the tab's terminal and stops (state T), and
@@ -2388,6 +2408,17 @@ L82. **Stale-worker alerts ask the operator for every long worker turn.**
     orca-health.sh HB_STALE=30. Proposal: count recent terminal output or a
     commit as life; or a coordinator ack with no question after it reads
     live work on the screen. Worker told to build the first shape.
+
+L83. **Cite lane-stack's Setup-tab wait from §12b rule 2 and `orca-lane.sh`.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    #136 left these sites as they were because tab3@matrix held the files:
+    rule 2 and the `create` success line say "read the Setup tab" with no
+    wait. Both should cite lane-stack's "Reading the `Setup` tab". Probe:
+    `git grep -n -i 'setup. tab' -- plugins/cepa/skills/autonomy/SKILL.md
+    plugins/cepa/scripts/orca-lane.sh`. Same words in the operator's global
+    CLAUDE.md "New lane" text (operator's file). Could ride with L80.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
