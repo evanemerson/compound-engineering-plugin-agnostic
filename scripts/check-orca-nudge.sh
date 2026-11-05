@@ -196,6 +196,9 @@
 #              re-binds, or asks when run-current does not agree; with run and
 #              confirm it re-binds; shell text in the run line runs nothing;
 #              with orca-rebind.sh absent it prints the skipped line.
+#   HEALTH LIFE — punch-list L82: the stale leg's terminal output and commit
+#              reads, on `hshow(term=...)` and a `git` stub that fails only
+#              its `log` read (STUB_GIT).
 #   HEALTHBLOCK — punch-list L46: §12b rule 8's health block. Each heredoc
 #              line reaches orca-health.sh as one argument: a cli with `$(…)`
 #              or spaces is refused, an ack key with shell text is refused,
@@ -333,6 +336,7 @@ case "${STUB_GIT:-}:$1" in
   fail:log) echo 999900; exit 1 ;;
   junk:log) echo not-a-time; exit 0 ;;
   future:log) echo 1009999; exit 0 ;;
+  old:log) echo 997600; exit 0 ;;
   hang:log) exec %s 30 ;;
   mark:log|mark:worktree) : >"$STUB_GIT_MARK" ;;
 esac
@@ -1540,14 +1544,13 @@ if LEGS in ("all", "health"):
            ["ORCA alert: waiting:%s:%d — %s is parked on a prompt only a human can answer" % (D1, HOUR, W)] + HSUM1,
            shows={D1: hshow(wait={"evidence": "hook"}, hb=45)})
     stale_t = NOW - 30 * 60
-    NOTERM = "; its terminal output could not be read"
     health("HEALTH stale at 30 minutes", 1,
-           ["ORCA alert: stale:%s:%d — %s sent no heartbeat for 30 minutes (bound 30)%s" % (D1, stale_t, W, NOTERM)] + HSUM1,
+           ["ORCA alert: stale:%s:%d — %s shows no life for 30 minutes (bound 30): heartbeat 30 minutes ago, terminal output unread, commit unread" % (D1, stale_t, W)] + HSUM1,
            shows={D1: hshow(hb=30)})
     health("HEALTH not stale at 29 minutes", 0, [HOK], shows={D1: hshow(hb=29)})
     health("HEALTH stale with no heartbeat counts from the dispatch", 1,
-           ["ORCA alert: stale:%s:%d — %s sent no heartbeat for 40 minutes (bound 30), none since its dispatch%s"
-            % (D1, NOW - 40 * 60, W, NOTERM)] + HSUM1, shows={D1: hshow(hb=None)})
+           ["ORCA alert: stale:%s:%d — %s shows no life for 40 minutes (bound 30): heartbeat none since its dispatch, terminal output unread, commit unread"
+            % (D1, NOW - 40 * 60, W)] + HSUM1, shows={D1: hshow(hb=None)})
     health("HEALTH pending ask is not stale", 0, [HOK], shows={D1: hshow(hb=50, cats=("input",))})
     health("HEALTH long at 180 minutes", 1,
            ["ORCA alert: long:%s — %s has run 180 minutes with no worker_done (bound 180)" % (D1, W)] + HSUM1,
@@ -1568,65 +1571,78 @@ if LEGS in ("all", "health"):
         return t
     def lms(m):
         return (NOW - m * 60) * 1000
-    def lquiet(m, tail=""):
-        return ["ORCA alert: stale:%s:%d — %s showed no heartbeat, terminal output or commit for %d minutes (bound 30)%s"
-                % (D1, NOW - m * 60, W, m, tail)] + HSUM1
-    def lunread(m):
-        return ["ORCA alert: stale:%s:%d — %s sent no heartbeat for %d minutes (bound 30)%s"
-                % (D1, NOW - m * 60, W, m, NOTERM)] + HSUM1
+    def lq(m, hb="45 minutes ago", out="unread", commit="unread", who=W, did=D1):
+        return ["ORCA alert: stale:%s:%d — %s shows no life for %d minutes (bound 30): heartbeat %s, terminal output %s, commit %s"
+                % (did, NOW - m * 60, who, m, hb, out, commit)]
     UNC = "\\\\wsl.localhost\\Ubuntu-24.04" + LWT.replace("/", "\\")
+    UNC2 = "\\\\wsl$\\Ubuntu-24.04" + LWT.replace("/", "\\")
+    CT = dict(branch=LBRANCH, path=LWT)
+    M50 = "50 minutes ago"
     health("HEALTH LIFE recent output is life", 0, [HOK], shows={D1: hshow(hb=45, term=lterm(lms(5)))})
     health("HEALTH LIFE output at 29 minutes is life", 0, [HOK], shows={D1: hshow(hb=45, term=lterm(lms(29)))})
-    health("HEALTH LIFE output at 30 minutes alerts", 1, lquiet(30), shows={D1: hshow(hb=45, term=lterm(lms(30)))})
-    health("HEALTH LIFE output older than the heartbeat keeps the heartbeat", 1, lquiet(35),
+    health("HEALTH LIFE output at 30 minutes alerts", 1, lq(30, out="30 minutes ago") + HSUM1,
+           shows={D1: hshow(hb=45, term=lterm(lms(30)))})
+    health("HEALTH LIFE output older than the heartbeat keeps the heartbeat", 1, lq(35, "35 minutes ago", M50) + HSUM1,
            shows={D1: hshow(hb=35, term=lterm(lms(50)))})
-    health("HEALTH LIFE no heartbeat since dispatch, silent", 1, lquiet(31, ", none since its dispatch"),
-           shows={D1: hshow(hb=None, term=lterm(lms(31)))})
-    health("HEALTH LIFE null output is no life", 1, lunread(45), shows={D1: hshow(hb=45, term=lterm())})
-    health("HEALTH LIFE text output time is no life", 1, lunread(45), shows={D1: hshow(hb=45, term=lterm(str(lms(1))))})
-    health("HEALTH LIFE true output time is no life", 1, lunread(45), shows={D1: hshow(hb=45, term=lterm(True))})
-    health("HEALTH LIFE float output time is no life", 1, lunread(45), shows={D1: hshow(hb=45, term=lterm(lms(1) + 0.5))})
-    health("HEALTH LIFE zero output time is no life", 1, lunread(45), shows={D1: hshow(hb=45, term=lterm(0))})
-    health("HEALTH LIFE an output time too large for a float is no life", 1, lunread(45),
+    health("HEALTH LIFE no heartbeat since dispatch, silent", 1,
+           lq(31, "none since its dispatch", "31 minutes ago") + HSUM1, shows={D1: hshow(hb=None, term=lterm(lms(31)))})
+    health("HEALTH LIFE null output is no life", 1, lq(45) + HSUM1, shows={D1: hshow(hb=45, term=lterm())})
+    health("HEALTH LIFE text output time is no life", 1, lq(45) + HSUM1, shows={D1: hshow(hb=45, term=lterm(str(lms(1))))})
+    health("HEALTH LIFE true output time is no life", 1, lq(45) + HSUM1, shows={D1: hshow(hb=45, term=lterm(True))})
+    health("HEALTH LIFE float output time is no life", 1, lq(45) + HSUM1, shows={D1: hshow(hb=45, term=lterm(lms(1) + 0.5))})
+    health("HEALTH LIFE zero output time is no life", 1, lq(45) + HSUM1, shows={D1: hshow(hb=45, term=lterm(0))})
+    health("HEALTH LIFE an output time too large for a float is no life", 1, lq(45) + HSUM1,
            shows={D1: hshow(hb=45, term=lterm(10 ** 400))})
-    health("HEALTH LIFE another terminal's output is no life", 1, lunread(45),
+    health("HEALTH LIFE another terminal's output is no life", 1, lq(45) + HSUM1,
            shows={D1: hshow(hb=45, term=lterm(lms(1), handle=OTHER))})
-    health("HEALTH LIFE a terminal that is not an object is no life", 1, lunread(45),
+    nohandle = json.loads(hshow(hb=45, term={"lastOutputAt": lms(1)}))
+    nohandle["result"]["worker"] = {}
+    del nohandle["result"]["dispatch"]["assigneeHandle"]
+    health("HEALTH LIFE no handle on either side is no life", 1, lq(45, who="worker " + D1) + HSUM1,
+           shows={D1: json.dumps(nohandle)})
+    health("HEALTH LIFE a terminal that is not an object is no life", 1, lq(45) + HSUM1,
            shows={D1: hshow(hb=45, term="term_x")})
     health("HEALTH LIFE output just past the clock is life", 0, [HOK],
            shows={D1: hshow(hb=45, term=lterm((NOW + 170) * 1000))})
-    health("HEALTH LIFE output far in the future is no life", 1, lunread(45),
+    health("HEALTH LIFE output far in the future is no life", 1, lq(45) + HSUM1,
            shows={D1: hshow(hb=45, term=lterm((NOW + 200) * 1000))})
+    health("HEALTH LIFE output stops counting at the long bound", 1,
+           lq(45, out="not counted past 180 minutes") + HSUM1,
+           shows={D1: hshow(hb=45, started=180, term=lterm(lms(1)))}, acked=["long:" + D1])
+    health("HEALTH LIFE output counts just before the long bound", 0, [HOK],
+           shows={D1: hshow(hb=45, started=179, term=lterm(lms(1)))})
     health("HEALTH LIFE commit on the worktree's branch is life", 0, [HOK],
-           shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=LWT))})
+           shows={D1: hshow(hb=45, term=lterm(lms(50), **CT))})
     health("HEALTH LIFE commit read through a WSL path", 0, [HOK],
            shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=UNC))})
-    health("HEALTH LIFE commit counts with no output time", 0, [HOK],
-           shows={D1: hshow(hb=45, term=lterm(branch=LBRANCH, path=LWT))})
-    health("HEALTH LIFE commit before the dispatch is the base, not life", 1, lquiet(45),
-           shows={D1: hshow(hb=45, started=4, term=lterm(lms(50), branch=LBRANCH, path=LWT))})
-    health("HEALTH LIFE a branch not checked out at that path is no life", 1, lquiet(45),
+    health("HEALTH LIFE commit read through a wsl$ path", 0, [HOK],
+           shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=UNC2))})
+    health("HEALTH LIFE commit counts with no output time", 0, [HOK], shows={D1: hshow(hb=45, term=lterm(**CT))})
+    health("HEALTH LIFE fresh output beats an older commit", 0, [HOK],
+           shows={D1: hshow(hb=45, started=50, term=lterm(lms(5), **CT))}, env_extra={"STUB_GIT": "old"})
+    health("HEALTH LIFE commit before the dispatch is the base, not life", 1,
+           lq(45, out=M50, commit="none since its dispatch") + HSUM1,
+           shows={D1: hshow(hb=45, started=4, term=lterm(lms(50), **CT))})
+    health("HEALTH LIFE a branch not checked out at that path is no life", 1, lq(45, out=M50) + HSUM1,
            shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=HWT))})
-    health("HEALTH LIFE a path outside this repo is no life", 1, lquiet(45),
+    health("HEALTH LIFE a path outside this repo is no life", 1, lq(45, out=M50) + HSUM1,
            shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path="/tmp/not-this-repo"))})
-    health("HEALTH LIFE a failing git is no life", 1, lquiet(45),
-           shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=LWT))}, env_extra={"STUB_GIT": "fail"})
-    health("HEALTH LIFE a commit time git cannot give is no life", 1, lquiet(45),
-           shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=LWT))}, env_extra={"STUB_GIT": "junk"})
-    health("HEALTH LIFE a future commit is no life", 1, lquiet(45),
-           shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=LWT))}, env_extra={"STUB_GIT": "future"})
+    health("HEALTH LIFE a failing git is no life", 1, lq(45, out=M50) + HSUM1,
+           shows={D1: hshow(hb=45, term=lterm(lms(50), **CT))}, env_extra={"STUB_GIT": "fail"})
+    health("HEALTH LIFE a commit time git cannot give is no life", 1, lq(45, out=M50) + HSUM1,
+           shows={D1: hshow(hb=45, term=lterm(lms(50), **CT))}, env_extra={"STUB_GIT": "junk"})
+    health("HEALTH LIFE a future commit is no life", 1, lq(45, out=M50) + HSUM1,
+           shows={D1: hshow(hb=45, term=lterm(lms(50), **CT))}, env_extra={"STUB_GIT": "future"})
     t0 = time.time()
     health("HEALTH LIFE a hung git ends the git reads", 1,
-           ["ORCA alert: stale:%s:%d — worker %s (%s) showed no heartbeat, terminal output or commit for 45 minutes (bound 30)"
-            % (d, NOW - 45 * 60, d, WORKER) for d in (D1, D2)]
+           lq(45, out=M50) + lq(45, out=M50, who="worker %s (%s)" % (D2, WORKER), did=D2)
            + ["ORCA health: 2 alerts — ask the operator (§12b rule 8)", HSUM1[1]],
            wlist=hwl((D1, "in_progress"), (D2, "in_progress")),
-           shows={D1: hshow(hb=45, term=lterm(lms(50), branch=LBRANCH, path=LWT)),
-                  D2: hshow(did=D2, hb=45, term=lterm(lms(50), branch=LBRANCH, path=LWT))},
+           shows={D1: hshow(hb=45, term=lterm(lms(50), **CT)), D2: hshow(did=D2, hb=45, term=lterm(lms(50), **CT))},
            env_extra={"STUB_GIT": "hang"})
     took = time.time() - t0
     (ok if took < 5.5 else miss)("HEALTH LIFE a hung git costs one 3-second wait" if took < 5.5 else
-                               "HEALTH LIFE a hung git costs one 3-second wait: %.1fs" % took)
+                                 "HEALTH LIFE a hung git costs one 3-second wait: %.1fs" % took)
     GMARK = os.path.join(TMP, "git-read")
     for name, kw in (("HEALTH LIFE a worker with a pending ask reads no life", {"hb": 45, "cats": ("input",)}),
                      ("HEALTH LIFE a fresh worker reads no life", {"hb": 5})):
@@ -1638,7 +1654,7 @@ if LEGS in ("all", "health"):
             os.remove(GMARK)
     health("HEALTH LIFE an acked silence stays quiet", 0, [HOK], shows={D1: hshow(hb=45, term=lterm(lms(35)))},
            acked=["stale:%s:%d" % (D1, NOW - 35 * 60)])
-    health("HEALTH LIFE life after an ack alerts again", 1, lquiet(31), shows={D1: hshow(hb=45, term=lterm(lms(31)))},
+    health("HEALTH LIFE life after an ack alerts again", 1, lq(31, out="31 minutes ago") + HSUM1, shows={D1: hshow(hb=45, term=lterm(lms(31)))},
            acked=["stale:%s:%d" % (D1, NOW - 35 * 60)])
     # Questions.
     QA, QB = "msg_aaaaaa000001", "msg_bbbbbb000002"
@@ -1764,7 +1780,7 @@ if LEGS in ("all", "health"):
     health("HEALTH acked file is not reported", 0, [HOK], keep=True)
     health("HEALTH another worktree's ack does not hide it", 1, [af_line()] + HSUM1, keep=True, cwd=HREPO)
     health("HEALTH new stale period alerts again", 1,
-           ["ORCA alert: stale:%s:%d — %s sent no heartbeat for 31 minutes (bound 30)%s" % (D1, NOW - 31 * 60, W, NOTERM)] + HSUM1,
+           ["ORCA alert: stale:%s:%d — %s shows no life for 31 minutes (bound 30): heartbeat 31 minutes ago, terminal output unread, commit unread" % (D1, NOW - 31 * 60, W)] + HSUM1,
            shows={D1: hshow(hb=31)}, acked=["stale:%s:%d" % (D1, stale_t)])
     health("HEALTH ack of a missing alert file fails", 1,
            ["ORCA ack failed: send-failed:%s — no such alert file" % AF],

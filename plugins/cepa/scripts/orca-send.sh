@@ -580,7 +580,7 @@ case "$cepa_send_cli" in
 esac
 case "${cepa_send_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || case "$cepa_send_cli" in
+  orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_send_cli" in
     /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
       cepa_send_l=; [ ! -f "$cepa_send_cli" ] || { IFS= read -r cepa_send_l <"$cepa_send_cli"; } 2>/dev/null || :
       case "$cepa_send_l" in

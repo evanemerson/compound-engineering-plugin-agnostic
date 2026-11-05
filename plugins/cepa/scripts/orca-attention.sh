@@ -146,7 +146,7 @@ case "$cepa_at_cli" in
 esac
 case "${cepa_at_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || case "$cepa_at_cli" in
+  orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_at_cli" in
     /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
       cepa_at_l=; [ ! -f "$cepa_at_cli" ] || { IFS= read -r cepa_at_l <"$cepa_at_cli"; } 2>/dev/null || :
       case "$cepa_at_l" in

@@ -1519,7 +1519,7 @@ prints exactly one line, `ORCA: present cli=<cli> via=<how>` or
 `ORCA: absent (<what failed>)`:
 
 ```bash
-cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=unknown
+cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=Linux
 cepa_orca_why=
 if [ -n "${ORCA_CLI_COMMAND:-}" ]; then
   cepa_orca_cli=$ORCA_CLI_COMMAND
@@ -1609,7 +1609,8 @@ fi
   line** must be exactly `#!/usr/bin/env bash` or `#!/usr/bin/env sh`, which
   is what every Orca launcher writer emits. GNOME Orca is a Python program,
   so a symlink or a shadowed directory that reaches it from a good path is
-  refused too. A new Orca path reads as absent until it is added here: the
+  refused too. A `uname` that fails reads as Linux, so an unknown OS gets the
+  strict test. A new Orca path reads as absent until it is added here: the
   safe answer. **Stated limit.** A shell script at a good path that itself
   execs the screen reader passes; only a process of this user can plant it.
   `scripts/check-orca-cli-path.sh` runs every site of this check and fails on
@@ -2354,7 +2355,7 @@ limits.
      if [ -z "$cepa_title_why" ]; then
        case "${cepa_title_cli##*/}" in
          orca-ide|orca-dev) ;;
-         orca) [ "$(uname -s 2>/dev/null)" != Linux ] || case "$cepa_title_cli" in
+         orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_title_cli" in
            /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
              cepa_title_l=; [ ! -f "$cepa_title_cli" ] || { IFS= read -r cepa_title_l <"$cepa_title_cli"; } 2>/dev/null || :
              case "$cepa_title_l" in

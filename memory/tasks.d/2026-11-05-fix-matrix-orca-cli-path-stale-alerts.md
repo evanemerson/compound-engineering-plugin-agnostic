@@ -35,3 +35,23 @@ these lines stay here until it reads them.
 6. [L82, untested] The 10-second total git budget in orca-health.sh has no
    control: a test needs more than 10 real seconds per mutant. The 3-second
    wait and the stop after a timeout are controlled.
+
+## Undone items from the PR #135 review (2026-11-05)
+
+Findings file: the `todos/review-*-fix-matrix-orca-cli-path-stale-alerts.md`
+of this branch, findings 10 to 14.
+
+7. [P3] A failed read after an ack can move the stale key back: one extra
+   question. Stated in the header — `plugins/cepa/scripts/orca-health.sh`
+8. [P3] worktree_refs caches a failed read for the run. The alert stays and
+   prints `commit unread` — `plugins/cepa/scripts/orca-health.sh`
+9. [P3] Skill extraction raises a traceback, not a MISS. Still red —
+   `scripts/check-orca-cli-path.sh`
+10. [P3] `..` segments, read-then-run, one refusal for an unreadable launcher:
+    inside §12a's same-user limit — `plugins/cepa/scripts/orca-health.sh`
+11. [P3] ack is refused when the launcher file is gone —
+    `plugins/cepa/scripts/orca-health.sh`
+12. [process] `/cepa:task` Phase 2 and 3.1b were not run as written: no
+    brainstorming skill and no plan-review panel, because the preamble bars
+    helpers unless the task asks, and the brief fixed the design. PR review
+    ran in full.

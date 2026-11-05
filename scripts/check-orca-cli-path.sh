@@ -128,7 +128,7 @@ class World:
         self.write(p, "#!/usr/bin/env python3\nopen(%r, 'w').close()\nprint('{\"ok\": true, \"result\": {}}')\n" % self.mark(tag))
 
     def uname(self, sysname):
-        self.write(os.path.join(self.bin, "uname"), "#!/bin/sh\necho %s\n" % sysname)
+        self.write(os.path.join(self.bin, "uname"), "#!/bin/sh\necho %s\n" % sysname if sysname else "#!/bin/sh\nexit 1\n")
 
     def run(self, site, cli, env_cli):
         argv, text = SITES[site][0](self, cli)
@@ -236,6 +236,9 @@ CASES = [
     ("empty file at a good path refused", "Linux", empty_at_path, 1),
     ("bare orca refused", "Linux", lambda w: "orca", 2),
     ("any path passes off Linux", "Darwin", darwin_path, 0),
+    ("bare orca passes off Linux", "Darwin", lambda w: "orca", 0),
+    ("failed uname reads as Linux, bare refused", None, lambda w: "orca", 2),
+    ("failed uname reads as Linux, good path passes", None, good_shim, 0),
 ]
 
 for site in SITES:
@@ -277,10 +280,10 @@ if not only:
             miss("SAME no Linux arm in %s" % name)
             return None
         t = textwrap.dedent(m.group(0))
-        t = re.sub(r'"\$\(uname -s 2>/dev/null\)"|"\$cepa_orca_os"', "OS", t)
+        t = re.sub(r'"\$\(uname -s 2>/dev/null \|\| echo Linux\)"|"\$cepa_orca_os"', "OS", t)
         t = re.sub(r"cepa_[a-z]+_(cli|l)\b", r"\1", t)
         t = re.sub(r'refuse "[^"\n]*"|cepa_[a-z]+_why="[^"\n]*"', "REFUSE", t)
-        return re.sub(r"\bcli\b", "cli", t)
+        return t
 
     arms = {}
     for n in ("attention", "health", "lane", "nudge", "outbox", "rebind", "send"):
@@ -301,7 +304,8 @@ if not only:
         for n in names:
             p = os.path.join(d, n)
             try:
-                if "orca-ide|orca-dev)" in open(p, encoding="utf-8", errors="replace").read():
+                text = open(p, encoding="utf-8", errors="replace").read()
+                if re.search(r"orca-(ide|dev)\s*\|\s*orca-(ide|dev)\s*\)", text):
                     found.add(os.path.relpath(p, ROOT))
             except OSError:
                 pass

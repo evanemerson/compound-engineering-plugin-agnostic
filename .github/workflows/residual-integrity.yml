@@ -402,6 +402,7 @@ jobs:
       - name: Check Orca cli path controls
         if: always()
         run: bash scripts/check-orca-cli-path-controls.sh
+
   orca-attention:
     # The attention flag (autonomy section 12b rule 7) runs only through
     # plugins/cepa/scripts/orca-attention.sh, which marks this checkout's own

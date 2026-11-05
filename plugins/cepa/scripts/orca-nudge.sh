@@ -7,7 +7,7 @@
 #
 # Usage: orca-nudge.sh <cli> <handle>
 #   <cli>     §12a's printed `cli=` value: the bare name orca-ide, orca-dev or
-#             (off Linux) orca, found on PATH. A path is accepted only when it
+#             (off Linux, bare) orca, found on PATH. A path is accepted only when it
 #             is absolute and equals ORCA_CLI_COMMAND, which Orca exports: any
 #             other path could name a planted binary, which the script would
 #             run and would type into another session (#100 review). On Linux
@@ -113,7 +113,7 @@ case "$cepa_nudge_cli" in
 esac
 case "${cepa_nudge_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || case "$cepa_nudge_cli" in
+  orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_nudge_cli" in
     /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
       cepa_nudge_l=; [ ! -f "$cepa_nudge_cli" ] || { IFS= read -r cepa_nudge_l <"$cepa_nudge_cli"; } 2>/dev/null || :
       case "$cepa_nudge_l" in

@@ -43,20 +43,28 @@ def refusal(site, why):
 def arm_mutants(site):
     v = PFX[site]
     path, bare = refusal(site, "path"), refusal(site, "bare")
-    os_test = '"$cepa_orca_os" != Linux' if site == "detect" else '"$(uname -s 2>/dev/null)" != Linux'
+    os_test = '"$cepa_orca_os" != Linux' if site == "detect" else '"$(uname -s 2>/dev/null || echo Linux)" != Linux'
+    no_uname = {"failed uname reads as Linux, bare refused"}
+    any_os = {"any path passes off Linux", "bare orca passes off Linux"}
     return [
         ("any-path", "/*) %s ;;\n" % path, "/*) ;;\n", BAD_PATHS),
         ("first-line-off", "*) %s ;;\n" % path, "*) ;;\n", READER),
-        ("bare-allowed", "*) %s ;;\n" % bare, "*) ;;\n", {"bare orca refused"}),
+        ("bare-allowed", "*) %s ;;\n" % bare, "*) ;;\n", {"bare orca refused"} | no_uname),
         ("no-file-guard", '%s_l=; [ ! -f "$%s_cli" ] || {' % (v, v), '%s_l=; {' % v,
          {"fifo at a good path refused, no hang"}),
         ("no-sh-launcher", "'#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;", "'#!/usr/bin/env bash') ;;",
          {"serve path passes"}),
         ("no-shim-path", "/*/linux-orca-cli-shim/orca|/*/cli/bin/orca)", "/*/cli/bin/orca)",
-         {"shim path passes"}),
+         {"shim path passes", "failed uname reads as Linux, good path passes"}),
         ("no-serve-path", "/*/linux-orca-cli-shim/orca|/*/cli/bin/orca)", "/*/linux-orca-cli-shim/orca)",
          {"serve path passes"}),
-        ("check-off-linux", os_test, os_test.replace("!= Linux", "= Linux"), None),
+        ("check-inverted", os_test, os_test.replace("!= Linux", "= Linux"),
+         BAD_PATHS | READER | any_os | {"bare orca refused"} | no_uname),
+        ("check-on-every-os", "[ %s ] || case" % os_test, "case", any_os),
+        ("failed-uname-open", ("cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=Linux" if site == "detect"
+                               else "uname -s 2>/dev/null || echo Linux"),
+         ("cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=unknown" if site == "detect" else "uname -s 2>/dev/null"),
+         no_uname),
     ]
 
 
@@ -110,10 +118,6 @@ def control(job):
             return "MISS %s: anchor text is gone" % label
         rc, lines = run(d, "--site", site)
         got = names(lines, site)
-        if want is None:
-            # The whole arm is skipped or inverted: Linux cases go red, and
-            # the off-Linux case does too. Only red is pinned here.
-            return None if rc == 1 and got else "MISS %s: stayed green" % label
         return None if rc == 1 and got == want else "MISS %s: killed %s, want %s" % (label, sorted(got), sorted(want))
     finally:
         shutil.rmtree(d, ignore_errors=True)
@@ -140,7 +144,7 @@ if lines != ["MISS SAME the arm differs at: outbox"]:
 shutil.rmtree(d, ignore_errors=True)
 
 d = tree()
-open(os.path.join(d, SCRIPTS, "orca-new.sh"), "w").write("case x in orca-ide|orca-dev) ;; esac\n")
+open(os.path.join(d, SCRIPTS, "orca-new.sh"), "w").write("case x in orca-dev | orca-ide) ;; esac\n")
 rc, lines = run(d)
 if not (len(lines) == 1 and lines[0].startswith("MISS SITES") and "orca-new.sh" in lines[0]):
     errs.append("MISS SITES new file: got %r" % lines)
