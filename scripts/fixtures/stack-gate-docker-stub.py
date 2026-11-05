@@ -20,13 +20,21 @@ Strict like real docker where the gate depends on it:
           id; a 12-char prefix resolves. $STUB_DOCKER_FAIL=inspect exits 1.
   add <project> <wd> <id>   (not docker) appends a running container; the
           check's start command uses it to model a stack coming up.
-  compose [<flag> <value>…] config --images   prints $STUB_COMPOSE_IMAGES
-          (comma-separated), each `{p}` replaced by $COMPOSE_PROJECT_NAME, so
-          an image list read without the project name finds nothing.
-          $STUB_DOCKER_FAIL=config exits 1.
+  compose [<flag> <value>…] config --no-env-resolution --format json   prints
+          the project as JSON,
+          with Compose's shape: top-level `name` ($COMPOSE_PROJECT_NAME, so a
+          read without the project name finds nothing) and `services`.
+          $STUB_COMPOSE_IMAGES is comma-separated: `{p}-web` is a service
+          `web` with a `build:` section and no `image:`; `build=<image>` has
+          both; any other entry is a pull-only `image:`.
+          $STUB_COMPOSE_JSON, when set, is a file printed instead, with
+          `{p}` replaced as above. Only this exact form: `--images` exits 64,
+          so a gate back on that list goes red.
+          $STUB_DOCKER_FAIL=config exits 1 with no stdout;
+          $STUB_DOCKER_FAIL=config-late prints the JSON, then exits 1.
   compose [<flag> <value>…] build   appends `start <project> <time>` and
           `end <project> <time>` to $STUB_BUILD_LOG around a sleep of
-          $STUB_BUILD_SLEEP seconds, adds the listed images to the image
+          $STUB_BUILD_SLEEP seconds, adds the built images to the image
           store, and exits $STUB_BUILD_RC (default 0).
   image inspect [--format <t>] [--] <ref…>   exits 1 unless every ref is in
           the JSON list in $STUB_DOCKER_IMAGES (a missing file is empty).
@@ -122,17 +130,31 @@ def images():
 
 if argv[:1] == ["compose"]:
     proj = os.environ.get("COMPOSE_PROJECT_NAME", "")
-    listed = [x.replace("{p}", proj) for x in os.environ.get("STUB_COMPOSE_IMAGES", "").split(",") if x]
+    services, built = {}, []
+    for n, x in enumerate(y for y in os.environ.get("STUB_COMPOSE_IMAGES", "").split(",") if y):
+        if x.startswith("build="):
+            image = x[len("build="):].replace("{p}", proj)
+            services[f"s{n}"] = {"build": {"context": "/app"}, "image": image}
+            built.append(image)
+        elif x.startswith("{p}-"):
+            services[x[len("{p}-"):]] = {"build": {"context": "/app"}}
+            built.append(x.replace("{p}", proj))
+        else:
+            services[f"s{n}"] = {"image": x}
     rest = argv[1:]
     while rest and rest[0].startswith("-"):
         rest = rest[2:]
-    if rest == ["config", "--images"]:
+    if rest == ["config", "--no-env-resolution", "--format", "json"]:
         if FAIL == "config":
             print("config failed", file=sys.stderr)
             sys.exit(1)
-        for x in listed:
-            print(x)
-        sys.exit(0)
+        fixture = os.environ.get("STUB_COMPOSE_JSON")
+        if fixture:
+            with open(fixture) as f:
+                print(f.read().replace("{p}", proj))
+        else:
+            print(json.dumps({"name": proj, "services": services}))
+        sys.exit(1 if FAIL == "config-late" else 0)
     if rest == ["build"]:
         blog = os.environ.get("STUB_BUILD_LOG")
         def note(w):
@@ -144,7 +166,7 @@ if argv[:1] == ["compose"]:
         if IMAGES:
             have = images()
             with open(IMAGES, "w") as f:
-                json.dump(sorted(set(have) | set(listed)), f)
+                json.dump(sorted(set(have) | set(built)), f)
         note("end")
         sys.exit(int(os.environ.get("STUB_BUILD_RC", "0")))
     print(f"stub docker: unsupported compose {argv}", file=sys.stderr)

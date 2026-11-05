@@ -8,7 +8,7 @@
 # changed shape and the mutant needs re-reading.
 #
 # Every case the unmutated check prints is in at least one mutant's exact
-# set, and every leg (YAML, GATE, MAKE, TEMPLATE, ENTRY) has a mutant that
+# set, and every leg (YAML, GATE, MAKE, TEMPLATE, ENTRY, SETUP) has a mutant that
 # only its own cases kill; the last controls assert both. The one case no
 # mutant of the skill can reach, `YAML PyYAML available`, is about the
 # runner, not the skill: it prints only when the import fails.
@@ -125,7 +125,8 @@ MUTANTS = [
     ("template-wrong-fence", "````markdown\nYou are <session name>.", "````text\nYou are <session name>.",
      {"TEMPLATE one first-prompt block", "TEMPLATE line 1 is the name blank", "TEMPLATE blank <lane names>",
       "TEMPLATE blank <lane count>", "TEMPLATE steps 1-5 in order", "TEMPLATE worker step make up",
-      "TEMPLATE step 1 names the Run", "TEMPLATE step 2 build contract", "TEMPLATE step 5 every pre-fix lane"}),
+      "TEMPLATE step 1 names the Run", "TEMPLATE step 2 build contract", "TEMPLATE step 5 every pre-fix lane",
+      "SETUP first prompt cites the wait", "SETUP first prompt checks item 7"}),
     # L71: each fixed step keeps its contract.
     ("template-run-not-named", "   (`run-create`), or `coord:<repo>` cannot reach this session.",
      "   (it may keep the old Run).", {"TEMPLATE step 1 names the Run"}),
@@ -151,6 +152,31 @@ MUTANTS = [
     ("entry-promoted", "1. **One entry point: `orca-lane.sh create`.**",
      "1. **One entry point: `orca-lane.sh create`, or `make worktree branch=<b>` by hand.**",
      {"ENTRY make worktree branch= only as forbidden"}),
+    # SETUP (L78)
+    ("timeout-rule-gone", "uses `timeout --foreground`, or, for\n   `compose run`, `-T </dev/null`.**",
+     "has a bound.**", {"SETUP timeout rule in the contract"}),
+    ("timeout-why-gone", "`timeout` puts its child in a background process\n   group, so a child",
+     "a child", {"SETUP timeout rule in the contract"}),
+    ("yaml-bare-timeout", "setup: env -u COMPOSE_PROJECT_NAME make worktree-init",
+     "setup: env -u COMPOSE_PROJECT_NAME timeout 300 make worktree-init", {"SETUP examples run no bare timeout"}),
+    ("tab-read-at-once", "for up to 5 minutes after `create` returned", "once", {"SETUP tab wait stated"}),
+    ("tab-absence-passes", "No tab yet is no result, never a pass.", "No tab means setup passed.", {"SETUP tab wait stated"}),
+    ("tab-never-shows-recreate", "do not run `create` again", "run `create` again", {"SETUP tab that never shows stated"}),
+    ("tab-never-shows-gone", "**When the tab never shows:**", "**Otherwise:**", {"SETUP tab that never shows stated"}),
+    ("tab-no-worker-gone", "start no worker in that lane, do not run setup", "do not run setup",
+     {"SETUP tab that never shows stated"}),
+    ("tab-operator-gone", "Then tell the\n  operator the lane,", "Then note the\n  lane,",
+     {"SETUP tab that never shows stated"}),
+    ("tab-no-setup-check", "First confirm the lane's `orca.yaml` has `scripts.setup`.", "First look at the lane.",
+     {"SETUP tab wait stated"}),
+    ("tab-read-preview", "Read the whole tab with `orca-ide terminal read --terminal <handle>`, never\n  `preview` alone",
+     "Read the row's `preview`", {"SETUP running tab is no result"}),
+    ("tab-running-passes", "**A tab still running is no result:**", "**A tab still running has passed:**",
+     {"SETUP running tab is no result"}),
+    ("tab-end-unstated", "when the tab's shell prompt returns", "soon", {"SETUP running tab is no result"}),
+    ("prompt-no-wait", 'tab (the skill\'s "Reading the `Setup` tab"). Confirm', "tab. Confirm", {"SETUP first prompt cites the wait"}),
+    ("prompt-no-item-7", "and contract item 7,\n   in `worktree-init` and every target it runs.", "and the rest.",
+     {"SETUP first prompt checks item 7"}),
 ]
 
 def run(path):
@@ -197,7 +223,7 @@ with tempfile.TemporaryDirectory() as d:
     control("every case has a killing mutant", clean_cases <= covered,
             "no mutant kills: %s" % sorted(clean_cases - covered))
 
-    for leg in ("YAML", "GATE", "MAKE", "TEMPLATE", "ENTRY"):
+    for leg in ("YAML", "GATE", "MAKE", "TEMPLATE", "ENTRY", "SETUP"):
         control("leg %s has a mutant only it kills" % leg, bool(killers.get(leg)),
                 "no mutant is killed by %s alone" % leg)
 
