@@ -175,7 +175,16 @@ case "$cepa_rb_cli" in
 esac
 case "${cepa_rb_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;
+  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || case "$cepa_rb_cli" in
+    /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
+      cepa_rb_l=; [ ! -f "$cepa_rb_cli" ] || { IFS= read -r cepa_rb_l <"$cepa_rb_cli"; } 2>/dev/null || :
+      case "$cepa_rb_l" in
+        '#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;
+        *) refuse "an orca path on Linux is not an Orca launcher" ;;
+      esac ;;
+    /*) refuse "an orca path on Linux is not an Orca launcher" ;;
+    *) refuse "bare orca on Linux is the screen reader" ;;
+  esac ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
 # An empty `run:` is no Run, as an absent one is.

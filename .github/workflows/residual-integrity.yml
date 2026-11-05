@@ -182,7 +182,7 @@ jobs:
   # shard nears half its bound, add a job and renumber every --shard I/N
   # rather than raise the bound.
   orca-nudge:
-    # The nudge check, then controls shard 1/3.
+    # The nudge check, then controls shard 1/4.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -199,29 +199,41 @@ jobs:
       - name: Check Orca nudge
         if: always()
         run: bash scripts/check-orca-nudge.sh
-      - name: Check Orca nudge controls (shard 1/3)
+      - name: Check Orca nudge controls (shard 1/4)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 1/3
+        run: bash scripts/check-orca-nudge-controls.sh --shard 1/4
 
   orca-nudge-2:
-    # Controls shard 2/3. Static command, no workflow-context interpolation.
+    # Controls shard 2/4. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca nudge controls (shard 2/3)
+      - name: Check Orca nudge controls (shard 2/4)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 2/3
+        run: bash scripts/check-orca-nudge-controls.sh --shard 2/4
 
   orca-nudge-3:
-    # Controls shard 3/3. Static command, no workflow-context interpolation.
+    # Controls shard 3/4. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca nudge controls (shard 3/3)
+      - name: Check Orca nudge controls (shard 3/4)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 3/3
+        run: bash scripts/check-orca-nudge-controls.sh --shard 3/4
+
+  orca-nudge-4:
+    # Controls shard 4/4. Static command, no workflow-context interpolation.
+    # A fourth shard came with L82: shard 1 took 481 of 600 seconds
+    # hosted (run 42052022556) before its mutants and slower health legs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 4/4)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 4/4
 
   orca-lane:
     # The lane lifecycle (autonomy section 12b rule 2) runs only through
@@ -374,6 +386,22 @@ jobs:
         run: bash scripts/check-orca-outbox-controls.sh
 
 
+  orca-cli-path:
+    # punch-list L81: on Linux Orca's cli is an absolute path whose basename
+    # is orca, which is also the GNOME screen reader's name. The check runs
+    # every site of the cli check against planted launchers and stub tools,
+    # never a real Orca; the controls mutate each site. Headers own the legs
+    # and limits. Static commands, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca cli path
+        if: always()
+        run: bash scripts/check-orca-cli-path.sh
+      - name: Check Orca cli path controls
+        if: always()
+        run: bash scripts/check-orca-cli-path-controls.sh
   orca-attention:
     # The attention flag (autonomy section 12b rule 7) runs only through
     # plugins/cepa/scripts/orca-attention.sh, which marks this checkout's own

@@ -10,7 +10,8 @@
 #             (off Linux) orca, found on PATH. A path is accepted only when it
 #             is absolute and equals ORCA_CLI_COMMAND, which Orca exports: any
 #             other path could name a planted binary, which the script would
-#             run and would type into another session (#100 review).
+#             run and would type into another session (#100 review). On Linux
+#             an `orca` basename also passes §12a's launcher path test.
 #   <handle>  the target terminal handle, `term_` and 36 hex-or-dash chars.
 #
 # Prints one result line, and its exit code says which:
@@ -112,7 +113,16 @@ case "$cepa_nudge_cli" in
 esac
 case "${cepa_nudge_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;
+  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || case "$cepa_nudge_cli" in
+    /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
+      cepa_nudge_l=; [ ! -f "$cepa_nudge_cli" ] || { IFS= read -r cepa_nudge_l <"$cepa_nudge_cli"; } 2>/dev/null || :
+      case "$cepa_nudge_l" in
+        '#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;
+        *) refuse "an orca path on Linux is not an Orca launcher" ;;
+      esac ;;
+    /*) refuse "an orca path on Linux is not an Orca launcher" ;;
+    *) refuse "bare orca on Linux is the screen reader" ;;
+  esac ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
 cepa_nudge_valid_term || refuse "the handle is not a terminal handle"
