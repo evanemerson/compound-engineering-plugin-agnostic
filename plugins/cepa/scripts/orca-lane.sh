@@ -345,7 +345,16 @@ case "$cepa_ln_cli" in
 esac
 case "${cepa_ln_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;
+  orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_ln_cli" in
+    /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
+      cepa_ln_l=; [ ! -f "$cepa_ln_cli" ] || { IFS= read -r cepa_ln_l <"$cepa_ln_cli"; } 2>/dev/null || :
+      case "$cepa_ln_l" in
+        '#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;
+        *) refuse "an orca path on Linux is not an Orca launcher" ;;
+      esac ;;
+    /*) refuse "an orca path on Linux is not an Orca launcher" ;;
+    *) refuse "bare orca on Linux is the screen reader" ;;
+  esac ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
 [[ $cepa_ln_seen == *" action "* ]] || refuse "the action field is missing"

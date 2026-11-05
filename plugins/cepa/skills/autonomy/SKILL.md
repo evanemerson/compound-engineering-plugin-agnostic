@@ -1519,7 +1519,7 @@ prints exactly one line, `ORCA: present cli=<cli> via=<how>` or
 `ORCA: absent (<what failed>)`:
 
 ```bash
-cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=unknown
+cepa_orca_os=$(uname -s 2>/dev/null) || cepa_orca_os=Linux
 cepa_orca_why=
 if [ -n "${ORCA_CLI_COMMAND:-}" ]; then
   cepa_orca_cli=$ORCA_CLI_COMMAND
@@ -1531,7 +1531,16 @@ if [ -n "${ORCA_CLI_COMMAND:-}" ]; then
   if [ -z "$cepa_orca_why" ]; then
     case "${cepa_orca_cli##*/}" in
       orca-ide|orca-dev) ;;
-      orca) [ "$cepa_orca_os" != Linux ] || cepa_orca_why="ORCA_CLI_COMMAND names bare orca on Linux" ;;
+      orca) [ "$cepa_orca_os" != Linux ] || case "$cepa_orca_cli" in
+        /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
+          cepa_orca_l=; [ ! -f "$cepa_orca_cli" ] || { IFS= read -r cepa_orca_l <"$cepa_orca_cli"; } 2>/dev/null || :
+          case "$cepa_orca_l" in
+            '#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;
+            *) cepa_orca_why="ORCA_CLI_COMMAND is not an Orca launcher" ;;
+          esac ;;
+        /*) cepa_orca_why="ORCA_CLI_COMMAND is not an Orca launcher" ;;
+        *) cepa_orca_why="ORCA_CLI_COMMAND names bare orca on Linux" ;;
+      esac ;;
       *) cepa_orca_why="ORCA_CLI_COMMAND does not name an Orca CLI" ;;
     esac
   fi
@@ -1588,6 +1597,24 @@ fi
   **Never run bare `orca` on Linux**: outside Orca's terminals it normally
   resolves to the GNOME Orca screen reader and starts speech on the operator's
   machine. That holds for a value in `ORCA_CLI_COMMAND` too.
+- **Orca on Linux exports an absolute path whose basename is `orca`**
+  (punch-list L81): the desktop app writes
+  `<user data>/linux-orca-cli-shim/orca`, and `orca serve` uses
+  `<user data>/cli/bin/orca` (both read in Orca 1.4.249's installed code;
+  neither is measured on a Linux host here). So on Linux an `orca` basename
+  passes only as such a path, by two tests, and neither one runs the file.
+  **The path** must end in one of those two forms, so `/usr/bin/orca`,
+  `/usr/local/bin/orca` and Orca's `~/.local/bin/orca` dispatcher (outside
+  Orca it can hand off to the next `orca` on PATH) are refused. **The first
+  line** must be exactly `#!/usr/bin/env bash` or `#!/usr/bin/env sh`, which
+  is what every Orca launcher writer emits. GNOME Orca is a Python program,
+  so a symlink or a shadowed directory that reaches it from a good path is
+  refused too. A `uname` that fails reads as Linux, so an unknown OS gets the
+  strict test. A new Orca path reads as absent until it is added here: the
+  safe answer. **Stated limit.** A shell script at a good path that itself
+  execs the screen reader passes; only a process of this user can plant it.
+  `scripts/check-orca-cli-path.sh` runs every site of this check and fails on
+  one that differs.
 - **A valid `ORCA_CLI_COMMAND` is probed too, at 3 seconds.** Orca sets the
   variable in its terminals, but a shell started from one (tmux, nohup) keeps
   it after Orca has closed. So a valid value runs the same `status` probe as
@@ -1597,8 +1624,8 @@ fi
   under WSL, `orca-ide status --json` took 0.46–0.49 s over 6 runs and
   0.475–0.621 s over 8 more, and a 0.5-second bound read absent in 5 of 20
   runs. Valid means a plain command name or path, with no leading `-`, whose
-  basename is `orca-ide`, `orca-dev` or (off Linux) `orca`, and which is on
-  PATH. Any other value reads as absent with no probe: the value is later
+  basename is `orca-ide`, `orca-dev` or `orca` (on Linux only as the launcher
+  path above), and which is on PATH. Any other value reads as absent with no probe: the value is later
   substituted into commands, so it is never trusted as shell text.
 - **Every other answer is probed** at 10 seconds plus a 2-second kill. On
   both paths the probe's stdin is `/dev/null` and its stdout goes to a temp
@@ -2194,6 +2221,16 @@ limits.
    the block again, or escalate. `Orca send failed: not proven stored`
    means Orca returned a message id that did not match, so a rerun can
    store the report twice.
+   - **Orca continues a finished worker that has unread mail** (punch-list
+     L81 item 3). When a dispatch settles with an unread message addressed to
+     `dispatch:<id>`, Orca starts a follow-up Dispatch on it, told to read the
+     mail: `followUpOf` names the first one, the terminal stays live, and it
+     owes its own `worker_done`. A follow-up that reports without reading is
+     failed. Only a drain reads (rule 8): a peek leaves the mail unread, so a
+     worker that only peeks gets this follow-up. Read in Orca 1.4.249's
+     installed code and its guide's `send` text; not measured on a live
+     worker. A worker that gets such a follow-up reads the mail, acts on it
+     by its own task's scope, and sends one more `worker_done`.
    - **A worker with no preamble sends its report, never only prints it.**
      When line 2 of its prompt is a `Report to:` line (rule 2), its final
      report sends the Handoff block to that handle with rule 1's send, then
@@ -2318,7 +2355,16 @@ limits.
      if [ -z "$cepa_title_why" ]; then
        case "${cepa_title_cli##*/}" in
          orca-ide|orca-dev) ;;
-         orca) [ "$(uname -s 2>/dev/null)" != Linux ] || cepa_title_why="bare orca on Linux is the screen reader" ;;
+         orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_title_cli" in
+           /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
+             cepa_title_l=; [ ! -f "$cepa_title_cli" ] || { IFS= read -r cepa_title_l <"$cepa_title_cli"; } 2>/dev/null || :
+             case "$cepa_title_l" in
+               '#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;
+               *) cepa_title_why="an orca path on Linux is not an Orca launcher" ;;
+             esac ;;
+           /*) cepa_title_why="an orca path on Linux is not an Orca launcher" ;;
+           *) cepa_title_why="bare orca on Linux is the screen reader" ;;
+         esac ;;
          *) cepa_title_why="the cli does not name an Orca CLI" ;;
        esac
      fi
@@ -2380,7 +2426,8 @@ limits.
      unknown command, and the empty value is skipped.
    - **The cli is checked as `orca-nudge.sh` checks it** before it runs: a
      plain command name, a path only when it equals `ORCA_CLI_COMMAND`, a
-     basename of `orca-ide`, `orca-dev` or (off Linux) `orca`, and on PATH.
+     basename of `orca-ide`, `orca-dev` or `orca` (§12a's Linux launcher path
+     test), and on PATH.
      It is then run as one quoted word. Why (punch-list L46, security
      review of #110): the block once spliced `<cli>` unquoted into the
      command line, so `orca-ide;touch${IFS}/tmp/x` ran the `touch`. §12a's

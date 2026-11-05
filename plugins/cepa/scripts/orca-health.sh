@@ -58,15 +58,52 @@
 #                        the worker is parked on a prompt only a human can
 #                        answer (Orca: "a waiting worker is healthy, not
 #                        failed", but nobody sees it unless told).
-#   stale:<dispatch>:<last heartbeat>  no heartbeat for 30 minutes or more
-#                        (dispatch.lastHeartbeatAt, else dispatchedAt). The
-#                        longest gap a healthy worker on that Run left was
-#                        20.5 minutes, against a 5-minute cadence. Orca's own
-#                        liveness never reads heartbeats: an agent probe that
-#                        sent none stayed `live` with no attention category.
-#                        Not raised while the dispatch has attention `input`
-#                        (a pending `ask` is itself a liveness signal) or is
-#                        already `exited` or `waiting`.
+#   stale:<dispatch>:<last life>  no life for 30 minutes or more. Life is
+#                        the newest of the heartbeat
+#                        (dispatch.lastHeartbeatAt, else dispatchedAt), the
+#                        worker's terminal output and a commit on its branch
+#                        (LIFE, below). The longest heartbeat gap a healthy
+#                        worker on that Run left was 20.5 minutes, against a
+#                        5-minute cadence. Orca's own liveness never reads
+#                        heartbeats: an agent probe that sent none stayed
+#                        `live` with no attention category. Not raised while
+#                        the dispatch has attention `input` (a pending `ask`
+#                        is itself a liveness signal) or is already `exited`
+#                        or `waiting`.
+#                        LIFE (punch-list L82: a worker in a long shell job
+#                        sends no heartbeat, and each alert cost the operator
+#                        a question). Both reads run only for a worker 30
+#                        minutes or more past its heartbeat with no `input`
+#                        category, and a read that fails or is unknown
+#                        counts as no life, so the alert stays. The alert
+#                        prints each signal's own state, `unread` when it
+#                        could not be read.
+#                        - Terminal output: `terminal.lastOutputAt` (epoch
+#                          ms) in the `worker-show` reply this script already
+#                          has, so it costs no Orca call and no time against
+#                          THE TIME BOUND. Measured on Orca 1.4.249 (WSL),
+#                          2026-11-05: 6 reads over a 72-second foreground
+#                          job that printed nothing were each under 0.4
+#                          seconds old (Claude Code redraws its timer); idle
+#                          agent and shell terminals read 320 to 490 minutes
+#                          old, so an agent at its prompt does not tick it.
+#                          Refused: `terminal` absent or naming another
+#                          handle, the field null or not an integer, or a
+#                          time more than 180 seconds after this script
+#                          started (a read can land 134 seconds after it, so
+#                          a live terminal's time can pass `now`). Not
+#                          counted once the dispatch reaches the `long:`
+#                          bound: `long:` has a key with no time, so after
+#                          its ack only `stale:` still watches an agent hung
+#                          inside a turn whose timer redraws (PR #135 review).
+#                        - A commit: `git log -1` on `terminal.branch`, only
+#                          when `terminal.worktreePath` is a worktree of this
+#                          repo with that branch checked out (`git worktree
+#                          list`), so a same-named branch of another repo is
+#                          not read, and only when the commit is not older
+#                          than the dispatch, so the branch's base is not
+#                          read as the worker's work. Local, 3 seconds a call
+#                          and 10 seconds a run; a timeout ends the git reads.
 #   long:<dispatch>      dispatched 180 minutes or more ago with no
 #                        worker_done. The longest settled dispatch took 55.
 #   question:<msg>       a `question` to this Run's mailbox with no reply
@@ -135,8 +172,9 @@
 # ACKS are empty marker files named by key in <alert dir>/acked/<worktree>/;
 # an alert file stays where it is. `ORCA ack:` prints only after the marker
 # is written; a send-failed key with no such file prints `ORCA ack failed`.
-# A stale key carries the heartbeat time and a waiting key the UTC hour, so a
-# worker that beats again and goes quiet again, or stays parked, alerts again.
+# A stale key carries the last life and a waiting key the UTC hour, so a
+# worker that shows life again and goes quiet again, or stays parked, alerts
+# again.
 #
 # STATED LIMITS:
 #   - It runs only when the coordinator runs a turn. An idle coordinator runs
@@ -148,10 +186,22 @@
 #   - The inbox window is 200 rows, newest first (the whole store was 245 rows
 #     on 2026-10-31). An older question is not seen.
 #   - The bounds are fixed here, from one Run's history. A worker with a
-#     longer honest gap will alert: one blocked on a long background job (the
-#     mutation sweep runs ~43 min) or in `check --wait` sends no heartbeat and
-#     has no `input` category. That costs one question; a missed hang costs
-#     the session.
+#     longer honest gap will alert: one whose turn ended while a background
+#     job runs (the mutation sweep runs ~43 min) sends no heartbeat, prints
+#     nothing and has no `input` category. That costs one question; a missed
+#     hang costs the session.
+#   - Terminal output proves a program drew to the screen, not that it makes
+#     progress. An agent hung inside a turn whose timer still redraws reads
+#     as live until 180 minutes after its dispatch. `check --wait` in the
+#     foreground likely reads the same way; that was not measured.
+#   - A commit on the base branch made after the dispatch reads as life for
+#     up to 30 minutes when the worker branched from it. A worker can also
+#     date a commit up to 180 seconds ahead.
+#   - A worker honest past 180 minutes alerts `stale:` beside `long:`, with
+#     its terminal output `not counted`.
+#   - The stale key follows the newest life that was read, so a read that
+#     fails after an ack can move the key back and ask once more about the
+#     same silence. An extra question, never a lost alert.
 #   - A send that failed and then succeeded on a rerun still leaves its alert
 #     file; the operator acks it.
 #   - `now` is this machine's clock and the Orca times are read as UTC (both
@@ -172,7 +222,16 @@ case "$cepa_h_cli" in
 esac
 case "${cepa_h_cli##*/}" in
   orca-ide|orca-dev) ;;
-  orca) [ "$(uname -s 2>/dev/null)" != Linux ] || refuse "bare orca on Linux is the screen reader" ;;
+  orca) [ "$(uname -s 2>/dev/null || echo Linux)" != Linux ] || case "$cepa_h_cli" in
+    /*/linux-orca-cli-shim/orca|/*/cli/bin/orca)
+      cepa_h_l=; [ ! -f "$cepa_h_cli" ] || { IFS= read -r cepa_h_l <"$cepa_h_cli"; } 2>/dev/null || :
+      case "$cepa_h_l" in
+        '#!/usr/bin/env bash'|'#!/usr/bin/env sh') ;;
+        *) refuse "an orca path on Linux is not an Orca launcher" ;;
+      esac ;;
+    /*) refuse "an orca path on Linux is not an Orca launcher" ;;
+    *) refuse "bare orca on Linux is the screen reader" ;;
+  esac ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
 [[ $cepa_h_dir == /* ]] || refuse "the alert directory is not an absolute path"
@@ -236,8 +295,8 @@ trap 'rm -rf "$cepa_h_tmp"' EXIT
 # 90 seconds or more after the script did, and none starts after a call timed
 # out: a wedged Orca would only stack more 17-second waits. A call that is not
 # started counts as failed, so it raises orca-unreadable, never `ok`. Worst
-# case about 90 + 34 = 124 seconds: run the block with a tool timeout of at
-# least 3 minutes.
+# case about 90 + 34 = 124 seconds, plus the 10-second git budget (LIFE): run
+# the block with a tool timeout of at least 3 minutes.
 cepa_h_wedged=0
 cepa_h_orca() {
   local out=$1 try rc e t
@@ -333,7 +392,7 @@ cepa_h_orca "$cepa_h_tmp/inbox.json" orchestration inbox --limit 200 --json --fu
 cepa_h_obox=${CEPA_ORCA_OUTBOX_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/outbox}
 python3 -I - "$cepa_h_tmp" "$cepa_h_dir" "$cepa_h_now" "$cepa_h_run" "$cepa_h_repo" \
   "${ORCA_TERMINAL_HANDLE:-}" "$cepa_h_wt" "$cepa_h_main" "$cepa_h_acked" "$cepa_h_obox" <<'PY'
-import calendar, json, os, re, sys, time
+import calendar, json, os, re, subprocess, sys, time
 
 def _crash(t, v, tb):
     # An uncaught error must not exit 1, which means "alerts".
@@ -343,6 +402,7 @@ sys.excepthook = _crash
 tmp, adir, now, run, repo, me, wt, main, acked_dir, obox = sys.argv[1:11]
 now, main = int(now), main == "1"
 HB_STALE, RUN_LONG, Q_WAIT, AWAIT = 30, 180, 10, 30   # minutes
+LIFE_AHEAD, GIT_WAIT = 180, 3   # seconds
 SAFE = re.compile(r"[A-Za-z0-9_.:@-]{1,120}")
 ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64}|coord:[A-Za-z0-9_-]{1,100})"
 MID = r"msg_[0-9a-f]{6,32}"
@@ -355,6 +415,7 @@ REASONS = [re.compile(x) for x in (
     r"subject and body are \d{1,9} bytes; the limit is 28000 \(WSL command-line limit\)",
     r"the cli is not a plain command name", r"the cli does not name an Orca CLI",
     r"a cli path must (be absolute and )?equal ORCA_CLI_COMMAND", r"bare orca on Linux is the screen reader",
+    r"an orca path on Linux is not an Orca launcher",
     r"[A-Za-z0-9._/-]{1,200} is not on PATH",
     r"orca-send\.sh takes no arguments; its fields go on stdin",
     r"a heredoc line is not a <name>: <value> field",
@@ -451,6 +512,65 @@ def load(name):
     except Exception:
         return None
     return d if isinstance(d, dict) and d.get("ok") is True else None
+
+# LIFE (header): a stale candidate's newest terminal output or commit.
+WSL_PATH = re.compile(r"\\\\wsl(?:\.localhost|\$)\\[^\\]+(\\.*)")
+git_left = [10.0]
+trees = {}
+
+def git(*args):
+    # stdout, or None. A timeout ends every later git read of this run.
+    if git_left[0] <= 0:
+        return None
+    t0 = time.time()
+    try:
+        g = subprocess.run(["git"] + list(args), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=min(GIT_WAIT, git_left[0]))
+    except subprocess.TimeoutExpired:
+        git_left[0] = 0
+        return None
+    except (OSError, ValueError):
+        return None
+    git_left[0] -= time.time() - t0
+    return g.stdout if g.returncode == 0 else None
+
+def worktree_refs():
+    # This repo's worktrees: path -> the branch checked out there. One read.
+    if "read" not in trees:
+        trees["read"] = {}
+        path = None
+        for l in (git("worktree", "list", "--porcelain") or "").splitlines():
+            if l.startswith("worktree "):
+                path = l[len("worktree "):]
+            elif l.startswith("branch ") and path:
+                trees["read"][path] = l[len("branch "):]
+    return trees["read"]
+
+def ago(t):
+    return "%d minutes ago" % max(mins(t), 0)
+
+def life(term, handle, start):
+    # (newest proof of life or None, the terminal's state, the commit's state).
+    out_txt = commit_txt = "unread"
+    if not isinstance(term, dict) or not isinstance(handle, str) or term.get("handle") != handle:
+        return None, out_txt, commit_txt
+    limit, best = now + LIFE_AHEAD, None
+    out = term.get("lastOutputAt")
+    if type(out) is int and 0 < out // 1000 <= limit:
+        if mins(start) < RUN_LONG:
+            best, out_txt = out // 1000, ago(out // 1000)
+        else:
+            out_txt = "not counted past %d minutes" % RUN_LONG
+    ref, path = term.get("branch"), term.get("worktreePath")
+    m = WSL_PATH.fullmatch(path) if isinstance(path, str) else None
+    path = m.group(1).replace("\\", "/") if m else path
+    if isinstance(ref, str) and isinstance(path, str) and worktree_refs().get(path) == ref:
+        t = (git("log", "-1", "--format=%ct", ref, "--") or "").strip()
+        if re.fullmatch(r"[0-9]{1,12}", t) and int(t) <= limit:
+            commit_txt = "none since its dispatch"
+            if start <= int(t):
+                best, commit_txt = max(best or 0, int(t)), ago(int(t))
+    return best, out_txt, commit_txt
 
 # 1. Alert files from orca-send.sh.
 FIELD = {"kind": r"send_(refused|failed|unproven)|outbox_(ambiguous|mismatch|unreadable|pruned)", "time": r"\d{1,12}", "repo": r"[A-Za-z0-9._@-]{1,100}",
@@ -675,10 +795,14 @@ if run:
             unreadable("worker-show")   # a heartbeat time in a shape this reader cannot date
             continue
         last = hb if hb is not None else start
+        out_txt = commit_txt = "unread"
+        if "input" not in cats and mins(last) >= HB_STALE:
+            seen, out_txt, commit_txt = life(r.get("terminal"), handle, start)
+            last = max(last, seen or 0)
         k = "stale:%s:%d" % (did, last)
         if "input" not in cats and mins(last) >= HB_STALE and k not in acked:
-            alert(k, "worker %s sent no heartbeat for %d minutes (bound %d)%s" % (
-                who, mins(last), HB_STALE, "" if hb is not None else ", none since its dispatch"))
+            alert(k, "worker %s shows no life for %d minutes (bound %d): heartbeat %s, terminal output %s, commit %s" % (
+                who, mins(last), HB_STALE, ago(hb) if hb is not None else "none since its dispatch", out_txt, commit_txt))
         k = "long:" + did
         if mins(start) >= RUN_LONG and k not in acked:
             alert(k, "worker %s has run %d minutes with no worker_done (bound %d)" % (who, mins(start), RUN_LONG))
