@@ -2440,6 +2440,34 @@ L84. **An Orca CLI failure after the request was sent is no result, for every wr
     run-use, terminal rename/close, ack) and apply the rule or state why
     not. Same class as the 2026-11-05 orca-lab handoff that stayed pending
     while this Run was bound (cause unknown; L81 header).
+
+L85. **An offline paired Orca host blocks every "complete read" guard (lane rm, re-bind).**
+    status: pending
+    severity: P2
+    owner: unassigned (fits the reliability set: L84's class)
+    orca-lab coord@main handoff 2026-11-08 08:03 UTC (outbox
+    20261108T080317Z-VFn8iBg0.md; evidence orca-lab
+    docs/upgrades/2026-11-07-1.4.249-to-1.4.253.md, orca-lab PRs #7, #8;
+    operator approved filing 2026-11-08):
+    1. `orca-lane.sh rm` refuses ("worktree ps was not a complete read")
+       while any paired server is offline: unscoped `worktree ps` returns
+       `hostScope.omittedHostIds: ["runtime:<id>"]`. `environment rm` does
+       not clear it (Orca's known hosts include saved workspace sessions'
+       host ids). Questions: scope the read to the repo's own host (a lane
+       on `local` cannot have an agent elsewhere)? Name the omitted host in
+       the refusal text?
+    2. Measured here by coord@main 2026-11-08: `orca-rebind.sh` with
+       `confirm:` refused the same way ("terminal list returned a partial
+       or unknown shape"): `terminal list --json` had
+       `omittedHostIds: ["runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"]`,
+       truncated false, 15 terminals, and the Run's holder term_53ee620c
+       absent. So the re-bind of run_ce7a15d01f88 is blocked until that
+       host is online or removed. Same fix question as item 1.
+    3. Also in the message (orca-lab L10, seen on 1.4.249 and 1.4.253): a
+       worker that only peeks gets a follow-up dispatch and a second
+       worker_done. §12b rule 3 already documents it (L81 item 3); check
+       that worker specs tell workers to drain before worker_done, and
+       that coordinators ack the follow-up.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
