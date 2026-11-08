@@ -1866,6 +1866,10 @@ L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `or
     owner: gain (unassigned worker; filed 2026-11-01 on the operator's answer
       "file L60, P2, for gain, but we're going to slow down and let things
       catch up before we continue" — do not start until the operator says)
+    NEXT (operator 2026-11-08, AskUserQuestion "Reliability set"): the next
+    coord@main starts L60 + L74 + L84 as one worker, after the re-bind probe
+    below. This lifts the 2026-11-01 hold on L60 and approves L74's rule 8
+    change.
     Evidence: tab31@roles, task `task_93b21c682afb`, dispatch
     `ctx_6e3509555ba9` (Run `run_5682a0ed1455`). `worker-show` read by
     coord@main: dispatched 03:07:13 UTC, `stage: agent_readiness`,
@@ -2148,6 +2152,10 @@ L74. **A `check --full` drain marks its batch read at once, so a lost drain outp
     status: pending
     severity: P2
     owner: unassigned (a §12b rule 8 change; operator's call)
+    NEXT (operator 2026-11-08, AskUserQuestion "Reliability set"): the next
+    coord@main starts L60 + L74 + L84 as one worker, after the re-bind probe
+    below. This lifts the 2026-11-01 hold on L60 and approves L74's rule 8
+    change.
     Measured by tab1@matrix on Orca 1.4.246 (PR #132, review finding 3,
     deferred): `check --full` returns `deliveryAcknowledged: true`. A bound
     Run's coordinator that drains and then loses the output (crash, context
@@ -2420,6 +2428,18 @@ L83. **Cite lane-stack's Setup-tab wait from §12b rule 2 and `orca-lane.sh`.**
     plugins/cepa/scripts/orca-lane.sh`. Same words in the operator's global
     CLAUDE.md "New lane" text (operator's file). Could ride with L80.
 
+L84. **An Orca CLI failure after the request was sent is no result, for every write verb.**
+    status: pending
+    severity: P2
+    owner: unassigned (reliability set with L60 + L74)
+    Drafted by tab2@matrix in #134 (shard
+    2026-11-04-fix-matrix-orca-lane-create-timeout-rm-defects.md, learning
+    3): "read Orca's state before reporting a failure". L79 was `create`;
+    #134's review found the same class in `rm`; both are fixed there only.
+    Find every other Orca write verb cepa calls (send, worker-start,
+    run-use, terminal rename/close, ack) and apply the rule or state why
+    not. Same class as the 2026-11-05 orca-lab handoff that stayed pending
+    while this Run was bound (cause unknown; L81 header).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
