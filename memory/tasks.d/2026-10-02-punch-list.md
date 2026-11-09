@@ -2468,6 +2468,36 @@ L85. **An offline paired Orca host blocks every "complete read" guard (lane rm, 
        worker_done. §12b rule 3 already documents it (L81 item 3); check
        that worker specs tell workers to drain before worker_done, and
        that coordinators ack the follow-up.
+    2026-11-09: host cleared by the operator's Orca restart (orca-lab L16;
+    msg_de93b1aec954). Measured: `terminal list` omittedHostIds [], and
+    the re-bind of run_ce7a15d01f88 then printed `done`. The defect stays
+    open: one offline host still blocks every complete-read guard.
+
+L86. **A resumed coordinator re-asks a question that a session end cut off.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    orca-lab coord@main handoff 2026-11-09 13:56 UTC (outbox
+    20261109T135615Z-YAyesqm7.md, orca-lab L17; operator approved filing
+    2026-11-09). When a session ends during an AskUserQuestion, Claude Code
+    records "[Tool call interrupted: the session ended before this call's
+    result was recorded …]", and the resumed session carries on as if
+    the question was declined. The decision is lost. Sender's evidence:
+    artist360 coord@main 2026-11-08 19:49Z (open about 17 h); cepa
+    coord@main 19:52Z. Seen here too: this session's offline-host question
+    on 2026-11-08 was interrupted the same way (moot after the host fix).
+    1. Rule: on its first turn after a resume, a coordinator whose last
+       AskUserQuestion result is an interruption asks it again, unchanged,
+       and labels it a re-ask (§12b rule 7, The operator kind).
+    2. `/cepa:handoff` names any question open when it ran, so the next
+       session asks it.
+    3. Sender reports, not measured here: Orca's NEEDS YOU state goes stale
+       30 minutes after the last hook event (AGENT_STATUS_STALE_AFTER_MS,
+       Orca 1.4.253), so the attention flag (L57) is the only lasting sign.
+    4. Outside reader: orca-lab's "needs you" panel reads
+       ~/.local/state/cepa/orca-alerts and ~/.local/state/cepa/outbox
+       read-only. A PR that moves or renames either one tells orca-lab
+       coord@main (via `coord:orca-lab`).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
