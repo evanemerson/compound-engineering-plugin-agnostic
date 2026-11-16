@@ -2472,6 +2472,20 @@ L85. **An offline paired Orca host blocks every "complete read" guard (lane rm, 
     msg_de93b1aec954). Measured: `terminal list` omittedHostIds [], and
     the re-bind of run_ce7a15d01f88 then printed `done`. The defect stays
     open: one offline host still blocks every complete-read guard.
+    2026-11-16: second trigger, no offline host needed. orca-lab
+    coord@main handoff 2026-11-16 03:14 UTC (outbox
+    20261116T031458Z-THES7DSP.md; evidence orca-lab
+    docs/research/2026-11-15-wsl-host-test.md; operator approved filing
+    2026-11-16). On Orca 1.4.259 an added experimental WSL host is omitted
+    from unscoped reads BY DEFAULT (`hostScope.omittedHostIds:
+    ["runtime:wsl%3Aubuntu-24.04"]`, selector `--environment
+    'Ubuntu-24.04 (WSL)'`). So `orca-lane.sh` complete() (line 462) and
+    `orca-rebind.sh` (line 298) refuse in EVERY repo while the host is
+    added. Sender reports, not measured here. Extra question: should
+    `orca-lane.sh` take an optional environment for a repo added on a
+    host? `repo list` without `--environment` returns only the local
+    \\wsl.localhost row, so `create` made the lane on the local
+    registration. Workaround: remove the WSL host.
 
 L86. **A resumed coordinator re-asks a question that a session end cut off.**
     status: pending
@@ -2498,6 +2512,42 @@ L86. **A resumed coordinator re-asks a question that a session end cut off.**
        ~/.local/state/cepa/orca-alerts and ~/.local/state/cepa/outbox
        read-only. A PR that moves or renames either one tells orca-lab
        coord@main (via `coord:orca-lab`).
+L87. **The 7-day outbox prune alerts on a file that already has an ack marker.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    orca-lab coord@main status 2026-11-12 23:18 UTC (outbox
+    20261112T231808Z-EsdAX9Ua.md; operator approved filing 2026-11-16).
+    `cepa_send_obox_prune` (orca-send.sh, around line 432) writes an
+    `outbox_pruned` alert for every pending or refused file it prunes. It
+    does not check `<alert dir>/acked/<worktree>/outbox:<repo>:<name>`,
+    so a message the operator already answered alerts a second time.
+    Measured here 2026-11-16 (`orca-health.sh orca-ide`): 3 such alerts
+    (1794437499-4Ahzi9eB, 1794524641-GYKOl2wK, 1794524641-HjzQroI9), and
+    all 3 files had ack markers (`ls .../acked/compound-engineering/ |
+    grep -E 'Ki3nkqJ0|1mnKE8pv|hgf4XopN'` printed 3). Fix: when the marker
+    exists, prune with no alert. Add a control. orca-lab's Needs You panel
+    reads these alerts (L86 item 4), so the duplicates show there too.
+L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a delivered dispatch: send as failed.**
+    status: pending
+    severity: P2
+    owner: unassigned (fits the reliability set with L85)
+    orca-lab coord@main handoff 2026-11-16 01:32 UTC (outbox
+    20261116T013254Z-ZHPbvYKe.md; evidence orca-lab
+    docs/research/2026-11-15-wsl-host-test.md, orca-lab PRs #26-#28;
+    operator approved filing 2026-11-16). Orca 1.4.259, experimental WSL
+    host. Sender reports, not measured here:
+    1. A `term_` handle of a host worker: rc 5 `terminal_not_found`. The
+       handle belongs to the host's server, so the send needs `--on
+       <server>` and the terminal reads need `--environment <selector>`.
+       The script has no field for either.
+    2. Target `dispatch:ctx_…` (a done, `--keep-open` host worker): rc 5
+       "the reply has no result.message.id" (orca-send.sh line 829), but
+       the worker got it as a follow-up dispatch and answered. A raw
+       `orchestration send --json --full` printed `result.message.id` with
+       the target rewritten to the new follow-up dispatch. Cause not
+       found. The false exit 5 also writes a send-failed alert.
+    Production repos stay on \\wsl.localhost until this is fixed.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
