@@ -132,8 +132,14 @@ if verb == ["worktree", "list"]:
         r["truncated"] = True
     if "listcount" in MODE:
         r["totalCount"] = len(rows) + 1
+    # L85: a host left out of the read. `listomitted` covers this machine
+    # (`local`); `listomitlocal` does not; `listnohost` has no hostIds.
     if "listomitted" in MODE:
-        r["hostScope"]["omittedHostIds"] = ["ssh:x"]
+        r["hostScope"]["omittedHostIds"] = ["runtime:wsl%3Aubuntu-24.04"]
+    if "listomitlocal" in MODE:
+        r["hostScope"] = {"hostIds": ["runtime:other"], "omittedHostIds": ["runtime:wsl%3Aubuntu-24.04"]}
+    if "listnohost" in MODE:
+        r["hostScope"] = {"omittedHostIds": []}
     out({"id": "x", "ok": True, "result": r})
 if verb == ["worktree", "create"]:
     if "createfail" in MODE:
@@ -211,6 +217,10 @@ if verb == ["worktree", "ps"]:
         rows.append({"worktreeId": row(w)["id"], "repoId": w["repoId"], "agents": ag})
     r = {"worktrees": rows, "hostScope": {"hostIds": ["local"], "omittedHostIds": []},
          "totalCount": len(rows), "truncated": "pspartial" in MODE}
+    if "psomitted" in MODE:
+        r["hostScope"]["omittedHostIds"] = ["runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"]
+    if "psomitlocal" in MODE:
+        r["hostScope"] = {"hostIds": [], "omittedHostIds": ["runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"]}
     out({"id": "x", "ok": True, "result": r})
 if verb == ["terminal", "list"]:
     if "--full" in argv:  # the real CLI refuses it (L72)

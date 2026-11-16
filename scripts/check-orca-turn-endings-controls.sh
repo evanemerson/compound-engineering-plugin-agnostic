@@ -34,7 +34,8 @@ CITE = "**Under Orca**, end the run per `cepa:autonomy` §12b rule 7."
 # A two-anchor mutant passes a list of (old, new) pairs as `old` and None as
 # `new`. The pairs apply in order, and each anchor must occur exactly once in
 # the text the earlier pairs left.
-DRAIN_MISS = {"PEEK: rule 8 holds a plain `<cli> orchestration check --full --json`, then it processes every message in that batch (a `worker_done` included, as rule 5 says), then `check --ack <deliveryId> --full`, repeated until `deliveryId` is null."}
+# L74: the drain processes from the peek, then drains with its own request id.
+DRAIN_MISS = {"PEEK: rule 8 holds the session first processes every message the peek returned (a `worker_done` included, as rule 5 says). Only then does it drain:"}
 MUTANTS = [
     ("rule-head-gone", "skill", "7. **How a turn ends under Orca.**", "7. **How a turn ends.**",
      # Without its head, rule 7's text is not found, so every phrase misses too.
@@ -373,8 +374,16 @@ MUTANTS += [
     # #102 review: Orca's --peek returns no delivery id, so it cannot be acked.
     ("peek-acks-peek", "skill", "returns no delivery id, so there is nothing to acknowledge.", "then acknowledges the delivery as rule 5 says.",
      {"PEEK: rule 8 holds **A peek only shows; a drain reads.** A peek marks nothing read and returns no delivery id, so there is nothing to acknowledge."}),
-    ("peek-drain-partial", "skill", "every message in that batch (a `worker_done` included, as\n     rule 5 says)", "the reply",
+    ("peek-drain-partial", "skill", "every message the peek returned (a\n     `worker_done` included, as rule 5 says)", "the reply",
      DRAIN_MISS),
+    # L74: the drain carries the session's own request id, and a lost drain
+    # is replayed with it.
+    ("peek-drain-no-request-id", "skill", "check --full --json --retry-request <id>`,", "check --full --json`,",
+     {"PEEK: rule 8 holds a plain `<cli> orchestration check --full --json --retry-request <id>`,"}),
+    ("peek-lost-drain-gone", "skill", "**A lost drain is run again with the same id.**", "**A lost drain is gone.**",
+     {"PEEK: rule 8 holds **A lost drain is run again with the same id.**"}),
+    ("peek-drain-reuses-id", "skill", "A new drain always takes a new id.", "A drain may reuse an id.",
+     {"PEEK: rule 8 holds A new drain always takes a new id."}),
     ("peek-end-unprocessed", "skill", "one at the end\n     comes before the turn ends,", "one at the end\n     waits for the next turn,",
      {"PEEK: rule 8 holds A drain at the start comes before other work; one at the end comes before the turn ends, and the ending (rule 7) reflects it."}),
     ("peek-stale-reply", "skill", "A reply to an\n     older question is never read as the answer to a newer one.", "Any reply answers the newest question.",
@@ -393,8 +402,8 @@ MUTANTS += [
      {"PEEK: rule 8 holds **Stated limit.** A session that is idle runs no turn"}),
     ("peek-claims-closed", "skill", "rule 8\n     narrows RC5 and does not close it.", "rule 8\n     closes RC5.",
      {"PEEK: rule 8 holds rule 8 narrows RC5 and does not close it."}),
-    ("peek-unbound-drains-from-check", "skill", "session processes the messages its peek returned, and only then runs a\n     plain `check --full` to mark them read.", "session processes the messages its plain `check` returns.",
-     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read."}),
+    ("peek-unbound-drains-from-check", "skill", "session processes the messages its peek\n     returned, and only then runs a plain `check --full` to mark them read,", "session processes the messages its plain `check` returns,",
+     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read,"}),
     # L73: a drop-`--full` mutant per `check` site. Rule 5, the no-bound-Run
     # `check --full` and `check --all` are pinned by FULL alone, so each of
     # those kills a case no other leg kills.
@@ -406,18 +415,20 @@ MUTANTS += [
     ("full-peek", "skill", "   `<cli> orchestration check --peek --full --json` at the start", "   `<cli> orchestration check --peek --json` at the start",
      {"PEEK: rule 8 holds the peek command exactly once",
       "FULL: the skill's `<cli> orchestration check --peek --json` passes --full"}),
-    ("full-drain", "skill", "a plain `<cli> orchestration check --full --json`, then it", "a plain `<cli> orchestration check --json`, then it",
-     DRAIN_MISS | {"FULL: the skill's `<cli> orchestration check --json` passes --full"}),
+    ("full-drain", "skill", "a plain `<cli> orchestration check --full --json --retry-request <id>`,", "a plain `<cli> orchestration check --json --retry-request <id>`,",
+     {"PEEK: rule 8 holds a plain `<cli> orchestration check --full --json --retry-request <id>`,",
+      "FULL: the skill's `<cli> orchestration check --json --retry-request <id>` passes --full"}),
     ("full-ack", "skill", "`check --ack <deliveryId> --full`, repeated", "`check --ack <deliveryId>`, repeated",
-     DRAIN_MISS | {"FULL: the skill's `check --ack <deliveryId>` passes --full"}),
+     {"PEEK: rule 8 holds then runs `check --ack <deliveryId> --full`, repeated until `deliveryId` is null.",
+      "FULL: the skill's `check --ack <deliveryId>` passes --full"}),
     ("full-rule8-wait", "skill", "\n     `check --wait --full` is already reading", "\n     `check --wait` is already reading",
      {"PEEK: rule 8 holds A coordinator blocked in rule 5's `check --wait --full` is already reading its inbox.",
       "FULL: the skill's `check --wait` passes --full"}),
     # A bare `check` span is a prose reference FULL cannot see; PEEK pins it.
     ("full-unbound-check", "skill", "Its plain `check --full` returns no `deliveryId`", "Its plain `check` returns no `deliveryId`",
-     {"PEEK: rule 8 holds Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once,"}),
-    ("full-unbound-mark", "skill", "plain `check --full` to mark them read.", "plain `check --peek` to mark them read.",
-     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read.",
+     {"PEEK: rule 8 holds Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once"}),
+    ("full-unbound-mark", "skill", "plain `check --full` to mark them read,", "plain `check --peek` to mark them read,",
+     {"PEEK: rule 8 holds So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read,",
       "FULL: the skill's `check --peek` passes --full"}),
     ("full-all", "skill", "`check --all --full` still lists", "`check --all` still lists",
      {"FULL: the skill's `check --all` passes --full"}),

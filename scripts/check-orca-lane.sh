@@ -329,7 +329,7 @@ W = World("reads")
 W.lane("gamma", mode="automatic")
 # One lane per rm case, so a mutant that lets one removal through cannot
 # change what a later case sees.
-for m in ("listfail", "listpartial", "listomitted", "listcount"):
+for m in ("listfail", "listpartial", "listomitlocal", "listnohost", "listcount"):
     expect("READS %s is UNKNOWN for name" % m, W.run(F(cli=CLI, action="name"), mode=m), rc=1,
            first="ORCA lane: no lane renamed", verbs_lack=[["worktree", "set"]])
     W.lane("g-" + m)
@@ -338,10 +338,37 @@ for m in ("listfail", "listpartial", "listomitted", "listcount"):
     expect("READS %s is UNKNOWN for create" % m, W.run(F(cli=CLI, action="create", lane="new1", base="main"), mode=m),
            rc=1, first="ORCA lane: new1 unchanged", verbs_lack=[["worktree", "create"]])
 for m, why in (("psfail", "worktree ps failed"), ("pspartial", "worktree ps was not a complete read"),
-               ("psmissing", "worktree ps was not a complete read")):
+               ("psmissing", "worktree ps was not a complete read"),
+               ("psomitlocal", "worktree ps was not a complete read")):
     W.lane("g-" + m)
     expect("READS %s keeps the lane" % m, W.run(F(cli=CLI, action="rm", lane="g-" + m), mode=m), rc=1,
            first="ORCA lane: kept g-%s — %s" % (m, why), verbs_lack=[["worktree", "rm"]])
+# L85: a host Orca left out, while it covered this machine, is not UNKNOWN:
+# the lane is on `local`. The last line names the host either way.
+NOTE_OK = ("ORCA lane note: Orca left host(s) %s out of its reads; this lane is on this machine (host local), "
+           "so they cannot hold its rows and the reads counted")
+NOTE_NO = ("ORCA lane note: Orca left host(s) %s out of its reads and did not cover this machine (host local), "
+           "so the read did not count")
+WSLH = "runtime:wsl%3Aubuntu-24.04"
+OFFH = "runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"
+expect("READS omitted host, local covered, name counts", W.run(F(cli=CLI, action="name"), mode="listomitted"), rc=0,
+       first="ORCA lane: named", has=(NOTE_OK % WSLH,))
+W.lane("g-omit")
+got = W.run(F(cli=CLI, action="rm", lane="g-omit"), mode="listomitted")
+expect("READS omitted host, local covered, rm counts", got, rc=0, first="ORCA lane: removed g-omit",
+       has=(NOTE_OK % WSLH,))
+(ok if got[1] and got[1][-1] == NOTE_OK % WSLH else miss)("READS the omitted-host note is the last line" + ("" if got[1] and got[1][-1] == NOTE_OK % WSLH else " | %r" % got[1][-1:]))
+expect("READS omitted host, local covered, create counts",
+       W.run(F(cli=CLI, action="create", lane="new2", base="main"), mode="listomitted"), rc=0,
+       first="ORCA lane: created new2", has=(NOTE_OK % WSLH,))
+expect("READS omitted host, local not covered, refusal names the host",
+       W.run(F(cli=CLI, action="name"), mode="listomitlocal"), rc=1, first="ORCA lane: no lane renamed",
+       has=(NOTE_NO % WSLH,), verbs_lack=[["worktree", "set"]])
+W.lane("g-psomit")
+expect("READS ps omits an offline host, local covered, rm counts",
+       W.run(F(cli=CLI, action="rm", lane="g-psomit"), mode="psomitted"), rc=0, first="ORCA lane: removed g-psomit",
+       has=(NOTE_OK % OFFH,))
+expect("READS no omitted host prints no note", W.run(F(cli=CLI, action="name")), rc=0, lacks=("ORCA lane note",))
 expect("READS repo list failure", W.run(F(cli=CLI, action="name"), mode="repofail"), rc=1,
        first="ORCA lane: lanes unchanged — repo list failed")
 W.done()

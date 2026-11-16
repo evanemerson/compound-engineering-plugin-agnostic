@@ -1782,6 +1782,30 @@ limits.
      nothing as sent, and the nudge then woke its coordinator to an empty
      inbox. The script's header owns the measured ways a send stores nothing
      and the size limit.
+     **A failed call is read back before it counts as failed** (punch-list
+     L84). When the send's call fails in a way that leaves the result
+     unknown (a timeout, an exit with no output, a reply in a shape the
+     script does not know), the script reads the inbox for this very
+     message (same type, subject and body, or for a reply the same thread;
+     from this session; made since the send began) before it reports a
+     failure. Found, it prints `Orca send read back: <id> …` and goes on as
+     a stored send; a `worker_done` must also show its dispatch settled.
+     Orca's own `"ok": false` is a result, so it is never read back. Why: on
+     2026-11-16 a `dispatch:` send that Orca delivered as a follow-up
+     dispatch exited 5 with "the reply has no result.message.id" and wrote a
+     send-failed alert (L88 item 2, sender report; its cause was not found).
+   - **A host worker's handle takes `on:`** (punch-list L88). A `term_`
+     handle that a paired Orca server issued (a worker on an Orca WSL or SSH
+     host) is reached only through that server: the block adds the line
+     `on: <server id or name>` (Orca's `--on`; `[A-Za-z0-9 ._:%()@-]`,
+     starting with a letter or digit), and the script passes
+     `--on <server>`. `on:` goes only with a `term_` target. Such a target
+     is never nudged from this machine (`orca-nudge.sh` reads only this
+     machine's terminals): with `nudge` the script prints
+     `Orca nudge skipped: …` and the `tell <handle>` ending line. Not
+     measured here: no host worker was at hand, so the argv follows
+     `send --help` on Orca 1.4.259 and the re-read is the same inbox read
+     (`--help`: "Your own Orca carries it").
      When a send fails with the WSL interop error (stderr holding
      `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
      sessions in the L26 re-probe, 2026-10-31), the script will
@@ -1990,6 +2014,16 @@ limits.
      checkout (`current`, or `'id:<full id>'`), list the Run's workers and
      confirm none is live in that checkout, the worker that just sent a
      hand-off included (rule 1).
+   - **A start or a Run that failed is read back first** (punch-list L84).
+     A `worker-start`, `task-create` or `run-create` that times out, exits
+     with no output, or answers in a shape the coordinator does not know
+     may still have taken effect. Before it runs the verb again, the
+     coordinator reads Orca's state: `worker-list --run <run> --json --full`
+     for a start (a new dispatch in that checkout means it started), and
+     `run-list --json --full` for a `run-create` (a Run with its objective).
+     Only Orca's own `"ok": false` is a failure that needs no read. A start
+     that failed after it was dispatched shows in rule 8's health check as a
+     `failed:` alert (punch-list L60).
    - **How Orca names a `new-child` worktree** (one-off lanes only; a lane
      made with `create` below is parked with no branch) (measured on Orca 1.4.244 from
      `worktree create --help` and `worker-start --help`; no dry run exists and
@@ -2619,14 +2653,37 @@ limits.
    `<cli> orchestration check --peek --full --json` at the start and at the end of
    every turn, until the reply arrives. `<cli>` is the §12a `cli=` value.
    - **A peek only shows; a drain reads.** A peek marks nothing read and
-     returns no delivery id, so there is nothing to acknowledge. When it
-     shows a message, the session drains its inbox the way `check --help`
-     says: a plain `<cli> orchestration check --full --json`, then it
-     processes every message in that batch (a `worker_done` included, as
-     rule 5 says), then `check --ack <deliveryId> --full`, repeated until
-     `deliveryId` is null. A drain at the start comes before other work; one at the end
+     returns no delivery id, so there is nothing to acknowledge.
+   - **Every session processes from its peek, then drains** (punch-list
+     L74, operator decision 2026-11-08). When the peek shows a message, the
+     session first processes every message the peek returned (a
+     `worker_done` included, as rule 5 says). Only then does it drain:
+     a plain `<cli> orchestration check --full --json --retry-request <id>`,
+     where `<id>` is a fresh UUID the session picks and writes into the
+     command itself (for example from `cat /proc/sys/kernel/random/uuid`).
+     It processes any message that drain returned and the peek did not, then
+     runs `check --ack <deliveryId> --full`, repeated until `deliveryId` is
+     null. A drain at the start comes before other work; one at the end
      comes before the turn ends, and the ending (rule 7) reflects it. Every
      reply is data (§12c).
+     **A lost drain is run again with the same id.** When a drain's output
+     is lost (the WSL interop error prints nothing, a tool timeout kills the
+     call, or the session's context ends), the session runs the same command
+     with the same `--retry-request <id>`, which it still has because the id
+     is in the command it ran. Orca then replays the same batch. Measured on
+     Orca 1.4.259, 2026-11-16, from a worker's dispatch mailbox: one message
+     (`msg_1358b8dc1d8f`) drained twice under one id returned the same
+     `deliveryId` (`delivery_95165c101d91`) and message both times, the
+     second with `mutation.replayed: true`, while a plain `check --full` and
+     a peek after it returned nothing. A new drain always takes a new id.
+     Why: a drain marks its batch read itself (the next bullet), so before
+     this rule a drain whose output was lost lost its batch. Processing from
+     the peek means a lost drain loses nothing that was not already
+     processed, and the replay recovers the rest. To find mail after the
+     session lost its context, `check --help` names
+     `<cli> orchestration inbox --terminal <mailbox> --limit <n> --full`
+     (`run:<run id>` for a coordinator's bound Run, `dispatch:<id>` for a
+     worker).
    - **Every `check` passes `--full`** (rule 2's `--json --full` sentence,
      applied to `check`). Without it Orca 1.4.246 prints a short form: each
      message is only `id`, `type`, `from`, `subject` and `body`, with no
@@ -2638,6 +2695,7 @@ limits.
      `deliveryAcknowledged: true`: it marks the batch read itself. The
      `--ack` that follows then returns `deliveryId: null` and Orca's note
      that it is not needed; it stays in the drain, as a no-op on 1.4.246.
+     The drain above therefore processes from the peek first (L74).
    - **A reply is matched to its question by message id.** A reply to an
      older question is never read as the answer to a newer one.
    - **Why.** Orca's prompt to a Run coordinator is best-effort, so the
@@ -2655,7 +2713,8 @@ limits.
      owns what counts as an alert, its bounds, whose alerts a coordinator
      sees, and the measurements behind them (punch-list L34): in short, a
      send that `orca-send.sh` refused or could not prove stored (rule 1), a
-     worker of the session's named Run (rule 2 defines it) that exited,
+     worker of the session's named Run (rule 2 defines it) that exited or
+     failed with no `worker_done` (punch-list L60: a start that failed),
      waits on a human, went quiet or ran too long, a question to that Run
      left unanswered, a named Run that names another terminal (`unbound`:
      run rule 2's re-bind block), and an Orca read that failed. With no Run
@@ -2810,24 +2869,20 @@ limits.
      narrows RC5 and does not close it.
    - **A session with no bound Run drains from its peek.** Its peek result
      has no `runId`. Its plain `check --full` returns no `deliveryId` and marks
-     every message it returns read at once, so nothing replays (measured in
-     punch-list L35 on Orca 1.4.245). If that output is lost (the WSL
-     interop error prints nothing, or a tool timeout kills the call), the
-     message drops out of every later peek and plain `check`. So such a
-     session processes the messages its peek returned, and only then runs a
-     plain `check --full` to mark them read. It also processes any message that
-     plain `check` returns and the peek did not. `check --all --full` still lists a
+     every message it returns read at once (measured in punch-list L35 on
+     Orca 1.4.245). So such a session processes the messages its peek
+     returned, and only then runs a plain `check --full` to mark them read,
+     as every session does (above). `check --all --full` still lists a
      message that was marked read, and marks nothing, so it is the way to
      find one that may have been missed.
-   - **Stated limit.** The bound-Run drain is the procedure in `check --help`
-     on Orca 1.4.245. A wrong `--ack` id returns `"ok": true` and acks
-     nothing (measured L35), so the batch replays: a duplicate, never a
-     loss. On Orca 1.4.246 that no longer holds: a drain marks its batch
-     read itself (the **Every `check` passes `--full`** bullet above; a wait
-     without `--full` did too), so a drain whose output is
-     lost loses its batch, as for a session with no bound Run. Whether
-     every session should then process from its peek first is open
-     (punch-list L73).
+   - **Stated limit.** The replay was measured on one dispatch mailbox, on
+     Orca 1.4.259, with a batch of one message. It was not measured for a
+     bound Run's mailbox, a batch of several, an older Orca, or a
+     `check --wait --full` (rule 5): a wait whose output is lost may still
+     lose its batch. Orca 1.4.245 has no `deliveryAcknowledged`, so there
+     the `--ack` step is still the one that marks the batch read, and a
+     wrong `--ack` id returns `"ok": true` and acks nothing (measured L35):
+     a duplicate, never a loss.
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 

@@ -102,6 +102,17 @@
 #              lifecycle prints `not proven stored`, never `no message
 #              stored`. WDREF: a bad target, task id or outcome, or a missing
 #              task id, is refused before any call.
+#   READBACK — punch-list L84: a send whose call failed in a way that leaves
+#              the result unknown (empty stdout, a timeout, no message id) is
+#              read back from the inbox first: a row from this session with the
+#              same type, subject and body (a reply: thread), dated in the
+#              window, counts as stored, and a worker_done also needs
+#              worker-show to report its dispatch settled. Each filter has a
+#              case whose row fails only that filter. `"ok": false` makes no
+#              read.
+#   HOSTON   — punch-list L88: the `on:` field becomes `--on <server>`; a
+#              host target is never nudged; `on:` with a non-term_ target or a
+#              bad value is refused before any call.
 #   SENDREF  — orca-send.sh's value checks: a bad cli (a flag, shell text,
 #              bare `orca` on Linux, a path that is not ORCA_CLI_COMMAND, a
 #              relative path, a name not on PATH), target, type (heartbeat
@@ -189,6 +200,16 @@
 #              field, a non-field line, a line after the fields, and a missing
 #              or bad ORCA_TERMINAL_HANDLE are refused with exit 4 before any
 #              call.
+#   HEALTH failed — punch-list L60: a dispatch that settled `failed` with no
+#              worker_done row alerts `failed:<dispatch>` with its stage and
+#              last failure; a worker_done row, an ack, a bad stage, a last
+#              failure outside the plain shape and a worker-show of another id
+#              each have a case.
+#   REBIND omitted — punch-list L85: a host terminal list left out is read
+#              on its own server (environment list, then terminal list
+#              --environment); live there asks, absent everywhere re-binds
+#              with a note, and a host with no environment or a failed or
+#              partial read asks, naming the host.
 #   RULE2BLOCK — punch-list L46 (#113 finding 10): §12b rule 2's re-bind block,
 #              read from SKILL.md and run against the stub. Its heredoc holds
 #              exactly the cli, run and confirm field lines. Filled with no
@@ -302,7 +323,11 @@ case "$1 $2" in
     read -r n <"$STUB_LOG.rs"; n=$((n + 1)); echo "$n" >"$STUB_LOG.rs"
     if [ "$n" -gt "${STUB_RUNSHOW_N:-1}" ] && [ -n "${STUB_RUNSHOW2+x}" ]; then printf '%s' "$STUB_RUNSHOW2"; exit "${STUB_RUNSHOW2_RC:-0}"; fi
     printf '%s' "${STUB_RUNSHOW-}"; exit "${STUB_RUNSHOW_RC:-0}" ;;
-  "terminal list") printf '%s' "${STUB_TLIST-}"; exit "${STUB_TLIST_RC:-0}" ;;
+  "terminal list")
+    # L85: a host's own list (--environment) answers from STUB_TLIST_ENV.
+    if [ "${3-}" = --environment ]; then printf '%s' "${STUB_TLIST_ENV-}"; exit "${STUB_TLIST_ENV_RC:-0}"; fi
+    printf '%s' "${STUB_TLIST-}"; exit "${STUB_TLIST_RC:-0}" ;;
+  "environment list") printf '%s' "${STUB_ENVS-}"; exit "${STUB_ENVS_RC:-0}" ;;
   "orchestration worker-list") printf '%s' "${STUB_WLIST-}"; exit "${STUB_WLIST_RC:-0}" ;;
   "orchestration worker-show") [ -f "$STUB_WSHOWDIR/$4.json" ] || exit 1; cat "$STUB_WSHOWDIR/$4.json" ;;
   *) exit 64 ;;
@@ -1000,6 +1025,123 @@ if LEGS in ("all", "send"):
             ("WDREF bad outcome", WARGS[:3] + ["done", TID], "the worker_done outcome is not succeeded or failed")]:
         store(name, 4, ["Orca send refused: " + why, PASTE_RC], argv=args, called=False)
 
+    # --- READBACK (punch-list L84): a send whose CLI call failed after the
+    # request left is read back from the inbox before it is reported failed.
+    # The stub's clock is 1000000, so a row made by this send is dated then.
+    import time as _time
+    T_NOW = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime(1000000))
+    T_OLD = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime(1000000 - 121))
+
+    def brow(mid=MID, to=H, typ="question", subj=SUBJ, body=BODY, at=T_NOW, frm=None, **kw):
+        r = {"id": mid, "to_handle": to, "type": typ, "subject": subj, "body": body, "created_at": at,
+             "sequence": 7}
+        if frm is not None:
+            r["from_handle"] = frm
+        r.update(kw)
+        return r
+
+    def back_line(why, mid=MID):
+        return "Orca send read back: %s is in the inbox from this send, though %s (punch-list L84)" % (mid, why)
+    EMPTY1 = "the send exited 1 and printed nothing"
+    calls = store("READBACK empty stdout, row in the inbox, counts", 0, [back_line(EMPTY1), STORED],
+                  mode="no-nudge", osend_rc=1, osend_json="", inbox_json=inbox(brow()))
+    check = [c[:2] for c in calls] == [["orchestration", "send"], ["orchestration", "inbox"], ["orchestration", "inbox"]]
+    (ok if check else miss)("READBACK reads the inbox before it reports" if check else
+                             "READBACK reads the inbox before it reports: %r" % [c[:2] for c in calls])
+    store("READBACK empty stdout, then the nudge", 0, [back_line(EMPTY1), STORED, "Orca nudge sent to " + H],
+          osend_rc=1, osend_json="", inbox_json=inbox(brow()))
+    store("READBACK timeout, row in the inbox, counts", 0, [back_line("the send exited 124 and printed nothing"), STORED],
+          mode="no-nudge", osend_rc=124, osend_json="", inbox_json=inbox(brow()))
+    store("READBACK ok with no message id counts (L88 item 2)", 0,
+          [back_line("the reply has no result.message.id"), STORED], mode="no-nudge",
+          osend_json=json.dumps({"ok": True, "result": {"messageId": MID}}), inbox_json=inbox(brow()))
+    # L88 item 2: a dispatch: send that Orca rewrote to a follow-up dispatch.
+    FUP = "dispatch:ctx_f011040f0000"
+    store("READBACK dispatch send rewritten to a follow-up", 0,
+          [back_line("the reply has no result.message.id"), "Orca send stored: %s for %s" % (MID, FUP),
+           "Orca nudge not needed: dispatch:ctx_abcdef is a mailbox Orca delivers; sent as no-nudge"],
+          target="dispatch:ctx_abcdef", osend_json=json.dumps({"ok": True, "result": {}}),
+          inbox_json=inbox(brow(to=FUP)))
+    # Each row is this session's (from_handle H), so only its own fault
+    # can reject it.
+    for name, brw in [("READBACK row older than the window", brow(at=T_OLD, frm=H)),
+                      ("READBACK row with another body", brow(body="other", frm=H)),
+                      ("READBACK row with another subject", brow(subj="other", frm=H)),
+                      ("READBACK row of another type", brow(typ="status", frm=H)),
+                      ("READBACK row with no date", brow(at=None, frm=H)),
+                      ("READBACK row with a bad id", brow(mid="msg_X", frm=H)),
+                      ("READBACK row from another sender", brow(frm=OTHER))]:
+        store(name, 5, [NOSTORE + EMPTY1, PASTE], mode="no-nudge", osend_rc=1, osend_json="",
+              inbox_json=inbox(brw), env_extra={"ORCA_TERMINAL_HANDLE": H})
+    store("READBACK row from this sender counts", 0, [back_line(EMPTY1), STORED], mode="no-nudge",
+          osend_rc=1, osend_json="", inbox_json=inbox(brow(frm=H)), env_extra={"ORCA_TERMINAL_HANDLE": H})
+    store("READBACK inbox read fails: the first reason stands", 5, [NOSTORE + EMPTY1, PASTE], mode="no-nudge",
+          osend_rc=1, osend_json="", inbox_rc=1, inbox_json="")
+    calls = store("READBACK ok false is a result, no read", 5,
+                  [NOSTORE + 'Orca did not return "ok": true (invalid_argument)', PASTE], mode="no-nudge", osend_rc=1,
+                  osend_json=json.dumps({"ok": False, "error": {"code": "invalid_argument"}}), inbox_json=inbox(brow()))
+    check = [c[:2] for c in calls] == [["orchestration", "send"]]
+    (ok if check else miss)("READBACK ok false makes no inbox call" if check else
+                             "READBACK ok false makes no inbox call: %r" % [c[:2] for c in calls])
+    # A reply is matched by its thread, not its subject.
+    QB = "msg_9a0e1b2c3d4e"
+    store("READBACK reply matched by thread", 0,
+          [back_line(EMPTY1), "Orca send stored: %s for %s" % (MID, OTHER)],
+          argv=["orca-ide", QB, "reply", "no-nudge"], stdin=SUBJ + "\n" + BODY + "\n", osend_rc=1, osend_json="",
+          inbox_json=inbox(brow(to=OTHER, typ="reply", subj=None, body=SUBJ + "\n" + BODY, thread_id=QB)))
+    store("READBACK reply on another thread fails", 5,
+          [NOSTORE + EMPTY1, END + "Needed from you: paste the block below into the session that asked " + QB],
+          argv=["orca-ide", QB, "reply", "no-nudge"], stdin=SUBJ + "\n" + BODY + "\n", osend_rc=1, osend_json="",
+          inbox_json=inbox(brow(to=OTHER, typ="reply", subj=None, body=SUBJ + "\n" + BODY, thread_id="msg_000000000009")))
+    # A worker_done read back must also show its dispatch settled.
+    WSD = os.path.join(TMP, "wshow-send")
+    os.makedirs(WSD, exist_ok=True)
+
+    def wshow(status):
+        open(os.path.join(WSD, DID + ".json"), "w").write(json.dumps({"ok": True, "result": {"dispatch": {"id": DID, "status": status}}}))
+    WPAY = json.dumps({"taskId": TID, "dispatchId": DID, "outcome": "succeeded"})
+    wshow("completed")
+    calls = store("READBACK worker_done row and a completed dispatch count", 0, [back_line(EMPTY1), WSTORED],
+                  argv=WARGS, osend_rc=1, osend_json="",
+                  inbox_json=inbox(brow(to=RUN, typ="worker_done", payload=WPAY)), env_extra={"STUB_WSHOWDIR": WSD})
+    check = ["orchestration", "worker-show", "--dispatch", DID, "--json", "--full"] in calls
+    (ok if check else miss)("READBACK worker_done reads worker-show" if check else
+                             "READBACK worker_done reads worker-show: %r" % calls)
+    wshow("in_progress")
+    store("READBACK worker_done with an open dispatch is unproven", 5,
+          [back_line(EMPTY1), UNPROVEN + "Orca did not record the dispatch as completed", PASTE_RC],
+          argv=WARGS, osend_rc=1, osend_json="",
+          inbox_json=inbox(brow(to=RUN, typ="worker_done", payload=WPAY)), env_extra={"STUB_WSHOWDIR": WSD})
+    wshow("completed")
+    store("READBACK worker_done row of another dispatch fails", 5, [NOSTORE + EMPTY1, PASTE_RC],
+          argv=WARGS, osend_rc=1, osend_json="",
+          inbox_json=inbox(brow(to=RUN, typ="worker_done", payload=WPAY.replace(DID, "ctx_000000000000"))),
+          env_extra={"STUB_WSHOWDIR": WSD})
+
+    # --- HOSTON (punch-list L88 item 1): `on:` names the paired server of a
+    # host worker's term_ handle; the send carries `--on <server>`.
+    SRV = "Ubuntu-24.04 (WSL)"
+
+    def on_fields(target=H, typ="question", mode="no-nudge", on=SRV):
+        return "cli: orca-ide\ntarget: %s\ntype: %s\nnudge: %s\non: %s\nfile: %s\n" % (
+            target, typ, mode, on, msg_file(STDIN))
+    calls = store("HOSTON no-nudge stores", 0, [STORED], raw=([], on_fields()))
+    oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
+    want = OSEND_ARGV[:4] + ["--on", SRV] + OSEND_ARGV[4:]
+    (ok if oc == [want] else miss)("HOSTON argv carries --on" if oc == [want] else "HOSTON argv carries --on: %r" % oc)
+    calls = store("HOSTON nudge is skipped, the host terminal is not on this machine", 1,
+                  [STORED, "Orca nudge skipped: %s is on Orca server %s, and orca-nudge.sh reads only this machine's terminals" % (H, SRV),
+                   END_H], raw=([], on_fields(mode="nudge")))
+    check = not sends(calls) and not [c for c in calls if c[:2] == ["worktree", "ps"]]
+    (ok if check else miss)("HOSTON makes no nudge call" if check else "HOSTON makes no nudge call: %r" % calls)
+    for name, fields, why, end in [
+            ("HOSTON run target refused", on_fields(target="run:run_abc"), "an on: server goes only with a term_ target",
+             END + "Needed from you: paste the block below into run:run_abc"),
+            ("HOSTON flag-shaped server refused", on_fields(on="--to"), "the on: server is not an Orca server id or name", PASTE),
+            ("HOSTON shell text in the server refused", on_fields(on="a;id"), "the on: server is not an Orca server id or name", PASTE),
+            ("HOSTON empty server refused", on_fields(on=""), "the on: server is not an Orca server id or name", PASTE)]:
+        store(name, 4, ["Orca send refused: " + why, end], raw=([], fields), called=False)
+
     # --- SENDREF ---
     SR = "Orca send refused: "
     for name, args, stdin, why, end in [
@@ -1058,7 +1200,7 @@ if LEGS in ("all", "send"):
             ("FIELDS no space after the colon", ([], F.replace("cli: ", "cli:") + MF()),
              "a heredoc line is not a <name>: <value> field", PASTE_ANY),
             ("FIELDS unknown name", ([], "to: x\n" + F + MF()),
-             "a field name is not cli, target, type, nudge, outcome, task, session or file", PASTE_ANY),
+             "a field name is not cli, target, type, nudge, outcome, task, session, on or file", PASTE_ANY),
             ("FIELDS name given twice", ([], F + "target: %s\n" % H + MF()), "the target field is given twice", PASTE),
             ("FIELDS no cli", ([], F.replace("cli: orca-ide\n", "") + MF()), "the cli field is missing", PASTE),
             ("FIELDS no target", ([], F.replace("target: %s\n" % H, "") + MF()), "the target field is missing", PASTE_ANY),
@@ -1406,8 +1548,10 @@ if LEGS in ("all", "health"):
     def hts(m, z=True):
         return time.strftime("%Y-%m-%dT%H:%M:%SZ" if z else "%Y-%m-%d %H:%M:%S", time.gmtime(NOW - m * 60))
     def hwl(*rows):
+        # A row is (dispatch, outcome) or (dispatch, outcome, stage detail).
         return json.dumps({"ok": True, "result": {"workers": [
-            {"dispatchId": d, "projection": {"outcome": o}} for d, o in rows]}})
+            {"dispatchId": r[0], "projection": dict({"outcome": r[1]}, **({"stage": {"detail": r[2]}} if len(r) > 2 else {}))}
+            for r in rows]}})
     def hshow(did=D1, outcome="in_progress", started=40, hb=5, cats=(), verdict="live", wait=None, sid=None,
               started_s=None, term=None):
         disp = {"id": sid or did, "dispatchedAt": started_s or hts(started, z=False), "assigneeHandle": WORKER,
@@ -1524,7 +1668,7 @@ if LEGS in ("all", "health"):
     lits = __import__('re').findall(r'(?:refuse|fail|unproven) "([^"]+)"', open(SEND_SCRIPT).read())
     # L38: "the $cepa_send_k field is …" is written for each field name.
     lits = sorted(set([l.replace("$cepa_send_k", k) for l in lits if "$cepa_send_k" in l
-                       for k in ("cli", "target", "type", "nudge", "outcome", "task", "session", "file")]
+                       for k in ("cli", "target", "type", "nudge", "outcome", "task", "session", "on", "file")]
                       + [l for l in lits if "$" not in l]))
     files = {"%d-R%04d.alert" % (NOW - 60, i): afile(reason=r) for i, r in enumerate(lits)}
     rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, cwd=HWT, env_extra={
@@ -1557,6 +1701,39 @@ if LEGS in ("all", "health"):
            shows={D1: hshow(started=180)})
     health("HEALTH not long at 179 minutes", 0, [HOK], shows={D1: hshow(started=179)})
     health("HEALTH settled in worker-show is skipped", 0, [HOK], shows={D1: hshow(outcome="succeeded", hb=90)})
+    # FAILED (punch-list L60): a dispatch that failed with no worker_done.
+    def fshow(did=D2, lf="terminal_exited", handle=WORKER):
+        return json.dumps({"ok": True, "result": {"dispatch": {"id": did, "status": "failed", "lastFailure": lf,
+                                                               "assigneeHandle": handle}}})
+    FWL = hwl((D1, "in_progress"), (D2, "failed", "agent_readiness"))
+    FW = "worker %s (%s)" % (D2, WORKER)
+
+    def falert(why="last failure: terminal_exited", who=FW, stage="agent_readiness"):
+        return "ORCA alert: failed:%s — %s failed at stage %s with no worker_done (%s); Orca sends no message for it" % (
+            D2, who, stage, why)
+    FCALLS = HCALLS[:3] + [["orchestration", "worker-show", "--dispatch", D2, "--json", "--full"], HCALLS[3]]
+    health("HEALTH failed at start alerts", 1, [falert()] + HSUM1, wlist=FWL,
+           shows={D1: hshow(), D2: fshow()}, calls_want=FCALLS)
+    health("HEALTH failed with an exited agent alerts", 1,
+           [falert(why="last failure: Agent process stop was requested but never confirmed", stage="process_exited")] + HSUM1,
+           wlist=hwl((D1, "in_progress"), (D2, "failed", "process_exited")),
+           shows={D1: hshow(), D2: fshow(lf="Agent process stop was requested but never confirmed")})
+    WD_ROW = dict(q("msg_0000000000d2", 5, typ="worker_done"), payload=json.dumps({"dispatchId": D2, "outcome": "failed"}))
+    health("HEALTH failed that sent its own worker_done is not an alert", 0, [HOK], wlist=FWL,
+           shows={D1: hshow(), D2: fshow()}, inbox_json=hinbox(WD_ROW))
+    health("HEALTH failed and acked is not read again", 0, [HOK], wlist=FWL,
+           shows={D1: hshow(), D2: fshow()}, acked=("failed:" + D2,), calls_want=HCALLS)
+    health("HEALTH failed whose worker-show fails still alerts", 1,
+           [falert(why="last failure unread", who="worker " + D2)] + HSUM1, wlist=FWL, shows={D1: hshow()})
+    health("HEALTH failed with shell text in its last failure", 1,
+           [falert(why="last failure: an unrecognised failure")] + HSUM1, wlist=FWL,
+           shows={D1: hshow(), D2: fshow(lf="x; $(id) `y`")})
+    health("HEALTH failed with an odd stage", 1, [falert(stage="unknown")] + HSUM1,
+           wlist=hwl((D1, "in_progress"), (D2, "failed", "Stage Two!")), shows={D1: hshow(), D2: fshow()})
+    health("HEALTH failed of another dispatch id in worker-show", 1,
+           [falert(why="last failure unread", who="worker " + D2)] + HSUM1, wlist=FWL,
+           shows={D1: hshow(), D2: fshow(did=D1)})
+    health("HEALTH failed is ackable", 0, ["ORCA ack: failed:" + D2], args=["orca-ide", "ack", "failed:" + D2])
     # LIFE (L82): terminal output and a commit count, and only a good read does.
     LBRANCH = "refs/heads/fix/wt2/job"
     LWT = os.path.join(TMP, "wt2")
@@ -1920,7 +2097,66 @@ if LEGS in ("all", "health"):
                "is unknown; nothing was changed" % DEAD, ASKEND + "check whether terminal %s is still open" % DEAD]
     rebind("REBIND truncated terminal list asks", 1, PARTIAL, tl=tlist(H, trunc=True), calls_want=TO_LIST)
     rebind("REBIND short terminal list asks", 1, PARTIAL, tl=tlist(H, total=5), calls_want=TO_LIST)
-    rebind("REBIND omitted host asks", 1, PARTIAL, tl=tlist(H, omitted=("paired-1",)), calls_want=TO_LIST)
+    # L85: a host Orca left out is read on its own server before any ask.
+    WSLH = "runtime:wsl%3Aubuntu-24.04"
+    OFFH = "runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"
+    ENVS = json.dumps({"ok": True, "result": {"environments": [
+        {"id": "env-wsl-1", "name": "Ubuntu-24.04 (WSL)", "runtimeId": "wsl:ubuntu-24.04"},
+        {"id": "612deff4-eb4e-49ff-a87f-298432410f71", "name": "app.example", "runtimeId": "f68aea96-2486-4a4a-956a-4da5fcc3136f"}]}})
+    ENVL = ["environment", "list", "--json"]
+
+    def hlist(env):
+        return ["terminal", "list", "--environment", env, "--json"]
+    rebind("REBIND omitted host read on its server, holder absent: re-binds", 0,
+           ["ORCA rebind: note — terminal list left out host(s) %s; each was read on its own server and does not hold %s (punch-list L85)"
+            % (WSLH, DEAD), DONE], tl=tlist(H, omitted=(WSLH,)),
+           env_extra={"STUB_ENVS": ENVS, "STUB_TLIST_ENV": tlist(OTHER)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("env-wsl-1"), RSHOW, RUSE, RSHOW])
+    rebind("REBIND two omitted hosts each read", 0,
+           ["ORCA rebind: note — terminal list left out host(s) %s %s; each was read on its own server and does not hold %s (punch-list L85)"
+            % (WSLH, OFFH, DEAD), DONE], tl=tlist(H, omitted=(WSLH, OFFH)),
+           env_extra={"STUB_ENVS": ENVS, "STUB_TLIST_ENV": tlist(OTHER)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("env-wsl-1"), hlist("612deff4-eb4e-49ff-a87f-298432410f71"),
+                       RSHOW, RUSE, RSHOW])
+    rebind("REBIND omitted host holds the holder: asks as live", 1,
+           ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, DEAD),
+            ASKEND + "say whether terminal %s or this one coordinates %s" % (DEAD, RB_RUN)],
+           tl=tlist(H, omitted=(WSLH,)), env_extra={"STUB_ENVS": ENVS, "STUB_TLIST_ENV": tlist(DEAD)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("env-wsl-1")])
+    HEND = ASKEND + "bring host %s online or remove it in Orca, then ask this session to run the re-bind again"
+    rebind("REBIND omitted host with no environment asks, naming it", 1,
+           ["ORCA rebind: ask — terminal list left out host paired-1, and no saved Orca environment matches it, so whether %s "
+            "is still open there is unknown; nothing was changed" % DEAD, HEND % "paired-1"],
+           tl=tlist(H, omitted=("paired-1",)), env_extra={"STUB_ENVS": ENVS}, calls_want=TO_LIST + [ENVL])
+    rebind("REBIND environment list fails asks, naming the host", 1,
+           ["ORCA rebind: ask — terminal list left out host(s) %s, and environment list failed, so whether %s is still "
+            "open there is unknown; nothing was changed" % (WSLH, DEAD),
+            ASKEND + "bring host(s) %s online or remove them in Orca, then ask this session to run the re-bind again" % WSLH],
+           tl=tlist(H, omitted=(WSLH,)), env_extra={"STUB_ENVS_RC": "1"}, calls_want=TO_LIST + [ENVL])
+    rebind("REBIND offline host's own list fails asks, naming it", 1,
+           ["ORCA rebind: ask — terminal list left out host %s, and its own terminal list (--environment env-wsl-1) failed, "
+            "so whether %s is still open there is unknown; nothing was changed" % (WSLH, DEAD), HEND % WSLH],
+           tl=tlist(H, omitted=(WSLH,)), env_extra={"STUB_ENVS": ENVS, "STUB_TLIST_ENV_RC": "1"},
+           calls_want=TO_LIST + [ENVL, hlist("env-wsl-1")])
+    rebind("REBIND host's own list truncated asks", 1,
+           ["ORCA rebind: ask — terminal list left out host %s, and its own terminal list (--environment env-wsl-1) returned "
+            "a partial or unknown shape, so whether %s is still open there is unknown; nothing was changed" % (WSLH, DEAD),
+            HEND % WSLH],
+           tl=tlist(H, omitted=(WSLH,)), env_extra={"STUB_ENVS": ENVS, "STUB_TLIST_ENV": tlist(OTHER, trunc=True)},
+           calls_want=TO_LIST + [ENVL, hlist("env-wsl-1")])
+    # A host's own list scopes to that host: the hosts IT leaves out (this
+    # machine among them) are not read again.
+    rebind("REBIND host list's own omitted hosts are its scope", 0,
+           ["ORCA rebind: note — terminal list left out host(s) %s; each was read on its own server and does not hold %s (punch-list L85)"
+            % (WSLH, DEAD), DONE], tl=tlist(H, omitted=(WSLH,)),
+           env_extra={"STUB_ENVS": ENVS, "STUB_TLIST_ENV": tlist(OTHER, omitted=("local",))},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("env-wsl-1"), RSHOW, RUSE, RSHOW])
+    rebind("REBIND omitted id with shell text asks as partial", 1, PARTIAL, tl=tlist(H, omitted=("a;id",)),
+           calls_want=TO_LIST)
+    rebind("REBIND live holder on this server wins over an omitted host", 1,
+           ["ORCA rebind: ask — %s is held by %s, which is still open; a live coordinator's Run is never taken" % (RB_RUN, DEAD),
+            ASKEND + "say whether terminal %s or this one coordinates %s" % (DEAD, RB_RUN)],
+           tl=tlist(H, DEAD, omitted=(WSLH,)), calls_want=TO_LIST)
     rebind("REBIND list with no host scope asks", 1, PARTIAL,
            tl=json.dumps({"ok": True, "result": {"terminals": [{"handle": H}], "totalCount": 1, "truncated": False}}),
            calls_want=TO_LIST)

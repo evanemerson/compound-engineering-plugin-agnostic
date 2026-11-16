@@ -39,8 +39,27 @@
 #
 # A read counts only when complete (review finding #13): exit 0, `"ok": true`,
 # `truncated: false`, `totalCount` equal to the rows returned and below
-# `--limit`, and no omitted host. Anything else is UNKNOWN: a pre-check
-# refuses, and a post-check reports "removal not proved".
+# `--limit`, and every host it needs covered. Anything else is UNKNOWN: a
+# pre-check refuses, and a post-check reports "removal not proved".
+#
+# THE OMITTED HOST (punch-list L85). An unscoped read names the hosts it
+# covered (`hostScope.hostIds`) and the ones it left out (`omittedHostIds`):
+# a paired server that is offline, and on Orca 1.4.259 an added WSL host BY
+# DEFAULT (sender report, orca-lab 2026-11-16; not measured here). Up to
+# 1.55.7 any omitted host made every read UNKNOWN, so `rm` refused in every
+# repo while one host was added. Now a read still counts when it covered
+# `local`: the repo row comes from this machine's `repo list`, and every id
+# the script matches (`<repoId>::<path>`) is that local registration, which a
+# host's own registration of the same repo does not share (`repo list`
+# without `--environment` returned only the local row, same report). Measured on Orca 1.4.259
+# (WSL), 2026-11-16, read only: `worktree ps` and `worktree list` rows carry
+# `hostId`, `terminal list` rows `executionHostId`, all `local`, and each
+# read's `hostScope` was `{"hostIds": ["local"], "omittedHostIds": []}`; the
+# `--help` of both worktree reads says no flag selects this machine. No host
+# was omitted at the time, so the omitted shape is the sender's. Either way
+# the script's last line names the omitted hosts (`ORCA lane note: …`).
+# Stated limit: a repo added on a host (not on `local`) is not supported; the
+# script resolves only the local registration (residual, PR body).
 #
 # Paths (review finding #5): Orca returns Windows UNC paths. A path
 # `\\wsl.localhost\<distro>\a\b` becomes `/a/b` only when <distro> equals
@@ -406,7 +425,20 @@ cepa_ln_main=$(git rev-parse --show-toplevel 2>/dev/null) || cepa_ln_main=
 case "$cepa_ln_main" in /*) ;; *) refuse "the main checkout's toplevel is unreadable" ;; esac
 [ "$cepa_ln_main" = "${cepa_ln_main%%$'\n'*}" ] || refuse "the main checkout's path is not one line"
 cepa_ln_tmp=$(mktemp -d 2>/dev/null) || refuse "mktemp failed"
-trap 'rm -rf "$cepa_ln_tmp"' EXIT
+# THE OMITTED HOST (punch-list L85): the last line names any host Orca left
+# out of a read, and says whether the read counted.
+cepa_ln_exit() {
+  local st ids
+  if [ -f "$cepa_ln_tmp/omitted" ] && read -r st ids <"$cepa_ln_tmp/omitted"; then
+    if [ "$st" = counted ]; then
+      echo "ORCA lane note: Orca left host(s) $ids out of its reads; this lane is on this machine (host local), so they cannot hold its rows and the reads counted"
+    else
+      echo "ORCA lane note: Orca left host(s) $ids out of its reads and did not cover this machine (host local), so the read did not count; bring the host online or remove it in Orca, then ask again"
+    fi
+  fi
+  rm -rf "$cepa_ln_tmp"
+}
+trap cepa_ln_exit EXIT
 
 # One Orca call, bounded at $3 seconds plus a 2-second kill. A read is retried
 # once on the WSL interop error (orca-send.sh's rule); a write never is.
@@ -426,7 +458,7 @@ cepa_ln_orca() {
 # the read is not complete, which the caller treats as UNKNOWN.
 cepa_ln_py() {
   python3 -I -c '
-import json, re, sys
+import json, os, re, sys
 mode, f = sys.argv[1], sys.argv[2]
 args = sys.argv[3:]
 LIMIT = 500
@@ -459,8 +491,21 @@ def complete(r, key):
         sys.exit(1)
     if r.get("totalCount") != len(rows) or len(rows) >= LIMIT:
         sys.exit(1)
-    if hs.get("omittedHostIds") != []:
+    om, cov = hs.get("omittedHostIds"), hs.get("hostIds")
+    if not isinstance(om, list) or not isinstance(cov, list):
         sys.exit(1)
+    if om:
+        # L85: a lane of this repo is on this machine (host `local`): the
+        # repo row and every id this script matches are the local
+        # registration. A host Orca left out cannot hold one of its rows, so
+        # the read still counts when it covered `local`. The hosts are named
+        # in a note line either way (THE OMITTED HOST, header).
+        names = " ".join(x if isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9:%._-]{1,100}", x) else "?" for x in om[:5])
+        ok = "local" in cov
+        with open(os.path.join(os.path.dirname(f), "omitted"), "w") as o:
+            o.write(("counted " if ok else "refused ") + names + "\n")
+        if not ok:
+            sys.exit(1)
     return rows
 
 if mode == "ok":
