@@ -1786,11 +1786,11 @@ limits.
      L84). When the send's call fails in a way that leaves the result
      unknown (a timeout, an exit with no output, a reply in a shape the
      script does not know), the script reads the inbox for this very
-     message (same type, subject and body, or for a reply the same thread;
-     from this session; made since the send began) before it reports a
-     failure. Found, it prints `Orca send read back: <id> …` and goes on as
-     a stored send; a `worker_done` must also show its dispatch settled.
-     Orca's own `"ok": false` is a result, so it is never read back. Why: on
+     message before it reports a failure. Found, it prints
+     `Orca send read back: <id> …` and goes on as a stored send. A reply
+     whose `ok` is not true (Orca's `"ok": false` included) is Orca's
+     answer, so it is never read back. The script's header (THE READ-BACK)
+     owns what counts as the same message and its limits. Why: on
      2026-11-16 a `dispatch:` send that Orca delivered as a follow-up
      dispatch exited 5 with "the reply has no result.message.id" and wrote a
      send-failed alert (L88 item 2, sender report; its cause was not found).

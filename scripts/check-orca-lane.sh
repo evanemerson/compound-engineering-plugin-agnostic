@@ -364,10 +364,23 @@ expect("READS omitted host, local covered, create counts",
 expect("READS omitted host, local not covered, refusal names the host",
        W.run(F(cli=CLI, action="name"), mode="listomitlocal"), rc=1, first="ORCA lane: no lane renamed",
        has=(NOTE_NO % WSLH,), verbs_lack=[["worktree", "set"]])
+# PR #138 review: the live-agent read before rm never counts with a host left
+# out (a WSL host shares this machine), and its note comes before the Ending
+# line, which stays last.
+NOTE_STRICT = ("ORCA lane note: Orca left host(s) %s out of worktree ps or terminal list; an agent on a host of this "
+               "machine can sit in this lane's directory, so the live-agent check did not count")
 W.lane("g-psomit")
-expect("READS ps omits an offline host, local covered, rm counts",
-       W.run(F(cli=CLI, action="rm", lane="g-psomit"), mode="psomitted"), rc=0, first="ORCA lane: removed g-psomit",
-       has=(NOTE_OK % OFFH,))
+got = W.run(F(cli=CLI, action="rm", lane="g-psomit"), mode="psomitted")
+expect("READS ps omits a host, local covered, rm keeps the lane", got, rc=1,
+       first="ORCA lane: kept g-psomit — worktree ps was not a complete read", has=(NOTE_STRICT % OFFH,),
+       verbs_lack=[["worktree", "rm"]])
+o = got[1]
+good = len(o) >= 3 and o[-1].startswith("Ending first line: ") and o[-2].startswith(NOTE_STRICT % OFFH)
+(ok if good else miss)("READS the note comes before the Ending line" + ("" if good else " | %r" % o[-3:]))
+got = W.run(F(cli=CLI, action="name"), mode="listomitlocal")
+o = got[1]
+good = len(o) >= 3 and o[-1].startswith("Ending first line: ") and o[-2].startswith(NOTE_NO % WSLH)
+(ok if good else miss)("READS a refused read's note comes before the Ending line" + ("" if good else " | %r" % o[-3:]))
 expect("READS no omitted host prints no note", W.run(F(cli=CLI, action="name")), rc=0, lacks=("ORCA lane note",))
 expect("READS repo list failure", W.run(F(cli=CLI, action="name"), mode="repofail"), rc=1,
        first="ORCA lane: lanes unchanged — repo list failed")

@@ -115,14 +115,16 @@
 #                        turn after. Read from the `worker-list` row
 #                        (`projection.outcome` and `projection.stage.detail`),
 #                        then `worker-show` of each one not yet acked, at most
-#                        10 a run, for `dispatch.lastFailure` (shown only in
-#                        a plain shape, else `an unrecognised failure`) and
-#                        its handle. Measured on Orca 1.4.259, 2026-11-16,
-#                        read only, on Run run_5682a0ed1455: its three failed
-#                        dispatches read `failed` with details agent_readiness
-#                        and process_exited. A worker that sent its own
-#                        `worker_done --outcome failed` is rule 5's, not an
-#                        alert. The first run on a Run asks once about every
+#                        10 a run, for `dispatch.lastFailure` (shown only as
+#                        a `[a-z_]` token or a sentence in LAST_FAILURES, else
+#                        `an unrecognised failure`) and its handle. Measured
+#                        on Orca 1.4.259, 2026-11-16, read only, with
+#                        `worker-list --run run_5682a0ed1455 --json --full`
+#                        and `worker-show --dispatch <id> --json --full`: its
+#                        three failed dispatches read `failed` with details
+#                        agent_readiness and process_exited. A worker that
+#                        sent its own `worker_done --outcome failed` is rule
+#                        5's, not an alert; a `succeeded` one still alerts. The first run on a Run asks once about every
 #                        older failure; the ack keeps them quiet.
 #   question:<msg>       a `question` to this Run's mailbox with no reply
 #                        threaded on it after 10 minutes (an `ask` waits 10 by
@@ -408,7 +410,7 @@ print(" ".join(ids[:20]))
         || : >"$cepa_h_tmp/show/$d.fail"
     done
     # L60: a failed dispatch not yet acked is read for its last failure, at
-    # most FAILED_SHOWS of them a run (THE TIME BOUND still applies).
+    # most 10 of them a run (THE TIME BOUND still applies).
     mkdir -p "$cepa_h_tmp/fshow"
     cepa_h_nf=0
     while read -r cepa_h_fd _; do
@@ -886,7 +888,10 @@ for x in rows:
         if k not in acked:
             alert(k, "your question %s to %s has had no reply for %d minutes (bound %d)" % (mid, to, mins(t), AWAIT))
 
-# 4. Failed dispatches (L60). A dispatch that failed at start (or whose agent
+# 4. Failed dispatches (L60). The sentences Orca 1.4.259 wrote as
+# dispatch.lastFailure (worker-show of run_5682a0ed1455's failed dispatches).
+LAST_FAILURES = ("Agent process stop was requested but never confirmed",)
+# A dispatch that failed at start (or whose agent
 # exited) settles as `failed` with no worker_done, and Orca sends no message
 # for it. One the worker reported itself has a worker_done row in the inbox
 # window, which rule 5 already shows.
@@ -898,7 +903,9 @@ if run and not os.path.exists(os.path.join(tmp, "workers.fail")):
                 pl = json.loads(x["payload"])
             except ValueError:
                 continue
-            if isinstance(pl, dict) and isinstance(pl.get("dispatchId"), str):
+            # Only the worker's own failed report: a `succeeded` one for a
+            # dispatch Orca settled failed still alerts (PR #138 review).
+            if isinstance(pl, dict) and isinstance(pl.get("dispatchId"), str) and pl.get("outcome") == "failed":
                 reported.add(pl["dispatchId"])
     try:
         flines = open(os.path.join(tmp, "failed.ids")).read().split("\n")
@@ -917,8 +924,9 @@ if run and not os.path.exists(os.path.join(tmp, "workers.fail")):
             why, handle = "last failure unread", None
         else:
             lf = disp.get("lastFailure")
-            # Orca's own text, shown only in a plain shape (§12c).
-            why = "last failure: " + (lf if isinstance(lf, str) and re.fullmatch(r"[A-Za-z0-9 _.,:'()-]{1,120}", lf)
+            # Orca's own text, shown only as a token or a sentence Orca was
+            # measured to write (§12c: a shape, never free prose).
+            why = "last failure: " + (lf if isinstance(lf, str) and (re.fullmatch(r"[a-z_]{1,40}", lf) or lf in LAST_FAILURES)
                                       else "an unrecognised failure")
             handle = disp.get("assigneeHandle")
         who = did + (" (%s)" % handle if isinstance(handle, str) and re.fullmatch(r"term_[0-9a-f-]{36}", handle) else "")

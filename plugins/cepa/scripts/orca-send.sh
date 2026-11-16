@@ -174,15 +174,18 @@
 # sender report, cause not found). Before any of those is reported, the
 # script reads `inbox --limit 200 --json --full` once for a row that is this
 # message: made no earlier than 120 s before the send began (Orca's clock is
-# Windows', this one WSL's), from ORCA_TERMINAL_HANDLE when that is a term_
-# handle, the same body (trailing space aside), and the same type and subject
-# (a reply: the same thread_id instead). A worker_done also needs the payload's
+# Windows', this one WSL's; with no clock there is no read-back), from
+# ORCA_TERMINAL_HANDLE when that is a term_ handle, the same body (trailing
+# space aside), and the same type and subject (a reply: the same thread_id
+# instead), stored for the target itself (a `dispatch:` target: for any
+# dispatch, as L88 item 2's rewrite was). A worker_done also needs the payload's
 # dispatch, task and outcome, and then `worker-show` must report the dispatch
 # `completed` or `failed` as the outcome asks, else it is `not proven stored`.
 # Found, it prints `Orca send read back: <id> is in the inbox from this send,
 # though <reason> (punch-list L84)` and goes on as a stored send (the re-read
 # below, the nudge). Not found, or the inbox unreadable, the first reason
-# stands. Orca's `"ok": false` is its answer, so it is never read back. The
+# stands. A reply whose `ok` is not true (Orca's `"ok": false` included) is
+# Orca's answer, so it is never read back. The
 # other Orca writes cepa makes, and why each needs no read-back here or has
 # one: §12b rule 2 (worker-start, run-create) and the PR body of L84.
 #
@@ -293,9 +296,10 @@
 #     failed even when it may have stored (the reason then says "unconfirmed"
 #     or names the exit): a pasted copy then duplicates it. A duplicate is the
 #     accepted cost; a lost message is not.
-#   - With ORCA_TERMINAL_HANDLE unset, THE READ-BACK cannot tell this session's
-#     row from another's that has the same type, subject and body in the same
-#     two minutes; such a row reads as stored.
+#   - THE READ-BACK cannot tell this send from an identical one (same type,
+#     subject, body and recipient) made in the same two minutes, by this
+#     session, or by any session when ORCA_TERMINAL_HANDLE is unset: such a
+#     row reads as stored. The message did reach that recipient.
 #   - The flags are from `orchestration send --help` and `inbox --help`
 #     (Orca 1.4.245; `--full` from 1.4.246, see above). If Orca changes them,
 #     the send fails loudly here.
@@ -962,6 +966,16 @@ for x in rows:
                 or p.get("taskId") != task or p.get("outcome") != outcome:
             continue
     mid, to = x.get("id"), x.get("to_handle")
+    # The recipient (PR #138 review): a term_ or run: target only as itself;
+    # a dispatch: target also as another dispatch (L88 item 2: Orca rewrote it
+    # to the follow-up dispatch). A reply and a worker_done are bound by
+    # thread and payload above.
+    if typ not in ("reply", "worker_done"):
+        if target.startswith("dispatch:"):
+            if not (isinstance(to, str) and to.startswith("dispatch:")):
+                continue
+        elif to != target:
+            continue
     MIDRE = r"msg_[0-9a-f]{6,32}"
     if isinstance(mid, str) and re.fullmatch(MIDRE, mid) \
             and isinstance(to, str) and re.fullmatch(ADDR, to):
@@ -978,6 +992,8 @@ case "$cepa_send_got" in
     cepa_send_why=${cepa_send_got#FAIL }
     [ -n "$cepa_send_why" ] || cepa_send_why="the send output could not be read"
     case "$cepa_send_why" in 'Orca did not return "ok": true'*) fail "$cepa_send_why" ;; esac
+    # With no clock there is no window, so any older row would match.
+    [ "$cepa_send_t0" != 0 ] || fail "$cepa_send_why"
     cepa_send_back=$(cepa_send_readback) || cepa_send_back=
     [[ $cepa_send_back =~ ^msg_[0-9a-f]{6,32}\ (term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]] \
       || fail "$cepa_send_why"

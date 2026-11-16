@@ -51,13 +51,20 @@
 # `local`: the repo row comes from this machine's `repo list`, and every id
 # the script matches (`<repoId>::<path>`) is that local registration, which a
 # host's own registration of the same repo does not share (`repo list`
-# without `--environment` returned only the local row, same report). Measured on Orca 1.4.259
-# (WSL), 2026-11-16, read only: `worktree ps` and `worktree list` rows carry
+# without `--environment` returned only the local row, same report). The
+# live-agent reads before `rm` (`worktree ps`, `terminal list`) never count
+# with a host left out: a WSL host runs on this machine, so an agent there
+# can sit in the lane's directory while no row here shows it (PR #138
+# review). So `rm` still refuses while a WSL host is added, now naming it;
+# `name` and `create` no longer do. Measured on Orca 1.4.259
+# (WSL), 2026-11-16, read only, with `worktree ps --json`, `worktree list
+# --json` and `terminal list --json`: `worktree ps` and `worktree list` rows carry
 # `hostId`, `terminal list` rows `executionHostId`, all `local`, and each
 # read's `hostScope` was `{"hostIds": ["local"], "omittedHostIds": []}`; the
 # `--help` of both worktree reads says no flag selects this machine. No host
 # was omitted at the time, so the omitted shape is the sender's. Either way
-# the script's last line names the omitted hosts (`ORCA lane note: …`).
+# a note line names the omitted hosts (`ORCA lane note: …`): before the
+# Ending line when there is one, else last.
 # Stated limit: a repo added on a host (not on `local`) is not supported; the
 # script resolves only the local registration (residual, PR body).
 #
@@ -329,13 +336,31 @@ set -u
 refuse() { echo "ORCA lane refused: $1"; exit 4; }
 kept() {
   echo "ORCA lane: $1"
+  cepa_ln_note
   echo "Ending first line: Needed from you: $2"
   exit 1
 }
 failed() {
   echo "ORCA lane failed: $1"
+  cepa_ln_note
   echo "Ending first line: Needed from you: ${2:-inspect the lane in Orca (worktree show by id) and say how to proceed}"
   exit 3
+}
+# THE OMITTED HOST (punch-list L85): one line names any host Orca left out of
+# a read, and says whether the read counted. kept() and failed() print it
+# before their Ending line, so that line stays last; any other exit prints it
+# last, from the EXIT trap. Printed once.
+cepa_ln_noted=
+cepa_ln_note() {
+  local st ids
+  [ -z "$cepa_ln_noted" ] && [ -n "${cepa_ln_tmp-}" ] && [ -f "$cepa_ln_tmp/omitted" ] \
+    && read -r st ids <"$cepa_ln_tmp/omitted" || return 0
+  cepa_ln_noted=1
+  case "$st" in
+    counted) echo "ORCA lane note: Orca left host(s) $ids out of its reads; this lane is on this machine (host local), so they cannot hold its rows and the reads counted" ;;
+    strict) echo "ORCA lane note: Orca left host(s) $ids out of worktree ps or terminal list; an agent on a host of this machine can sit in this lane's directory, so the live-agent check did not count; bring the host online or remove it in Orca, then ask again" ;;
+    *) echo "ORCA lane note: Orca left host(s) $ids out of its reads and did not cover this machine (host local), so the read did not count; bring the host online or remove it in Orca, then ask again" ;;
+  esac
 }
 
 [ $# -eq 0 ] || refuse "orca-lane.sh takes no arguments; its fields go on stdin"
@@ -425,17 +450,8 @@ cepa_ln_main=$(git rev-parse --show-toplevel 2>/dev/null) || cepa_ln_main=
 case "$cepa_ln_main" in /*) ;; *) refuse "the main checkout's toplevel is unreadable" ;; esac
 [ "$cepa_ln_main" = "${cepa_ln_main%%$'\n'*}" ] || refuse "the main checkout's path is not one line"
 cepa_ln_tmp=$(mktemp -d 2>/dev/null) || refuse "mktemp failed"
-# THE OMITTED HOST (punch-list L85): the last line names any host Orca left
-# out of a read, and says whether the read counted.
 cepa_ln_exit() {
-  local st ids
-  if [ -f "$cepa_ln_tmp/omitted" ] && read -r st ids <"$cepa_ln_tmp/omitted"; then
-    if [ "$st" = counted ]; then
-      echo "ORCA lane note: Orca left host(s) $ids out of its reads; this lane is on this machine (host local), so they cannot hold its rows and the reads counted"
-    else
-      echo "ORCA lane note: Orca left host(s) $ids out of its reads and did not cover this machine (host local), so the read did not count; bring the host online or remove it in Orca, then ask again"
-    fi
-  fi
+  cepa_ln_note
   rm -rf "$cepa_ln_tmp"
 }
 trap cepa_ln_exit EXIT
@@ -484,7 +500,7 @@ def linux(p, distro):
 def safe(s, pat=r"[A-Za-z0-9._/@ -]{1,100}"):
     return s if isinstance(s, str) and re.fullmatch(pat, s) else "?"
 
-def complete(r, key):
+def complete(r, key, strict=False):
     rows = r.get(key)
     hs = r.get("hostScope") or {}
     if not isinstance(rows, list) or r.get("truncated") is not False:
@@ -501,9 +517,12 @@ def complete(r, key):
         # the read still counts when it covered `local`. The hosts are named
         # in a note line either way (THE OMITTED HOST, header).
         names = " ".join(x if isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9:%._-]{1,100}", x) else "?" for x in om[:5])
-        ok = "local" in cov
+        # strict: the live-agent reads before rm. A WSL host runs on this
+        # machine, so an agent there can sit in the lane directory while
+        # the rows of this machine show none (PR #138 review): never counted.
+        ok = "local" in cov and not strict
         with open(os.path.join(os.path.dirname(f), "omitted"), "w") as o:
-            o.write(("counted " if ok else "refused ") + names + "\n")
+            o.write(("counted " if ok else "strict " if strict else "refused ") + names + "\n")
         if not ok:
             sys.exit(1)
     return rows
@@ -672,7 +691,7 @@ elif mode == "shown":
 elif mode == "agents":
     if not isinstance(r, dict):
         sys.exit(1)
-    rows = [w for w in complete(r, "worktrees") if isinstance(w, dict) and w.get("worktreeId") == args[0]]
+    rows = [w for w in complete(r, "worktrees", strict=True) if isinstance(w, dict) and w.get("worktreeId") == args[0]]
     if len(rows) != 1 or not isinstance(rows[0].get("agents"), list):
         sys.exit(1)
     print(len(rows[0]["agents"]))
@@ -684,7 +703,7 @@ elif mode == "terms":
     wid, tf = args
     if not isinstance(r, dict):
         sys.exit(1)
-    rows = [w for w in complete(r, "worktrees") if isinstance(w, dict) and w.get("worktreeId") == wid]
+    rows = [w for w in complete(r, "worktrees", strict=True) if isinstance(w, dict) and w.get("worktreeId") == wid]
     if len(rows) != 1 or not isinstance(rows[0].get("agents"), list):
         sys.exit(1)
     try:
@@ -694,7 +713,7 @@ elif mode == "terms":
     tr = t.get("result") if isinstance(t, dict) and t.get("ok") is True else None
     if not isinstance(tr, dict):
         sys.exit(1)
-    terms = [x for x in complete(tr, "terminals") if isinstance(x, dict) and x.get("worktreeId") == wid]
+    terms = [x for x in complete(tr, "terminals", strict=True) if isinstance(x, dict) and x.get("worktreeId") == wid]
     panes = {}
     for x in terms:
         h = x.get("handle")

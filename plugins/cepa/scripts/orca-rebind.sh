@@ -117,13 +117,18 @@
 #     left out BY DEFAULT, sender report) is read on its own server, by the
 #     saved environment whose `runtimeId` (or id) is the host id after
 #     `runtime:`, URL-decoded: `terminal list --environment <env id>`. The
-#     holder found there is live (ask); absent from every such host is
-#     gone, with a note line naming the hosts. A host that matches no
-#     environment, or whose read fails or is partial, asks, naming the host
+#     holder found there is live (ask); absent from every such host, each
+#     read complete in its own scope (hosts named, none left out), is gone,
+#     with a note line naming the hosts. A host that matches no
+#     environment, or whose read fails or is partial, asks, naming the host;
+#     more than 5 omitted hosts, or an id of an unknown shape, asks unnamed
 #     (up to 1.55.7 every omitted host asked, unnamed, so one offline host
-#     blocked every re-bind). The mapping is from `environment list` rows
-#     measured on Orca 1.4.259, 2026-11-16 (`id`, `name`, `runtimeId`); the
-#     omitted id `runtime:f68aea96-…` of L85 item 2 has that runtimeId shape.
+#     blocked every re-bind). The mapping is from `environment list --json`
+#     rows measured on Orca 1.4.259, 2026-11-16 (`id`, `name`, `runtimeId`, a
+#     UUID); the omitted id `runtime:f68aea96-…` of L85 item 2 is a UUID
+#     after `runtime:`. `terminal list --environment <a paired id> --json`
+#     returned ok, truncated false, and `hostIds: ["local"]` (that server's
+#     own scope) the same day.
 #     Whether the WSL host has an environment row was not measured (none was
 #     added): if it has none, the re-bind still asks, now naming it.
 #   - Two sessions that re-bind the same Run at the same moment: at most one
@@ -312,11 +317,17 @@ hs = [x["handle"] for x in t]
 if sys.argv[2] in hs:
     print("live")
     sys.exit(0)
+hs = r.get("hostScope")
 if sys.argv[3] == "host":
-    print("gone")   # a host read: its own scope is that host
+    # A host read counts only when complete in its own scope: hosts named,
+    # none left out (PR #138 review: an offline host behind the relay could
+    # answer an empty list).
+    if not isinstance(hs, dict) or not hs.get("hostIds") or hs.get("omittedHostIds") != []:
+        sys.exit(1)
+    print("gone")
     sys.exit(0)
 # A host Orca left out of the list could hold the terminal (PR #113 review).
-om = r["hostScope"]["omittedHostIds"]
+om = hs["omittedHostIds"]
 if not isinstance(om, list) or not all(isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9:%._-]{1,100}", x) for x in om) \
         or len(om) > 5:
     sys.exit(1)
@@ -339,7 +350,7 @@ h = sys.argv[2]
 want = urllib.parse.unquote(h[len("runtime:"):]) if h.startswith("runtime:") else None
 hit = [e["id"] for e in envs if isinstance(e, dict) and want is not None
        and (e.get("runtimeId") == want or e.get("id") == want)]
-if len(hit) != 1 or not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", hit[0]):
+if len(hit) != 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", hit[0]):
     sys.exit(1)
 print(hit[0])
 ' "$cepa_rb_tmp/envs.json" "$cepa_rb_h" 2>/dev/null) \

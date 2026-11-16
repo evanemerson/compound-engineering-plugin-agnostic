@@ -16,7 +16,13 @@ shard holds what this branch did not close.
    Unmeasured: whether Orca stores the row in this machine's inbox with
    `to_handle` equal to the host `term_` handle (the re-read needs that), and
    whether a `dispatch:` target for a host worker needs `on:` at all.
-3. [P2] L85: `orca-lane.sh` for a repo added on a host (the item's extra
+3. [P2] L85: `orca-lane.sh rm` still refuses while a WSL host is added (now
+   naming it). PR #138 review: a WSL host runs on this machine, so its agent
+   can sit in the lane's directory with no local row, and the live-agent read
+   stays strict. To lift it: read the WSL host's own `worktree ps
+   --environment <id>` and match agents by path (the host path form is not
+   measured).
+3b. [P2] L85: `orca-lane.sh` for a repo added on a host (the item's extra
    question). Not implemented: every call would need `--environment`, the
    repo resolver reads only the local registration, and host paths differ.
    The script states this as a limit.
@@ -40,3 +46,15 @@ shard holds what this branch did not close.
    of a handled delivery is a no-op. `worktree create` / `rm`: #134.
    `worker-start`, `task-create`, `run-create`: no script runs them; §12b
    rule 2 now says to read `worker-list` / `run-list` before a rerun.
+9. [P3] PR #138 review, test gaps: the 10-show cap on failed dispatches (and
+   acked rows not counting), the highest-sequence pick of two matching rows,
+   `on:` with a reply, two omitted hosts with the second live, two
+   environments matching one host, two lane reads overwriting the note, and a
+   PEEK pin on rule 8's replay sentence. Add a case and a mutant each.
+10. [P3] PR #138 review: the read-back cannot tell this send from an identical
+    one (same type, subject, body, recipient) stored in the same two minutes.
+    A pre-send inbox read that excludes existing ids would close it.
+11. [P3] PR #138 review: run `/cepa:compound` on "a host or scope relaxation
+    needs a measured round trip before it fails open" (review caught two).
+12. [P3] PR #138 review: rule 1's `on:` bullet restates details the
+    orca-send.sh header owns; cut it to what a session does and cite.
