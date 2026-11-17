@@ -1683,9 +1683,10 @@ if LEGS in ("all", "health"):
     health("HEALTH unknown repo shows every file", 1, [af_line(wt="wt2")] + HSUM1, files={AF: afile(wt="wt2")}, cwd=TMP)
     health("HEALTH refused send reads refused", 1, [af_line(what="was refused before any Orca call")] + HSUM1,
            files={AF: afile(kind="send_refused")})
-    for why in ("worktree ps failed or timed out", "terminal show failed or timed out",
-                "terminal send exited non-zero or timed out", 'terminal send did not return "ok": true'):
-        health("HEALTH nudge_skipped reads its reason: " + why, 1,
+    for tag, why in (("ps", "worktree ps failed or timed out"), ("show", "terminal show failed or timed out"),
+                     ("send exit", "terminal send exited non-zero or timed out"),
+                     ("send not ok", 'terminal send did not return "ok": true')):
+        health("HEALTH nudge_skipped reads its reason (%s)" % tag, 1,
                [af_line(what="was stored, but its nudge was skipped", why=why)] + HSUM1,
                files={AF: afile(kind="nudge_skipped", reason=why)})
     health("HEALTH unknown reason is not shown", 1, [af_line(why="an unrecognised reason")] + HSUM1,
