@@ -11,9 +11,12 @@
 #   YAML      the `orca.yaml` example block parses (with lane_scheme.py's
 #             loader: a duplicate key voids it), uses only the top-level
 #             keys Orca 1.4.245's parser reads (lane_scheme.ORCA_KEYS,
-#             measured 2026-11-02 in out/shared/orca-yaml.js), and has scripts.setup,
-#             scripts.archive and `setupAgentStartupPolicy: wait-for-setup`
-#             (the only two values that parser accepts are listed there).
+#             measured 2026-11-02 in out/shared/orca-yaml.js), and has
+#             scripts.setup, scripts.archive and
+#             `setupAgentStartupPolicy: wait-for-setup` (the only two values
+#             that parser accepts are listed there). It imports lane_scheme
+#             from plugins/cepa/scripts under the repo root, which the `cd`
+#             below makes the working directory.
 #   GATE      inside the `## The stack gate` section, the gate is cited by
 #             path, config path, call shape, output line and exit codes
 #             (design "Builder-check answers" 6), the start command
@@ -60,10 +63,12 @@
 # Orca's parser on one date; a later Orca can add keys, and this check will
 # not see that. The MAKE leg runs the example as written with stubs; it does
 # not prove any repo's real Makefile is gated (that is /cepa:setup's check 8,
-# plugins/cepa/scripts/lane_scheme.py, tested by scripts/check-lane-scheme.sh). The SETUP leg reads this skill only, never a repo's `worktree-init`,
-# and it does not run the hang (the pty probe is in L78). No leg checks the
-# Setup order (build, then the gate, then `.env` and migrations under it) or
-# its two build preconditions: they are prose only. The TEMPLATE leg checks anchors, not the meaning of each step.
+# plugins/cepa/scripts/lane_scheme.py, tested by scripts/check-lane-scheme.sh).
+# The SETUP leg reads this skill only, never a repo's `worktree-init`, and it
+# does not run the hang (the pty probe is in L78). No leg checks the Setup
+# order (build, then the gate, then `.env` and migrations under it) or its two
+# build preconditions: they are prose only. The TEMPLATE leg checks anchors,
+# not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SKILL="$(realpath "${1:-plugins/cepa/skills/lane-stack/SKILL.md}")" python3 - <<'PY'

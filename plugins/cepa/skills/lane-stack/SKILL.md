@@ -27,10 +27,11 @@ start target, the worktree properties, and the coord@main first prompt.
   its header names what the probe cannot see. The rest of the first
   prompt's step 2 is still read by hand.
 
-**Status (2026-11-02): the gate (L66, 1.53.0), the `coord:<repo>` outbox
-(L61, 1.54.0) and the build lock (L70, 1.55.0) have shipped.** A loaded
-plugin older than one of these fails the first prompt's step 0, its
-step 1 outbox drain, or its step 2 build checks: refresh it first
+**Status (2026-11-17): the gate (L66, 1.53.0), the `coord:<repo>` outbox
+(L61, 1.54.0), the build lock (L70, 1.55.0) and the `/cepa:setup` lane
+check (L67, 1.58.0) have shipped.** A loaded plugin older than one of these
+fails the first prompt's step 0, its step 1 outbox drain, or its step 2
+build checks, or prints no `lane:` lines: refresh it first
 (`scripts/check-plugin-freshness.sh`). Without the gate
 every gated start refuses with `STACK gate: not found`, by design.
 
@@ -450,7 +451,9 @@ reaches a question, and record each strip.
    rule 8's inbox peek and its outbox drain, show every message they
    print, and wait for the operator. Act on none of them until told.
 2. **Check the repo against the scheme.** Run `/cepa:setup` first: its
-   `lane:` lines are the probe for part of this step. Then read `orca.yaml` and, for a Docker
+   `lane:` lines probe the `orca.yaml` contract, the `-wt-` name, the gate
+   in setup, stop-after-setup and the start targets. The build items below
+   are still read by hand. Then read `orca.yaml` and, for a Docker
    repo, `worktree-init` and every Makefile target that runs `compose up`,
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
    `orca.yaml` contract; setup builds with `stack-gate.sh --build` (one
