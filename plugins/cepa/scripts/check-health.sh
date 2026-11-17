@@ -170,6 +170,28 @@ EOF
   fi
 fi
 
+# --- lane & stack scheme (punch-list L67) -----------------------------------
+# Facts only; /cepa:setup check 8 interprets them. lane_scheme.py's header owns
+# what it reads and what it cannot see; the lane-stack skill owns the contract.
+ls_py="$(dirname "$0")/lane_scheme.py"
+if ! command -v python3 >/dev/null 2>&1; then
+  info "lane: NOT CHECKED — python3 unavailable"
+elif [ ! -f "$ls_py" ]; then
+  info "lane: NOT CHECKED — $ls_py not found"
+else
+  ls_rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 5 60 python3 "$ls_py" . </dev/null || ls_rc=$?
+  else
+    python3 "$ls_py" . </dev/null || ls_rc=$?
+  fi
+  case "$ls_rc" in
+    0) ;;
+    124|137) miss "lane: lane_scheme.py timed out after 60 s — the lane facts above are incomplete" ;;
+    *) miss "lane: lane_scheme.py exited $ls_rc — the lane facts above are incomplete" ;;
+  esac
+fi
+
 # --- plugin version drift --------------------------------------------------
 IP="$HOME/.claude/plugins/installed_plugins.json"
 if ! command -v python3 >/dev/null 2>&1; then

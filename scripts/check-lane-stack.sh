@@ -8,11 +8,15 @@
 #   The optional path lets the controls run it on a mutated copy.
 #
 # Legs:
-#   YAML      the `orca.yaml` example block parses, uses only the top-level
-#             keys Orca 1.4.245's parser reads (measured 2026-11-02 in
-#             out/shared/orca-yaml.js), and has scripts.setup,
-#             scripts.archive and `setupAgentStartupPolicy: wait-for-setup`
-#             (the only two values that parser accepts are listed there).
+#   YAML      the `orca.yaml` example block parses (with lane_scheme.py's
+#             loader: a duplicate key voids it), uses only the top-level
+#             keys Orca 1.4.245's parser reads (lane_scheme.ORCA_KEYS,
+#             measured 2026-11-02 in out/shared/orca-yaml.js), and has
+#             scripts.setup, scripts.archive and
+#             `setupAgentStartupPolicy: wait-for-setup` (the only two values
+#             that parser accepts are listed there). It imports lane_scheme
+#             from plugins/cepa/scripts under the repo root, which the `cd`
+#             below makes the working directory.
 #   GATE      inside the `## The stack gate` section, the gate is cited by
 #             path, config path, call shape, output line and exit codes
 #             (design "Builder-check answers" 6), the start command
@@ -58,11 +62,13 @@
 # STATED LIMITS: the YAML leg checks the key set against a list copied from
 # Orca's parser on one date; a later Orca can add keys, and this check will
 # not see that. The MAKE leg runs the example as written with stubs; it does
-# not prove any repo's real Makefile is gated (that is L67's /cepa:setup
-# check). The SETUP leg reads this skill only, never a repo's `worktree-init`,
-# and it does not run the hang (the pty probe is in L78). No leg checks the
-# Setup order (build, then the gate, then `.env` and migrations under it) or
-# its two build preconditions: they are prose only. The TEMPLATE leg checks anchors, not the meaning of each step.
+# not prove any repo's real Makefile is gated (that is /cepa:setup's check 8,
+# plugins/cepa/scripts/lane_scheme.py, tested by scripts/check-lane-scheme.sh).
+# The SETUP leg reads this skill only, never a repo's `worktree-init`, and it
+# does not run the hang (the pty probe is in L78). No leg checks the Setup
+# order (build, then the gate, then `.env` and migrations under it) or its two
+# build preconditions: they are prose only. The TEMPLATE leg checks anchors,
+# not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SKILL="$(realpath "${1:-plugins/cepa/skills/lane-stack/SKILL.md}")" python3 - <<'PY'
@@ -88,21 +94,22 @@ def blocks(lang, fence="```"):
     pat = r"^%s%s\n(.*?)^%s$" % (re.escape(fence), re.escape(lang), re.escape(fence))
     return re.findall(pat, text, re.S | re.M)
 
-# YAML
-ORCA_KEYS = {"scripts", "setupAgentStartupPolicy", "issueCommand", "defaultTabs",
-             "environmentRecipes", "worktree"}
+# YAML — through /cepa:setup's own parser (plugins/cepa/scripts/lane_scheme.py,
+# L67), so the example and every repo's orca.yaml are read by one loader with
+# one key set: duplicate keys void the file, as in Orca.
+sys.dont_write_bytecode = True   # no __pycache__ inside the plugin
+sys.path.insert(0, os.path.join(os.getcwd(), "plugins", "cepa", "scripts"))
+from lane_scheme import ORCA_KEYS, load_orca_yaml, YamlUnavailable
 ys = blocks("yaml")
 doc = None
+yaml_ok = True
 try:
-    import yaml
-except ImportError:
-    yaml = None
+    load_orca_yaml("{}")
+except YamlUnavailable:
+    yaml_ok = False
     case("YAML PyYAML available", False, "python3 cannot import yaml — install PyYAML")
-if len(ys) == 1 and yaml is not None:
-    try:
-        doc = yaml.safe_load(ys[0])
-    except yaml.YAMLError:
-        doc = None
+if len(ys) == 1 and yaml_ok:
+    doc, _ = load_orca_yaml(ys[0])
 case("YAML one orca.yaml block that parses", isinstance(doc, dict),
      "found %d yaml blocks, or the block does not parse to a mapping" % len(ys))
 doc = doc if isinstance(doc, dict) else {}

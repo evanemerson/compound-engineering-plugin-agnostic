@@ -448,6 +448,15 @@ jobs:
       - name: Check lane-stack skill controls
         if: always()
         run: bash scripts/check-lane-stack-controls.sh
+      # /cepa:setup's check of a repo against the skill (punch-list L67,
+      # plugins/cepa/scripts/lane_scheme.py): fixture repos built from the
+      # skill's own examples, one gap per case; the controls mutate the probe.
+      - name: Check lane scheme probe
+        if: always()
+        run: bash scripts/check-lane-scheme.sh
+      - name: Check lane scheme probe controls
+        if: always()
+        run: bash scripts/check-lane-scheme-controls.sh
 
   orca-outbox:
     # The coord:<repo> address (autonomy section 12b rules 1 and 8, punch-list

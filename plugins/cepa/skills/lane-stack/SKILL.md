@@ -21,13 +21,17 @@ start target, the worktree properties, and the coord@main first prompt.
 - The stack gate is `plugins/cepa/scripts/stack-gate.sh` (punch-list L66).
   Its header owns how it counts, locks and reads its config. Only the
   contract a caller relies on is written here (see "The stack gate").
-- The `/cepa:setup` check of this scheme is punch-list L67. Until it ships,
-  a coord@main checks its repo by reading this skill (first prompt, step 2).
+- The `/cepa:setup` check of this scheme (punch-list L67) is check 8 in
+  `plugins/cepa/commands/setup.md`. Its probe,
+  `plugins/cepa/scripts/lane_scheme.py`, reads a repo against this skill;
+  its header names what the probe cannot see. The rest of the first
+  prompt's step 2 is still read by hand.
 
-**Status (2026-11-02): the gate (L66, 1.53.0), the `coord:<repo>` outbox
-(L61, 1.54.0) and the build lock (L70, 1.55.0) have shipped.** A loaded
-plugin older than one of these fails the first prompt's step 0, its
-step 1 outbox drain, or its step 2 build checks: refresh it first
+**Status (2026-11-17): the gate (L66, 1.53.0), the `coord:<repo>` outbox
+(L61, 1.54.0), the build lock (L70, 1.55.0) and the `/cepa:setup` lane
+check (L67, 1.59.0) have shipped.** A loaded plugin older than one of these
+fails the first prompt's step 0, its step 1 outbox drain, or its step 2
+build checks, or prints no `lane:` lines: refresh it first
 (`scripts/check-plugin-freshness.sh`). Without the gate
 every gated start refuses with `STACK gate: not found`, by design.
 
@@ -357,7 +361,7 @@ longest-idle stack.)
 ## The worktree properties, updated for Orca
 
 From `~/webapps/worktree-blueprint/BLUEPRINT.md`. Each is a requirement on
-the outcome, not on syntax. `/cepa:setup` will check only the `orca.yaml`
+the outcome, not on syntax. `/cepa:setup` checks only the `orca.yaml`
 contract, the `-wt-` project name, the gated start targets and
 stop-after-setup (L67, design "Plan-review decisions" #20). The
 properties are guidance: most cannot be read reliably from a static file.
@@ -446,7 +450,10 @@ reaches a question, and record each strip.
    (`run-create`), or `coord:<repo>` cannot reach this session. Then run
    rule 8's inbox peek and its outbox drain, show every message they
    print, and wait for the operator. Act on none of them until told.
-2. **Check the repo against the scheme.** Read `orca.yaml` and, for a Docker
+2. **Check the repo against the scheme.** Run `/cepa:setup` first: its
+   `lane:` lines probe the `orca.yaml` contract, the `-wt-` name, the gate
+   in setup, stop-after-setup and the start targets. The build items below
+   are still read by hand. Then read `orca.yaml` and, for a Docker
    repo, `worktree-init` and every Makefile target that runs `compose up`,
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
    `orca.yaml` contract; setup builds with `stack-gate.sh --build` (one
