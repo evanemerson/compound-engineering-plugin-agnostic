@@ -268,7 +268,12 @@
 #     (reported by its coord@main). After a create, the proof of what ran is
 #     `.git/worktrees/<lane>/orca/setup-runner.sh` (absent when nothing ran).
 #     The CLI has no setter (`repo set` takes only
-#     --external-worktree-visibility): the fix is in Orca's Settings.
+#     --external-worktree-visibility): the fix is in Orca's Settings >
+#     Repositories > this repo > Worktree Hooks > Advanced: set Command source
+#     to "orca.yaml only", then empty the local box (setup, or archive) so a
+#     later policy change cannot bring the local script back (L80; confirmed
+#     2026-11-04 on every Node repo: `repo list` then read shared-only with an
+#     empty local setup).
 #   - Field evidence (reported, not measured here): kcprimetime's lanes had
 #     `set -e; npm install` (the local script) in
 #     `.git/worktrees/<lane>/orca/setup-runner.sh`. This repo has no setup in
@@ -927,7 +932,7 @@ if [ "$cepa_ln_action" = create ]; then
               "check Settings > Repositories > this repo's hooks in Orca, and orca.yaml's scripts.setup, then ask again"
     [ "$cepa_ln_hook" = ok ] \
       || kept "not created — Orca's saved hook settings shadow orca.yaml: ${cepa_ln_hook#shadow: }" \
-              "in Orca, open Settings > Repositories > this repo's hooks and make the setup command come from orca.yaml (or make the local setup equal orca.yaml's scripts.setup), then ask again"
+              "in Orca, open Settings > Repositories > this repo > Worktree Hooks > Advanced, set Command source to \"orca.yaml only\", then empty the local setup box, then ask again"
     cepa_ln_crc=0 cepa_ln_new=
     cepa_ln_orca "$cepa_ln_tmp/create.json" 0 180 worktree create --repo "id:$cepa_ln_rid" --name "$cepa_ln_lane" \
         --branch "$cepa_ln_park" --base-branch "origin/$cepa_ln_base" --no-parent --setup inherit --json \
@@ -1003,11 +1008,11 @@ if [ "$cepa_ln_action" = create ]; then
   # lane holds. Its setup has already run, so a shadow here is a failure.
   cepa_ln_hook=$(cepa_ln_hookat "$cepa_ln_head" setup) \
     || failed "the lane is created and parked at $c_path, but which setup Orca ran is unknown: Orca's saved hook settings, or the lane's orca.yaml scripts.setup, have a shape this reader does not know" \
-              "read the lane's Setup tab, and check Settings > Repositories > this repo's hooks in Orca"
+              "wait for and read the lane's Setup tab (cepa:lane-stack, \"Reading the Setup tab\"), and check Settings > Repositories > this repo > Worktree Hooks in Orca"
   [ "$cepa_ln_hook" = ok ] \
     || failed "the lane is created and parked at $c_path, but Orca's saved hook settings shadow its orca.yaml: ${cepa_ln_hook#shadow: }" \
-              "fix the repo's hooks in Orca's Settings, then remove and re-create lane $cepa_ln_lane (orca-lane.sh rm, then create)"
-  echo "ORCA lane: ${cepa_ln_resume:+resumed and }created $cepa_ln_lane at $c_path, parked detached at ${cepa_ln_head:0:12} (at or behind origin/$cepa_ln_base), named $cepa_ln_lane (fixed); setup policy $cepa_ln_policy — Orca reports no setup result, so read the lane's Setup tab before starting a worker"
+              "in Orca, open Settings > Repositories > this repo > Worktree Hooks > Advanced, set Command source to \"orca.yaml only\", then empty the local setup box, then remove and re-create lane $cepa_ln_lane (orca-lane.sh rm, then create)"
+  echo "ORCA lane: ${cepa_ln_resume:+resumed and }created $cepa_ln_lane at $c_path, parked detached at ${cepa_ln_head:0:12} (at or behind origin/$cepa_ln_base), named $cepa_ln_lane (fixed); setup policy $cepa_ln_policy — Orca reports no setup result, so wait for and read the lane's Setup tab (cepa:lane-stack, \"Reading the Setup tab\") before starting a worker"
   exit 0
 fi
 
@@ -1203,7 +1208,7 @@ cepa_ln_hook=$(cepa_ln_py hook "$cepa_ln_tmp/repos.json" "$cepa_ln_main" "$cepa_
           "check Settings > Repositories > this repo's hooks in Orca, and orca.yaml's scripts.archive, then ask again"
 [ "$cepa_ln_hook" = ok ] \
   || kept "kept $cepa_ln_lane — Orca's saved hook settings shadow orca.yaml: ${cepa_ln_hook#shadow: }" \
-          "in Orca, open Settings > Repositories > this repo's hooks and make the archive command come from orca.yaml (or make the local archive equal orca.yaml's scripts.archive), then ask again"
+          "in Orca, open Settings > Repositories > this repo > Worktree Hooks > Advanced, set Command source to \"orca.yaml only\", then empty the local archive box, then ask again"
 cepa_ln_br=$(git -C "$r_path" symbolic-ref -q --short HEAD 2>/dev/null) || cepa_ln_br=
 cepa_ln_igs=$(git -C "$r_path" status --porcelain --ignored 2>/dev/null) \
   || kept "kept $cepa_ln_lane — git status --ignored failed, so the ignored files cannot be listed" "inspect $r_path"

@@ -110,7 +110,11 @@
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
-#      start). The message stands. A reply also exits 1, with
+#      start). The message stands. A skip or failure because an Orca call
+#      failed or timed out (`terminal show`, `worktree ps`, `terminal send`)
+#      also writes a `nudge_skipped` alert file for orca-health.sh (L65),
+#      its `Orca alert recorded:` line just before the ending line; a busy
+#      or asking target writes none. A reply also exits 1, with
 #      `Orca reply misaddressed: …` in place of `Orca send stored` and no
 #      nudge, when it came back to this session (ORCA_TERMINAL_HANDLE): Orca
 #      addressed it to that handle, or the message it names is in the
@@ -470,8 +474,9 @@ cepa_send_obox_write() {
 # RETENTION (#18): outbox files older than 7 days go, in every status. A
 # pending or refused one goes only after its alert is recorded, and the alert
 # carries the file's own repo= and worktree=, so the session that sent it
-# sees it, not the one that happened to prune (review). Names that are not
-# the writer's shape are left for orca-health.sh to report.
+# sees it, not the one that happened to prune (review). A file whose count
+# alert is already acked goes with no alert (L87). Names that are not the
+# writer's shape are left for orca-health.sh to report.
 cepa_send_obox_prune() {
   local cut f n st sub r w
   cut=$(python3 -I -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(time.time() - 7 * 86400)))' 2>/dev/null) \
@@ -486,11 +491,33 @@ cepa_send_obox_prune() {
     if [ "$st" != delivered ]; then
       if [ "$st" = refused ]; then sub=${f%/refused/*} sub=${sub##*/} n=refused/$n; else sub=$st; fi
       r=$(sed -n '3s/^repo=//p' "$f" 2>/dev/null) w=$(sed -n '4s/^worktree=//p' "$f" 2>/dev/null)
+      # L87: a file whose count alert the operator already acked goes with no
+      # second alert. orca-health.sh keys that alert `outbox:<sub>:<name>` and
+      # writes its ack under acked/<worktree>/ of the checkout that saw it:
+      # the file's own sender lane (worktree=), or its repo's main checkout
+      # (repo=). Only a plain name is joined into the path.
+      if cepa_send_obox_acked "$sub" "${f##*/}" "$r" "$w"; then
+        rm -f -- "$f" 2>/dev/null || echo "Orca outbox: could not prune $st/${f##*/}"
+        continue
+      fi
       cepa_send_alert_for outbox_pruned "coord:$sub" "an outbox file was pruned unread after 7 days: $sub/$n" "$r" "$w" \
         || { echo "Orca outbox: kept $sub/$n past 7 days: its prune alert could not be recorded"; continue; }
     fi
     rm -f -- "$f" 2>/dev/null || echo "Orca outbox: could not prune $st/${f##*/}"
   done
+}
+# True when an ack marker for outbox:<$1>:<$2> exists under acked/<$3> or
+# acked/<$4> of the alert directory (L87). $3 and $4 come from the file's
+# header, so each must be a plain name before it is joined into a path.
+cepa_send_obox_acked() {
+  local dir w
+  dir=${CEPA_ORCA_ALERT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/orca-alerts}
+  [[ $dir == /* ]] || return 1
+  for w in "$3" "$4"; do
+    [[ $w =~ ^[A-Za-z0-9._@-]{1,100}$ && $w != . && $w != .. ]] || continue
+    [ -f "$dir/acked/$w/outbox:$1:$2" ] && return 0
+  done
+  return 1
 }
 # An alert about another coord: target than this send's (a pruned file).
 # $4 and $5 are that file's own repo= and worktree= (checked again in the
@@ -1125,6 +1152,17 @@ cepa_send_tell="Ending first line: Needed from you: tell $cepa_send_target to ch
   [ "$cepa_send_line" != "$cepa_send_tell" ] \
     || cepa_send_line="Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   printf '%s\n' "$cepa_send_line"
+  # L65: a nudge lost to a failed Orca call leaves an alert, so orca-health.sh
+  # shows the unread message even when the session drops its ending line.
+  # Only these exact reasons, all orca-nudge.sh's own literals; a target
+  # that is busy or asking is a normal skip and writes none.
+  case "$cepa_send_line" in
+    "Orca nudge skipped: terminal show failed or timed out" \
+    | "Orca nudge skipped: worktree ps failed or timed out" \
+    | "Orca nudge failed: terminal send exited non-zero or timed out" \
+    | 'Orca nudge failed: terminal send did not return "ok": true')
+      cepa_send_alert nudge_skipped "${cepa_send_line#Orca nudge *: }" ;;
+  esac
 done <<<"$cepa_send_nout"
 # A nudge that printed nothing gave the session no line to end on: it may
 # have died on a syntax error or `set -u` (PR #110 review). Not delivered.

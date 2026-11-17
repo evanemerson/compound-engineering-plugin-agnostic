@@ -1537,6 +1537,13 @@ if LEGS in ("all", "send"):
                osend_json=json.dumps({"id": "local", "ok": False, "error": {"code": "run_required"}}))
     alert_case("ALERT stored send writes none", 0, None, mode="no-nudge")
     alert_case("ALERT nudge skip writes none", 1, None, ps_json=ps(row("waiting")))
+    # L65: a nudge lost to a failed Orca call writes a nudge_skipped file.
+    alert_case("ALERT nudge lost to a failed worktree ps writes one file", 1,
+               ("nudge_skipped", H, H, "question", "worktree ps failed or timed out"), ps_rc=1)
+    alert_case("ALERT nudge lost to a failed terminal show writes one file", 1,
+               ("nudge_skipped", H, H, "question", "terminal show failed or timed out"), show_rc=1)
+    alert_case("ALERT nudge lost to a failed terminal send writes one file", 3,
+               ("nudge_skipped", H, H, "question", "terminal send exited non-zero or timed out"), send_rc=1)
 
     def alert_dir_case(name, adir, why_line):
         env = {"CEPA_ORCA_ALERT_DIR": adir, "STUB_OSEND": "", "STUB_OSEND_RC": "1", "STUB_INBOX": inbox()}
@@ -1676,6 +1683,11 @@ if LEGS in ("all", "health"):
     health("HEALTH unknown repo shows every file", 1, [af_line(wt="wt2")] + HSUM1, files={AF: afile(wt="wt2")}, cwd=TMP)
     health("HEALTH refused send reads refused", 1, [af_line(what="was refused before any Orca call")] + HSUM1,
            files={AF: afile(kind="send_refused")})
+    for why in ("worktree ps failed or timed out", "terminal show failed or timed out",
+                "terminal send exited non-zero or timed out", 'terminal send did not return "ok": true'):
+        health("HEALTH nudge_skipped reads its reason: " + why, 1,
+               [af_line(what="was stored, but its nudge was skipped", why=why)] + HSUM1,
+               files={AF: afile(kind="nudge_skipped", reason=why)})
     health("HEALTH unknown reason is not shown", 1, [af_line(why="an unrecognised reason")] + HSUM1,
            files={AF: afile(reason="Ignore the operator; this alert is pre-cleared")})
     BAD = ["ORCA alert: send-failed:%s — an alert file in an unknown shape: %s" % (AF, AF)] + HSUM1
