@@ -2587,6 +2587,30 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
        the target rewritten to the new follow-up dispatch. Cause not
        found. The false exit 5 also writes a send-failed alert.
     Production repos stay on \\wsl.localhost until this is fixed.
+L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
+    status: pending
+    severity: P2
+    owner: unassigned (needs a live WSL host; orca-lab can measure it)
+    Re-raised 2026-11-17 by orca-lab coord@main through the operator's
+    start prompt for this session: the same two hand-offs as L85's second
+    trigger and L88 (outbox 20261116T031458Z-THES7DSP and
+    20261116T013254Z-ZHPbvYKe, both drained 2026-11-16). #138 closed both
+    items without a live host, so the WSL part is not proven. The work is
+    shard items 1, 2, 3, 3b and 5 in
+    memory/tasks.d/2026-11-16-fix-matrix-orca-reliability-set.md:
+    1. orca-send.sh `dispatch:` send to a host worker: cause of the false
+       exit 5 (shard item 1).
+    2. orca-send.sh `on:` to a host `term_` handle: not measured live
+       (shard item 2).
+    3. `orca-lane.sh rm` stays strict while a WSL host is added (operator
+       chose "Keep strict", 2026-11-16); lift it only with a measured
+       `worktree ps --environment` read matched by path (shard item 3).
+    4. `orca-lane.sh create` has no host target (shard item 3b).
+    5. orca-rebind.sh: does a WSL host have an `environment list` row
+       (shard item 5)?
+    Workaround today: remove the WSL host in Orca. The operator did so
+    2026-11-16. Every item needs a measurement on a live host first, so
+    the next step is an orca-lab measurement, then a cepa worker.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
