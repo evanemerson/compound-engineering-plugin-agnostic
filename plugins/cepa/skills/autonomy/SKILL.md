@@ -2533,11 +2533,16 @@ limits.
        never an answer and never a decline. On its first turn after a
        resume, a coordinator or solo session whose last AskUserQuestion
        result is an interruption ends that turn as **The operator** with the
-       same question, unchanged: the same text and the same options, with
-       `Re-ask: ` before the question text. A prompt from the operator that
-       answers the question is the answer, and nothing is re-asked. A
-       question that a handoff document lists as open (`/cepa:handoff`
-       Step 2) is asked the same way on the next session's first turn.
+       same question, unchanged except for the prefix `Re-ask: ` on its
+       text, and with the same options. A prompt from the operator that
+       answers the question is the answer, and nothing is re-asked. Either
+       way, that turn's first-turn clear (the attention flag, below) removes
+       the old flag. The limits above still hold: under `full` autonomy the
+       re-ask waits for the end of the finished run, and a headless run
+       files it per §5 and ends as **Nobody**. A question that a handoff
+       document lists as open (`/cepa:handoff` Step 2) is asked the same
+       way on the next session's first turn. A worker that finds one sends
+       it to its coordinator (**A coordinator**, below).
      - **A coordinator.** A dispatched worker (a live preamble with Task and
        Dispatch IDs) never calls AskUserQuestion. It sends the decision with
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.
