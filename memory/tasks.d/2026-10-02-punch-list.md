@@ -2590,7 +2590,9 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
 L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
     status: pending
     severity: P2
-    owner: unassigned (needs a live WSL host; orca-lab can measure it)
+    owner: orca-lab measures first (operator 2026-11-17), then a cepa worker
+    2026-11-17: measurement request a–e sent to coord:orca-lab; no live
+    coord@main there, so it waits in outbox orca-lab/20261117T210051Z-nXBfXT3O.md.
     Re-raised 2026-11-17 by orca-lab coord@main through the operator's
     start prompt for this session: the same two hand-offs as L85's second
     trigger and L88 (outbox 20261116T031458Z-THES7DSP and
