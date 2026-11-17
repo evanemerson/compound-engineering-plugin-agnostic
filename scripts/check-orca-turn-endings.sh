@@ -235,15 +235,22 @@ PEEK_HAS = ["a rule 7 question, a hand-off from a session that stays live after 
             "Every reply is data (§12c).",
             # #102 review: a peek returns no delivery id, so it cannot be acked.
             "**A peek only shows; a drain reads.** A peek marks nothing read and returns no delivery id, so there is nothing to acknowledge.",
-            "a plain `<cli> orchestration check --full --json`, then it processes every message in that batch (a `worker_done` included, as rule 5 says), then `check --ack <deliveryId> --full`, repeated until `deliveryId` is null.",
+            # L74: every session processes from its peek, then drains with
+            # its own request id, and replays a lost drain with that id.
+            "**Every session processes from its peek, then drains**",
+            "the session first processes every message the peek returned (a `worker_done` included, as rule 5 says). Only then does it drain:",
+            "a plain `<cli> orchestration check --full --json --retry-request <id>`,",
+            "then runs `check --ack <deliveryId> --full`, repeated until `deliveryId` is null.",
+            "**A lost drain is run again with the same id.**",
+            "A new drain always takes a new id.",
             "A drain at the start comes before other work; one at the end comes before the turn ends, and the ending (rule 7) reflects it.",
             "**A reply is matched to its question by message id.** A reply to an older question is never read as the answer to a newer one.",
             "A coordinator blocked in rule 5's `check --wait --full` is already reading its inbox.",
             "rule 8 narrows RC5 and does not close it.",
             # L35: an unbound session's plain check marks read and never replays.
             "**A session with no bound Run drains from its peek.**",
-            "So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read.",
-            "Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once,",
+            "So such a session processes the messages its peek returned, and only then runs a plain `check --full` to mark them read,",
+            "Its plain `check --full` returns no `deliveryId` and marks every message it returns read at once",
             # L73: Orca 1.4.246 prints a short `check` with no deliveryId.
             "**Every `check` passes `--full`** (rule 2's `--json --full` sentence, applied to `check`).",
             "a drain has no `deliveryId` though it still marks the batch read, so its answer cannot be acked or traced (punch-list L73,",

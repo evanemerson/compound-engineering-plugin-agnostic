@@ -112,7 +112,25 @@
 #     `run-use`, never a stolen Run.
 #   - `terminal list` lists one Orca server's terminals. A Run held by a
 #     terminal on a paired server that list does not cover reads as absent
-#     here; a host the list says it omitted reads as unknown (exit 1).
+#     here. THE OMITTED HOST (punch-list L85): a host the list says it left
+#     out (`hostScope.omittedHostIds`; on Orca 1.4.259 an added WSL host is
+#     left out BY DEFAULT, sender report) is read on its own server, by the
+#     saved environment whose `runtimeId` (or id) is the host id after
+#     `runtime:`, URL-decoded: `terminal list --environment <env id>`. The
+#     holder found there is live (ask); absent from every such host, each
+#     read complete in its own scope (hosts named, none left out), is gone,
+#     with a note line naming the hosts. A host that matches no
+#     environment, or whose read fails or is partial, asks, naming the host;
+#     more than 5 omitted hosts, or an id of an unknown shape, asks unnamed
+#     (up to 1.55.7 every omitted host asked, unnamed, so one offline host
+#     blocked every re-bind). The mapping is from `environment list --json`
+#     rows measured on Orca 1.4.259, 2026-11-16 (`id`, `name`, `runtimeId`, a
+#     UUID); the omitted id `runtime:f68aea96-…` of L85 item 2 is a UUID
+#     after `runtime:`. `terminal list --environment <a paired id> --json`
+#     returned ok, truncated false, and `hostIds: ["local"]` (that server's
+#     own scope) the same day.
+#     Whether the WSL host has an environment row was not measured (none was
+#     added): if it has none, the re-bind still asks, now naming it.
 #   - Two sessions that re-bind the same Run at the same moment: at most one
 #     prints `done`. `done` is a fact about the re-read, not about later: a
 #     session whose `run-use` lands after it takes the Run, and prints
@@ -287,19 +305,70 @@ fi
 cepa_rb_orca "$cepa_rb_tmp/terms.json" 1 terminal list --json \
   || ask "terminal list failed, so whether $cepa_rb_old is still open is unknown; nothing was changed" \
          "check whether terminal $cepa_rb_old is still open"
-cepa_rb_live=$(python3 -I -c '
-import json, sys
+# Prints `live`, `gone`, or `omitted <host id>...` (THE OMITTED HOST, header).
+cepa_rb_tread='
+import json, re, sys
 d = json.load(open(sys.argv[1]))
 r = d["result"] if d.get("ok") is True else sys.exit(1)
 t = r["terminals"]
 if not isinstance(t, list) or r.get("truncated") is not False or r.get("totalCount") != len(t):
     sys.exit(1)
-# A host Orca left out of the list could hold the terminal (PR #113 review).
-if r["hostScope"]["omittedHostIds"] != []:
-    sys.exit(1)
 hs = [x["handle"] for x in t]
-print("live" if sys.argv[2] in hs else "gone")
-' "$cepa_rb_tmp/terms.json" "$cepa_rb_old" 2>/dev/null) || cepa_rb_live=
+if sys.argv[2] in hs:
+    print("live")
+    sys.exit(0)
+hs = r.get("hostScope")
+if sys.argv[3] == "host":
+    # A host read counts only when complete in its own scope: hosts named,
+    # none left out (PR #138 review: an offline host behind the relay could
+    # answer an empty list).
+    if not isinstance(hs, dict) or not hs.get("hostIds") or hs.get("omittedHostIds") != []:
+        sys.exit(1)
+    print("gone")
+    sys.exit(0)
+# A host Orca left out of the list could hold the terminal (PR #113 review).
+om = hs["omittedHostIds"]
+if not isinstance(om, list) or not all(isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9:%._-]{1,100}", x) for x in om) \
+        or len(om) > 5:
+    sys.exit(1)
+print("omitted " + " ".join(om) if om else "gone")
+'
+cepa_rb_live=$(python3 -I -c "$cepa_rb_tread" "$cepa_rb_tmp/terms.json" "$cepa_rb_old" local 2>/dev/null) || cepa_rb_live=
+if [[ $cepa_rb_live == omitted\ * ]]; then
+  # L85: read each host Orca left out, on its own server, before any ask.
+  cepa_rb_hosts=${cepa_rb_live#omitted }
+  cepa_rb_orca "$cepa_rb_tmp/envs.json" 1 environment list --json \
+    || ask "terminal list left out host(s) $cepa_rb_hosts, and environment list failed, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
+           "bring host(s) $cepa_rb_hosts online or remove them in Orca, then ask this session to run the re-bind again"
+  cepa_rb_live=gone
+  for cepa_rb_h in $cepa_rb_hosts; do
+    cepa_rb_env=$(python3 -I -c '
+import json, re, sys, urllib.parse
+d = json.load(open(sys.argv[1]))
+envs = d["result"]["environments"] if d.get("ok") is True else sys.exit(1)
+h = sys.argv[2]
+want = urllib.parse.unquote(h[len("runtime:"):]) if h.startswith("runtime:") else None
+hit = [e["id"] for e in envs if isinstance(e, dict) and want is not None
+       and (e.get("runtimeId") == want or e.get("id") == want)]
+if len(hit) != 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", hit[0]):
+    sys.exit(1)
+print(hit[0])
+' "$cepa_rb_tmp/envs.json" "$cepa_rb_h" 2>/dev/null) \
+      || ask "terminal list left out host $cepa_rb_h, and no saved Orca environment matches it, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
+             "bring host $cepa_rb_h online or remove it in Orca, then ask this session to run the re-bind again"
+    cepa_rb_orca "$cepa_rb_tmp/hterms.json" 1 terminal list --environment "$cepa_rb_env" --json \
+      || ask "terminal list left out host $cepa_rb_h, and its own terminal list (--environment $cepa_rb_env) failed, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
+             "bring host $cepa_rb_h online or remove it in Orca, then ask this session to run the re-bind again"
+    cepa_rb_hl=$(python3 -I -c "$cepa_rb_tread" "$cepa_rb_tmp/hterms.json" "$cepa_rb_old" host 2>/dev/null) || cepa_rb_hl=
+    case "$cepa_rb_hl" in
+      gone) ;;
+      live) cepa_rb_live=live; break ;;
+      *) ask "terminal list left out host $cepa_rb_h, and its own terminal list (--environment $cepa_rb_env) returned a partial or unknown shape, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
+             "bring host $cepa_rb_h online or remove it in Orca, then ask this session to run the re-bind again" ;;
+    esac
+  done
+  [ "$cepa_rb_live" = live ] || echo "ORCA rebind: note — terminal list left out host(s) $cepa_rb_hosts; each was read on its own server and does not hold $cepa_rb_old (punch-list L85)"
+fi
 case "$cepa_rb_live" in
   gone) ;;
   live) ask "$cepa_rb_run is held by $cepa_rb_old, which is still open; a live coordinator's Run is never taken" \

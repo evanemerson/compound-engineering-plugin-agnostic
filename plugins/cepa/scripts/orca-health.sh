@@ -106,6 +106,26 @@
 #                          and 10 seconds a run; a timeout ends the git reads.
 #   long:<dispatch>      dispatched 180 minutes or more ago with no
 #                        worker_done. The longest settled dispatch took 55.
+#   failed:<dispatch>    (punch-list L60) a dispatch of the Run that settled
+#                        `failed` with no worker_done row from it in the
+#                        inbox window. Orca sends no message for it: on
+#                        2026-11-02 tab31's start failed (stage
+#                        agent_readiness, lastFailure terminal_exited, no
+#                        heartbeat) and this script printed `ok` on every
+#                        turn after. Read from the `worker-list` row
+#                        (`projection.outcome` and `projection.stage.detail`),
+#                        then `worker-show` of each one not yet acked, at most
+#                        10 a run, for `dispatch.lastFailure` (shown only as
+#                        a `[a-z_]` token or a sentence in LAST_FAILURES, else
+#                        `an unrecognised failure`) and its handle. Measured
+#                        on Orca 1.4.259, 2026-11-16, read only, with
+#                        `worker-list --run run_5682a0ed1455 --json --full`
+#                        and `worker-show --dispatch <id> --json --full`: its
+#                        three failed dispatches read `failed` with details
+#                        agent_readiness and process_exited. A worker that
+#                        sent its own `worker_done --outcome failed` is rule
+#                        5's, not an alert; a `succeeded` one still alerts. The first run on a Run asks once about every
+#                        older failure; the ack keeps them quiet.
 #   question:<msg>       a `question` to this Run's mailbox with no reply
 #                        threaded on it after 10 minutes (an `ask` waits 10 by
 #                        default). Orca shows it as attention `input`.
@@ -184,7 +204,8 @@
 #   - Its Run is the named one, or this pane's Run when this terminal holds
 #     it. A session with neither gets only the file and awaited alerts.
 #   - The inbox window is 200 rows, newest first (the whole store was 245 rows
-#     on 2026-10-31). An older question is not seen.
+#     on 2026-10-31). An older question is not seen, and a worker_done older
+#     than the window does not clear its failed dispatch (one extra question).
 #   - The bounds are fixed here, from one Run's history. A worker with a
 #     longer honest gap will alert: one whose turn ended while a background
 #     job runs (the mutation sweep runs ~43 min) sends no heartbeat, prints
@@ -262,7 +283,7 @@ elif [ $# -ge 2 ]; then
   [ $# -ge 3 ] || refuse "usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."
   shift 2
   for k in "$@"; do
-    [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|outbox:[A-Za-z0-9_-]{1,100}:([0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md|(ambiguous|mismatch|unreadable|pruned):[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|unknown-shape:[0-9a-f]{12})|(exited|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
+    [[ $k =~ ^(send-failed:[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|outbox:[A-Za-z0-9_-]{1,100}:([0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md|(ambiguous|mismatch|unreadable|pruned):[0-9]{1,12}-[A-Za-z0-9]{1,20}\.alert|unknown-shape:[0-9a-f]{12})|(exited|failed|long|question|awaited):[A-Za-z0-9_]{1,64}|(waiting|stale):[A-Za-z0-9_]{1,64}:[0-9]{1,12}|unbound:run_[A-Za-z0-9_-]{1,64}:[0-9]{1,12}|orca-unreadable:[a-z-]{1,20}:[0-9]{1,12})$ ]] \
       || refuse "not an alert key: $(printf '%s' "${k:0:80}" | tr -c 'A-Za-z0-9_.:-' '?')"
   done
   mkdir -p "$cepa_h_acked" 2>/dev/null || { echo "ORCA ack failed: the ack directory could not be made"; exit 1; }
@@ -367,22 +388,38 @@ d = json.load(open(sys.argv[1]))
 rows = d["result"]["workers"] if d.get("ok") is True else sys.exit(1)
 if not isinstance(rows, list):
     sys.exit(1)
-ids = []
+ids, failed = [], []
 for w in rows:
     i, o = w["dispatchId"], w["projection"]["outcome"]
     if not (isinstance(i, str) and re.fullmatch(r"ctx_[0-9a-f]{6,32}", i) and isinstance(o, str)):
         sys.exit(1)
     if o == "in_progress":
         ids.append(i)
+    elif o == "failed":
+        # L60: where it failed, as Orca names the stage.
+        det = (w["projection"].get("stage") or {}).get("detail")
+        failed.append("%s %s" % (i, det if isinstance(det, str) and re.fullmatch(r"[a-z_]{1,40}", det) else "unknown"))
 page = d["result"].get("page")
 if len(ids) > 20 or (isinstance(page, dict) and page.get("hasMore") is not False and "hasMore" in page):
     open(sys.argv[2], "w").close()
+open(sys.argv[3], "w").write("".join(x + "\n" for x in failed))
 print(" ".join(ids[:20]))
-' "$cepa_h_tmp/workers.json" "$cepa_h_tmp/capped" 2>/dev/null); then
+' "$cepa_h_tmp/workers.json" "$cepa_h_tmp/capped" "$cepa_h_tmp/failed.ids" 2>/dev/null); then
     for d in $cepa_h_ids; do
       cepa_h_orca "$cepa_h_tmp/show/$d.json" orchestration worker-show --dispatch "$d" --json --full \
         || : >"$cepa_h_tmp/show/$d.fail"
     done
+    # L60: a failed dispatch not yet acked is read for its last failure, at
+    # most 10 of them a run (THE TIME BOUND still applies).
+    mkdir -p "$cepa_h_tmp/fshow"
+    cepa_h_nf=0
+    while read -r cepa_h_fd _; do
+      [ ! -e "$cepa_h_acked/failed:$cepa_h_fd" ] || continue
+      cepa_h_nf=$((cepa_h_nf + 1))
+      [ "$cepa_h_nf" -le 10 ] || break
+      cepa_h_orca "$cepa_h_tmp/fshow/$cepa_h_fd.json" orchestration worker-show --dispatch "$cepa_h_fd" --json --full \
+        || : >"$cepa_h_tmp/fshow/$cepa_h_fd.fail"
+    done <"$cepa_h_tmp/failed.ids"
   else
     : >"$cepa_h_tmp/workers.fail"
   fi
@@ -419,8 +456,10 @@ REASONS = [re.compile(x) for x in (
     r"[A-Za-z0-9._/-]{1,200} is not on PATH",
     r"orca-send\.sh takes no arguments; its fields go on stdin",
     r"a heredoc line is not a <name>: <value> field",
-    r"a field name is not cli, target, type, nudge, outcome, task, session or file",
-    r"the (cli|target|type|nudge|outcome|task|session|file) field is (given twice|missing)",
+    r"a field name is not cli, target, type, nudge, outcome, task, session, on or file",
+    # 1.56.0 (punch-list L88): the host target.
+    r"an on: server goes only with a term_ target", r"the on: server is not an Orca server id or name",
+    r"the (cli|target|type|nudge|outcome|task|session|on|file) field is (given twice|missing)",
     # 1.44.0 (punch-list L41): the message is in a file, never in the heredoc.
     r"the heredoc holds a message after its fields; the message goes in the file the file: field names",
     r"the message file is not an absolute path to a cepa-send-<name>\.txt file",
@@ -848,6 +887,50 @@ for x in rows:
         to = to if isinstance(to, str) and SAFE.fullmatch(to) else "its recipient"
         if k not in acked:
             alert(k, "your question %s to %s has had no reply for %d minutes (bound %d)" % (mid, to, mins(t), AWAIT))
+
+# 4. Failed dispatches (L60). The sentences Orca 1.4.259 wrote as
+# dispatch.lastFailure (worker-show of run_5682a0ed1455's failed dispatches).
+LAST_FAILURES = ("Agent process stop was requested but never confirmed",)
+# A dispatch that failed at start (or whose agent
+# exited) settles as `failed` with no worker_done, and Orca sends no message
+# for it. One the worker reported itself has a worker_done row in the inbox
+# window, which rule 5 already shows.
+if run and not os.path.exists(os.path.join(tmp, "workers.fail")):
+    reported = set()
+    for x in rows:
+        if x.get("type") == "worker_done" and isinstance(x.get("payload"), str):
+            try:
+                pl = json.loads(x["payload"])
+            except ValueError:
+                continue
+            # Only the worker's own failed report: a `succeeded` one for a
+            # dispatch Orca settled failed still alerts (PR #138 review).
+            if isinstance(pl, dict) and isinstance(pl.get("dispatchId"), str) and pl.get("outcome") == "failed":
+                reported.add(pl["dispatchId"])
+    try:
+        flines = open(os.path.join(tmp, "failed.ids")).read().split("\n")
+    except OSError:
+        flines = []
+    for line in flines:
+        if not line:
+            continue
+        did, det = line.split(" ", 1)
+        k = "failed:" + did
+        if k in acked or did in reported:
+            continue
+        fs = load(os.path.join("fshow", did + ".json"))
+        disp = ((fs or {}).get("result") or {}).get("dispatch")
+        if not isinstance(disp, dict) or disp.get("id") != did:
+            why, handle = "last failure unread", None
+        else:
+            lf = disp.get("lastFailure")
+            # Orca's own text, shown only as a token or a sentence Orca was
+            # measured to write (§12c: a shape, never free prose).
+            why = "last failure: " + (lf if isinstance(lf, str) and (re.fullmatch(r"[a-z_]{1,40}", lf) or lf in LAST_FAILURES)
+                                      else "an unrecognised failure")
+            handle = disp.get("assigneeHandle")
+        who = did + (" (%s)" % handle if isinstance(handle, str) and re.fullmatch(r"term_[0-9a-f-]{36}", handle) else "")
+        alert(k, "worker %s failed at stage %s with no worker_done (%s); Orca sends no message for it" % (who, det, why))
 
 seen, hidden = set(), set()
 for k, text in alerts:

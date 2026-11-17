@@ -21,11 +21,13 @@ passed no `--full`). Measurement: `cepa:autonomy` §12b rule 8, the
 4. [P3] The operator's `~/.claude/CLAUDE.md` tells a session to run
    `orca-ide orchestration check --peek --format --json`. It needs `--full`
    too. That file is the operator's, outside this repo.
-5. [P2] Rule 8's drain loses a batch whose output is lost on Orca 1.4.246:
+5. ~~[P2] Rule 8's drain loses a batch whose output is lost on Orca 1.4.246:
    the drain marks the batch read itself. The stated limit now says so.
    Whether every session should process from its peek first (as a session
    with no bound Run does) is a rule change, left to the coordinator.
-   #132 review, adversarial finding 1 (judgment).
+   #132 review, adversarial finding 1 (judgment).~~ Resolved by punch-list
+   L74 in PR #138: every session processes from its peek, then drains with
+   its own `--retry-request` id and replays a lost drain with it.
 6. [P3] Whether Orca 1.4.245 accepts `--full` on `check` was not measured
    (none at hand). Item 2 assumes 1.4.245 is still in use: measure it, or
    state one support floor. #132 review, adversarial finding 3.
