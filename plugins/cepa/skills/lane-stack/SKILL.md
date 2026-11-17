@@ -29,7 +29,7 @@ start target, the worktree properties, and the coord@main first prompt.
 
 **Status (2026-11-17): the gate (L66, 1.53.0), the `coord:<repo>` outbox
 (L61, 1.54.0), the build lock (L70, 1.55.0) and the `/cepa:setup` lane
-check (L67, 1.58.0) have shipped.** A loaded plugin older than one of these
+check (L67, 1.59.0) have shipped.** A loaded plugin older than one of these
 fails the first prompt's step 0, its step 1 outbox drain, or its step 2
 build checks, or prints no `lane:` lines: refresh it first
 (`scripts/check-plugin-freshness.sh`). Without the gate
