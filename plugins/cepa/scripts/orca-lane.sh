@@ -929,7 +929,7 @@ if [ "$cepa_ln_action" = create ]; then
     # U1), unless the repo's saved hook settings shadow it (H1).
     cepa_ln_hook=$(cepa_ln_hookat "refs/remotes/origin/$cepa_ln_base" setup) \
       || kept "not created — Orca's saved hook settings for this repo, or orca.yaml's scripts.setup, have a shape this reader does not know, so which setup Orca would run is unknown" \
-              "check Settings > Repositories > this repo's hooks in Orca, and orca.yaml's scripts.setup, then ask again"
+              "check Settings > Repositories > this repo > Worktree Hooks > Advanced in Orca, and orca.yaml's scripts.setup, then ask again"
     [ "$cepa_ln_hook" = ok ] \
       || kept "not created — Orca's saved hook settings shadow orca.yaml: ${cepa_ln_hook#shadow: }" \
               "in Orca, open Settings > Repositories > this repo > Worktree Hooks > Advanced, set Command source to \"orca.yaml only\", then empty the local setup box, then ask again"
@@ -1008,7 +1008,7 @@ if [ "$cepa_ln_action" = create ]; then
   # lane holds. Its setup has already run, so a shadow here is a failure.
   cepa_ln_hook=$(cepa_ln_hookat "$cepa_ln_head" setup) \
     || failed "the lane is created and parked at $c_path, but which setup Orca ran is unknown: Orca's saved hook settings, or the lane's orca.yaml scripts.setup, have a shape this reader does not know" \
-              "wait for and read the lane's Setup tab (cepa:lane-stack, \"Reading the Setup tab\"), and check Settings > Repositories > this repo > Worktree Hooks in Orca"
+              "wait for and read the lane's Setup tab (cepa:lane-stack, \"Reading the Setup tab\"), and check Settings > Repositories > this repo > Worktree Hooks > Advanced in Orca"
   [ "$cepa_ln_hook" = ok ] \
     || failed "the lane is created and parked at $c_path, but Orca's saved hook settings shadow its orca.yaml: ${cepa_ln_hook#shadow: }" \
               "in Orca, open Settings > Repositories > this repo > Worktree Hooks > Advanced, set Command source to \"orca.yaml only\", then empty the local setup box, then remove and re-create lane $cepa_ln_lane (orca-lane.sh rm, then create)"
@@ -1205,7 +1205,7 @@ cepa_ln_yf=
 [ ! -e "$cepa_ln_main/orca.yaml" ] || cepa_ln_yf="$cepa_ln_main/orca.yaml"
 cepa_ln_hook=$(cepa_ln_py hook "$cepa_ln_tmp/repos.json" "$cepa_ln_main" "$cepa_ln_distro" archive "$cepa_ln_yf") \
   || kept "kept $cepa_ln_lane — Orca's saved hook settings for this repo, or orca.yaml's scripts.archive, have a shape this reader does not know, so which archive hook Orca would run is unknown" \
-          "check Settings > Repositories > this repo's hooks in Orca, and orca.yaml's scripts.archive, then ask again"
+          "check Settings > Repositories > this repo > Worktree Hooks > Advanced in Orca, and orca.yaml's scripts.archive, then ask again"
 [ "$cepa_ln_hook" = ok ] \
   || kept "kept $cepa_ln_lane — Orca's saved hook settings shadow orca.yaml: ${cepa_ln_hook#shadow: }" \
           "in Orca, open Settings > Repositories > this repo > Worktree Hooks > Advanced, set Command source to \"orca.yaml only\", then empty the local archive box, then ask again"

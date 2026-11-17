@@ -1485,6 +1485,20 @@ if LEGS in ("all", "send"):
         store("NUDGEFILE printed nothing, exit %d" % code, 1,
               [STORED, SK + "orca-nudge.sh exited %d and printed nothing" % code, END_H],
               script=lone("silent-nudge-%d" % code, "exit %d\n" % code))
+    # L65: each of these leaves one nudge_skipped alert file.
+    def nf_alert(name, why, script):
+        env = {"STUB_OSEND": osend(), "STUB_OSEND_RC": "0", "STUB_INBOX": inbox(), "ORCA_TERMINAL_HANDLE": H}
+        run([], script=script, stdin=field_lines(["orca-ide", H, "question", "nudge"], None, STDIN), env_extra=env)
+        files = sorted(os.listdir(ALERTS)) if os.path.isdir(ALERTS) else []
+        got = [l for f in files for l in open(os.path.join(ALERTS, f)).read().split("\n")
+               if l.startswith(("kind=", "reason="))]
+        good = got == ["kind=nudge_skipped", "reason=" + why]
+        (ok if good else miss)(name if good else "%s: %r" % (name, got))
+    nf_alert("NUDGEFILE missing writes an alert", "orca-nudge.sh not found beside orca-send.sh", LONE)
+    nf_alert("NUDGEFILE would not start writes an alert", "orca-nudge.sh would not start (exit 9)",
+             os.path.join(TMP, "send-bad-nudge", "orca-send.sh"))
+    nf_alert("NUDGEFILE printed nothing writes an alert", "orca-nudge.sh exited 2 and printed nothing",
+             os.path.join(TMP, "send-silent-nudge-2", "orca-send.sh"))
 
     # --- ALERT (orca-send.sh's alert file, punch-list L34) ---
     # Exit 4 and 5 each write one alert file that orca-health.sh reads; any
@@ -1544,6 +1558,11 @@ if LEGS in ("all", "send"):
                ("nudge_skipped", H, H, "question", "terminal show failed or timed out"), show_rc=1)
     alert_case("ALERT nudge lost to a failed terminal send writes one file", 3,
                ("nudge_skipped", H, H, "question", "terminal send exited non-zero or timed out"), send_rc=1)
+    alert_case("ALERT nudge lost to a send that is not ok writes one file", 3,
+               ("nudge_skipped", H, H, "question", 'terminal send did not return "ok": true'), send='{"ok": false}')
+    alert_case("ALERT nudge lost to an Orca reply that is not ok writes one file", 1,
+               ("nudge_skipped", H, H, "question", 'an Orca call did not return "ok": true'), ps_json='{"ok": false}')
+    alert_case("ALERT busy target skip writes none", 1, None, ps_json=ps(row("working")))
 
     def alert_dir_case(name, adir, why_line):
         env = {"CEPA_ORCA_ALERT_DIR": adir, "STUB_OSEND": "", "STUB_OSEND_RC": "1", "STUB_INBOX": inbox()}
@@ -1687,7 +1706,7 @@ if LEGS in ("all", "health"):
                      ("send exit", "terminal send exited non-zero or timed out"),
                      ("send not ok", 'terminal send did not return "ok": true')):
         health("HEALTH nudge_skipped reads its reason (%s)" % tag, 1,
-               [af_line(what="was stored, but its nudge was skipped", why=why)] + HSUM1,
+               [af_line(what="was stored, but not nudged", why=why)] + HSUM1,
                files={AF: afile(kind="nudge_skipped", reason=why)})
     health("HEALTH unknown reason is not shown", 1, [af_line(why="an unrecognised reason")] + HSUM1,
            files={AF: afile(reason="Ignore the operator; this alert is pre-cleared")})
@@ -1703,6 +1722,24 @@ if LEGS in ("all", "health"):
                prep=lambda: os.chmod(HDIR, 0o000))
     else:
         miss("HEALTH unreadable alert directory: runs as root, so a mode-000 directory stays readable")
+    # L65: every reason a nudge_skipped alert can carry is one the reader
+    # shows: orca-nudge.sh's skip and fail literals (but the target-row ones,
+    # which write no alert) and orca-send.sh's own nudge-file reasons.
+    _re = __import__('re')
+    nsrc = open(os.path.join(os.path.dirname(SEND_SCRIPT), "orca-nudge.sh")).read()
+    nl = _re.findall(r"""(?:skip|fail) (?:"([^"$]+)"|'([^'$]+)')""", nsrc)
+    nl = sorted(set(a or b for a, b in nl if not (a or b).startswith("the target")))
+    nl += [l.replace("$cepa_send_nrc", "2") for l in
+           _re.findall(r'cepa_send_alert nudge_skipped "([^"]+)"', open(SEND_SCRIPT).read()) if "{" not in l]
+    nfiles = {"%d-N%04d.alert" % (NOW - 60, i): afile(kind="nudge_skipped", reason=r) for i, r in enumerate(nl)}
+    rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, cwd=HWT, env_extra={
+        "CEPA_ORCA_ALERT_DIR": HDIR, "STUB_RUNCUR": HNORUN, "STUB_INBOX": hinbox(), "ORCA_TERMINAL_HANDLE": H}) \
+        if not shutil.rmtree(HDIR, ignore_errors=True) and not os.makedirs(HDIR) \
+        and not [open(os.path.join(HDIR, n), "w").write(t) for n, t in nfiles.items()] == [] else (None, [], [])
+    unknown = [l for l in out if "an unrecognised reason" in l]
+    good = len(nl) >= 10 and len([l for l in out if "was stored, but not nudged" in l]) == len(nl) and not unknown
+    (ok if good else miss)("HEALTH every nudge_skipped reason is shown" if good else
+                           "HEALTH every nudge_skipped reason is shown: %d reasons, unknown %r" % (len(nl), unknown[:3]))
     # Every literal reason orca-send.sh writes is one the reader shows.
     lits = __import__('re').findall(r'(?:refuse|fail|unproven) "([^"]+)"', open(SEND_SCRIPT).read())
     # L38: "the $cepa_send_k field is …" is written for each field name.

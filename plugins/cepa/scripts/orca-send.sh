@@ -110,11 +110,13 @@
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
-#      start). The message stands. A skip or failure because an Orca call
-#      failed or timed out (`terminal show`, `worktree ps`, `terminal send`)
-#      also writes a `nudge_skipped` alert file for orca-health.sh (L65),
-#      its `Orca alert recorded:` line just before the ending line; a busy
-#      or asking target writes none. A reply also exits 1, with
+#      start). The message stands. Every nudge skip or failure but a skip on
+#      the target's own row (busy, asking, no row, two rows) also writes a
+#      `nudge_skipped` alert file for orca-health.sh (L65): a failed or
+#      timed-out Orca call, Orca output it could not read, a missing tool, or
+#      an orca-nudge.sh that is missing, will not start or printed nothing.
+#      Its `Orca alert recorded:` line comes just before the ending line.
+#      A reply also exits 1, with
 #      `Orca reply misaddressed: …` in place of `Orca send stored` and no
 #      nudge, when it came back to this session (ORCA_TERMINAL_HANDLE): Orca
 #      addressed it to that handle, or the message it names is in the
@@ -506,16 +508,25 @@ cepa_send_obox_prune() {
     rm -f -- "$f" 2>/dev/null || echo "Orca outbox: could not prune $st/${f##*/}"
   done
 }
-# True when an ack marker for outbox:<$1>:<$2> exists under acked/<$3> or
-# acked/<$4> of the alert directory (L87). $3 and $4 come from the file's
-# header, so each must be a plain name before it is joined into a path.
+# True when the count alert that covered outbox:<$1>:<$2> is acked under
+# acked/<$3> or acked/<$4> of the alert directory (L87). That alert is keyed
+# by its NEWEST file, and its ack holds every file up to that one, so a
+# marker outbox:<$1>:<m> with m sorting at or after $2 counts (names start
+# with their UTC stamp). $3 and $4 come from the file's header, so each must
+# be a plain name before it is joined into a path. A main checkout's ack
+# also covers a lane's file: that coordinator saw the same message.
 cepa_send_obox_acked() {
-  local dir w
+  local dir w m
   dir=${CEPA_ORCA_ALERT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/orca-alerts}
   [[ $dir == /* ]] || return 1
   for w in "$3" "$4"; do
     [[ $w =~ ^[A-Za-z0-9._@-]{1,100}$ && $w != . && $w != .. ]] || continue
-    [ -f "$dir/acked/$w/outbox:$1:$2" ] && return 0
+    for m in "$dir/acked/$w/outbox:$1:"*.md; do
+      [ -f "$m" ] || continue
+      m=${m##*/outbox:"$1":}
+      [[ $m =~ ^[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md$ ]] || continue
+      [[ $m < $2 ]] || return 0
+    done
   done
   return 1
 }
@@ -527,7 +538,7 @@ cepa_send_alert_for() {
   cepa_send_target=$2 cepa_send_arepo=${4-} cepa_send_awt=${5-}
   out=$(cepa_send_alert "$1" "$3")
   cepa_send_target=$keep cepa_send_arepo= cepa_send_awt=
-  [[ $out == "Orca alert recorded: "* ]]
+  [[ $out == "Orca alert recorded: "* ]] || { printf '%s\n' "$out"; return 1; }
 }
 
 [ $# -eq 0 ] || refuse "orca-send.sh takes no arguments; its fields go on stdin"
@@ -1138,6 +1149,7 @@ fi
 cepa_send_nudge="$(dirname "$0")/orca-nudge.sh"
 if [ ! -f "$cepa_send_nudge" ]; then
   echo "Orca nudge skipped: orca-nudge.sh not found beside orca-send.sh"
+  cepa_send_alert nudge_skipped "orca-nudge.sh not found beside orca-send.sh"
   echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   exit 1
 fi
@@ -1152,15 +1164,16 @@ cepa_send_tell="Ending first line: Needed from you: tell $cepa_send_target to ch
   [ "$cepa_send_line" != "$cepa_send_tell" ] \
     || cepa_send_line="Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   printf '%s\n' "$cepa_send_line"
-  # L65: a nudge lost to a failed Orca call leaves an alert, so orca-health.sh
-  # shows the unread message even when the session drops its ending line.
-  # Only these exact reasons, all orca-nudge.sh's own literals; a target
-  # that is busy or asking is a normal skip and writes none.
+  # L65: a nudge that did not run to a decision leaves an alert, so
+  # orca-health.sh shows the unread message even when the session drops its
+  # ending line. Only a skip on the target's own row (busy, asking, gone, or
+  # two rows) is a normal skip and writes none; every other skip or failure
+  # (a failed or timed-out Orca call, output it could not read, a missing
+  # tool) writes one. orca-health.sh shows only reasons in its REASONS list.
   case "$cepa_send_line" in
-    "Orca nudge skipped: terminal show failed or timed out" \
-    | "Orca nudge skipped: worktree ps failed or timed out" \
-    | "Orca nudge failed: terminal send exited non-zero or timed out" \
-    | 'Orca nudge failed: terminal send did not return "ok": true')
+    "Orca nudge skipped: the target is "* | "Orca nudge skipped: the target has no agent row" \
+    | "Orca nudge skipped: the target matches "* | "Orca nudge skipped: the target state is unknown") ;;
+    "Orca nudge skipped: "* | "Orca nudge failed: "*)
       cepa_send_alert nudge_skipped "${cepa_send_line#Orca nudge *: }" ;;
   esac
 done <<<"$cepa_send_nout"
@@ -1168,11 +1181,13 @@ done <<<"$cepa_send_nout"
 # have died on a syntax error or `set -u` (PR #110 review). Not delivered.
 if [ "$cepa_send_nrc" -le 3 ] && [ -z "$cepa_send_nout" ]; then
   echo "Orca nudge skipped: orca-nudge.sh exited $cepa_send_nrc and printed nothing"
+  cepa_send_alert nudge_skipped "orca-nudge.sh exited $cepa_send_nrc and printed nothing"
   echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   exit 1
 fi
 if [ "$cepa_send_nrc" -gt 3 ]; then
   echo "Orca nudge skipped: orca-nudge.sh would not start (exit $cepa_send_nrc)"
+  cepa_send_alert nudge_skipped "orca-nudge.sh would not start (exit $cepa_send_nrc)"
   echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
   exit 1
 fi

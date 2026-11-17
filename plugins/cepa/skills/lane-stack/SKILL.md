@@ -118,9 +118,7 @@ The contract, item by item:
 5. **Orca's saved hook settings do not shadow this file.** What a shadow is,
    how to read the settings, and the evidence are the `H1` block in
    `plugins/cepa/scripts/orca-lane.sh`'s header (punch-list L76). The
-   operator fixes a shadow in Orca: Settings > Repositories > this repo >
-   Worktree Hooks > Advanced, set Command source to "orca.yaml only", then
-   empty the local box (punch-list L80).
+   operator fixes a shadow with the Orca control that block names (L80).
 6. `make worktree branch=` (or any repo command that creates a worktree) is
    not named as an entry point anywhere: not in `orca.yaml`, the Makefile's
    help text, or the repo's CLAUDE.md. A repo may keep the target, but its

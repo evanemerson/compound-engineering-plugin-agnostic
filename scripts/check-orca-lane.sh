@@ -1137,7 +1137,9 @@ hook(hs("local-only", setup="npm install"))
 got = W.run(F(cli=CLI, action="create", lane="h4", base="main"))
 expect("HOOKS local-only differing refuses", got, rc=1,
        first=SH + "commandSourcePolicy local-only runs the local setup script (differs), not the orca.yaml one (present)",
-       has=("Needed from you: in Orca, open Settings",), verbs_lack=NOCREATE)
+       has=("Needed from you: in Orca, open Settings",
+            'Worktree Hooks > Advanced, set Command source to "orca.yaml only", then empty the local setup box'),
+       verbs_lack=NOCREATE)
 hook(hs("local-only", setup=""))
 expect("HOOKS local-only empty refuses", W.run(F(cli=CLI, action="create", lane="h5", base="main")), rc=1,
        first=SH + "commandSourcePolicy local-only runs the local setup script (empty)", verbs_lack=NOCREATE)

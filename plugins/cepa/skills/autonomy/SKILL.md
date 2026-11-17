@@ -2047,9 +2047,7 @@ limits.
        Orca reads that `setup:` from the new lane's own checkout (the base
        ref), so it must be committed on `<base>`. `create` and `rm` refuse
        when Orca's saved hook settings shadow `orca.yaml` (`orca-lane.sh`
-       header, H1); the operator fixes that in Orca: Worktree Hooks >
-       Advanced > Command source = "orca.yaml only", then empty the local
-       box (lane-stack contract item 5). A repo
+       header, H1, which names the Orca control that fixes it). A repo
        whose stack init is not in `orca.yaml` names it in its own
        CLAUDE.md, and the main coordinator runs it once, in the lane, after
        `create`. **Orca reports

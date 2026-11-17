@@ -391,12 +391,22 @@ plant("dpc-pro/" + a_n)
 for w, n in (("sendrepo", a_r), ("otherlane", a_w), ("sendrepo", "outbox:helm:" + a_n)):
     os.makedirs(os.path.join(ALERTS, "acked", w), exist_ok=True)
     open(os.path.join(ALERTS, "acked", w, n if n.startswith("outbox:") else "outbox:dpc-pro:" + n), "w").close()
+# An older file is held by the ack of a newer one (the count alert keys on its
+# newest file). A marker the file's header does not lead to never counts: one
+# under another worktree, or one that `..` in the header would reach.
+a_o, a_d, a_s = stamp(11) + "-Aack0004.md", stamp(10) + "-Aack0005.md", stamp(10) + "-Aack0006.md"
+plant("dpc-pro/" + a_o)
+plant("dpc-pro/" + a_d, header={"repo": "..", "worktree": ".."})
+plant("dpc-pro/" + a_s, header={"repo": "repo2", "worktree": "lane2"})
+open(os.path.join(ALERTS, "outbox:dpc-pro:" + a_d), "w").close()
+os.makedirs(os.path.join(ALERTS, "acked", "stranger"), exist_ok=True)
+open(os.path.join(ALERTS, "acked", "stranger", "outbox:dpc-pro:" + a_s), "w").close()
 rc, out = send({"target": "coord:dpc-pro"}, st=state(runs=[]))
 fl = files()
 reasons = sorted(a.get("reason") for a in alerts() if a.get("kind") == "outbox_pruned")
 check("PRUNE an acked file goes with no alert",
       not [f for f in fl if "Aack000" in f]
-      and reasons == ["an outbox file was pruned unread after 7 days: dpc-pro/" + a_n],
+      and reasons == sorted("an outbox file was pruned unread after 7 days: dpc-pro/" + n for n in (a_n, a_d, a_s)),
       "files=%s reasons=%s" % (fl, reasons))
 
 # ---------------------------------------------------------------- HEALTH
