@@ -2020,7 +2020,13 @@ L64. **Shared `worktree-init` code with a small per-repo config (later).**
     Operator 2026-11-02: "same behavior now, shared code later". After L63.
 
 L65. **A nudge is skipped without an alert when `worktree ps` times out.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-17 — PR #139 merged `a87f427` (1.57.0). tab39@matrix
+    (head b8f39d2); tab40@matrix split the nudge controls into 12 CI
+    shards after 3 of 4 hit the 10-minute bound (head 9aadb2b, 32/32 pass).
+    Fixed, wider than the item (operator kept it 2026-11-17): every nudge skip
+    or failure except one on the target's own row writes a `nudge_skipped`
+    alert. orca-lab told about the new kind (same outbox file as L87).
     severity: P3
     owner: unassigned (fold into L60 or L61 if adjacent)
     Evidence: dpc-insider-www `docs/handoff/2026-10-31-coord-main-worktreeinclude.md:24`
@@ -2351,7 +2357,13 @@ L79. **`orca-lane.sh create`: Orca's `runtime_timeout` is not a failed create; t
     Related: L77 (rm), L78 (Setup tab appears late).
 
 L80. **Name Orca's Command source control in the shadow fix text.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-17 — PR #139 merged `a87f427` (1.57.0). tab39@matrix
+    (head b8f39d2); tab40@matrix split the nudge controls into 12 CI
+    shards after 3 of 4 hit the 10-minute bound (head 9aadb2b, 32/32 pass).
+    Fixed: shadow fix text names Worktree Hooks > Advanced > Command source.
+    The operator's global CLAUDE.md "New lane" text now names it too (edited
+    by coord@main on the operator's answer, 2026-11-17).
     severity: P3
     owner: unassigned
     `orca-lane.sh` H1 and its three shadow refusals, lane-stack §5 and
@@ -2424,7 +2436,12 @@ L82. **Stale-worker alerts ask the operator for every long worker turn.**
     live work on the screen. Worker told to build the first shape.
 
 L83. **Cite lane-stack's Setup-tab wait from §12b rule 2 and `orca-lane.sh`.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-17 — PR #139 merged `a87f427` (1.57.0). tab39@matrix
+    (head b8f39d2); tab40@matrix split the nudge controls into 12 CI
+    shards after 3 of 4 hit the 10-minute bound (head 9aadb2b, 32/32 pass).
+    Fixed: rule 2 and the `create` line cite lane-stack's "Reading the
+    `Setup` tab". Global CLAUDE.md "New lane" text updated the same way.
     severity: P3
     owner: unassigned
     #136 left these sites as they were because tab3@matrix held the files:
@@ -2525,7 +2542,14 @@ L86. **A resumed coordinator re-asks a question that a session end cut off.**
        read-only. A PR that moves or renames either one tells orca-lab
        coord@main (via `coord:orca-lab`).
 L87. **The 7-day outbox prune alerts on a file that already has an ack marker.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-17 — PR #139 merged `a87f427` (1.57.0). tab39@matrix
+    (head b8f39d2); tab40@matrix split the nudge controls into 12 CI
+    shards after 3 of 4 hit the 10-minute bound (head 9aadb2b, 32/32 pass).
+    Fixed: the prune skips the alert when the ack marker exists. Kept as shipped
+    (operator 2026-11-17): an ack of the newest outbox file covers older ones,
+    and a main-checkout ack covers a lane's file. orca-lab told (outbox
+    orca-lab/20261117T142656Z-dwnwdJi1.md, pending its next turn).
     severity: P3
     owner: unassigned
     orca-lab coord@main status 2026-11-12 23:18 UTC (outbox
