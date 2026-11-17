@@ -2517,7 +2517,19 @@ L85. **An offline paired Orca host blocks every "complete read" guard (lane rm, 
     registration. Workaround: remove the WSL host.
 
 L86. **A resumed coordinator re-asks a question that a session end cut off.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-17 — PR #140 merged `171cb25` (1.58.0). tab41@matrix (head
+    8da8f62 = Handoff; update-branch → 6cd13c5, 32/32 CI pass). Rule 7: an
+    interrupted AskUserQuestion is never an answer or a decline; a resumed
+    session re-asks it unchanged with a `Re-ask: ` prefix. /cepa:handoff
+    lists open questions (incl. an unanswered `ask`) in `## Unsettled`.
+    Item 3, tab41 read Orca 1.4.259's app.asar: a waiting/blocked row is kept
+    only while its state is <= 1800000 ms (30 min) old (confirmed in code);
+    the name AGENT_STATUS_STALE_AFTER_MS was not found (minified) and the
+    live dashboard effect was not measured. No behavior change. Item 4:
+    paths untouched. Open: the live re-ask probe (end a session mid-question,
+    resume) — run it once on 1.58.0. Review: 1 finding deferred in
+    todos/review-2026-11-17-145958-fix-matrix-reask-interrupted-question.md.
     severity: P2
     owner: unassigned
     orca-lab coord@main handoff 2026-11-09 13:56 UTC (outbox
@@ -2590,7 +2602,9 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
 L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
     status: pending
     severity: P2
-    owner: unassigned (needs a live WSL host; orca-lab can measure it)
+    owner: orca-lab measures first (operator 2026-11-17), then a cepa worker
+    2026-11-17: measurement request a–e sent to coord:orca-lab; no live
+    coord@main there, so it waits in outbox orca-lab/20261117T210051Z-nXBfXT3O.md.
     Re-raised 2026-11-17 by orca-lab coord@main through the operator's
     start prompt for this session: the same two hand-offs as L85's second
     trigger and L88 (outbox 20261116T031458Z-THES7DSP and
