@@ -1966,7 +1966,16 @@ L66. **Stack gate script `stack-gate.sh` (PR C), runs the start under its lock.*
     #19. Config `~/.config/cepa/stack-gate.conf`. Before fleet launch.
 
 L67. **`/cepa:setup` check for the lane & stack scheme (PR B2, after launch).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-17 — PR #141 merged `5290bd0` (1.59.0). tab42@optimization
+    (head cddc1d3 = Handoff). coord@main merged main in and re-bumped
+    1.58.0 → 1.59.0 (68d762e) after #140 took 1.58.0; 32/32 CI pass.
+    /cepa:setup check 8 (`plugins/cepa/scripts/lane_scheme.py`) reports
+    decision #20's scope; check-lane-stack.sh's YAML leg uses the same
+    parser. 0 MISS over 10 fleet repos read through gh api. Review: 32
+    findings, 25 applied, 7 deferred in
+    todos/review-2026-11-17-154632-feat-optimization-setup-lane-stack-check.md;
+    #26 and #30 filed as L90 and L91 (operator 2026-11-17).
     severity: P2
     owner: unassigned (after L62 and L66)
     Scope per "Plan-review decisions" #20.
@@ -2625,6 +2634,22 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     Workaround today: remove the WSL host in Orca. The operator did so
     2026-11-16. Every item needs a measurement on a live host first, so
     the next step is an orca-lab measurement, then a cepa worker.
+L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    PR #141 review finding #26 (deferred; operator 2026-11-17 chose to file
+    it). `lane_scheme.py` skips farmtender by its directory name. Fix: a
+    `cepa.local.md` opt-out key (tab42's pick), or read the lane-stack
+    skill's "Which repos need what" table. Review file:
+    todos/review-2026-11-17-154632-feat-optimization-setup-lane-stack-check.md.
+L91. **Lane contract item 7 passes `timeout --foreground` without `-k` or `</dev/null`.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    PR #141 review finding #30 (deferred; operator 2026-11-17). Tighten the
+    check only if the lane-stack skill makes `-k` a hard rule. Same review
+    file as L90.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
