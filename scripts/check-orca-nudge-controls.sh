@@ -33,7 +33,9 @@
 # drop mutants. Cost history: 3m33s on a 16-core box when every mutant ran all
 # 154 cases; the PR #106 body has the time after the part split; after PR #110
 # the one hosted job took 7m24s-7m58s of its 10-minute bound (runs 41264491281,
-# 41265227855); the PR #111 body has the per-shard times.
+# 41265227855); the PR #111 body has the per-shard times. With 319 mutants, 4
+# hosted shards hit the 10-minute bound (run 44033973810), so PR #139 went to
+# 12: shard 1/12 took 2m36s locally, about 1m40s of it the fixed baseline.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case list
@@ -748,22 +750,22 @@ for n in sorted({want_n or 1, NSHARDS}):
         miss("shards of N=%d: sizes %r, %d of %d names covered"
              % (n, [len(x) for x in parts], len(set(sum(parts, []))), len(names)))
 # Planted workflow edits, checked in process: each must make wf_problems red.
-J2, J3 = "\n  orca-nudge-2:\n", "\n  orca-nudge-4:\n"
-R3 = "        run: bash scripts/check-orca-nudge-controls.sh --shard 4/4\n"
+J2, J3 = "\n  orca-nudge-2:\n", "\n  orca-nudge-12:\n"
+R3 = "        run: bash scripts/check-orca-nudge-controls.sh --shard 12/12\n"
 WF_PLANTS = [
     ("two shards in one job", J2, "\n"),
     ("job-level if: false", J3, J3 + "    if: false\n"),
     ("continue-on-error on a job", J3, J3 + "    continue-on-error: true\n"),
-    ("shard 4 job deleted", wf[wf.find(J3):] if J3 in wf else J3, "\n"),
-    ("shard 4 run line commented out", R3, "        # run: bash scripts/check-orca-nudge-controls.sh --shard 4/4\n"),
-    ("shard 4 run line in a block scalar", R3,
-     "        run: |\n          bash scripts/check-orca-nudge-controls.sh --shard 4/4\n"),
-    ("shard 4 run line with || true", R3, R3[:-1] + " || true\n"),
-    ("a quoted mention beside the shard 4 run line", R3,
-     R3 + "      - run: echo bash scripts/check-orca-nudge-controls.sh --shard 4/4\n"),
+    ("shard 12 job deleted", wf[wf.find(J3):] if J3 in wf else J3, "\n"),
+    ("shard 12 run line commented out", R3, "        # run: bash scripts/check-orca-nudge-controls.sh --shard 12/12\n"),
+    ("shard 12 run line in a block scalar", R3,
+     "        run: |\n          bash scripts/check-orca-nudge-controls.sh --shard 12/12\n"),
+    ("shard 12 run line with || true", R3, R3[:-1] + " || true\n"),
+    ("a quoted mention beside the shard 12 run line", R3,
+     R3 + "      - run: echo bash scripts/check-orca-nudge-controls.sh --shard 12/12\n"),
     ("shard 2 step without if: always()",
-     "        if: always()\n        run: bash scripts/check-orca-nudge-controls.sh --shard 2/4\n",
-     "        run: bash scripts/check-orca-nudge-controls.sh --shard 2/4\n"),
+     "        if: always()\n        run: bash scripts/check-orca-nudge-controls.sh --shard 2/12\n",
+     "        run: bash scripts/check-orca-nudge-controls.sh --shard 2/12\n"),
 ]
 for label, old, new in WF_PLANTS:
     if wf.count(old) != 1:

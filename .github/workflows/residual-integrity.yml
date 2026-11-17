@@ -182,7 +182,7 @@ jobs:
   # shard nears half its bound, add a job and renumber every --shard I/N
   # rather than raise the bound.
   orca-nudge:
-    # The nudge check, then controls shard 1/4.
+    # The nudge check, then controls shard 1/12.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -199,41 +199,125 @@ jobs:
       - name: Check Orca nudge
         if: always()
         run: bash scripts/check-orca-nudge.sh
-      - name: Check Orca nudge controls (shard 1/4)
+      - name: Check Orca nudge controls (shard 1/12)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 1/4
+        run: bash scripts/check-orca-nudge-controls.sh --shard 1/12
 
   orca-nudge-2:
-    # Controls shard 2/4. Static command, no workflow-context interpolation.
+    # Controls shard 2/12. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca nudge controls (shard 2/4)
+      - name: Check Orca nudge controls (shard 2/12)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 2/4
+        run: bash scripts/check-orca-nudge-controls.sh --shard 2/12
 
   orca-nudge-3:
-    # Controls shard 3/4. Static command, no workflow-context interpolation.
+    # Controls shard 3/12. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca nudge controls (shard 3/4)
+      - name: Check Orca nudge controls (shard 3/12)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 3/4
+        run: bash scripts/check-orca-nudge-controls.sh --shard 3/12
 
   orca-nudge-4:
-    # Controls shard 4/4. Static command, no workflow-context interpolation.
-    # A fourth shard came with L82: shard 1 took 481 of 600 seconds
-    # hosted (run 42052022556) before its mutants and slower health legs.
+    # Controls shard 4/12. Static command, no workflow-context interpolation.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check Orca nudge controls (shard 4/4)
+      - name: Check Orca nudge controls (shard 4/12)
         if: always()
-        run: bash scripts/check-orca-nudge-controls.sh --shard 4/4
+        run: bash scripts/check-orca-nudge-controls.sh --shard 4/12
+
+  orca-nudge-5:
+    # Controls shard 5/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 5/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 5/12
+
+  orca-nudge-6:
+    # Controls shard 6/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 6/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 6/12
+
+  orca-nudge-7:
+    # Controls shard 7/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 7/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 7/12
+
+  orca-nudge-8:
+    # Controls shard 8/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 8/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 8/12
+
+  orca-nudge-9:
+    # Controls shard 9/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 9/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 9/12
+
+  orca-nudge-10:
+    # Controls shard 10/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 10/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 10/12
+
+  orca-nudge-11:
+    # Controls shard 11/12. Static command, no workflow-context interpolation.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 11/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 11/12
+
+  orca-nudge-12:
+    # Controls shard 12/12. Static command, no workflow-context interpolation.
+    # The jobs went from 4 to 12 with PR #139 (334 controls): on run
+    # 44033973810 three of the four shards were cancelled at 10 minutes
+    # (10m17s to 12m17s) and shard 3 took 9m43s. Locally shard 1/4 took
+    # 5m22s and shard 1/12 2m36s, of which about 1m40s is the fixed
+    # baseline every shard runs. A fourth shard came with L82: shard 1
+    # took 481 of 600 seconds hosted (run 42052022556).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check Orca nudge controls (shard 12/12)
+        if: always()
+        run: bash scripts/check-orca-nudge-controls.sh --shard 12/12
 
   orca-lane:
     # The lane lifecycle (autonomy section 12b rule 2) runs only through
