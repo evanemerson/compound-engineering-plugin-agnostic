@@ -1861,7 +1861,10 @@ L59. **The quoted-value injection shape is still live in `compound.md` and auton
     finding 5.
 
 L60. **A Run dispatch that fails at start reaches nobody: no escalation, and `orca-health.sh` says `ok`.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-16 — PR #138 merged `ac48315` (1.56.0), tab38@matrix
+    (head b65cf97 = Handoff, 24/24 CI pass). Fixed: a dispatch that fails at start now raises an alert (live probe on the evidence Run confirmed). Open: the run-use fence probe (shard item 7).
+    Residuals: memory/tasks.d/2026-11-16-fix-matrix-orca-reliability-set.md.
     severity: P2
     owner: gain (unassigned worker; filed 2026-11-01 on the operator's answer
       "file L60, P2, for gain, but we're going to slow down and let things
@@ -2149,7 +2152,10 @@ L73. **`orchestration check` also returns a short form on Orca 1.4.246.**
     output need `--full`. Until then, coord@main runs `check ... --full`.
 
 L74. **A `check --full` drain marks its batch read at once, so a lost drain output loses the batch.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-16 — PR #138 merged `ac48315` (1.56.0), tab38@matrix
+    (head b65cf97 = Handoff, 24/24 CI pass). Fixed: the rule 8 drain change (operator approved 2026-11-08); live probe confirmed the drain replay. Open: the same-request replay (shard item 6).
+    Residuals: memory/tasks.d/2026-11-16-fix-matrix-orca-reliability-set.md.
     severity: P2
     owner: unassigned (a §12b rule 8 change; operator's call)
     NEXT (operator 2026-11-08, AskUserQuestion "Reliability set"): the next
@@ -2429,7 +2435,10 @@ L83. **Cite lane-stack's Setup-tab wait from §12b rule 2 and `orca-lane.sh`.**
     CLAUDE.md "New lane" text (operator's file). Could ride with L80.
 
 L84. **An Orca CLI failure after the request was sent is no result, for every write verb.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-16 — PR #138 merged `ac48315` (1.56.0), tab38@matrix
+    (head b65cf97 = Handoff, 24/24 CI pass). Fixed: a failure after the request was sent is no longer read as no result. Verbs left without a read-back: shard item 8.
+    Residuals: memory/tasks.d/2026-11-16-fix-matrix-orca-reliability-set.md.
     severity: P2
     owner: unassigned (reliability set with L60 + L74)
     Drafted by tab2@matrix in #134 (shard
@@ -2442,7 +2451,10 @@ L84. **An Orca CLI failure after the request was sent is no result, for every wr
     while this Run was bound (cause unknown; L81 header).
 
 L85. **An offline paired Orca host blocks every "complete read" guard (lane rm, re-bind).**
-    status: pending
+    status: completed
+    CLOSED 2026-11-16 — PR #138 merged `ac48315` (1.56.0), tab38@matrix
+    (head b65cf97 = Handoff, 24/24 CI pass). Fixed for re-bind and the other complete-read guards; the omitted host is named in the refusal. `orca-lane.sh rm` stays STRICT while a WSL host is added (operator's AskUserQuestion 2026-11-16, "Keep strict"; review P2: a WSL agent can sit in the lane's directory with no local row). Relaxing waits for shard item 3. The operator removed the WSL host 2026-11-16, which cleared the live block.
+    Residuals: memory/tasks.d/2026-11-16-fix-matrix-orca-reliability-set.md.
     severity: P2
     owner: unassigned (fits the reliability set: L84's class)
     orca-lab coord@main handoff 2026-11-08 08:03 UTC (outbox
@@ -2529,7 +2541,10 @@ L87. **The 7-day outbox prune alerts on a file that already has an ack marker.**
     exists, prune with no alert. Add a control. orca-lab's Needs You panel
     reads these alerts (L86 item 4), so the duplicates show there too.
 L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a delivered dispatch: send as failed.**
-    status: pending
+    status: completed
+    CLOSED 2026-11-16 — PR #138 merged `ac48315` (1.56.0), tab38@matrix
+    (head b65cf97 = Handoff, 24/24 CI pass). Fixed: optional host target for sends. Not measured on a live host (shard items 1 and 2: the false exit 5 cause, and `on:`).
+    Residuals: memory/tasks.d/2026-11-16-fix-matrix-orca-reliability-set.md.
     severity: P2
     owner: unassigned (fits the reliability set with L85)
     orca-lab coord@main handoff 2026-11-16 01:32 UTC (outbox
