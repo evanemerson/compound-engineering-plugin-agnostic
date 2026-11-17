@@ -170,6 +170,16 @@ A source that could not be read is a named coverage gap, not a clean pass.
    and their status.
 6. **Uncommitted work** — what is dirty and whether it is coherent enough
    to commit as a checkpoint (Step 6).
+7. **Open questions** — each question this session put to the operator,
+   or sent to its coordinator, that has no answer in the transcript: an
+   AskUserQuestion whose result is an interruption or never came back, an
+   unanswered `ask`, or a numbered choice the operator did not answer. Each
+   one goes in `## Unsettled — decide before starting` as
+   `Re-ask: <question>`, with its options word for word, so the next
+   session asks it on its first turn (`cepa:autonomy` §12b rule 7, "A
+   question that a session end cut off is asked again"). Step 4 does not
+   ask it again: it travels as a re-ask. When there is none, report
+   `collected (none open)`.
 
 ### Branch disposition — classify it here, act on it in Step 7
 
@@ -577,7 +587,8 @@ branch, file:line, what state it is in, what remains.>
 ## Unsettled — decide before starting
 <Open questions as questions. Each names what it blocks. Anything owned by
 another worktree, checkout, or repo is marked read-only with its owner
-named — see the ownership rule below.>
+named — see the ownership rule below. A question Step 2 found open comes
+first, as `Re-ask: <question>` with its options.>
 
 ## Goals
 <Direction and intent that outlives this session.>

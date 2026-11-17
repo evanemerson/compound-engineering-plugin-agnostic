@@ -46,6 +46,13 @@
 #              inside a fence each line counts. It reads the whole
 #              file, so a new site is caught, not only the known ones. Each
 #              failing span is its own MISS line, named by its text.
+#   REASK    — each command in REASK_SITES carries each of its phrases exactly
+#              once outside fences, inside the step it names (punch-list
+#              L86: /cepa:handoff lists a question a session end cut off,
+#              so the next session asks it again under rule 7), and each
+#              phrase in REASK_FENCED once in the whole file (its Step 5
+#              template sits in a fence). Rule 7's half of L86 is pinned in
+#              RULE_PHRASES.
 #   CITES    — each command in SITES carries CITE exactly once outside fenced
 #              blocks, and that once is inside the heading SITES names: the
 #              step where its run ends.
@@ -127,6 +134,30 @@ RULE_PHRASES = [
     "A `## Record` section",
     "**One Handoff block per message** (rule 1).",
 ]
+# L86: a question a session end cut off is asked again, unchanged.
+RULE_PHRASES += [
+    "**A question that a session end cut off is asked again** (punch-list L86).",
+    "records the call's result as `[Tool call interrupted: the session ended before this call's result was recorded …]`.",
+    "An interruption is never an answer and never a decline.",
+    "On its first turn after a resume, a coordinator or solo session whose last AskUserQuestion result is an interruption ends that turn as **The operator** with the same question, unchanged except for the prefix `Re-ask: ` on its text, and with the same options.",
+    "A prompt from the operator that answers the question is the answer, and nothing is re-asked.",
+    "Either way, that turn's first-turn clear (the attention flag, below) removes the old flag.",
+    "The limits above still hold: under `full` autonomy the re-ask waits for the end of the finished run, and a headless run files it per §5 and ends as **Nobody**.",
+    "A question that a handoff document lists as open (`/cepa:handoff` Step 2) is asked the same way on the next session's first turn.",
+    "A worker that finds one sends it to its coordinator (**A coordinator**, below)."]
+# L86: command file -> (the step that collects open questions, its phrases).
+# Each phrase is there exactly once outside fences, and inside that step.
+REASK_SITES = {"handoff.md": ("## Step 2: Inventory (fail-closed)", [
+    "7. **Open questions** — each question this session put to the operator, or sent to its coordinator, that has no answer in the transcript",
+    "an AskUserQuestion whose result is an interruption or never came back, an unanswered `ask`, or a numbered choice the operator did not answer.",
+    "goes in `## Unsettled — decide before starting` as `Re-ask: <question>`, with its options word for word",
+    "(`cepa:autonomy` §12b rule 7, \"A question that a session end cut off is asked again\")",
+    "Step 4 does not ask it again: it travels as a re-ask.",
+    "When there is none, report `collected (none open)`."])}
+# L86: phrases inside a fenced template (Step 5's document shape), which a
+# step scope cannot read: each is in the whole file exactly once.
+REASK_FENCED = {"handoff.md": [
+    "A question Step 2 found open comes first, as `Re-ask: <question>` with its options."]}
 SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
@@ -418,16 +449,32 @@ def step(u, head):
         sec = sec[:m.start()] if m else sec
     return sec
 
-for n, (head, cs) in REPORT_SITES.items():
+def site_once(leg, what, sites):
+    # Each phrase is in the command exactly once outside fences, inside the
+    # step its entry names.
+    for n, (head, cs) in sites.items():
+        p = os.path.join(SITES_DIR, n)
+        try:
+            u = unfenced(open(p, encoding="utf-8").read())
+        except OSError as e:
+            miss("%s: cannot read %s: %s" % (leg, p, e)); continue
+        sec = fold(step(u, head) or "")
+        for c in cs:
+            check(fold(u).count(c) == 1 and c in sec,
+                  "%s: %s carries its %s once, in %s: %s" % (leg, n, what, head, c))
+
+site_once("REPORT", "citation", REPORT_SITES)
+
+# --- REASK (L86) ---
+site_once("REASK", "phrase", REASK_SITES)
+for n, cs in REASK_FENCED.items():
     p = os.path.join(SITES_DIR, n)
     try:
-        u = unfenced(open(p, encoding="utf-8").read())
+        f = fold(open(p, encoding="utf-8").read())
     except OSError as e:
-        miss("REPORT: cannot read %s: %s" % (p, e)); continue
-    sec = fold(step(u, head) or "")
+        miss("REASK: cannot read %s: %s" % (p, e)); continue
     for c in cs:
-        check(fold(u).count(c) == 1 and c in sec,
-              "REPORT: %s carries its citation once, in %s: %s" % (n, head, c))
+        check(f.count(fold(c)) == 1, "REASK: %s carries its template phrase once: %s" % (n, c))
 
 for n, head in SITES.items():
     p = os.path.join(SITES_DIR, n)
