@@ -31,7 +31,8 @@
 #             cursor, a failed or truncated read (unreadable alert), the send
 #             argv and the delivered move, a failed send kept pending.
 #   PRUNE   — files older than 7 days go in every status; a pending or
-#             refused one leaves an outbox_pruned alert, a delivered one none.
+#             refused one leaves an outbox_pruned alert, a delivered one none,
+#             and one already acked (L87) none.
 #   HEALTH  — the sender's count alert (key = newest file, #25), its ack,
 #             a new file re-alerting, worktree scope, the resolver alert
 #             kinds, unknown-shape files shown only to the receiving main
@@ -379,6 +380,34 @@ owner = sorted((a.get("reason", "").endswith(old_p), a.get("repo"), a.get("workt
 check("PRUNE an alert names the pruned file's own sender",
       owner == [(False, "sendrepo", "sendrepo", "coord:dpc-pro"), (True, "otherrepo", "otherlane", "coord:dpc-pro")],
       "owner=%s" % owner)
+
+# L87: a file the operator already acked (its marker under acked/<repo=> or
+# acked/<worktree=>) goes with no second alert; an unacked one still alerts.
+reset()
+a_r, a_w, a_n = stamp(10) + "-Aack0001.md", stamp(10) + "-Aack0002.md", stamp(10) + "-Aack0003.md"
+plant("dpc-pro/" + a_r, header={"worktree": "lanex"})
+plant("dpc-pro/refused/" + a_w, header={"repo": "otherrepo", "worktree": "otherlane"})
+plant("dpc-pro/" + a_n)
+for w, n in (("sendrepo", a_r), ("otherlane", a_w), ("sendrepo", "outbox:helm:" + a_n)):
+    os.makedirs(os.path.join(ALERTS, "acked", w), exist_ok=True)
+    open(os.path.join(ALERTS, "acked", w, n if n.startswith("outbox:") else "outbox:dpc-pro:" + n), "w").close()
+# An older file is held by the ack of a newer one (the count alert keys on its
+# newest file). A marker the file's header does not lead to never counts: one
+# under another worktree, or one that `..` in the header would reach.
+a_o, a_d, a_s = stamp(11) + "-Aack0004.md", stamp(10) + "-Aack0005.md", stamp(10) + "-Aack0006.md"
+plant("dpc-pro/" + a_o)
+plant("dpc-pro/" + a_d, header={"repo": "..", "worktree": ".."})
+plant("dpc-pro/" + a_s, header={"repo": "repo2", "worktree": "lane2"})
+open(os.path.join(ALERTS, "outbox:dpc-pro:" + a_d), "w").close()
+os.makedirs(os.path.join(ALERTS, "acked", "stranger"), exist_ok=True)
+open(os.path.join(ALERTS, "acked", "stranger", "outbox:dpc-pro:" + a_s), "w").close()
+rc, out = send({"target": "coord:dpc-pro"}, st=state(runs=[]))
+fl = files()
+reasons = sorted(a.get("reason") for a in alerts() if a.get("kind") == "outbox_pruned")
+check("PRUNE an acked file goes with no alert",
+      not [f for f in fl if "Aack000" in f]
+      and reasons == sorted("an outbox file was pruned unread after 7 days: dpc-pro/" + n for n in (a_n, a_d, a_s)),
+      "files=%s reasons=%s" % (fl, reasons))
 
 # ---------------------------------------------------------------- HEALTH
 def health(args, cwd, st=None):

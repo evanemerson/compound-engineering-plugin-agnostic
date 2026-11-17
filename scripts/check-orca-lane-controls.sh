@@ -84,6 +84,9 @@ MUTANTS = [
     ("omitted-scope-shape", 'if not isinstance(om, list) or not isinstance(cov, list):', 'if not isinstance(om, list):', None),
     ("omitted-note-off", 'cepa_ln_note() {\n  local st ids', 'cepa_ln_note() {\n  return 0\n  local st ids', None),
     ("omitted-note-after-ending", '  echo "ORCA lane: $1"\n  cepa_ln_note\n', '  echo "ORCA lane: $1"\n', None),
+    # L80: the shadow refusal names Orca's control.
+    ("shadow-fix-unnamed", 'Worktree Hooks > Advanced, set Command source to \\"orca.yaml only\\", then empty the local setup box, then ask again"',
+     'Worktree Hooks, then ask again"', {"HOOKS local-only differing refuses"}),
     ("ps-failure-ok", '"kept $cepa_ln_lane — worktree ps failed, so a live agent cannot be ruled out"',
      'true', None),
     # CREATE

@@ -2047,13 +2047,15 @@ limits.
        Orca reads that `setup:` from the new lane's own checkout (the base
        ref), so it must be committed on `<base>`. `create` and `rm` refuse
        when Orca's saved hook settings shadow `orca.yaml` (`orca-lane.sh`
-       header, H1); the operator fixes that in Orca's Settings. A repo
+       header, H1, which names the Orca control that fixes it). A repo
        whose stack init is not in `orca.yaml` names it in its own
        CLAUDE.md, and the main coordinator runs it once, in the lane, after
        `create`. **Orca reports
        no setup result** (a setup that exits 1 still reads `"ok": true`), so
-       the coordinator reads the lane's `Setup` tab before it starts a
-       worker there.
+       the coordinator waits for and reads the lane's `Setup` tab before
+       it starts a worker there, by `cepa:lane-stack`'s "Reading the
+       `Setup` tab": the tab can appear minutes late, and no tab yet is no
+       result, never a pass.
      - **Removal always runs the archive hook** (`worktree rm --run-hooks`),
        which Orca reads from the main checkout's working-tree `orca.yaml`.
        A failed hook removes nothing; never pass

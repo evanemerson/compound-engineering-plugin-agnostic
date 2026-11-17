@@ -51,6 +51,11 @@
 #   send-failed:<file>   orca-send.sh exit 4 or 5 wrote an alert file for this
 #                        repo (or for no known repo). Orca has no record of a
 #                        send it never stored, so this file is the only trace.
+#                        Also a stored send whose nudge did not run to a
+#                        decision (kind nudge_skipped, L65: an Orca call
+#                        failed, its output was unreadable, or orca-nudge.sh
+#                        could not run): stored, but unread until its target
+#                        checks its inbox.
 #   exited:<dispatch>    a live dispatch whose liveness verdict is `exited`:
 #                        Orca's positive proof the agent stopped, and no
 #                        worker_done came.
@@ -501,7 +506,16 @@ REASONS = [re.compile(x) for x in (
     r"a live session claims coord@main of [A-Za-z0-9_-]{1,100} outside its main checkout: "
     r"term_[0-9a-f-]{36}( term_[0-9a-f-]{36}){0,9}",
     r"an outbox file was pruned unread after 7 days: [A-Za-z0-9_-]{1,100}(/refused)?/"
-    r"[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md")]
+    r"[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{8}\.md",
+    # 1.57.0 (punch-list L65): orca-nudge.sh's skip and fail reasons, and
+    # orca-send.sh's own nudge-file reasons, relayed as a nudge_skipped alert.
+    # (no timeout, no python3 and mktemp failed are listed above.)
+    r"(terminal show|worktree ps) failed or timed out", r"terminal send exited non-zero or timed out",
+    r'terminal send did not return "ok": true', r"the Orca output (could not be read|is not JSON|has an unexpected shape)",
+    r'an Orca call did not return "ok": true', r"terminal show did not describe this handle",
+    r"date gave no clock for the wait", r"sleep failed in the wait",
+    r"orca-nudge\.sh not found beside orca-send\.sh", r"orca-nudge\.sh exited [0-3] and printed nothing",
+    r"orca-nudge\.sh would not start \(exit \d{1,3}\)")]
 if not re.fullmatch(r"term_[0-9a-f-]{36}", me):
     me = ""
 hour = now // 3600
@@ -612,7 +626,7 @@ def life(term, handle, start):
     return best, out_txt, commit_txt
 
 # 1. Alert files from orca-send.sh.
-FIELD = {"kind": r"send_(refused|failed|unproven)|outbox_(ambiguous|mismatch|unreadable|pruned)", "time": r"\d{1,12}", "repo": r"[A-Za-z0-9._@-]{1,100}",
+FIELD = {"kind": r"send_(refused|failed|unproven)|nudge_skipped|outbox_(ambiguous|mismatch|unreadable|pruned)", "time": r"\d{1,12}", "repo": r"[A-Za-z0-9._@-]{1,100}",
          "worktree": r"[A-Za-z0-9._@-]{1,100}", "sender": r"term_[0-9a-f-]{36}|unknown",
          "target": r"(msg_[0-9a-f]{6,32}|%s)|invalid" % ADDR[1:-1],
          "type": r"[a-z_]{1,20}", "reason": r"[ -~]{0,300}"}
@@ -656,7 +670,8 @@ for n in listdir(adir, "alert-dir"):
         continue
     what = {"send_refused": "was refused before any Orca call",
             "send_failed": "stored nothing",
-            "send_unproven": "was not proven stored"}[f["kind"]]
+            "send_unproven": "was not proven stored",
+            "nudge_skipped": "was stored, but not nudged"}[f["kind"]]
     why = f["reason"] if any(r.fullmatch(f["reason"]) for r in REASONS) else "an unrecognised reason"
     alert(key, "%s: a %s send to %s %s (%s), at %s, from %s" % (
         f["worktree"], f["type"], f["target"], what, why, hhmm(int(f["time"])), f["sender"]))
