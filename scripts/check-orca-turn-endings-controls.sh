@@ -458,6 +458,28 @@ MUTANTS += [
      {"GRANTS: handoff.md grants Bash(orca-ide orchestration check:*)"}),
     ("grant-gone-check-review", "review.md", ", Bash(orca-ide orchestration check:*)", "",
      {"GRANTS: review.md grants Bash(orca-ide orchestration check:*)"}),
+    # L86: an interruption read as a decline loses the decision.
+    ("rule-interrupt-is-decline", "skill", "An interruption is\n       never an answer and never a decline.",
+     "An interruption is\n       a decline.",
+     {"RULE: rule 7 holds An interruption is never an answer and never a decline."}),
+    ("rule-reask-reworded", "skill", "same question, unchanged: the same text and the same options",
+     "same decision, in new words",
+     {"RULE: rule 7 holds On its first turn after a resume, a coordinator or solo session whose last AskUserQuestion result is an interruption ends that turn as **The operator** with the same question, unchanged: the same text and the same options, with `Re-ask: ` before the question text."}),
+    ("rule-reask-unlabelled", "skill", " with\n       `Re-ask: ` before the question text.", ".",
+     {"RULE: rule 7 holds On its first turn after a resume, a coordinator or solo session whose last AskUserQuestion result is an interruption ends that turn as **The operator** with the same question, unchanged: the same text and the same options, with `Re-ask: ` before the question text."}),
+    ("rule-reask-handoff-gone", "skill", " A\n       question that a handoff document lists as open (`/cepa:handoff`\n       Step 2) is asked the same way on the next session's first turn.", "",
+     {"RULE: rule 7 holds A question that a handoff document lists as open (`/cepa:handoff` Step 2) is asked the same way on the next session's first turn."}),
+    ("reask-uncited-handoff", "handoff.md", "turn (`cepa:autonomy` §12b rule 7, \"A question that a session end cut\n   off is asked again\").", "turn.",
+     {"REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): (`cepa:autonomy` §12b rule 7, \"A question that a session end cut off is asked again\")"}),
+    ("reask-no-options-handoff", "handoff.md", ", with\n   its options word for word,", ",",
+     {"REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): goes in `## Unsettled — decide before starting` as `Re-ask: <question>`, with its options word for word"}),
+    # Still once, but moved out of the inventory step.
+    ("reask-moved-handoff", "handoff.md", "\n7. **Open questions** —", "\n## Step 2-split\n\n7. **Open questions** —",
+     {"REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): 7. **Open questions** — each question this session put to the operator that has no answer in the transcript" ,
+      "REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): an AskUserQuestion whose result is an interruption (`[Tool call interrupted: …`) or never came back",
+      "REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): goes in `## Unsettled — decide before starting` as `Re-ask: <question>`, with its options word for word",
+      "REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): (`cepa:autonomy` §12b rule 7, \"A question that a session end cut off is asked again\")",
+      "REASK: handoff.md carries its phrase once, in ## Step 2: Inventory (fail-closed): When there is none, report `collected (none open)`."}),
 ]
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-turn-ctl-")

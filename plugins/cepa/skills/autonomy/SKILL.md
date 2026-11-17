@@ -2526,6 +2526,18 @@ limits.
        before that call, the session runs the attention block below with
        `action: mark`; after the answer, its first step is the same block
        with `action: clear`.
+       **A question that a session end cut off is asked again** (punch-list
+       L86). When a session ends while AskUserQuestion is open, Claude Code
+       records the call's result as `[Tool call interrupted: the session
+       ended before this call's result was recorded …]`. An interruption is
+       never an answer and never a decline. On its first turn after a
+       resume, a coordinator or solo session whose last AskUserQuestion
+       result is an interruption ends that turn as **The operator** with the
+       same question, unchanged: the same text and the same options, with
+       `Re-ask: ` before the question text. A prompt from the operator that
+       answers the question is the answer, and nothing is re-asked. A
+       question that a handoff document lists as open (`/cepa:handoff`
+       Step 2) is asked the same way on the next session's first turn.
      - **A coordinator.** A dispatched worker (a live preamble with Task and
        Dispatch IDs) never calls AskUserQuestion. It sends the decision with
        the preamble's `ask` (rule 4), or puts it in `Decisions` under `full`.

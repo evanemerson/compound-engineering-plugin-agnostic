@@ -46,6 +46,11 @@
 #              inside a fence each line counts. It reads the whole
 #              file, so a new site is caught, not only the known ones. Each
 #              failing span is its own MISS line, named by its text.
+#   REASK    — each command in REASK_SITES carries each of its phrases exactly
+#              once outside fences, inside the step it names (punch-list
+#              L86: /cepa:handoff lists a question a session end cut off,
+#              so the next session asks it again under rule 7). Rule 7's
+#              half of L86 is pinned in RULE_PHRASES.
 #   CITES    — each command in SITES carries CITE exactly once outside fenced
 #              blocks, and that once is inside the heading SITES names: the
 #              step where its run ends.
@@ -127,6 +132,21 @@ RULE_PHRASES = [
     "A `## Record` section",
     "**One Handoff block per message** (rule 1).",
 ]
+# L86: a question a session end cut off is asked again, unchanged.
+RULE_PHRASES += [
+    "**A question that a session end cut off is asked again** (punch-list L86).",
+    "An interruption is never an answer and never a decline.",
+    "On its first turn after a resume, a coordinator or solo session whose last AskUserQuestion result is an interruption ends that turn as **The operator** with the same question, unchanged: the same text and the same options, with `Re-ask: ` before the question text.",
+    "A prompt from the operator that answers the question is the answer, and nothing is re-asked.",
+    "A question that a handoff document lists as open (`/cepa:handoff` Step 2) is asked the same way on the next session's first turn."]
+# L86: command file -> (the step that collects open questions, its phrases).
+# Each phrase is there exactly once outside fences, and inside that step.
+REASK_SITES = {"handoff.md": ("## Step 2: Inventory (fail-closed)", [
+    "7. **Open questions** — each question this session put to the operator that has no answer in the transcript",
+    "an AskUserQuestion whose result is an interruption (`[Tool call interrupted: …`) or never came back",
+    "goes in `## Unsettled — decide before starting` as `Re-ask: <question>`, with its options word for word",
+    "(`cepa:autonomy` §12b rule 7, \"A question that a session end cut off is asked again\")",
+    "When there is none, report `collected (none open)`."])}
 SCOPE_HAS = ["block addressed to a session Orca can reach",
              "only a block with no reachable target is printed for pasting.",
              "says `(Handoff block above)` in its place."]
@@ -428,6 +448,18 @@ for n, (head, cs) in REPORT_SITES.items():
     for c in cs:
         check(fold(u).count(c) == 1 and c in sec,
               "REPORT: %s carries its citation once, in %s: %s" % (n, head, c))
+
+# --- REASK (L86) ---
+for n, (head, cs) in REASK_SITES.items():
+    p = os.path.join(SITES_DIR, n)
+    try:
+        u = unfenced(open(p, encoding="utf-8").read())
+    except OSError as e:
+        miss("REASK: cannot read %s: %s" % (p, e)); continue
+    sec = fold(step(u, head) or "")
+    for c in cs:
+        check(fold(u).count(c) == 1 and c in sec,
+              "REASK: %s carries its phrase once, in %s: %s" % (n, head, c))
 
 for n, head in SITES.items():
     p = os.path.join(SITES_DIR, n)
