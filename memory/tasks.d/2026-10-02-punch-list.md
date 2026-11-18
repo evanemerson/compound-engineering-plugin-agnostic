@@ -2702,6 +2702,11 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     supported; release-by-newest documented in §12b rule 3. Residuals in
     the 2026-11-17 shard (new section). L89 stays open for the shard's
     live re-measures; host coordinator gaps are L93.
+    RE-MEASURED 2026-11-18 by orca-lab on 1.60.1 (msg_201730c8762e,
+    sender-reported): a PASS (rc 0, no ask); b PASS twice (second send
+    found the chain); release-by-newest closed the terminal. c not
+    reachable: the scratch repo is now a host-only project, so rm stops
+    earlier; that new advice gap is L93 item 3.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
@@ -2756,6 +2761,12 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
        sends fail (terminal_not_found). Windows → host works. One line in
        §12b: a mixed setup needs the Windows side to poll or the operator
        to relay; it ends when every repo is on the host.
+    3. (msg_201730c8762e) For a host-only repo (no Windows project), a
+       Windows-side `orca-lane.sh` says "Orca has no repo at <path>" and
+       advises `orca repo add`, which re-creates the double registration
+       the operator removed. Fix: when the local `repo list` has no row
+       but `repo list --environment <host>` has the path, say it is a
+       WSL-host project and lane commands run from a session on that host.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
