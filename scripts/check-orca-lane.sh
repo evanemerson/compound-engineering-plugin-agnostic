@@ -26,6 +26,12 @@
 #            removed; a path from another WSL distro reads as UNKNOWN.
 #   READS  — a failed, truncated or host-omitting list, or a failed or
 #            truncated ps, is UNKNOWN: kept, and no write call is made.
+#   WSLHOST — punch-list L89 c: rm reads `environment list`, then the one
+#            Orca WSL host's own `worktree ps --environment <id>`, and keeps
+#            the lane while an agent is in its directory there (matched by
+#            path), the host read fails or is partial, more than one WSL host
+#            is added, or either read has an unknown shape. An omitted host
+#            that is that WSL host, read clean, no longer keeps the lane.
 #   CREATE — happy create (exact create argv, parked detached, park branch
 #            deleted, show by id); a name taken in Orca or in git; a park
 #            branch that exists; a failed create; a suffixed path; a
@@ -384,6 +390,59 @@ good = len(o) >= 3 and o[-1].startswith("Ending first line: ") and o[-2].startsw
 expect("READS no omitted host prints no note", W.run(F(cli=CLI, action="name")), rc=0, lacks=("ORCA lane note",))
 expect("READS repo list failure", W.run(F(cli=CLI, action="name"), mode="repofail"), rc=1,
        first="ORCA lane: lanes unchanged — repo list failed")
+# ---- WSLHOST (punch-list L89 c; orca-lab, Orca 1.4.262, live WSL host): an
+# Orca WSL host runs on this machine, and its agents are not in this
+# machine's worktree ps. rm reads the host's own worktree ps and matches the
+# lane by path; anything it cannot read keeps the lane.
+ENVL = ["environment", "list", "--json"]
+HPS = ["worktree", "ps", "--environment", "wsl:ubuntu-24.04", "--limit", "500", "--json"]
+W.lane("w-none")
+got = W.run(F(cli=CLI, action="rm", lane="w-none"))
+calls = got[2]
+expect("WSLHOST no WSL host: rm removes", got, rc=0, first="ORCA lane: removed w-none")
+good = ENVL in calls and not [c for c in calls if c[:2] == ["worktree", "ps"] and "--environment" in c]
+(ok if good else miss)("WSLHOST no WSL host: environment list only" + ("" if good else " | %r" % calls))
+W.lane("w-clean")
+got = W.run(F(cli=CLI, action="rm", lane="w-clean"), mode="wsl")
+expect("WSLHOST host read with no agent in the lane: rm removes", got, rc=0, first="ORCA lane: removed w-clean")
+good = HPS in got[2] and got[2].index(HPS) < next(i for i, c in enumerate(got[2]) if c[:2] == ["worktree", "ps"] and "--environment" not in c)
+(ok if good else miss)("WSLHOST host ps read before the local one" + ("" if good else " | %r" % got[2]))
+W.lane("w-idle")
+expect("WSLHOST lane row with no agent on the host: rm removes",
+       W.run(F(cli=CLI, action="rm", lane="w-idle"), mode="wsl,hostidle", env={"STUB_HOST_AGENT_ON": "w-idle"}),
+       rc=0, first="ORCA lane: removed w-idle")
+WK = "ORCA lane: kept %s — "
+for lane, mode, why in (
+        ("w-agent", "wsl,hostagent", "1 agent(s) in its directory on the Orca WSL host wsl:ubuntu-24.04"),
+        ("w-psfail", "wsl,hostpsfail", "worktree ps on the Orca WSL host wsl:ubuntu-24.04 failed"),
+        ("w-pspart", "wsl,hostpspartial", "worktree ps on the Orca WSL host wsl:ubuntu-24.04 was not a complete read"),
+        ("w-psomit", "wsl,hostpsomit", "worktree ps on the Orca WSL host wsl:ubuntu-24.04 was not a complete read"),
+        ("w-distro", "wsl,hostidle,hostotherdistro", "worktree ps on the Orca WSL host wsl:ubuntu-24.04 was not a complete read"),
+        ("w-two", "wsl2", "more than one Orca WSL host is added"),
+        ("w-badid", "wslbadid", "environment list has a shape this script does not know"),
+        ("w-envfail", "envfail", "environment list failed"),
+        ("w-envbad", "envbad", "environment list has a shape this script does not know")):
+    W.lane(lane)
+    expect("WSLHOST %s keeps the lane" % mode, W.run(F(cli=CLI, action="rm", lane=lane), mode=mode,
+                                                    env={"STUB_HOST_AGENT_ON": lane}),
+           rc=1, first=WK % lane + why, verbs_lack=[["worktree", "rm"]])
+# An omitted host that is that WSL host, read clean, no longer keeps the lane.
+NOTE_HOST = ("ORCA lane note: Orca left host(s) %s out of worktree ps; each is an Orca WSL host this run read on its "
+             "own server, with no agent in this lane's directory, so the live-agent check counted (punch-list L89)")
+W.lane("w-omit")
+expect("WSLHOST omitted host read clean on its server: rm removes",
+       W.run(F(cli=CLI, action="rm", lane="w-omit"), mode="psomitted,wsl"), rc=0, first="ORCA lane: removed w-omit",
+       has=(NOTE_HOST % OFFH,))
+# The omitted id measured live (runtime:<env id, URL-encoded>) maps by the id.
+W.lane("w-omitid")
+expect("WSLHOST measured omitted id maps to the WSL host by its id",
+       W.run(F(cli=CLI, action="rm", lane="w-omitid"), mode="psomitwsl,wslother"), rc=0,
+       first="ORCA lane: removed w-omitid", has=(NOTE_HOST % WSLH,))
+W.lane("w-omit2")
+expect("WSLHOST omitted host that is not the WSL host keeps the lane",
+       W.run(F(cli=CLI, action="rm", lane="w-omit2"), mode="psomitted,wslother"), rc=1,
+       first="ORCA lane: kept w-omit2 — worktree ps was not a complete read", has=(NOTE_STRICT % OFFH,),
+       verbs_lack=[["worktree", "rm"]])
 W.done()
 
 # ---- CREATE

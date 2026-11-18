@@ -65,6 +65,10 @@
 # `Ending first line: Needed from you: …`. Exit codes:
 #   0  `ORCA rebind: ok — …` (already bound, or nothing named) or
 #      `ORCA rebind: done — <run> moved from <old> to this terminal`.
+#   2  `ORCA rebind: retired — Run retired; create a new one: …` (punch-list
+#      L92): `run-show` for the named Run answered `run_not_found`. Read at
+#      step 3, and before step 2's ownership ask (a Run Orca deleted is not
+#      an ownership question). §12b rule 2 says what the session does next.
 #   1  `ORCA rebind: ask — …`: no `run:` while run-current reports a Run
 #      bound elsewhere, a `run:` Run that run-current does not report and no
 #      `confirm:` names, a live holder, a holder that could not be checked,
@@ -129,8 +133,34 @@
 #     after `runtime:`. `terminal list --environment <a paired id> --json`
 #     returned ok, truncated false, and `hostIds: ["local"]` (that server's
 #     own scope) the same day.
-#     Whether the WSL host has an environment row was not measured (none was
-#     added): if it has none, the re-bind still asks, now naming it.
+#     THE WSL HOST (punch-list L89 d). orca-lab measured on Orca 1.4.262 with
+#     a live WSL host, 2026-11-17 (sender report, not re-run here): it has an
+#     `environment list` row (`id` `wsl:ubuntu-24.04`, a `runtimeId` that
+#     changes each time the host is re-added, `orcadDeployment.kind` `wsl`,
+#     no `connectionDependency`), so the omitted-host mapping above finds it.
+#     The same report read this machine's `worktree ps` with
+#     `omittedHostIds: []` and no row for the host's lane; this run's own
+#     read (Orca 1.4.262, 2026-11-17, host live) found `terminal list` and
+#     `worktree ps` leaving it out as `runtime:wsl%3Aubuntu-24.04`, which
+#     maps to the row by its `id`, and `terminal list --environment
+#     wsl:ubuntu-24.04 --json` complete in its own scope (`hostIds:
+#     ["local"]`, `omittedHostIds: []`). So a WSL host is not always named as
+#     omitted. Its terminals run on this machine, so
+#     after the local list, every `kind: wsl` row (at most 5) is read with
+#     `terminal list --environment <id>`, as an omitted host is: the holder
+#     there asks; a failed or partial read, or an `environment list` that
+#     fails or has a shape this reader does not know, asks. A host the
+#     omitted-host step already read is not read twice.
+#   - THE RETIRED RUN (punch-list L92). From Orca 1.4.262 hourly maintenance
+#     deletes a Run with no open work and no live coordinator pane for 24 h
+#     (orca-lab report, stablyai/orca #43322 and #43550; not measured here).
+#     `run-show --id <unknown run> --json --full` was measured on Orca 1.4.262
+#     (WSL), 2026-11-17, read only: exit 1, `"ok": false`, `error.code`
+#     `run_not_found` ("Run <id> was not found."). That is the code this
+#     script keys on. Not measured: the answer for a Run maintenance DELETED
+#     (no throwaway Run could be aged 24 h, and Orca has no verb that deletes
+#     one); it is read as the same "not found". Any other failure stays
+#     `failed`.
 #   - Two sessions that re-bind the same Run at the same moment: at most one
 #     prints `done`. `done` is a fact about the re-read, not about later: a
 #     session whose `run-use` lands after it takes the Run, and prints
@@ -149,8 +179,10 @@
 #   - `run-current` is read first on every path, so a failed or unknown
 #     `run-current` stops a re-bind even when `confirm:` names the Run. That
 #     fails closed: rerun, or fix what changed in Orca.
-#   - Worst case about 190 seconds (each of five reads 2 x 17, run-use 17):
-#     run the block with a tool timeout of at least 4 minutes.
+#   - Worst case about 190 seconds (each of five reads 2 x 17, run-use 17),
+#     plus 34 s for `environment list` and 34 s for each WSL host (at most
+#     5) when the holder is absent: run the block with a tool timeout of at
+#     least 8 minutes.
 #   - It does not wait for or prove Orca's prompts reach the new terminal;
 #     it proves the Run's record names it.
 set -u
@@ -160,6 +192,21 @@ ask() {
   echo "ORCA rebind: ask — $1"
   echo "Ending first line: Needed from you: $2"
   exit 1
+}
+# L92: Orca 1.4.262 deletes an idle Run (header, THE RETIRED RUN). Exit 2.
+retired() {
+  echo "ORCA rebind: retired — Run retired; create a new one: run-show reports run_not_found for $cepa_rb_run, so Orca deleted it or it never existed; nothing was changed (punch-list L92)"
+  echo "Ending first line: Needed from you: nothing; this session creates a new Run (cepa:autonomy §12b rule 2)"
+  exit 2
+}
+# True when $1 holds Orca's answer for a Run it does not have.
+cepa_rb_gone_run() {
+  python3 -I -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+e = d.get("error") if isinstance(d, dict) and d.get("ok") is False else None
+sys.exit(0 if isinstance(e, dict) and e.get("code") == "run_not_found" else 1)
+' "$1" 2>/dev/null
 }
 failed() {
   echo "ORCA rebind failed: $1"
@@ -286,12 +333,16 @@ cepa_rb_run=$cepa_rb_want
 # A named Run is taken only when run-current agrees, or the operator
 # confirmed it (#113 finding 12; run-show has no repo or worktree field).
 if [ "$cepa_rb_cur_id" != "$cepa_rb_run" ] && [ "$cepa_rb_confirm" != "$cepa_rb_run" ]; then
+  # L92: a Run Orca deleted is not an ownership question. Any other run-show
+  # result leaves the ask as it was.
+  cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
+    || ! cepa_rb_gone_run "$cepa_rb_tmp/show.json" || retired
   ask "run-current reports ${cepa_rb_cur_id:-no Run}, not $cepa_rb_run, and Orca records no repo or worktree for a Run, so whether this session coordinates $cepa_rb_run is unproven; nothing was changed" \
     "say whether this session coordinates $cepa_rb_run (then it runs the re-bind again with a confirm: $cepa_rb_run line)"
 fi
 # The named Run's holder and generation, from run-show (exact by id).
 cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
-  || failed "run-show for $cepa_rb_run failed"
+  || { ! cepa_rb_gone_run "$cepa_rb_tmp/show.json" || retired; failed "run-show for $cepa_rb_run failed"; }
 cepa_rb_shown=$(cepa_rb_read_run "$cepa_rb_tmp/show.json" gen) \
   || failed "run-show returned a shape this reader does not know"
 read -r cepa_rb_s_id cepa_rb_old cepa_rb_gen <<<"$cepa_rb_shown"
@@ -334,6 +385,7 @@ if not isinstance(om, list) or not all(isinstance(x, str) and re.fullmatch(r"[A-
 print("omitted " + " ".join(om) if om else "gone")
 '
 cepa_rb_live=$(python3 -I -c "$cepa_rb_tread" "$cepa_rb_tmp/terms.json" "$cepa_rb_old" local 2>/dev/null) || cepa_rb_live=
+cepa_rb_envs_read=" "
 if [[ $cepa_rb_live == omitted\ * ]]; then
   # L85: read each host Orca left out, on its own server, before any ask.
   cepa_rb_hosts=${cepa_rb_live#omitted }
@@ -361,7 +413,7 @@ print(hit[0])
              "bring host $cepa_rb_h online or remove it in Orca, then ask this session to run the re-bind again"
     cepa_rb_hl=$(python3 -I -c "$cepa_rb_tread" "$cepa_rb_tmp/hterms.json" "$cepa_rb_old" host 2>/dev/null) || cepa_rb_hl=
     case "$cepa_rb_hl" in
-      gone) ;;
+      gone) cepa_rb_envs_read+=" $cepa_rb_env " ;;
       live) cepa_rb_live=live; break ;;
       *) ask "terminal list left out host $cepa_rb_h, and its own terminal list (--environment $cepa_rb_env) returned a partial or unknown shape, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
              "bring host $cepa_rb_h online or remove it in Orca, then ask this session to run the re-bind again" ;;
@@ -376,6 +428,53 @@ case "$cepa_rb_live" in
   *) ask "terminal list returned a partial or unknown shape, so whether $cepa_rb_old is still open is unknown; nothing was changed" \
          "check whether terminal $cepa_rb_old is still open" ;;
 esac
+# THE WSL HOST (punch-list L89 d): an Orca WSL host runs on this machine, and
+# its terminals need not be in this machine's list, nor in its omitted hosts
+# (orca-lab measured `omittedHostIds: []` beside a live WSL host). So each
+# `environment list` row with `orcadDeployment.kind` `wsl` is read on its own
+# server, as an omitted host is; one read for the omitted hosts serves both.
+[ -s "$cepa_rb_tmp/envs.json" ] \
+  || cepa_rb_orca "$cepa_rb_tmp/envs.json" 1 environment list --json \
+  || ask "environment list failed, so whether an Orca WSL host of this machine holds $cepa_rb_old is unknown; nothing was changed" \
+         "check whether terminal $cepa_rb_old is still open, then ask this session to run the re-bind again"
+cepa_rb_wsl=$(python3 -I -c '
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+envs = d["result"]["environments"] if d.get("ok") is True else sys.exit(1)
+if not isinstance(envs, list):
+    sys.exit(1)
+out = []
+for e in envs:
+    if not isinstance(e, dict):
+        sys.exit(1)
+    od = e.get("orcadDeployment")
+    if isinstance(od, dict) and od.get("kind") == "wsl":
+        i = e.get("id")
+        if not (isinstance(i, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", i)):
+            sys.exit(1)
+        out.append(i)
+if len(out) > 5:
+    sys.exit(1)
+print(" ".join(out))
+' "$cepa_rb_tmp/envs.json" 2>/dev/null) \
+  || ask "environment list returned a shape this reader does not know, so whether an Orca WSL host of this machine holds $cepa_rb_old is unknown; nothing was changed" \
+         "check whether terminal $cepa_rb_old is still open, then ask this session to run the re-bind again"
+cepa_rb_wsl_read=
+for cepa_rb_env in $cepa_rb_wsl; do
+  [[ $cepa_rb_envs_read != *" $cepa_rb_env "* ]] || continue
+  cepa_rb_orca "$cepa_rb_tmp/wterms.json" 1 terminal list --environment "$cepa_rb_env" --json \
+    || ask "the Orca WSL host $cepa_rb_env runs on this machine, and its own terminal list (--environment $cepa_rb_env) failed, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
+           "bring WSL host $cepa_rb_env online or remove it in Orca, then ask this session to run the re-bind again"
+  cepa_rb_hl=$(python3 -I -c "$cepa_rb_tread" "$cepa_rb_tmp/wterms.json" "$cepa_rb_old" host 2>/dev/null) || cepa_rb_hl=
+  case "$cepa_rb_hl" in
+    gone) cepa_rb_wsl_read+=" $cepa_rb_env" ;;
+    live) ask "$cepa_rb_run is held by $cepa_rb_old, which is still open on the Orca WSL host $cepa_rb_env; a live coordinator's Run is never taken" \
+              "say whether terminal $cepa_rb_old or this one coordinates $cepa_rb_run" ;;
+    *) ask "the Orca WSL host $cepa_rb_env runs on this machine, and its own terminal list (--environment $cepa_rb_env) returned a partial or unknown shape, so whether $cepa_rb_old is still open there is unknown; nothing was changed" \
+           "bring WSL host $cepa_rb_env online or remove it in Orca, then ask this session to run the re-bind again" ;;
+  esac
+done
+[ -z "$cepa_rb_wsl_read" ] || echo "ORCA rebind: note — read the Orca WSL host(s)$cepa_rb_wsl_read on their own server; none holds $cepa_rb_old (punch-list L89)"
 # The Run must not have moved while terminal list ran: another session that
 # re-bound it in that window is live now, and is never taken.
 cepa_rb_orca "$cepa_rb_tmp/recheck.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \

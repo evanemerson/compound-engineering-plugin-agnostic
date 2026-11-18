@@ -44,11 +44,20 @@
 #                           never nudged from here: orca-nudge.sh reads this
 #                           machine's `worktree ps`, which does not list a host
 #                           terminal, so `nudge` prints `Orca nudge skipped:`
-#                           and the `tell` ending line. Not measured: no host
-#                           worker was at hand; the flag is from
-#                           `orchestration send --help` on Orca 1.4.259 ("Your
-#                           own Orca carries it, and replies come back to your
-#                           own check"), so the re-read is the same inbox read.
+#                           and the `tell` ending line. L89 a (orca-lab,
+#                           Orca 1.4.262, live WSL host, 2026-11-17; sender
+#                           report, not re-run here): the stored row is only
+#                           in the HOST's inbox (`to_handle` the host term_,
+#                           `from_handle` `<sender> on <machine>`), so the
+#                           re-read and the read-back pass `--environment
+#                           <server>` (its `--help`: "a saved paired Orca
+#                           server (id or name)", the same as `--on`). The
+#                           read-back takes that `from_handle` form only with
+#                           `on:`. This run measured the read itself (Orca
+#                           1.4.262, 2026-11-17, host live): `orchestration
+#                           inbox --environment <sel> --limit 3 --json --full`
+#                           answered `"ok": true` with the host's rows for
+#                           both `wsl:ubuntu-24.04` and `Ubuntu-24.04 (WSL)`.
 #     session: <name>       optional: the target's session name, as §10a
 #                           writes it (`coord@main`, `tab3@roles`). The ending
 #                           line then names that session beside the handle
@@ -102,6 +111,16 @@
 #             starts `<name>: `, so none can equal `CEPA_FIELDS`.
 #
 # Prints one result line, then the nudge's lines when it runs. Exit codes:
+#   0  Orca send stored as a follow-up dispatch: dispatch:<new> of <target>
+#      (punch-list L89 b) — a `dispatch:` send that Orca 1.4.262 carried as a
+#      follow-up dispatch of a finished `--keep-open` worker (orca-lab's
+#      measurement, sender report). Its reply has no `result.message`; it
+#      counts only with exit 0, `"ok": true`, `state: "ready"`, `followUpOf`
+#      equal to the target's dispatch id, and a `dispatchId` (`ctx_…`) that is
+#      not the target's. There is no msg_ id to re-read, and no nudge. The
+#      value of `followUpOf` was not in the report: its two accepted forms
+#      (`ctx_…` and `dispatch:ctx_…`) are this script's reading. Any other
+#      shape goes on to THE READ-BACK as before.
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
 #      <reason>` (stored in a Run mailbox, or `nudge` given for a `run:` or
@@ -924,6 +943,17 @@ def verdict():
     m = r.get("message") if isinstance(r, dict) else None
     mid = m.get("id") if isinstance(m, dict) else None
     if not isinstance(mid, str) or not re.fullmatch(r"msg_[0-9a-f]{6,32}", mid):
+        # L89 b (orca-lab, Orca 1.4.262, sender report): a `dispatch:` send to
+        # a finished `--keep-open` worker starts a follow-up dispatch. The
+        # reply then has no `message`, but `dispatchId` (the new dispatch),
+        # `followUpOf` and `state: "ready"`. Only that whole shape counts.
+        if m is None and typ not in ("reply", "worker_done") and target.startswith("dispatch:") \
+                and isinstance(r, dict) and r.get("state") == "ready" \
+                and r.get("followUpOf") in (target, target[len("dispatch:"):]):
+            nd = r.get("dispatchId")
+            if isinstance(nd, str) and re.fullmatch(r"ctx_[A-Za-z0-9_-]{1,64}", nd) \
+                    and nd != target[len("dispatch:"):]:
+                return "FOLLOWUP dispatch:" + nd
         return "FAIL the reply has no result.message.id"
     to = m.get("to_handle")
     if typ == "reply":
@@ -948,19 +978,25 @@ except Exception:
     print("FAIL the send output could not be read")
 PY
 ) || cepa_send_got=
+# L89 a (orca-lab, Orca 1.4.262, sender report): a send with `on:` is stored
+# in the HOST's inbox, not this machine's, so both inbox reads below go to
+# that server (`--environment` takes the same id or name as `--on`).
+cepa_send_env_args=()
+[ -z "$cepa_send_on" ] || cepa_send_env_args=(--environment "$cepa_send_on")
 # THE READ-BACK (punch-list L84; header). A send whose CLI call failed after
 # the request left may still have stored, so before such a failure is
 # reported the inbox is read for this very message. Only Orca's own
 # `"ok": false` is a result that needs no read.
 cepa_send_readback() {
-  cepa_send_orca "$cepa_send_tmp/back.json" orchestration inbox --limit 200 --json --full || return 1
+  cepa_send_orca "$cepa_send_tmp/back.json" orchestration inbox \
+    ${cepa_send_env_args[@]+"${cepa_send_env_args[@]}"} --limit 200 --json --full || return 1
   { printf '%s' "$cepa_send_subject" >"$cepa_send_tmp/subject" && printf '%s' "$cepa_send_body" >"$cepa_send_tmp/body"; } \
     2>/dev/null || return 1
   python3 -I - "$cepa_send_tmp/back.json" "$cepa_send_type" "$cepa_send_target" "$cepa_send_task" \
     "${cepa_send_outcome_arg-}" "$cepa_send_t0" "${ORCA_TERMINAL_HANDLE:-}" "$cepa_send_tmp/subject" \
-    "$cepa_send_tmp/body" <<'PY' 2>/dev/null
+    "$cepa_send_tmp/body" "$cepa_send_on" <<'PY' 2>/dev/null
 import calendar, json, re, sys, time
-f, typ, target, task, outcome, t0, me, sf, bf = sys.argv[1:10]
+f, typ, target, task, outcome, t0, me, sf, bf, on = sys.argv[1:11]
 ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})"
 d = json.load(open(f))
 rows = d["result"]["messages"] if d.get("ok") is True else sys.exit(1)
@@ -986,7 +1022,9 @@ for x in rows:
     # 120 s of slack: Orca's clock is Windows', this script's is WSL's.
     if t is None or t < int(t0) - 120:
         continue
-    if me and x.get("from_handle") != me:
+    # L89 a: a host's inbox names this sender `<handle> on <machine>`.
+    fh = x.get("from_handle")
+    if me and fh != me and not (on and isinstance(fh, str) and fh.startswith(me + " on ")):
         continue
     if not isinstance(x.get("body"), str) or x["body"].rstrip() != body:
         continue
@@ -1052,13 +1090,21 @@ sys.exit(0 if st == sys.argv[2] else 1)
         || unproven "Orca did not record the dispatch as $cepa_send_outcome"
     fi ;;
   'UNPROVEN '*) unproven "${cepa_send_got#UNPROVEN }" ;;
+  'FOLLOWUP '*)
+    # L89 b: Orca carried the message as a follow-up dispatch, so there is no
+    # msg_ id to re-read. A dispatch mailbox is never nudged.
+    echo "Orca send stored as a follow-up dispatch: ${cepa_send_got#FOLLOWUP } of $cepa_send_target (punch-list L89)"
+    [ -z "$cepa_send_downgraded" ] \
+      || echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"
+    exit 0 ;;
 esac
 cepa_send_id=${cepa_send_got%% *}
 cepa_send_to=${cepa_send_got#* }
 [ -n "$cepa_send_to" ] && [ "$cepa_send_to" != "$cepa_send_got" ] || fail "the send output could not be read"
 
 # THE RE-READ.
-cepa_send_orca "$cepa_send_tmp/inbox.json" orchestration inbox --limit 200 --json --full \
+cepa_send_orca "$cepa_send_tmp/inbox.json" orchestration inbox \
+  ${cepa_send_env_args[@]+"${cepa_send_env_args[@]}"} --limit 200 --json --full \
   || fail "the inbox could not be re-read, so $cepa_send_id is unconfirmed"
 cepa_send_q=
 [ "$cepa_send_type" = reply ] && cepa_send_q=$cepa_send_target

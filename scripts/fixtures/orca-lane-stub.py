@@ -204,6 +204,45 @@ if verb == ["worktree", "set"]:
     if "setnoop" not in MODE:
         w["name"], w["mode"] = opt("--display-name"), "fixed"
     out({"id": "x", "ok": True, "result": {"worktree": row(w)}})
+# L89 c/d (orca-lab, Orca 1.4.262, live WSL host): `environment list` rows.
+# A paired SSH server always; a WSL host (orcadDeployment.kind wsl) with mode
+# `wsl`. Its runtimeId is the one `psomitted` leaves out, so that omission
+# maps to it; `wslother` gives it another runtimeId.
+WSLENV = {"id": "wsl:ubuntu-24.04", "name": "Ubuntu-24.04 (WSL)",
+          "runtimeId": "f68aea96-2486-4a4a-956a-4da5fcc3136f" if "wslother" not in MODE else "0000aaaa-0000-4000-8000-000000000000",
+          "orcadDeployment": {"kind": "wsl", "distro": "Ubuntu-24.04", "localPort": 6801, "remotePort": 6800}}
+if verb == ["environment", "list"]:
+    if "envfail" in MODE:
+        sys.exit(1)
+    if "envbad" in MODE:
+        out({"id": "x", "ok": False, "error": {"code": "runtime_error"}}, 1 if "envbad1" in MODE else 0)
+    envs = [{"id": "612deff4-eb4e-49ff-a87f-298432410f71", "name": "app.example", "runtimeId": "9b0c0000-0000-4000-8000-000000000001",
+             "connectionDependency": "ssh-tunnel", "orcadDeployment": {"sshTargetId": "ssh-1", "localPort": 61139, "remotePort": 6768}}]
+    if MODE & {"wsl", "wslother", "wsl2", "wslbadid"}:
+        envs.append(dict(WSLENV, id="--json") if "wslbadid" in MODE else WSLENV)
+    if "wsl2" in MODE:
+        envs.append(dict(WSLENV, id="wsl:debian", runtimeId="1111aaaa-0000-4000-8000-000000000000"))
+    out({"id": "x", "ok": True, "result": {"environments": envs}})
+# A WSL host's own `worktree ps` (measured shape: Linux paths, hostId local,
+# environment.id, agent rows with paneKey and state, no cwd). It holds a lane
+# of its own; `hostagent` adds the STUB_HOST_AGENT_ON lane's path with an
+# agent, `hostidle` that path with none.
+if verb == ["worktree", "ps"] and "--environment" in argv:
+    if "hostpsfail" in MODE:
+        sys.exit(1)
+    env = {"id": opt("--environment")}
+    rows = [{"worktreeId": "identity:wt2:local:h1", "path": "/home/evan/orca/workspaces/orca-chat-scratch/hostlane",
+             "hostId": "local", "environment": env, "agents": [{"paneKey": "h:1", "state": "working"}]}]
+    on = os.environ.get("STUB_HOST_AGENT_ON")
+    for w in st["wts"]:
+        if on and os.path.basename(w["path"]) == on and MODE & {"hostagent", "hostidle"}:
+            rows.append({"worktreeId": "identity:wt2:local:h2",
+                         "path": unc(w["path"]).replace(DISTRO, "Debian", 1) if "hostotherdistro" in MODE else w["path"],
+                         "hostId": "local", "environment": env,
+                         "agents": [{"paneKey": "h:2", "state": "done"}] if "hostagent" in MODE else []})
+    r = {"worktrees": rows, "hostScope": {"hostIds": ["local"], "omittedHostIds": ["x"] if "hostpsomit" in MODE else []},
+         "totalCount": len(rows), "truncated": "hostpspartial" in MODE}
+    out({"id": "x", "ok": True, "result": r})
 if verb == ["worktree", "ps"]:
     if "psfail" in MODE:
         sys.exit(1)
@@ -221,6 +260,9 @@ if verb == ["worktree", "ps"]:
         r["hostScope"]["omittedHostIds"] = ["runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"]
     if "psomitlocal" in MODE:
         r["hostScope"] = {"hostIds": [], "omittedHostIds": ["runtime:f68aea96-2486-4a4a-956a-4da5fcc3136f"]}
+    # L89: the form measured with a live WSL host (Orca 1.4.262, 2026-11-17).
+    if "psomitwsl" in MODE:
+        r["hostScope"]["omittedHostIds"] = ["runtime:wsl%3Aubuntu-24.04"]
     out({"id": "x", "ok": True, "result": r})
 if verb == ["terminal", "list"]:
     if "--full" in argv:  # the real CLI refuses it (L72)
