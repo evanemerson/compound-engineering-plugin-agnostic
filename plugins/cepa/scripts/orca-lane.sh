@@ -84,7 +84,11 @@
 # that host: the local read then counts when every host it left out is a
 # cleared host (by `runtime:<id or runtimeId>`, URL-decoded), with a note
 # line. Any other omitted host still keeps the lane. Both reads are bounded
-# at 10 s with no retry, to stay inside the 10-minute budget below.
+# at 5 s with no retry, to stay inside the 10-minute budget below. What the
+# match proves: no host worktree row at the lane's path has an agent. The
+# host Orca starts agents only in worktrees it has registered, which list
+# with their path; a shell on the host that only `cd`s into the lane is not
+# seen, as a plain local terminal is not (stated limits, below).
 # Stated limit: a repo added on a host (not on `local`) is not supported by
 # `create` or `name`; the script resolves only the local registration. The
 # host's own `repo list --environment <host>` row has its own `id`, a Linux
@@ -322,9 +326,9 @@
 #     once can both pass step 1. One coord@main per repo makes it rare; the
 #     basename check in step 3 then stops the second.
 #   - `rm` runs the repo's archive hook with Orca's own bound; the script
-#     bounds the call at 300 s. Worst case about 599 s of bounded calls:
+#     bounds the call at 300 s. Worst case about 589 s of bounded calls:
 #     four reads at 2 x 17 s, the fetch 62 s, the trunk read 12 s, the reflog
-#     check 62 s, rm 302 s, and the two WSL host reads (L89) at 12 s each; local git work (measured 2-10 s on the 2026-11-01
+#     check 62 s, rm 302 s, and the two WSL host reads (L89) at 7 s each; local git work (measured 2-10 s on the 2026-11-01
 #     lanes) comes on top. The `terminal list` read is not in that sum: it
 #     runs only on the way to `kept`, so `rm` never follows it. Run the block
 #     with a tool timeout of 10 minutes. A call the bound killed reads as
@@ -388,7 +392,7 @@ cepa_ln_note() {
   cepa_ln_noted=1
   case "$st" in
     counted) echo "ORCA lane note: Orca left host(s) $ids out of its reads; this lane is on this machine (host local), so they cannot hold its rows and the reads counted" ;;
-    hostread) echo "ORCA lane note: Orca left host(s) $ids out of worktree ps; each is an Orca WSL host this run read on its own server, with no agent in this lane's directory, so the live-agent check counted (punch-list L89)" ;;
+    hostread) echo "ORCA lane note: Orca left host(s) $ids out of worktree ps; each is an Orca WSL host this run read on its own server, and no host worktree row at this lane's path has an agent, so the live-agent check counted (punch-list L89)" ;;
     strict) echo "ORCA lane note: Orca left host(s) $ids out of worktree ps or terminal list; an agent on a host of this machine can sit in this lane's directory, so the live-agent check did not count; bring the host online or remove it in Orca, then ask again" ;;
     *) echo "ORCA lane note: Orca left host(s) $ids out of its reads and did not cover this machine (host local), so the read did not count; bring the host online or remove it in Orca, then ask again" ;;
   esac
@@ -1244,8 +1248,8 @@ fi
 # THE WSL HOST (punch-list L89 c; header): an Orca WSL host runs on this
 # machine, and this machine's worktree ps has no row for its agents. So the
 # host's own worktree ps is read and matched by path first. One host at most;
-# 10-second bounds, no retry (the 10-minute budget, header).
-cepa_ln_orca "$cepa_ln_tmp/envs.json" 0 10 environment list --json \
+# 5-second bounds, no retry (the 10-minute budget, header).
+cepa_ln_orca "$cepa_ln_tmp/envs.json" 0 5 environment list --json \
   || kept "kept $cepa_ln_lane — environment list failed, so an agent on an Orca WSL host cannot be ruled out" \
           "check $cepa_ln_lane for a live agent, then ask again"
 cepa_ln_wrc=0
@@ -1259,7 +1263,7 @@ case "$cepa_ln_wrc" in
 esac
 if [ -n "$cepa_ln_wsl" ]; then
   read -r cepa_ln_wid cepa_ln_wrt <<<"$cepa_ln_wsl"
-  cepa_ln_orca "$cepa_ln_tmp/hps.json" 0 10 worktree ps --environment "$cepa_ln_wid" --limit 500 --json \
+  cepa_ln_orca "$cepa_ln_tmp/hps.json" 0 5 worktree ps --environment "$cepa_ln_wid" --limit 500 --json \
     || kept "kept $cepa_ln_lane — worktree ps on the Orca WSL host $cepa_ln_wid failed, so a live agent there cannot be ruled out" \
             "bring WSL host $cepa_ln_wid online or remove it in Orca, then ask again"
   cepa_ln_hn=$(cepa_ln_py hostagents "$cepa_ln_tmp/hps.json" "$r_path" "$cepa_ln_distro") \

@@ -116,8 +116,12 @@
 #      follow-up dispatch of a finished `--keep-open` worker (orca-lab's
 #      measurement, sender report). Its reply has no `result.message`; it
 #      counts only with exit 0, `"ok": true`, `state: "ready"`, `followUpOf`
-#      equal to the target's dispatch id, and a `dispatchId` (`ctx_…`) that is
-#      not the target's. There is no msg_ id to re-read, and no nudge. The
+#      equal to the target's dispatch id, a `dispatchId` (`ctx_` then
+#      [A-Za-z0-9_-], at most 64) that is not the target's, no `message` at
+#      all, and a type other than reply and worker_done. There is no msg_ id
+#      to re-read, and no nudge. A plain `dispatch:` send that failed in any
+#      other way and is not read back exits 5 as `not proven stored`, never
+#      `no message stored`: it may have started a follow-up. The
 #      value of `followUpOf` was not in the report: its two accepted forms
 #      (`ctx_…` and `dispatch:ctx_…`) are this script's reading. Any other
 #      shape goes on to THE READ-BACK as before.
@@ -1071,8 +1075,13 @@ case "$cepa_send_got" in
     # With no clock there is no window, so any older row would match.
     [ "$cepa_send_t0" != 0 ] || fail "$cepa_send_why"
     cepa_send_back=$(cepa_send_readback) || cepa_send_back=
-    [[ $cepa_send_back =~ ^msg_[0-9a-f]{6,32}\ (term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]] \
-      || fail "$cepa_send_why"
+    if ! [[ $cepa_send_back =~ ^msg_[0-9a-f]{6,32}\ (term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]]; then
+      # L89 b (PR #142 review): a plain send to a dispatch may have started a
+      # follow-up dispatch, which leaves no inbox row to read back, so it is
+      # not proven either way; a rerun would start a second one.
+      [[ $cepa_send_target != dispatch:* || $cepa_send_type == worker_done ]] || unproven "$cepa_send_why"
+      fail "$cepa_send_why"
+    fi
     echo "Orca send read back: ${cepa_send_back%% *} is in the inbox from this send, though $cepa_send_why (punch-list L84)"
     cepa_send_got=$cepa_send_back
     # A worker_done also needs its lifecycle: the dispatch must have settled

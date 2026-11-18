@@ -428,7 +428,8 @@ for lane, mode, why in (
            rc=1, first=WK % lane + why, verbs_lack=[["worktree", "rm"]])
 # An omitted host that is that WSL host, read clean, no longer keeps the lane.
 NOTE_HOST = ("ORCA lane note: Orca left host(s) %s out of worktree ps; each is an Orca WSL host this run read on its "
-             "own server, with no agent in this lane's directory, so the live-agent check counted (punch-list L89)")
+             "own server, and no host worktree row at this lane's path has an agent, so the live-agent check counted "
+             "(punch-list L89)")
 W.lane("w-omit")
 expect("WSLHOST omitted host read clean on its server: rm removes",
        W.run(F(cli=CLI, action="rm", lane="w-omit"), mode="psomitted,wsl"), rc=0, first="ORCA lane: removed w-omit",
@@ -438,6 +439,11 @@ W.lane("w-omitid")
 expect("WSLHOST measured omitted id maps to the WSL host by its id",
        W.run(F(cli=CLI, action="rm", lane="w-omitid"), mode="psomitwsl,wslother"), rc=0,
        first="ORCA lane: removed w-omitid", has=(NOTE_HOST % WSLH,))
+# Every omitted host must be cleared, not one of them (PR #142 review).
+W.lane("w-omit3")
+expect("WSLHOST omitted WSL host beside another omitted host keeps the lane",
+       W.run(F(cli=CLI, action="rm", lane="w-omit3"), mode="psomit2,wsl"), rc=1,
+       first="ORCA lane: kept w-omit3 — worktree ps was not a complete read", verbs_lack=[["worktree", "rm"]])
 W.lane("w-omit2")
 expect("WSLHOST omitted host that is not the WSL host keeps the lane",
        W.run(F(cli=CLI, action="rm", lane="w-omit2"), mode="psomitted,wslother"), rc=1,

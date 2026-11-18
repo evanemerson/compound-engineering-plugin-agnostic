@@ -154,7 +154,8 @@
 #                        beside `workerState` and `dispatchStatus`; its 3
 #                        local rows have `projection` and no `server`. So a
 #                        row with a `server` object whose `environmentId` is
-#                        a string, a valid dispatch id and no projection
+#                        a string other than `local`, a valid dispatch id and
+#                        no projection
 #                        (absent or null) is skipped, never read as unknown:
 #                        before this, one such row made every hourly run
 #                        alert `orca-unreadable:worker-list`. So no alert here
@@ -415,11 +416,12 @@ if not isinstance(rows, list):
 ids, failed = [], []
 for w in rows:
     # L89 g: a dispatch started on an Orca host (`worker-start --on`) lists
-    # with no projection and a `server` object naming its environment. This
-    # machine Orca projects nothing for it, so it is not read here (header,
+    # with no projection and a `server` object naming its environment. The
+    # local Orca projects nothing for it, so it is not read here (header,
     # HOST DISPATCHES); any other row without a projection is still unknown.
     sv = w.get("server") if isinstance(w, dict) else None
-    if isinstance(sv, dict) and isinstance(sv.get("environmentId"), str) and w.get("projection") is None \
+    if isinstance(sv, dict) and isinstance(sv.get("environmentId"), str) and sv["environmentId"] != "local" \
+            and w.get("projection") is None \
             and isinstance(w.get("dispatchId"), str) and re.fullmatch(r"ctx_[0-9a-f]{6,32}", w["dispatchId"]):
         continue
     i, o = w["dispatchId"], w["projection"]["outcome"]

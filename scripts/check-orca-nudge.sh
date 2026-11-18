@@ -1096,10 +1096,16 @@ if LEGS in ("all", "send"):
                      ("FOLLOWUP new dispatch of a bad shape fails", fup(dispatchId="ctx_a;b")),
                      ("FOLLOWUP beside a message is not a follow-up", json.dumps({"ok": True, "result": dict(
                          json.loads(fup())["result"], message={"subject": SUBJ})}))]:
-        store(name, 5, [NOSTORE + NOMID, FPASTE], mode="no-nudge", target=FD, osend_json=js, inbox_json=NOROW)
+        # PR #142 review: not read back, a plain dispatch: send may still have
+        # started a follow-up, so it is unproven, never "no message stored".
+        store(name, 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge", target=FD, osend_json=js, inbox_json=NOROW)
     store("FOLLOWUP shape for a term_ target fails", 5, [NOSTORE + NOMID, PASTE], mode="no-nudge",
           osend_json=fup(followUpOf=H), inbox_json=NOROW)
-    store("FOLLOWUP that exited non-zero fails", 5, [NOSTORE + "the send exited 1", FPASTE], mode="no-nudge",
+    # A worker_done is never a follow-up, and its failure stays "no message
+    # stored" (rule 3 counts it only with its lifecycle).
+    store("FOLLOWUP shape on a worker_done is not a follow-up", 5, [NOSTORE + NOMID, PASTE_RC], argv=WARGS,
+          osend_json=fup(followUpOf=DID), inbox_json=NOROW)
+    store("FOLLOWUP that exited non-zero fails", 5, [UNPROVEN + "the send exited 1", FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(), osend_rc=1, inbox_json=NOROW)
     # Each row is this session's (from_handle H), so only its own fault
     # can reject it.
@@ -1120,7 +1126,7 @@ if LEGS in ("all", "send"):
           mode="no-nudge", target="run:run_abc", osend_rc=1, osend_json="",
           inbox_json=inbox(brow(to="run:run_other", frm=H)), env_extra={"ORCA_TERMINAL_HANDLE": H})
     store("READBACK dispatch target does not take a term_ row", 5,
-          [NOSTORE + "the reply has no result.message.id", END + "Needed from you: paste the block below into dispatch:ctx_abcdef"],
+          [UNPROVEN + "the reply has no result.message.id", END + "Needed from you: paste the block below into dispatch:ctx_abcdef"],
           mode="no-nudge", target="dispatch:ctx_abcdef", osend_json=json.dumps({"ok": True, "result": {}}),
           inbox_json=inbox(brow(to=H, frm=H)), env_extra={"ORCA_TERMINAL_HANDLE": H})
     # With no clock there is no window: no read-back.
@@ -2037,6 +2043,11 @@ if LEGS in ("all", "health"):
            wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, dispatchId="ctx_a;b")]}}))
     health("HEALTH host dispatch with projection null is skipped", 0, [HOK], calls_want=HCALLS,
            wlist=hwl_host((D1, "in_progress"), (D2, "succeeded")).replace('"server"', '"projection": null, "server"', 1))
+    health("HEALTH local server row with no projection is unreadable", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, server={"environmentId": "local"})]}}))
+    d_ = json.loads(hwl((D1, "in_progress"), (D2, "succeeded")))
+    d_["result"]["workers"][0]["server"] = dict(HOSTROW["server"])
+    health("HEALTH server row with a projection is still read", 0, [HOK], calls_want=HCALLS, wlist=json.dumps(d_))
     health("HEALTH host dispatch row with no environment id is unreadable", 1, unread("worker-list"),
            wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, server={"name": "x"})]}}))
     health("HEALTH more than 20 live workers", 1,
@@ -2229,11 +2240,11 @@ if LEGS in ("all", "health"):
     rebind("REBIND empty run field is no Run", 1, norunask(), stdin="cli: orca-ide\nrun:\n", calls_want=[RCUR])
     # L46: a named Run is taken only when run-current agrees or confirm names it.
     rebind("REBIND named Run that run-current does not report asks", 1, ownask("run_other"),
-           cur=rrun("run_other", OTHER), calls_want=[RCUR, RSHOW])
+           cur=rrun("run_other", OTHER), calls_want=[RCUR])
     rebind("REBIND named Run with no current Run asks", 1, ownask("no Run"), cur=NORUN, calls_want=[RCUR, RSHOW])
     rebind("REBIND bound here with another run field asks", 1, ownask(RB_RUN, "run_other"),
            cur=rrun(RB_RUN, H), stdin="cli: orca-ide\nrun: run_other\n",
-           calls_want=[RCUR, ["orchestration", "run-show", "--id", "run_other", "--json", "--full"]])
+           calls_want=[RCUR])
     # L92: a Run Orca deleted (run_not_found, measured on Orca 1.4.262 for an
     # unknown id) is retired, before or instead of any ask.
     GONE = json.dumps({"ok": False, "error": {"code": "run_not_found", "message": "Run %s was not found." % RB_RUN}})
@@ -2247,6 +2258,10 @@ if LEGS in ("all", "health"):
     rebind("REBIND confirmed retired Run says so", 2, RETIRED, cur=NORUN, show=GONE,
            stdin="cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN), env_extra={"STUB_RUNSHOW_RC": "1"},
            calls_want=[RCUR, RSHOW])
+    # A gone named Run while run-current reports another may be a typo: it
+    # still asks, naming both (PR #142 review).
+    rebind("REBIND gone named Run while run-current reports another asks", 1, ownask("run_other"),
+           cur=rrun("run_other", OTHER), show=GONE, env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR])
     OTHERERR = json.dumps({"ok": False, "error": {"code": "runtime_timeout"}})
     rebind("REBIND run-show error before the ownership ask still asks", 1, ownask("no Run"), cur=NORUN, show=OTHERERR,
            env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR, RSHOW])

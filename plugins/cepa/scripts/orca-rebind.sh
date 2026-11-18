@@ -61,14 +61,16 @@
 #      `run-use` whose output was lost (the WSL interop error) but that took
 #      effect counts.
 #
-# Prints one summary line, and on exit 1 or 3 a second line,
+# Prints one summary line, and on exit 1, 2 or 3 a second line,
 # `Ending first line: Needed from you: …`. Exit codes:
 #   0  `ORCA rebind: ok — …` (already bound, or nothing named) or
 #      `ORCA rebind: done — <run> moved from <old> to this terminal`.
 #   2  `ORCA rebind: retired — Run retired; create a new one: …` (punch-list
-#      L92): `run-show` for the named Run answered `run_not_found`. Read at
-#      step 3, and before step 2's ownership ask (a Run Orca deleted is not
-#      an ownership question). §12b rule 2 says what the session does next.
+#      L92): `run-show` for the named Run answered `run_not_found`. Read in
+#      step 3, and in step 2's ask branch when run-current reports no Run (a
+#      Run Orca deleted is not an ownership question; one that run-current
+#      contradicts may be a typo, so that still asks). §12b rule 2 says what
+#      the session does next.
 #   1  `ORCA rebind: ask — …`: no `run:` while run-current reports a Run
 #      bound elsewhere, a `run:` Run that run-current does not report and no
 #      `confirm:` names, a live holder, a holder that could not be checked,
@@ -333,10 +335,14 @@ cepa_rb_run=$cepa_rb_want
 # A named Run is taken only when run-current agrees, or the operator
 # confirmed it (#113 finding 12; run-show has no repo or worktree field).
 if [ "$cepa_rb_cur_id" != "$cepa_rb_run" ] && [ "$cepa_rb_confirm" != "$cepa_rb_run" ]; then
-  # L92: a Run Orca deleted is not an ownership question. Any other run-show
-  # result leaves the ask as it was.
-  cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
-    || ! cepa_rb_gone_run "$cepa_rb_tmp/show.json" || retired
+  # L92: a Run Orca deleted is not an ownership question, but only while
+  # run-current reports no Run: a named Run that is gone while this pane has
+  # another may be a typo, and the ask names both (PR #142 review). Any other
+  # run-show result leaves the ask as it was.
+  if [ -z "$cepa_rb_cur_id" ]; then
+    cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
+      || ! cepa_rb_gone_run "$cepa_rb_tmp/show.json" || retired
+  fi
   ask "run-current reports ${cepa_rb_cur_id:-no Run}, not $cepa_rb_run, and Orca records no repo or worktree for a Run, so whether this session coordinates $cepa_rb_run is unproven; nothing was changed" \
     "say whether this session coordinates $cepa_rb_run (then it runs the re-bind again with a confirm: $cepa_rb_run line)"
 fi

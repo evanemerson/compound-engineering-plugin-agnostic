@@ -263,6 +263,8 @@ if verb == ["worktree", "ps"]:
     # L89: the form measured with a live WSL host (Orca 1.4.262, 2026-11-17).
     if "psomitwsl" in MODE:
         r["hostScope"]["omittedHostIds"] = ["runtime:wsl%3Aubuntu-24.04"]
+    if "psomit2" in MODE:
+        r["hostScope"]["omittedHostIds"] = ["runtime:wsl%3Aubuntu-24.04", "runtime:9b0c0000-0000-4000-8000-000000000001"]
     out({"id": "x", "ok": True, "result": r})
 if verb == ["terminal", "list"]:
     if "--full" in argv:  # the real CLI refuses it (L72)
