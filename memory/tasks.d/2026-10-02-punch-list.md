@@ -2611,7 +2611,7 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
 L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
     status: pending
     severity: P2
-    owner: unassigned (cepa worker; orca-lab measured 2026-11-17, below)
+    owner: matrix (tab43@matrix; orca-lab measured 2026-11-17, below)
     2026-11-17: measurement request a–e sent to coord:orca-lab; no live
     coord@main there, so it waits in outbox orca-lab/20261117T210051Z-nXBfXT3O.md.
     Re-raised 2026-11-17 by orca-lab coord@main through the operator's
@@ -2659,6 +2659,18 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     g NEW: orca-health.sh alerts `orca-unreadable:worker-list` for a Run
       holding a host dispatch: those rows have `projection: null`, and
       the parser needs projection.outcome (sys.exit(1)); recurs hourly.
+    2026-11-17 later: the operator keeps the WSL host connected from now
+    on (orca-lab msg, same day). With it added, `terminal list` and
+    `worktree ps` still omit it by default, and rebind returns ok, so
+    `orca-lane.sh rm` is the block in every repo. orca-lab offers to
+    re-measure fixes live; f goes upstream via orca-lab. Owner:
+    tab43@matrix (with L92), dispatched 2026-11-17.
+    f cause (orca-lab, v1.4.262 source): home Orca's check-mail
+    reconciliation (Orca PR #39256) looks the dispatch up in local
+    dispatch_contexts only; an --on worker's is in remote_dispatches.
+    Filed upstream as stablyai/orca#43869; no cepa workaround. A coord in
+    a terminal on the host, starting workers there without --on, gets a
+    clean worker_done.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
@@ -2678,7 +2690,7 @@ L91. **Lane contract item 7 passes `timeout --foreground` without `-k` or `</dev
 L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: matrix (tab43@matrix, with L89)
     From orca-lab coord@main (outbox, 2026-11-17; evidence: orca-lab
     docs/upgrades/2026-11-17-1.4.259-to-1.4.262.md, stablyai/orca #43322
     and #43550; sender-reported, not measured here). From 1.4.262 Orca's
