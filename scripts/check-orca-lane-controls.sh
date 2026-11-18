@@ -30,6 +30,10 @@
 # cancelled at the bound) — about 10.7s of hosted wall time per check run,
 # 4 at a time. The PR #133 body has the per-shard times. PR #134: 107 mutants
 # on 4 shards took 7m42s to 9m58s (run 41832679426), so it went to 8 shards.
+# PR #143: 145 mutants on 8 shards took 7m11s to 10m24s, two cancelled at the
+# bound (run 44329468205). Each shard pays the unmutated baseline (about 100s
+# locally) before its mutants, so it went to 24 shards, and the check moved
+# out of shard 1's job.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case
@@ -582,7 +586,7 @@ for n in sorted({want_n or 1, NSHARDS}):
         "shards of N=%d partition the %d mutants, none empty: sizes %r" % (n, len(mnames), [len(x) for x in parts]))
 # Planted workflow edits, checked in process: each must make wf_problems red.
 J2, J4 = "\n  orca-lane-2:\n", "\n  orca-lane-4:\n"
-R4 = "        run: bash scripts/check-orca-lane-controls.sh --shard 4/8\n"
+R4 = "        run: bash scripts/check-orca-lane-controls.sh --shard 4/24\n"
 WF_PLANTS = [
     ("two shards in one job", J2, "\n"),
     ("job-level if: false", J4, J4 + "    if: false\n"),
@@ -591,15 +595,15 @@ WF_PLANTS = [
     # and every other job stays.
     ("shard 4 job deleted", (lambda a: wf[a:a + len(J4) + re.search(
         r"(?m)^  (?=[A-Za-z0-9_-]+:[ \t]*$)|\Z", wf[a + len(J4):]).start()] if a >= 0 else J4)(wf.find(J4)), "\n"),
-    ("shard 4 run line commented out", R4, "        # run: bash scripts/check-orca-lane-controls.sh --shard 4/8\n"),
+    ("shard 4 run line commented out", R4, "        # run: bash scripts/check-orca-lane-controls.sh --shard 4/24\n"),
     ("shard 4 run line in a block scalar", R4,
-     "        run: |\n          bash scripts/check-orca-lane-controls.sh --shard 4/8\n"),
+     "        run: |\n          bash scripts/check-orca-lane-controls.sh --shard 4/24\n"),
     ("shard 4 run line with || true", R4, R4[:-1] + " || true\n"),
     ("a quoted mention beside the shard 4 run line", R4,
-     R4 + "      - run: echo bash scripts/check-orca-lane-controls.sh --shard 4/8\n"),
+     R4 + "      - run: echo bash scripts/check-orca-lane-controls.sh --shard 4/24\n"),
     ("shard 2 step without if: always()",
-     "        if: always()\n        run: bash scripts/check-orca-lane-controls.sh --shard 2/8\n",
-     "        run: bash scripts/check-orca-lane-controls.sh --shard 2/8\n"),
+     "        if: always()\n        run: bash scripts/check-orca-lane-controls.sh --shard 2/24\n",
+     "        run: bash scripts/check-orca-lane-controls.sh --shard 2/24\n"),
 ]
 for label, old, new in WF_PLANTS:
     if wf.count(old) != 1:
