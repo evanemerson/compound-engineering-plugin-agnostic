@@ -2611,7 +2611,7 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
 L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
     status: pending
     severity: P2
-    owner: matrix (tab43@matrix; orca-lab measured 2026-11-17, below)
+    owner: unassigned (after #142; waits on orca-lab re-measure, below)
     2026-11-17: measurement request a–e sent to coord:orca-lab; no live
     coord@main there, so it waits in outbox orca-lab/20261117T210051Z-nXBfXT3O.md.
     Re-raised 2026-11-17 by orca-lab coord@main through the operator's
@@ -2671,6 +2671,16 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     Filed upstream as stablyai/orca#43869; no cepa workaround. A coord in
     a terminal on the host, starting workers there without --on, gets a
     clean worker_done.
+    PARTLY CLOSED 2026-11-17 — PR #142 (`9de699a`), v1.60.0, tab43@matrix:
+    a, b, c, d, g fixed in the four Orca scripts; f documented in §12b rule
+    3 (stablyai/orca#43869). tab43 re-measured the reads live; g's rows
+    have NO projection key (not `null` as relayed) and a server object.
+    The 2026-11-16 shard items 1, 2, 3, 3b, 5 now point at shard
+    memory/tasks.d/2026-11-17-fix-matrix-orca-wsl-host-and-retired-run.md
+    (items 1-12: live a/b sends, host create/name, host-worker alerts while
+    #43869 is open, 6 deferred review findings). Next: orca-lab re-measures
+    a, b, c, g on the live host with 1.60.0 (request sent 2026-11-17).
+    owner now: unassigned (waits on orca-lab's re-measure).
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
@@ -2688,7 +2698,7 @@ L91. **Lane contract item 7 passes `timeout --foreground` without `-k` or `</dev
     check only if the lane-stack skill makes `-k` a hard rule. Same review
     file as L90.
 L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
-    status: pending
+    status: completed
     severity: P2
     owner: matrix (tab43@matrix, with L89)
     From orca-lab coord@main (outbox, 2026-11-17; evidence: orca-lab
@@ -2702,6 +2712,11 @@ L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
     (exit 3). Fix: measure run-show's error for a deleted Run first; then
     rebind says "Run retired; create a new one", and §12b rule 2 covers
     that path (prompts carry the old `Orca Run:` id).
+    **CLOSED 2026-11-17** — PR #142 (`9de699a`), v1.60.0. Rebind keys on
+    `run_not_found` (measured for a never-existing id; a Run that maintenance
+    deleted is not measured, Orca has no delete verb). Residuals: shard
+    memory/tasks.d/2026-11-17-fix-matrix-orca-wsl-host-and-retired-run.md
+    items 3 and 8.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
