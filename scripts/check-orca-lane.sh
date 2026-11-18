@@ -38,6 +38,11 @@
 #            a main row, another repo's path or another name keep the plain
 #            refusal; two hosts or a failed or partial host read say a host
 #            lane is not ruled out.
+#   HOSTREPO — punch-list L93 3: a repo in no local `repo list` row but
+#            registered on the one WSL host is named as a WSL-host project,
+#            with no `orca repo add` advice; no host or another path keeps
+#            that advice; two hosts or a failed host read say a host project
+#            is not ruled out.
 #   CREATE — happy create (exact create argv, parked detached, park branch
 #            deleted, show by id); a name taken in Orca or in git; a park
 #            branch that exists; a failed create; a suffixed path; a
@@ -487,6 +492,33 @@ for name, mode in (("HOSTLANE failed host list is not ruled out", "wsl,hostlane,
 expect("HOSTLANE other host lane name keeps the plain refusal",
        W.run(F(cli=CLI, action="rm", lane="h-1"), mode="wsl,hostlane", env={"STUB_HOST_LANE": "h-2"}),
        rc=1, first=NOLANE, lacks=("host-side",))
+# ---- HOSTREPO (punch-list L93 3; orca-lab msg_201730c8762e, sender report): a
+# repo registered only on the WSL host is in no local `repo list` row. Every
+# action then names the host, and never advises `orca repo add`.
+HRW = ("ORCA lane: %%s unchanged — %s is a project on the Orca WSL host wsl:ubuntu-24.04, not in this "
+       "machine's Orca (punch-list L93)" % W.main)
+HRE = ("Ending first line: Needed from you: run this lane command from a session on WSL host wsl:ubuntu-24.04; "
+       "do not add this repo to this machine's Orca")
+for act, lane, name in (("rm", "h-1", "HOSTREPO rm names the WSL host"), ("create", "h-1", "HOSTREPO create names the WSL host"),
+                        ("name", None, "HOSTREPO name names the WSL host")):
+    fl = F(cli=CLI, action=act) if not lane else F(cli=CLI, action=act, lane=lane, base="main") if act == "create" \
+        else F(cli=CLI, action=act, lane=lane)
+    got = W.run(fl, mode="wsl,nolocalrepo")
+    expect(name, got, rc=1, first=HRW % (lane or "lanes"), has=(HRE,), lacks=("repo add",),
+           verbs_lack=[["worktree", "list"], ["worktree", "create"], ["worktree", "rm"], ["worktree", "set"]])
+HRR = [c for c in got[2] if c[:2] in (["environment", "list"], ["repo", "list"])]
+HRWANT = [["repo", "list", "--json"], ["environment", "list", "--json"],
+          ["repo", "list", "--environment", "wsl:ubuntu-24.04", "--json"]]
+(ok if HRR == HRWANT else miss)("HOSTREPO reads the local repo list, then the WSL host's" + ("" if HRR == HRWANT else ": %r" % HRR))
+NOREPO = "ORCA lane: lanes unchanged — Orca has no repo at %s" % W.main
+for name, mode in (("HOSTREPO no WSL host keeps the repo add advice", "nolocalrepo"),
+                   ("HOSTREPO host repo at another path keeps the repo add advice", "wsl,nolocalrepo,hostlaneother")):
+    expect(name, W.run(F(cli=CLI, action="name"), mode=mode), rc=1, first=NOREPO, has=("repo add",), lacks=("WSL host",))
+HRFAIL = ("ORCA lane: lanes unchanged — Orca has no repo at %s, and the Orca WSL host's repo list could not be "
+          "read, so a project on that host is not ruled out" % W.main)
+for name, mode in (("HOSTREPO failed host repo list is not ruled out", "wsl,nolocalrepo,hostrepofail"),
+                   ("HOSTREPO two WSL hosts are not ruled out", "wsl2,nolocalrepo")):
+    expect(name, W.run(F(cli=CLI, action="name"), mode=mode), rc=1, first=HRFAIL)
 W.done()
 
 # ---- CREATE

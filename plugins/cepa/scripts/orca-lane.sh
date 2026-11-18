@@ -104,6 +104,16 @@
 # measured that refusal on 1.60.0 (sender report); the read shapes were
 # re-measured live here (Orca 1.4.262, 2026-11-18, main rows only). Those
 # reads run only on the way to `kept`, so no rm follows them.
+# A repo that only the WSL host registers (punch-list L93 3; orca-lab
+# msg_201730c8762e, sender report: the operator removed orca-chat-scratch's
+# Windows project) is in no local `repo list` row. Every action then reads
+# `environment list` and the one WSL host's `repo list --environment <id>`
+# (two reads, 5 s each, no retry): a row at this main checkout's path keeps
+# everything with `<path> is a project on the Orca WSL host <id>` and says to
+# run lane commands from a session on that host, never `orca repo add`, which
+# would register the repo twice. A failed host read, or two WSL hosts, says a
+# host project is not ruled out; no WSL host, or no row at this path, keeps
+# the `orca repo add` advice.
 #
 # Paths (review finding #5): Orca returns Windows UNC paths. A path
 # `\\wsl.localhost\<distro>\a\b` becomes `/a/b` only when <distro> equals
@@ -860,6 +870,15 @@ elif mode == "hostlane":
         if p and os.path.basename(p) == lane and re.fullmatch(r"[A-Za-z0-9._/@ -]{1,300}", p):
             print(p)
             break
+elif mode == "hostrepo":
+    # L93 3: does the one WSL host register a repo at this main checkout?
+    # The host `repo list --environment` rows are {id, path (Linux),
+    # connectionId null, hostId null} (L89 e, above). Prints `yes` or nothing.
+    main, distro = args
+    if not isinstance(r, dict) or not isinstance(r.get("repos"), list):
+        sys.exit(1)
+    if any(isinstance(x, dict) and linux(x.get("path"), distro) == main for x in r["repos"]):
+        print("yes")
 elif mode == "rmres":
     if d.get("ok") is True:
         print("removed" if isinstance(r, dict) and r.get("removed") is True else "unknown")
@@ -880,13 +899,40 @@ else:
 }
 
 cepa_ln_distro=${WSL_DISTRO_NAME:-}
+# L93 3 (orca-lab msg_201730c8762e, sender report): a repo registered only on
+# the Orca WSL host is in no local `repo list` row, and `orca repo add` would
+# register it twice. Prints the WSL host's id when the one WSL host has a repo
+# at this main checkout; nothing, exit 0, when there is no WSL host or no such
+# repo; exit 1 when a read fails or has an unknown shape, or more than one WSL
+# host is added. Two reads (`environment list`, `repo list --environment`),
+# 5 s each, no retry, only on the way to `kept`.
+cepa_ln_hostrepo() {
+  local w id rt h
+  cepa_ln_orca "$cepa_ln_tmp/hrenvs.json" 0 5 environment list --json || return 1
+  w=$(cepa_ln_py wslenvs "$cepa_ln_tmp/hrenvs.json") || return 1
+  [ -n "$w" ] || return 0
+  read -r id rt <<<"$w"
+  cepa_ln_orca "$cepa_ln_tmp/hrrepos.json" 0 5 repo list --environment "$id" --json || return 1
+  h=$(cepa_ln_py hostrepo "$cepa_ln_tmp/hrrepos.json" "$cepa_ln_main" "$cepa_ln_distro") || return 1
+  [ -z "$h" ] || printf '%s\n' "$id"
+}
 # This repo's Orca id, from the `repo list` row whose path is this checkout.
 cepa_ln_orca "$cepa_ln_tmp/repos.json" 1 15 repo list --json \
   || kept "${cepa_ln_lane:-lanes} unchanged — repo list failed" "check that Orca is running, then ask this session to run the block again"
 cepa_ln_rc=0
 cepa_ln_repo=$(cepa_ln_py repo "$cepa_ln_tmp/repos.json" "$cepa_ln_main" "$cepa_ln_distro") || cepa_ln_rc=$?
-[ "$cepa_ln_rc" != 2 ] || kept "${cepa_ln_lane:-lanes} unchanged — Orca has no repo at $cepa_ln_main" \
-  "add this repo to Orca (orca repo add), then ask this session to run the block again"
+if [ "$cepa_ln_rc" = 2 ]; then
+  cepa_ln_hrrc=0
+  cepa_ln_hr=$(cepa_ln_hostrepo) || { cepa_ln_hrrc=1 cepa_ln_hr=; }
+  [ -z "$cepa_ln_hr" ] \
+    || kept "${cepa_ln_lane:-lanes} unchanged — $cepa_ln_main is a project on the Orca WSL host $cepa_ln_hr, not in this machine's Orca (punch-list L93)" \
+            "run this lane command from a session on WSL host $cepa_ln_hr; do not add this repo to this machine's Orca"
+  [ "$cepa_ln_hrrc" = 0 ] \
+    || kept "${cepa_ln_lane:-lanes} unchanged — Orca has no repo at $cepa_ln_main, and the Orca WSL host's repo list could not be read, so a project on that host is not ruled out" \
+            "check orca repo list --environment <WSL host>: if the repo is there, run this lane command from a session on that host; if not, add it to Orca (orca repo add), then ask this session to run the block again"
+  kept "${cepa_ln_lane:-lanes} unchanged — Orca has no repo at $cepa_ln_main" \
+    "add this repo to Orca (orca repo add), then ask this session to run the block again"
+fi
 [ "$cepa_ln_rc" = 0 ] || kept "${cepa_ln_lane:-lanes} unchanged — repo list returned a shape this reader does not know, or two repos at $cepa_ln_main" \
   "check Orca's repo list for $cepa_ln_main"
 read -r cepa_ln_rid cepa_ln_policy <<<"$cepa_ln_repo"

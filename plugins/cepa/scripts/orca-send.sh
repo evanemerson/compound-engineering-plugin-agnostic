@@ -154,6 +154,36 @@
 #      given: that send is then the direct follow-up, with no walk. A read that fails, an
 #      unknown shape, a loop, `null` before the target or more hops than the cap
 #      exits 5 as `not proven stored` (it may have started a follow-up).
+#   0  Orca send stored as a follow-up dispatch: dispatch:<new> of <target>,
+#      found by a re-read, though <reason> (punch-list L93) — a plain
+#      `dispatch:` send whose call failed (exit != 0: a timeout, or an exit
+#      with no reply) and that THE READ-BACK did not find. orca-lab's report
+#      (msg_9dce386e6069, Orca 1.4.262, cepa 1.60.0, a coord@main ON the WSL
+#      host; sender report, not re-run here): two such sends exited 124 with
+#      no output, and each had started a follow-up dispatch that the worker
+#      answered. THE FOLLOW-UP RE-READ proves the new dispatch from Orca's
+#      own records, in this order, every read on the target's server: the
+#      target's record names its terminal (`result.dispatch.assigneeHandle`);
+#      `worker-list --limit 100 --json --full` has exactly one row whose
+#      `resource.terminalHandle` is that terminal and whose
+#      `resource.ownerDispatchId` is the row's own `dispatchId`; that
+#      dispatch's `createdAt` is no earlier than 120 s before the send began
+#      (THE READ-BACK's clock slack); its `followUpOf` is a `ctx_` id; that
+#      id, unless it is the target, was made BEFORE the window (two follow-ups
+#      in one window cannot be told apart); and THE FOLLOW-UP CHAIN leads from
+#      it to the target. Measured for L93, read only (Orca 1.4.262,
+#      2026-11-18, `worker-list --environment wsl:ubuntu-24.04 --limit 100
+#      --json --full`: 18 rows, newest first; and `worker-show` of each
+#      dispatch of one 3-dispatch chain): only the chain's newest dispatch
+#      carries the terminal resource, its `ownerDispatchId` is itself and
+#      `originDispatchId` is the chain's first; the older ones have
+#      `resource: null`, and `createdAt` reads `YYYY-MM-DD HH:MM:SS` (UTC).
+#      Not measured: the moment a follow-up takes the resource over while
+#      the send is still running. A follow-up another sender starts on the
+#      same worker inside the window would pass as this one; one coordinator
+#      owns a worker (§10), so that is accepted. Anything else exits 5 as
+#      `not proven stored`, with `a re-read found no follow-up dispatch it
+#      could prove, but one may exist, so do not resend` after the reason.
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
 #      <reason>` (stored in a Run mailbox, `nudge` given for a `run:` or
@@ -259,7 +289,12 @@
 # retry a call takes at most 34 s: the send and the re-read take at most 68 s,
 # plus the nudge's own bound (about 220 s, its header): about 290 s in all.
 # A follow-up chain (L89 b) is the send plus at most 9 reads and no nudge:
-# at most 340 s.
+# at most 340 s. A plain send to a `dispatch:` target is bounded at 60 s
+# instead (L93 1: on a WSL host coordinator, orca-lab measured two such sends
+# exit 124 at 15 s, both delivered; 60 is a margin chosen here, not a
+# measured start time), so at most 124 s with its retry. When it fails and
+# takes THE FOLLOW-UP RE-READ, add the inbox read-back, 5 reads and the chain
+# walk's 9: at most about 640 s, with no nudge.
 # A session that runs the block again after a failure makes a new request id,
 # so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
@@ -798,13 +833,15 @@ command -v python3 >/dev/null 2>&1 || fail "no python3 to read the Orca output"
 cepa_send_tmp=$(mktemp -d 2>/dev/null) || fail "mktemp failed"
 trap 'rm -rf "$cepa_send_tmp"' EXIT
 
-# One Orca call, bounded at 15 seconds plus a 2-second kill, its stdout to $1.
-# Sets cepa_send_rc. Retried once, only on the WSL interop error.
+# One Orca call, bounded at cepa_send_bound seconds (15, or 60 for a plain
+# send to a `dispatch:` target: TIME BUDGET) plus a 2-second kill, its stdout
+# to $1. Sets cepa_send_rc. Retried once, only on the WSL interop error.
+cepa_send_bound=15
 cepa_send_orca() {
   local out=$1 try
   shift
   for try in 1 2; do
-    timeout -k 2 15 "$cepa_send_cli" "$@" </dev/null >"$out" 2>"$cepa_send_tmp/err" && { cepa_send_rc=0; return 0; }
+    timeout -k 2 "$cepa_send_bound" "$cepa_send_cli" "$@" </dev/null >"$out" 2>"$cepa_send_tmp/err" && { cepa_send_rc=0; return 0; }
     cepa_send_rc=$?
     [ "$try" = 1 ] && [ "$cepa_send_rc" != 124 ] && [ "$cepa_send_rc" != 137 ] || return 1
     { cepa_send_e=$(<"$cepa_send_tmp/err"); } 2>/dev/null || return 1
@@ -942,11 +979,14 @@ case "$cepa_send_type" in
   *)
 cepa_send_on_args=()
 [ -z "$cepa_send_on" ] || cepa_send_on_args=(--on "$cepa_send_on")
+# L93 1: a host Orca took longer than 15 s to start a follow-up dispatch.
+[[ $cepa_send_target != dispatch:* ]] || cepa_send_bound=60
 cepa_send_orca "$cepa_send_tmp/send.json" orchestration send --to "$cepa_send_target" \
   ${cepa_send_on_args[@]+"${cepa_send_on_args[@]}"} \
   --type "$cepa_send_type" --subject "$cepa_send_subject" --body "$cepa_send_body" \
   --retry-request "$cepa_send_req" --json --full ;;
 esac
+cepa_send_bound=15
 
 # Prints `<msg id> <recipient>`, or `FAIL <reason>`. The reason holds no Orca
 # text except an error code that is a plain word.
@@ -1109,14 +1149,16 @@ PY
 # `worker-show --dispatch <id>`, whose `result.dispatch.followUpOf` names the
 # dispatch it followed up, until the walk reaches the target. On failure it
 # sets cepa_send_chain_why and returns 1.
-cepa_send_chain() {
-  local x=$1 td=${cepa_send_target#dispatch:} hop seen=' ' nx
-  local -a env=()
-  cepa_send_chain_why="the follow-up names $1, and the follow-up chain of $cepa_send_target could not be read"
-  cepa_send_orca "$cepa_send_tmp/chain0.json" orchestration worker-show --dispatch "$td" --json --full || return 1
-  # Where the chain lives: a host dispatch's home record names its server
-  # (`result.server.environmentId`), a local one has no `server` key.
-  nx=$(python3 -I - "$cepa_send_tmp/chain0.json" "$td" <<'PY' 2>/dev/null
+# Where the target's chain lives: reads the target's home record into $1 and
+# sets cepa_send_where_env to `--environment <id>` for a host dispatch, whose
+# home record names its server (`result.server.environmentId`), or to nothing
+# for a local one, which has no `server` key. Returns 1 on a failed read or
+# an unknown shape.
+cepa_send_where() {
+  local td=${cepa_send_target#dispatch:} nx
+  cepa_send_where_env=()
+  cepa_send_orca "$1" orchestration worker-show --dispatch "$td" --json --full || return 1
+  nx=$(python3 -I - "$1" "$td" <<'PY' 2>/dev/null
 import json, re, sys
 d = json.load(open(sys.argv[1]))
 r = d["result"] if d.get("ok") is True else sys.exit(1)
@@ -1133,9 +1175,16 @@ PY
 ) || return 1
   case "$nx" in
     local) ;;
-    'env '*) env=(--environment "${nx#env }") ;;
+    'env '*) cepa_send_where_env=(--environment "${nx#env }") ;;
     *) return 1 ;;
   esac
+}
+cepa_send_chain() {
+  local x=$1 td=${cepa_send_target#dispatch:} hop seen=' ' nx
+  local -a env=()
+  cepa_send_chain_why="the follow-up names $1, and the follow-up chain of $cepa_send_target could not be read"
+  cepa_send_where "$cepa_send_tmp/chain0.json" || return 1
+  env=(${cepa_send_where_env[@]+"${cepa_send_where_env[@]}"})
   for hop in 1 2 3 4 5 6 7 8; do
     [ "$x" != "$td" ] || return 0
     case "$seen" in *" $x "*) cepa_send_chain_why="the follow-up chain of $cepa_send_target loops at $x"; return 1 ;; esac
@@ -1168,6 +1217,93 @@ PY
   cepa_send_chain_why="the follow-up names $1, and the follow-up chain of $cepa_send_target is longer than 8 hops"
   return 1
 }
+# THE FOLLOW-UP RE-READ (punch-list L93 1; header). A plain send to a
+# `dispatch:` target whose call failed (a timeout, or an exit with no reply)
+# may have started a follow-up dispatch, which leaves no inbox row. This finds
+# the dispatch that now owns the target's terminal, made in the send's window,
+# and proves it follows the target with THE FOLLOW-UP CHAIN. It prints the new
+# dispatch id, or returns 1.
+cepa_send_fresh() {
+  local td=${cepa_send_target#dispatch:} nd fu
+  local -a env=()
+  cepa_send_where "$cepa_send_tmp/fresh0.json" || return 1
+  env=(${cepa_send_where_env[@]+"${cepa_send_where_env[@]}"})
+  # The target's terminal: a host dispatch's own server names it.
+  if [ ${#env[@]} -gt 0 ]; then
+    cepa_send_orca "$cepa_send_tmp/fresh1.json" orchestration worker-show --dispatch "$td" "${env[@]}" \
+      --json --full || return 1
+  else
+    cp "$cepa_send_tmp/fresh0.json" "$cepa_send_tmp/fresh1.json" 2>/dev/null || return 1
+  fi
+  cepa_send_orca "$cepa_send_tmp/fresh2.json" orchestration worker-list ${env[@]+"${env[@]}"} \
+    --limit 100 --json --full || return 1
+  # The one row that owns the target's terminal. When that is the target
+  # itself, no follow-up started, and the chain walk below cannot reach it.
+  nd=$(python3 -I - "$cepa_send_tmp/fresh1.json" "$cepa_send_tmp/fresh2.json" "$td" <<'PY' 2>/dev/null
+import json, re, sys
+CTX = r"ctx_[A-Za-z0-9_-]{1,64}"
+a, b, td = json.load(open(sys.argv[1])), json.load(open(sys.argv[2])), sys.argv[3]
+x = a["result"]["dispatch"] if a.get("ok") is True else sys.exit(1)
+h = x.get("assigneeHandle") if isinstance(x, dict) and x.get("id") == td else None
+if not isinstance(h, str):
+    sys.exit(1)
+rows = b["result"]["workers"] if b.get("ok") is True else sys.exit(1)
+if not isinstance(rows, list):
+    sys.exit(1)
+hit = []
+for w in rows:
+    r = w.get("resource") if isinstance(w, dict) else None
+    i = w.get("dispatchId") if isinstance(w, dict) else None
+    if isinstance(r, dict) and r.get("terminalHandle") == h and isinstance(i, str) \
+            and r.get("ownerDispatchId") == i and re.fullmatch(CTX, i):
+        hit.append(i)
+if len(hit) != 1:
+    sys.exit(1)
+print(hit[0])
+PY
+) || return 1
+  # The new dispatch: made in the send's window, and what it follows.
+  cepa_send_orca "$cepa_send_tmp/fresh3.json" orchestration worker-show --dispatch "$nd" \
+    ${env[@]+"${env[@]}"} --json --full || return 1
+  fu=$(cepa_send_made "$cepa_send_tmp/fresh3.json" "$nd" new) || return 1
+  # Its predecessor, unless it is the target, was made BEFORE the window:
+  # two follow-ups in one window cannot be told apart, so neither counts.
+  if [ "$fu" != "$td" ]; then
+    cepa_send_orca "$cepa_send_tmp/fresh4.json" orchestration worker-show --dispatch "$fu" \
+      ${env[@]+"${env[@]}"} --json --full || return 1
+    cepa_send_made "$cepa_send_tmp/fresh4.json" "$fu" old >/dev/null || return 1
+  fi
+  cepa_send_chain "$fu" || return 1
+  printf '%s\n' "$nd"
+}
+# Reads worker-show $1 for dispatch $2. With `new` it must be made no earlier
+# than 120 s before the send began (THE READ-BACK's clock slack) and follow up
+# a ctx_ id, which it prints; with `old` it must be made before that.
+cepa_send_made() {
+  python3 -I - "$1" "$2" "$3" "$cepa_send_t0" <<'PY' 2>/dev/null
+import calendar, json, re, sys, time
+d = json.load(open(sys.argv[1]))
+x = d["result"]["dispatch"] if d.get("ok") is True else sys.exit(1)
+if not isinstance(x, dict) or x.get("id") != sys.argv[2]:
+    sys.exit(1)
+t = None
+for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ"):
+    try:
+        t = calendar.timegm(time.strptime(x.get("createdAt"), fmt))
+        break
+    except (TypeError, ValueError):
+        pass
+if t is None:
+    sys.exit(1)
+fresh = t >= int(sys.argv[4]) - 120
+if sys.argv[3] == "old":
+    sys.exit(1 if fresh else 0)
+f = x.get("followUpOf")
+if not fresh or not (isinstance(f, str) and re.fullmatch(r"ctx_[A-Za-z0-9_-]{1,64}", f)):
+    sys.exit(1)
+print(f)
+PY
+}
 case "$cepa_send_got" in
   'CHAIN '*)
     cepa_send_got=${cepa_send_got#CHAIN }
@@ -1191,8 +1327,19 @@ case "$cepa_send_got" in
     if ! [[ $cepa_send_back =~ ^msg_[0-9a-f]{6,32}\ (term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})$ ]]; then
       # L89 b (PR #142 review): a plain send to a dispatch may have started a
       # follow-up dispatch, which leaves no inbox row to read back, so it is
-      # not proven either way; a rerun would start a second one.
-      [[ $cepa_send_target != dispatch:* || $cepa_send_type == worker_done ]] || unproven "$cepa_send_why"
+      # not proven either way; a rerun would start a second one. When the
+      # call itself failed (L93 1: a host send exited 124, and was delivered),
+      # THE FOLLOW-UP RE-READ looks for that dispatch first.
+      if [[ $cepa_send_target == dispatch:* && $cepa_send_type != worker_done ]]; then
+        if [ "$cepa_send_rc" != 0 ] && cepa_send_new=$(cepa_send_fresh); then
+          echo "Orca send stored as a follow-up dispatch: dispatch:$cepa_send_new of $cepa_send_target, found by a re-read, though $cepa_send_why (punch-list L93)"
+          [ -z "$cepa_send_downgraded" ] \
+            || echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"
+          exit 0
+        fi
+        [ "$cepa_send_rc" = 0 ] || unproven "$cepa_send_why; a re-read found no follow-up dispatch it could prove, but one may exist, so do not resend"
+        unproven "$cepa_send_why"
+      fi
       fail "$cepa_send_why"
     fi
     echo "Orca send read back: ${cepa_send_back%% *} is in the inbox from this send, though $cepa_send_why (punch-list L84)"
