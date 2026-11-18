@@ -94,7 +94,14 @@
 # host's own `repo list --environment <host>` row has its own `id`, a Linux
 # `path`, and `connectionId`/`hostId` null (orca-lab, L89 e, not re-run
 # here), so nothing in it ties to the local registration, and a host create
-# would need `--environment` on every call (residual, PR body).
+# would need `--environment` on every call (residual, PR body). `rm` of a
+# name that is in no local row reads the one WSL host's `repo list` and
+# `worktree list` (`--environment <id>`, 5 s each, no retry); a non-main row
+# of a host repo at this main checkout's path, with the lane's basename, is
+# kept as `host-side lanes are not supported (punch-list L89 e)`. orca-lab
+# measured that refusal on 1.60.0 (sender report); the read shapes were
+# re-measured live here (Orca 1.4.262, 2026-11-18, main rows only). Those
+# reads run only on the way to `kept`, so no rm follows them.
 #
 # Paths (review finding #5): Orca returns Windows UNC paths. A path
 # `\\wsl.localhost\<distro>\a\b` becomes `/a/b` only when <distro> equals
@@ -825,6 +832,30 @@ elif mode == "hostagents":
                 sys.exit(1)
             n += len(w["agents"])
     print(n)
+elif mode == "hostlane":
+    # L89 e: the `worktree list --environment <id>` rows (f) of the WSL
+    # host repo registrations (args[0], `repo list --environment <id>`) whose
+    # path is this main checkout. Prints the path of a non-main row whose
+    # basename is the lane, or nothing. Shapes measured on Orca 1.4.262,
+    # 2026-11-18, live host: repo rows {id, path (Linux), connectionId null,
+    # hostId null}; worktree rows {id, repoId, path (Linux), isMainWorktree,
+    # hostId local}. Only a main row was listed, so a non-main row is
+    # assumed to share that shape.
+    repos_f, main, distro, lane = args
+    rr = json.load(open(repos_f))
+    repos = rr.get("result", {}).get("repos") if rr.get("ok") is True else None
+    rows = r.get("worktrees") if isinstance(r, dict) else None
+    if not isinstance(repos, list) or not isinstance(rows, list):
+        sys.exit(1)
+    ids = {x.get("id") for x in repos if isinstance(x, dict) and isinstance(x.get("id"), str)
+           and linux(x.get("path"), distro) == main}
+    for w in rows:
+        if not isinstance(w, dict) or w.get("repoId") not in ids or w.get("isMainWorktree") is not False:
+            continue
+        p = linux(w.get("path"), distro)
+        if p and os.path.basename(p) == lane and re.fullmatch(r"[A-Za-z0-9._/@ -]{1,300}", p):
+            print(p)
+            break
 elif mode == "rmres":
     if d.get("ok") is True:
         print("removed" if isinstance(r, dict) and r.get("removed") is True else "unknown")
@@ -1158,14 +1189,41 @@ cepa_ln_trunk_read() {
   [ -z "$cepa_ln_trunk" ] || cepa_ln_tiprev=$(git rev-parse -q --verify "refs/remotes/origin/$cepa_ln_trunk^{commit}" 2>/dev/null) || cepa_ln_tiprev=
 }
 
+# L89 e: prints `<host id> <path>` when the lane is a lane of this repo on the
+# one Orca WSL host (its own registration), else nothing; non-zero when a
+# read fails. Three reads at 5 s, no retry, only on the way to `kept`.
+cepa_ln_hostlane() {
+  local w id rt p
+  cepa_ln_orca "$cepa_ln_tmp/hlenvs.json" 0 5 environment list --json || return 1
+  w=$(cepa_ln_py wslenvs "$cepa_ln_tmp/hlenvs.json") && [ -n "$w" ] || return 1
+  read -r id rt <<<"$w"
+  cepa_ln_orca "$cepa_ln_tmp/hlrepos.json" 0 5 repo list --environment "$id" --json || return 1
+  cepa_ln_orca "$cepa_ln_tmp/hlwts.json" 0 5 worktree list --environment "$id" --limit 500 --json || return 1
+  p=$(cepa_ln_py hostlane "$cepa_ln_tmp/hlwts.json" "$cepa_ln_tmp/hlrepos.json" "$cepa_ln_main" \
+    "$cepa_ln_distro" "$cepa_ln_lane") && [ -n "$p" ] || return 1
+  printf '%s %s\n' "$id" "$p"
+}
+
 cepa_ln_hits=0
 while IFS=$'\t' read -r w_id w_path w_base w_mode w_name w_main w_br; do
   [ -n "$w_id" ] && [ "$w_main" = 0 ] && [ "$w_base" = "$cepa_ln_lane" ] || continue
   cepa_ln_hits=$((cepa_ln_hits + 1))
   r_id=$w_id r_path=$w_path
 done <<<"$cepa_ln_all"
-[ "$cepa_ln_hits" -gt 0 ] || kept "kept $cepa_ln_lane — no lane of this repo has that name in Orca's list" \
-  "check the lane name (orca worktree list) and ask again"
+if [ "$cepa_ln_hits" = 0 ]; then
+  # L89 e (orca-lab, 1.60.0 re-measure): a lane made on the Orca WSL host
+  # (`worktree create --environment`) is only in the HOST's list, under the
+  # host's own repo registration. Such a lane is named as not supported; a
+  # read that fails or does not find it leaves the plain refusal below.
+  cepa_ln_hl=$(cepa_ln_hostlane) || cepa_ln_hl=
+  if [ -n "$cepa_ln_hl" ]; then
+    read -r cepa_ln_hlid cepa_ln_hlpath <<<"$cepa_ln_hl"
+    kept "kept $cepa_ln_lane — it is a lane on the Orca WSL host $cepa_ln_hlid ($cepa_ln_hlpath), made there with --environment; host-side lanes are not supported (punch-list L89 e)" \
+      "remove $cepa_ln_lane on WSL host $cepa_ln_hlid in Orca yourself, or keep it"
+  fi
+  kept "kept $cepa_ln_lane — no lane of this repo has that name in Orca's list" \
+    "check the lane name (orca worktree list) and ask again"
+fi
 [ "$cepa_ln_hits" = 1 ] || kept "kept $cepa_ln_lane — $cepa_ln_hits lanes of this repo have that basename" \
   "say which lane to remove"
 [ "$r_path" != "$cepa_ln_main" ] || kept "kept $cepa_ln_lane — it is the main checkout" "check the lane name"

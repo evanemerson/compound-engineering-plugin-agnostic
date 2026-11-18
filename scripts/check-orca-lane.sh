@@ -32,6 +32,11 @@
 #            path), the host read fails or is partial, more than one WSL host
 #            is added, or either read has an unknown shape. An omitted host
 #            that is that WSL host, read clean, no longer keeps the lane.
+#   HOSTLANE — punch-list L89 e: rm of a name in no local row reads the WSL
+#            host's own repo and worktree lists; a non-main host lane of this
+#            repo with that basename is kept as not supported. No WSL host,
+#            two hosts, a failed host read, a main row, another repo's path
+#            or another name keep the plain refusal.
 #   CREATE — happy create (exact create argv, parked detached, park branch
 #            deleted, show by id); a name taken in Orca or in git; a park
 #            branch that exists; a failed create; a suffixed path; a
@@ -449,6 +454,31 @@ expect("WSLHOST omitted host that is not the WSL host keeps the lane",
        W.run(F(cli=CLI, action="rm", lane="w-omit2"), mode="psomitted,wslother"), rc=1,
        first="ORCA lane: kept w-omit2 — worktree ps was not a complete read", has=(NOTE_STRICT % OFFH,),
        verbs_lack=[["worktree", "rm"]])
+# ---- HOSTLANE (punch-list L89 e; orca-lab's 1.60.0 re-measure): a lane made
+# on the WSL host (`worktree create --environment`) is only in the host's own
+# list. rm names it as not supported; anything else keeps the plain refusal.
+HLP = os.path.join(W.ws, os.path.basename(W.main), "h-1")
+HLW = ("ORCA lane: kept h-1 — it is a lane on the Orca WSL host wsl:ubuntu-24.04 (%s), made there with "
+       "--environment; host-side lanes are not supported (punch-list L89 e)" % HLP)
+HLE = "Ending first line: Needed from you: remove h-1 on WSL host wsl:ubuntu-24.04 in Orca yourself, or keep it"
+got = W.run(F(cli=CLI, action="rm", lane="h-1"), mode="wsl,hostlane", env={"STUB_HOST_LANE": "h-1"})
+expect("HOSTLANE host-side lane is named not supported", got, rc=1, first=HLW, has=(HLE,),
+       verbs_lack=[["worktree", "rm"], ["worktree", "ps"]])
+HLR = [c for c in got[2] if "--environment" in c and c[:2] in (["repo", "list"], ["worktree", "list"])]
+HLWANT = [["repo", "list", "--environment", "wsl:ubuntu-24.04", "--json"],
+          ["worktree", "list", "--environment", "wsl:ubuntu-24.04", "--limit", "500", "--json"]]
+(ok if HLR == HLWANT else miss)("HOSTLANE reads the host's repo and worktree lists" + ("" if HLR == HLWANT else ": %r" % HLR))
+NOLANE = "ORCA lane: kept h-1 — no lane of this repo has that name in Orca's list"
+for name, mode in (("HOSTLANE no WSL host keeps the plain refusal", "hostlane"),
+                   ("HOSTLANE host main row is not a lane", "wsl,hostlanemain"),
+                   ("HOSTLANE host repo at another path is not this repo", "wsl,hostlaneother"),
+                   ("HOSTLANE failed host list keeps the plain refusal", "wsl,hostlane,hostlistfail"),
+                   ("HOSTLANE two WSL hosts keep the plain refusal", "wsl2,hostlane")):
+    expect(name, W.run(F(cli=CLI, action="rm", lane="h-1"), mode=mode, env={"STUB_HOST_LANE": "h-1"}),
+           rc=1, first=NOLANE, lacks=("host-side",), verbs_lack=[["worktree", "rm"]])
+expect("HOSTLANE other host lane name keeps the plain refusal",
+       W.run(F(cli=CLI, action="rm", lane="h-1"), mode="wsl,hostlane", env={"STUB_HOST_LANE": "h-2"}),
+       rc=1, first=NOLANE, lacks=("host-side",))
 W.done()
 
 # ---- CREATE

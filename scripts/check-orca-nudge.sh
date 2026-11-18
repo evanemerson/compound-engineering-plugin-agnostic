@@ -111,8 +111,14 @@
 #              case whose row fails only that filter. `"ok": false` makes no
 #              read.
 #   HOSTON   — punch-list L88: the `on:` field becomes `--on <server>`; a
-#              host target is never nudged; `on:` with a non-term_ target or a
+#              host target is never nudged, and a send stored for it exits 0
+#              with no operator ask (L89 a); `on:` with a non-term_ target or a
 #              bad value is refused before any call.
+#   CHAIN    — punch-list L89 b: a follow-up reply whose followUpOf names
+#              another dispatch counts only when worker-show's followUpOf
+#              links (home record, then each hop on the target's server)
+#              reach the target within 8 hops; a stranger, a loop, a failed
+#              read, a bad shape or 9 hops is `not proven stored`.
 #   SENDREF  — orca-send.sh's value checks: a bad cli (a flag, shell text,
 #              bare `orca` on Linux, a path that is not ORCA_CLI_COMMAND, a
 #              relative path, a name not on PATH), target, type (heartbeat
@@ -332,7 +338,11 @@ case "$1 $2" in
     printf '%s' "${STUB_TLIST-}"; exit "${STUB_TLIST_RC:-0}" ;;
   "environment list") printf '%s' "${STUB_ENVS-}"; exit "${STUB_ENVS_RC:-0}" ;;
   "orchestration worker-list") printf '%s' "${STUB_WLIST-}"; exit "${STUB_WLIST_RC:-0}" ;;
-  "orchestration worker-show") [ -f "$STUB_WSHOWDIR/$4.json" ] || exit 1; cat "$STUB_WSHOWDIR/$4.json" ;;
+  "orchestration worker-show")
+    # L89 b: a read on a host server (--environment after the dispatch id)
+    # answers from $STUB_WSHOWDIR/env.
+    d=$STUB_WSHOWDIR; [ "${5-}" != --environment ] || d=$STUB_WSHOWDIR/env
+    [ -f "$d/$4.json" ] || exit 1; cat "$d/$4.json" ;;
   *) exit 64 ;;
 esac
 ''')
@@ -1090,8 +1100,7 @@ if LEGS in ("all", "send"):
           target=FD, osend_json=fup(), inbox_json=NOROW)
     store("FOLLOWUP followUpOf as an address counts", 0, [FUP_LINE], mode="no-nudge", target=FD,
           osend_json=fup(followUpOf=FD), inbox_json=NOROW)
-    for name, js in [("FOLLOWUP of another dispatch fails", fup(followUpOf="ctx_000000000000")),
-                     ("FOLLOWUP not ready fails", fup(state="failed")),
+    for name, js in [("FOLLOWUP not ready fails", fup(state="failed")),
                      ("FOLLOWUP new dispatch equal to the target fails", fup(dispatchId="ctx_abcdef")),
                      ("FOLLOWUP new dispatch of a bad shape fails", fup(dispatchId="ctx_a;b")),
                      ("FOLLOWUP beside a message is not a follow-up", json.dumps({"ok": True, "result": dict(
@@ -1100,13 +1109,93 @@ if LEGS in ("all", "send"):
         # started a follow-up, so it is unproven, never "no message stored".
         store(name, 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge", target=FD, osend_json=js, inbox_json=NOROW)
     store("FOLLOWUP shape for a term_ target fails", 5, [NOSTORE + NOMID, PASTE], mode="no-nudge",
-          osend_json=fup(followUpOf=H), inbox_json=NOROW)
+          osend_json=fup(followUpOf="ctx_abcdef"), inbox_json=NOROW)
     # A worker_done is never a follow-up, and its failure stays "no message
     # stored" (rule 3 counts it only with its lifecycle).
     store("FOLLOWUP shape on a worker_done is not a follow-up", 5, [NOSTORE + NOMID, PASTE_RC], argv=WARGS,
           osend_json=fup(followUpOf=DID), inbox_json=NOROW)
     store("FOLLOWUP that exited non-zero fails", 5, [UNPROVEN + "the send exited 1", FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(), osend_rc=1, inbox_json=NOROW)
+    # --- CHAIN (punch-list L89 b; orca-lab's 1.60.0 re-measure): followUpOf
+    # names the NEWEST dispatch of the target's follow-up chain. The send
+    # counts only when worker-show's followUpOf links lead back to the target.
+    # Shapes re-measured on Orca 1.4.262, 2026-11-18: a host dispatch's home
+    # record has `server.environmentId`; its host record names followUpOf.
+    CHD = os.path.join(TMP, "wshow-chain")
+
+    def chain(recs, home=None, env=None):
+        shutil.rmtree(CHD, ignore_errors=True)
+        os.makedirs(os.path.join(CHD, "env"))
+        h = {"ok": True, "result": {"dispatch": {"id": "ctx_abcdef", "followUpOf": None},
+                                    "server": {"environmentId": "wsl:ubuntu-24.04", "name": "Ubuntu-24.04 (WSL)"}}}
+        if home is not None:
+            h = home
+        open(os.path.join(CHD, "ctx_abcdef.json"), "w").write(json.dumps(h))
+        for i, f in recs.items():
+            rec = f if isinstance(f, dict) else {"ok": True, "result": {"dispatch": {"id": i, "followUpOf": f}}}
+            open(os.path.join(CHD, "env" if env is None else env, i + ".json"), "w").write(json.dumps(rec))
+        return {"STUB_WSHOWDIR": CHD}
+    HOP = {"ctx_c0000000000b": "ctx_c0000000000a", "ctx_c0000000000a": "ctx_abcdef"}
+
+    def chain_line(fu):
+        return "Orca send stored as a follow-up dispatch: dispatch:%s of %s, after %s in its follow-up chain (punch-list L89 b)" % (NEWD, FD, fu)
+    calls = store("CHAIN newest dispatch of the target's chain counts", 0, [chain_line("ctx_c0000000000b")],
+                  mode="no-nudge", target=FD, osend_json=fup(followUpOf="ctx_c0000000000b"), inbox_json=NOROW,
+                  env_extra=chain(HOP))
+    ws = [c for c in calls if c[:2] == ["orchestration", "worker-show"]]
+    want = [["orchestration", "worker-show", "--dispatch", "ctx_abcdef", "--json", "--full"]] + [
+        ["orchestration", "worker-show", "--dispatch", x, "--environment", "wsl:ubuntu-24.04", "--json", "--full"]
+        for x in ("ctx_c0000000000b", "ctx_c0000000000a")]
+    check = ws == want and not [c for c in calls if c[:2] == ["orchestration", "inbox"]]
+    (ok if check else miss)("CHAIN reads the home record, then each hop on its server" if check else
+                             "CHAIN reads the home record, then each hop on its server: %r" % calls)
+    store("CHAIN followUpOf as an address counts", 0, [chain_line("ctx_c0000000000b")], mode="no-nudge", target=FD,
+          osend_json=fup(followUpOf="dispatch:ctx_c0000000000b"), inbox_json=NOROW, env_extra=chain(HOP))
+    store("CHAIN with nudge says it is not needed", 0,
+          [chain_line("ctx_c0000000000b"), "Orca nudge not needed: %s is a mailbox Orca delivers; sent as no-nudge" % FD],
+          target=FD, osend_json=fup(followUpOf="ctx_c0000000000b"), inbox_json=NOROW, env_extra=chain(HOP))
+    store("CHAIN local dispatch walks this machine's records", 0, [chain_line("ctx_c0000000000b")], mode="no-nudge",
+          target=FD, osend_json=fup(followUpOf="ctx_c0000000000b"), inbox_json=NOROW,
+          env_extra=chain(HOP, home={"ok": True, "result": {"dispatch": {"id": "ctx_abcdef", "followUpOf": None}}}, env=""))
+    LONG = {"ctx_l%d" % i: ("ctx_l%d" % (i - 1) if i > 1 else "ctx_abcdef") for i in range(1, 10)}
+    store("CHAIN of 8 hops counts", 0, [chain_line("ctx_l8")], mode="no-nudge", target=FD,
+          osend_json=fup(followUpOf="ctx_l8"), inbox_json=NOROW, env_extra=chain(LONG))
+    CW = "the follow-up names %s, "
+    for name, fu, recs, why, home in [
+            ("CHAIN stranger's dispatch fails", "ctx_5000", {"ctx_5000": "ctx_4000", "ctx_4000": None},
+             CW % "ctx_5000" + "which is not in the follow-up chain of " + FD, None),
+            ("CHAIN unreadable hop fails", "ctx_c0000000000b", {"ctx_c0000000000b": "ctx_gone"},
+             CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD, None),
+            ("CHAIN loop fails", "ctx_100p", {"ctx_100p": "ctx_100q", "ctx_100q": "ctx_100p"},
+             "the follow-up chain of %s loops at ctx_100p" % FD, None),
+            ("CHAIN of 9 hops fails", "ctx_l9", LONG,
+             CW % "ctx_l9" + "and the follow-up chain of %s is longer than 8 hops" % FD, None),
+            ("CHAIN hop of a bad shape fails", "ctx_c0000000000b", {"ctx_c0000000000b": "dispatch:ctx_abcdef"},
+             CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD, None),
+            ("CHAIN hop record of another id fails", "ctx_c0000000000b",
+             {"ctx_c0000000000b": {"ok": True, "result": {"dispatch": {"id": "ctx_other", "followUpOf": "ctx_abcdef"}}}},
+             CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD, None),
+            ("CHAIN hop with no followUpOf key fails", "ctx_c0000000000b",
+             {"ctx_c0000000000b": {"ok": True, "result": {"dispatch": {"id": "ctx_c0000000000b"}}}},
+             CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD, None),
+            ("CHAIN server id with shell text fails", "ctx_c0000000000b", HOP,
+             CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD,
+             {"ok": True, "result": {"dispatch": {"id": "ctx_abcdef"}, "server": {"environmentId": "a;b"}}}),
+            ("CHAIN home record of another id fails", "ctx_c0000000000b", HOP,
+             CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD,
+             {"ok": True, "result": {"dispatch": {"id": "ctx_other"}, "server": {"environmentId": "wsl:ubuntu-24.04"}}}),
+            ("CHAIN with no worker-show reads fails", "ctx_000000000000", {},
+             CW % "ctx_000000000000" + "and the follow-up chain of %s could not be read" % FD, None)]:
+        env = chain(recs, home=home)
+        if name == "CHAIN with no worker-show reads fails":
+            env = {"STUB_WSHOWDIR": os.path.join(TMP, "no-such-dir")}
+        store(name, 5, [UNPROVEN + why, FPASTE], mode="no-nudge", target=FD, osend_json=fup(followUpOf=fu),
+              inbox_json=NOROW, env_extra=env)
+    store("CHAIN new dispatch equal to the target is not a follow-up", 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge",
+          target=FD, osend_json=fup(followUpOf="ctx_c0000000000b", dispatchId="ctx_abcdef"), inbox_json=NOROW,
+          env_extra=chain(HOP))
+    store("CHAIN new dispatch equal to followUpOf is not a follow-up", 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge",
+          target=FD, osend_json=fup(followUpOf=NEWD), inbox_json=NOROW, env_extra=chain(HOP))
     # Each row is this session's (from_handle H), so only its own fault
     # can reject it.
     for name, brw in [("READBACK row older than the window", brow(at=T_OLD, frm=H)),
@@ -1220,11 +1309,18 @@ if LEGS in ("all", "send"):
     store("HOSTON read-back sender form of another handle fails", 5, [NOSTORE + EMPTY1, PASTE], raw=([], on_fields()),
           osend_rc=1, osend_json="", inbox_json=NOROW, inbox_env_json=inbox(brow(frm=OTHER + " on Sidewalk26")),
           env_extra={"ORCA_TERMINAL_HANDLE": H})
-    calls = store("HOSTON nudge is skipped, the host terminal is not on this machine", 1,
-                  [STORED, "Orca nudge skipped: %s is on Orca server %s, and orca-nudge.sh reads only this machine's terminals" % (H, SRV),
-                   END_H], raw=([], on_fields(mode="nudge")), inbox_json=NOROW, inbox_env_json=inbox())
+    # L89 a (orca-lab's 1.60.0 re-measure): the host Orca prompts its own
+    # worker, so a stored host send needs no nudge and no operator ask.
+    calls = store("HOSTON nudge is not needed, the host prompts its worker", 0,
+                  [STORED, "Orca nudge not needed: %s is on Orca server %s, which prompts its own worker (punch-list L89 a)" % (H, SRV)],
+                  raw=([], on_fields(mode="nudge")), inbox_json=NOROW, inbox_env_json=inbox())
     check = not sends(calls) and not [c for c in calls if c[:2] == ["worktree", "ps"]]
     (ok if check else miss)("HOSTON makes no nudge call" if check else "HOSTON makes no nudge call: %r" % calls)
+    store("HOSTON row stored for another handle is still a skip", 1,
+          ["Orca send stored: %s for %s" % (MID, OTHER), "Orca nudge skipped: Orca stored it for %s, not the target" % OTHER,
+           END + "Needed from you: tell %s to check its Orca inbox" % OTHER],
+          raw=([], on_fields(mode="nudge")), osend_json=osend(to=OTHER), inbox_json=NOROW,
+          inbox_env_json=inbox({"id": MID, "to_handle": OTHER}))
     for name, fields, why, end in [
             ("HOSTON run target refused", on_fields(target="run:run_abc"), "an on: server goes only with a term_ target",
              END + "Needed from you: paste the block below into run:run_abc"),

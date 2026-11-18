@@ -100,6 +100,31 @@ def make_lane(rid, name, br, base):
 HOOK = {"mode": "auto", "setupRunPolicy": "run-by-default", "setupAgentStartupPolicy": "start-immediately",
         "scripts": {"setup": "", "archive": ""}}
 verb = argv[:2]
+# L89 e (Orca 1.4.262, 2026-11-18, live host, read only): the WSL host's own
+# registration. `repo list --environment` rows have their own id, a Linux path
+# and connectionId/hostId null; `worktree list --environment` rows a Linux
+# path, repoId and isMainWorktree. `hostlane` lists STUB_HOST_LANE as a
+# non-main host lane of the first state repo; `hostlanemain` lists it as a main
+# row; `hostlaneother` under a host repo at another path; `hostlistfail` fails
+# the host worktree list.
+if verb in (["repo", "list"], ["worktree", "list"]) and "--environment" in argv:
+    hr = st["repos"][0]
+    hpath = hr["path"] if "hostlaneother" not in MODE else "/srv/elsewhere"
+    if verb == ["repo", "list"]:
+        out({"id": "x", "ok": True, "result": {"repos": [
+            {"id": "host-" + hr["id"], "path": hpath, "displayName": os.path.basename(hpath),
+             "connectionId": None, "hostId": None}]}})
+    if "hostlistfail" in MODE:
+        save(); sys.exit(1)
+    rows = [{"id": "host-%s::%s" % (hr["id"], hpath), "repoId": "host-" + hr["id"], "path": hpath,
+             "isMainWorktree": True, "hostId": "local", "displayName": "main"}]
+    hl = os.environ.get("STUB_HOST_LANE")
+    if hl and MODE & {"hostlane", "hostlanemain", "hostlaneother"}:
+        p = os.path.join(st["ws"], os.path.basename(hpath), hl)
+        rows.append({"id": "host-%s::%s" % (hr["id"], p), "repoId": "host-" + hr["id"], "path": p,
+                     "isMainWorktree": "hostlanemain" in MODE, "hostId": "local", "displayName": hl})
+    out({"id": "x", "ok": True, "result": {"worktrees": rows, "hostScope": {"hostIds": ["local"], "omittedHostIds": []},
+                                           "totalCount": len(rows), "truncated": False}})
 if argv[:2] == ["repo", "list"]:
     if "repofail" in MODE:
         sys.exit(1)

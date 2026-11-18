@@ -43,8 +43,13 @@
 #                           digit, at most 100 characters. Such a target is
 #                           never nudged from here: orca-nudge.sh reads this
 #                           machine's `worktree ps`, which does not list a host
-#                           terminal, so `nudge` prints `Orca nudge skipped:`
-#                           and the `tell` ending line. L89 a (orca-lab,
+#                           terminal. Nor is it needed: the host Orca prompts
+#                           its own worker (orca-lab's 1.60.0 re-measure,
+#                           msg_6a0b36ef91b6, sender report: the worker read
+#                           the message and replied). So with `nudge`, a row
+#                           stored for the target prints `Orca nudge not
+#                           needed: … which prompts its own worker` and exits
+#                           0, with no operator ask (L89 a). L89 a (orca-lab,
 #                           Orca 1.4.262, live WSL host, 2026-11-17; sender
 #                           report, not re-run here): the stored row is only
 #                           in the HOST's inbox (`to_handle` the host term_,
@@ -121,10 +126,29 @@
 #      all, and a type other than reply and worker_done. There is no msg_ id
 #      to re-read, and no nudge. A plain `dispatch:` send that failed in any
 #      other way and is not read back exits 5 as `not proven stored`, never
-#      `no message stored`: it may have started a follow-up. The
-#      value of `followUpOf` was not in the report: its two accepted forms
-#      (`ctx_…` and `dispatch:ctx_…`) are this script's reading. Any other
-#      shape goes on to THE READ-BACK as before.
+#      `no message stored`: it may have started a follow-up. `followUpOf`
+#      is accepted as `ctx_…` or `dispatch:ctx_…`. Any other shape goes on to
+#      THE READ-BACK as before.
+#   0  Orca send stored as a follow-up dispatch: dispatch:<new> of <target>,
+#      after <ctx> in its follow-up chain (punch-list L89 b) — the same
+#      shape, but `followUpOf` names another dispatch. orca-lab's 1.60.0
+#      re-measure (msg_6a0b36ef91b6, sender report): it is a bare `ctx_…`
+#      naming the NEWEST dispatch of the chain, so every send after the
+#      first carries one. THE FOLLOW-UP CHAIN proves it from Orca's own
+#      records, re-measured here (Orca 1.4.262, 2026-11-18, read only): on
+#      the WSL host, `worker-show --environment wsl:ubuntu-24.04 --dispatch
+#      <id> --json --full` gives `result.dispatch.followUpOf` = the dispatch
+#      it followed up (chains of 4, 3 and 3 dispatches, each sharing one
+#      terminal, the oldest `null`); this machine's record of the same host
+#      dispatch has `followUpOf: null` and `result.server.environmentId`,
+#      and a local dispatch's record has no `server` key. So the walk reads
+#      the target's record here, then each hop on the target's server, from
+#      <ctx> back along `followUpOf`, and counts the send only when it
+#      reaches the target within 8 hops. A stranger's dispatch cannot pass:
+#      its `followUpOf` links, written by Orca, end at its own first
+#      dispatch (`null`) without passing the target. A read that fails, an
+#      unknown shape, a loop, `null` before the target or more than 8 hops
+#      exits 5 as `not proven stored` (it may have started a follow-up).
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
 #      <reason>` (stored in a Run mailbox, or `nudge` given for a `run:` or
@@ -229,6 +253,8 @@
 # TIME BUDGET. Each Orca call is bounded at 15 s plus a 2 s kill, so with its
 # retry a call takes at most 34 s: the send and the re-read take at most 68 s,
 # plus the nudge's own bound (about 220 s, its header): about 290 s in all.
+# A follow-up chain (L89 b) is the send plus at most 9 reads and no nudge:
+# at most 340 s.
 # A session that runs the block again after a failure makes a new request id,
 # so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
@@ -951,13 +977,19 @@ def verdict():
         # a finished `--keep-open` worker starts a follow-up dispatch. The
         # reply then has no `message`, but `dispatchId` (the new dispatch),
         # `followUpOf` and `state: "ready"`. Only that whole shape counts.
+        # L89 b (orca-lab's 1.60.0 re-measure): `followUpOf` is a bare ctx_
+        # naming the NEWEST dispatch of the target's follow-up chain, so from
+        # the second send on it is not the target: CHAIN, which the caller
+        # proves from Orca's own records (THE FOLLOW-UP CHAIN, below).
         if m is None and typ not in ("reply", "worker_done") and target.startswith("dispatch:") \
-                and isinstance(r, dict) and r.get("state") == "ready" \
-                and r.get("followUpOf") in (target, target[len("dispatch:"):]):
+                and isinstance(r, dict) and r.get("state") == "ready":
+            fu, td = r.get("followUpOf"), target[len("dispatch:"):]
+            fu = fu[len("dispatch:"):] if isinstance(fu, str) and fu.startswith("dispatch:") else fu
             nd = r.get("dispatchId")
-            if isinstance(nd, str) and re.fullmatch(r"ctx_[A-Za-z0-9_-]{1,64}", nd) \
-                    and nd != target[len("dispatch:"):]:
-                return "FOLLOWUP dispatch:" + nd
+            if isinstance(fu, str) and re.fullmatch(r"ctx_[A-Za-z0-9_-]{1,64}", fu) \
+                    and isinstance(nd, str) and re.fullmatch(r"ctx_[A-Za-z0-9_-]{1,64}", nd) \
+                    and nd not in (td, fu):
+                return ("FOLLOWUP dispatch:" + nd) if fu == td else ("CHAIN dispatch:%s %s" % (nd, fu))
         return "FAIL the reply has no result.message.id"
     to = m.get("to_handle")
     if typ == "reply":
@@ -1067,6 +1099,79 @@ hits.sort()
 print(hits[-1][2], hits[-1][3])
 PY
 }
+# THE FOLLOW-UP CHAIN (punch-list L89 b; header). Proves that dispatch $1
+# (the reply's `followUpOf`) is in the target's follow-up chain: each hop is
+# `worker-show --dispatch <id>`, whose `result.dispatch.followUpOf` names the
+# dispatch it followed up, until the walk reaches the target. On failure it
+# sets cepa_send_chain_why and returns 1.
+cepa_send_chain() {
+  local x=$1 td=${cepa_send_target#dispatch:} hop seen=' ' nx
+  local -a env=()
+  cepa_send_chain_why="the follow-up names $1, and the follow-up chain of $cepa_send_target could not be read"
+  cepa_send_orca "$cepa_send_tmp/chain0.json" orchestration worker-show --dispatch "$td" --json --full || return 1
+  # Where the chain lives: a host dispatch's home record names its server
+  # (`result.server.environmentId`), a local one has no `server` key.
+  nx=$(python3 -I - "$cepa_send_tmp/chain0.json" "$td" <<'PY' 2>/dev/null
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+r = d["result"] if d.get("ok") is True else sys.exit(1)
+if not isinstance(r, dict) or not isinstance(r.get("dispatch"), dict) or r["dispatch"].get("id") != sys.argv[2]:
+    sys.exit(1)
+if "server" not in r:
+    print("local")
+    sys.exit(0)
+e = r["server"].get("environmentId") if isinstance(r["server"], dict) else None
+if not (isinstance(e, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._:%()@-]{0,99}", e)):
+    sys.exit(1)
+print("env " + e)
+PY
+) || return 1
+  case "$nx" in
+    local) ;;
+    'env '*) env=(--environment "${nx#env }") ;;
+    *) return 1 ;;
+  esac
+  for hop in 1 2 3 4 5 6 7 8; do
+    [ "$x" != "$td" ] || return 0
+    case "$seen" in *" $x "*) cepa_send_chain_why="the follow-up chain of $cepa_send_target loops at $x"; return 1 ;; esac
+    seen+="$x "
+    cepa_send_orca "$cepa_send_tmp/chain.json" orchestration worker-show --dispatch "$x" \
+      ${env[@]+"${env[@]}"} --json --full || return 1
+    nx=$(python3 -I - "$cepa_send_tmp/chain.json" "$x" <<'PY' 2>/dev/null
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+r = d["result"] if d.get("ok") is True else sys.exit(1)
+x = r.get("dispatch") if isinstance(r, dict) else None
+if not isinstance(x, dict) or x.get("id") != sys.argv[2] or "followUpOf" not in x:
+    sys.exit(1)
+f = x["followUpOf"]
+if f is None:
+    print("END")
+elif isinstance(f, str) and re.fullmatch(r"ctx_[A-Za-z0-9_-]{1,64}", f):
+    print(f)
+else:
+    sys.exit(1)
+PY
+) || return 1
+    if [ "$nx" = END ]; then
+      cepa_send_chain_why="the follow-up names $1, which is not in the follow-up chain of $cepa_send_target"
+      return 1
+    fi
+    x=$nx
+  done
+  [ "$x" != "$td" ] || return 0
+  cepa_send_chain_why="the follow-up names $1, and the follow-up chain of $cepa_send_target is longer than 8 hops"
+  return 1
+}
+case "$cepa_send_got" in
+  'CHAIN '*)
+    cepa_send_got=${cepa_send_got#CHAIN }
+    cepa_send_chain "${cepa_send_got#* }" || unproven "$cepa_send_chain_why"
+    echo "Orca send stored as a follow-up dispatch: ${cepa_send_got%% *} of $cepa_send_target, after ${cepa_send_got#* } in its follow-up chain (punch-list L89 b)"
+    [ -z "$cepa_send_downgraded" ] \
+      || echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"
+    exit 0 ;;
+esac
 case "$cepa_send_got" in
   ''|'FAIL '*)
     cepa_send_why=${cepa_send_got#FAIL }
@@ -1186,10 +1291,12 @@ if [ -n "$cepa_send_downgraded" ]; then
 fi
 # A host worker's terminal (L88) is not in this machine's worktree ps, where
 # orca-nudge.sh finds the row it guards on, so it is never nudged from here.
-if [ -n "$cepa_send_on" ] && [ "$cepa_send_mode" = nudge ]; then
-  echo "Orca nudge skipped: $cepa_send_target is on Orca server $cepa_send_on, and orca-nudge.sh reads only this machine's terminals"
-  echo "Ending first line: Needed from you: tell $(cepa_send_who "$cepa_send_target") to check its Orca inbox"
-  exit 1
+# Nor does it need it (L89 a, orca-lab's 1.60.0 re-measure, sender report):
+# the host Orca prompted its worker itself, which read the message and
+# replied. A row stored for another handle still takes the skip below.
+if [ -n "$cepa_send_on" ] && [ "$cepa_send_mode" = nudge ] && [ "$cepa_send_to" = "$cepa_send_target" ]; then
+  echo "Orca nudge not needed: $cepa_send_target is on Orca server $cepa_send_on, which prompts its own worker (punch-list L89 a)"
+  exit 0
 fi
 [ "$cepa_send_mode" = nudge ] || exit 0
 if [ "$cepa_send_to" != "$cepa_send_target" ]; then

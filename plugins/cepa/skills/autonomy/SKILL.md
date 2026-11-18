@@ -1798,7 +1798,13 @@ limits.
      worker starts a follow-up dispatch on it, and the reply names that
      dispatch, not a message. The script now prints `Orca send stored as a
      follow-up dispatch: …` for that shape, exit 0 (its header owns what
-     counts). Each such send starts one more dispatch on that worker.
+     counts). Each such send starts one more dispatch on that worker. From
+     the second send on, `followUpOf` names the newest dispatch of that
+     worker's follow-up chain, not the target (orca-lab's 1.60.0
+     re-measure, sender report). The script then counts the send only when
+     Orca's own `worker-show` records lead from that dispatch back to the
+     target, and otherwise exits 5 as not proven stored (L89 b; its header,
+     THE FOLLOW-UP CHAIN, owns the rule and the measurement).
    - **A host worker's handle takes `on:`** (punch-list L88). A `term_`
      handle that a paired Orca server issued (a worker on an Orca WSL or SSH
      host) is reached only through that server: the block adds the line
@@ -1806,8 +1812,10 @@ limits.
      starting with a letter or digit), and the script passes
      `--on <server>`. `on:` goes only with a `term_` target. Such a target
      is never nudged from this machine (`orca-nudge.sh` reads only this
-     machine's terminals): with `nudge` the script prints
-     `Orca nudge skipped: …` and the `tell <handle>` ending line. Orca
+     machine's terminals), and needs no nudge: the host Orca prompts its own
+     worker (L89 a, orca-lab's 1.60.0 re-measure, sender report). So with
+     `nudge`, a send stored for the target prints `Orca nudge not needed: …`
+     and exits 0, with no ask to the operator. Orca
      stores such a send only in the host's inbox, so the script re-reads it
      there (L89 a; the `on:` field in its header owns the measurement).
      When a send fails with the WSL interop error (stderr holding
@@ -2298,6 +2306,19 @@ limits.
      #43869 is fixed. Sender report, not measured here: a coordinator in a
      terminal on the WSL host that starts workers there without `--on`
      gets a clean `worker_done`.
+   - **Release a follow-up chain by its newest dispatch** (punch-list L89;
+     orca-lab's 1.60.0 re-measure, sender report). After follow-ups (rule
+     1), `worker-release` of the original dispatch answers state retained,
+     reason `ownership_transferred`, and closes nothing; only the newest
+     follow-up's release closes the terminal. Re-measured here read only
+     (Orca 1.4.262, 2026-11-18, `worker-show --environment
+     wsl:ubuntu-24.04 --dispatch <id> --json --full` along a host chain):
+     the chain's one terminal resource names the newest dispatch as
+     `ownerDispatchId`, and every older dispatch shows `resource` `absent`.
+     So a coordinator that releases a host worker reads `worker-show` for
+     the newest dispatch of its chain (the one no other dispatch's
+     `followUpOf` names) and releases that one. No cepa script releases a
+     dispatch.
    - **A worker with no preamble sends its report, never only prints it.**
      When line 2 of its prompt is a `Report to:` line (rule 2), its final
      report sends the Handoff block to that handle with rule 1's send, then
