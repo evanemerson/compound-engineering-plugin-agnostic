@@ -2650,6 +2650,21 @@ L91. **Lane contract item 7 passes `timeout --foreground` without `-k` or `</dev
     PR #141 review finding #30 (deferred; operator 2026-11-17). Tighten the
     check only if the lane-stack skill makes `-k` a hard rule. Same review
     file as L90.
+L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From orca-lab coord@main (outbox, 2026-11-17; evidence: orca-lab
+    docs/upgrades/2026-11-17-1.4.259-to-1.4.262.md, stablyai/orca #43322
+    and #43550; sender-reported, not measured here). From 1.4.262 Orca's
+    hourly maintenance deletes a Run with no open Task/Dispatch/question,
+    no live or unreleased worker terminal, no row in 24 h, and no live
+    coordinator pane that bound it. A reboot keeps the pane, so it is safe;
+    a coordinator tab closed for more than a day loses its Run. Then
+    rebind with that `run:` fails at `run-show` with "an Orca read failed"
+    (exit 3). Fix: measure run-show's error for a deleted Run first; then
+    rebind says "Run retired; create a new one", and §12b rule 2 covers
+    that path (prompts carry the old `Orca Run:` id).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
