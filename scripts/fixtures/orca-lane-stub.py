@@ -106,7 +106,7 @@ verb = argv[:2]
 # path, repoId and isMainWorktree. `hostlane` lists STUB_HOST_LANE as a
 # non-main host lane of the first state repo; `hostlanemain` lists it as a main
 # row; `hostlaneother` under a host repo at another path; `hostlistfail` fails
-# the host worktree list.
+# the host worktree list; `hostlistpartial` marks it truncated.
 if verb in (["repo", "list"], ["worktree", "list"]) and "--environment" in argv:
     hr = st["repos"][0]
     hpath = hr["path"] if "hostlaneother" not in MODE else "/srv/elsewhere"
@@ -124,7 +124,8 @@ if verb in (["repo", "list"], ["worktree", "list"]) and "--environment" in argv:
         rows.append({"id": "host-%s::%s" % (hr["id"], p), "repoId": "host-" + hr["id"], "path": p,
                      "isMainWorktree": "hostlanemain" in MODE, "hostId": "local", "displayName": hl})
     out({"id": "x", "ok": True, "result": {"worktrees": rows, "hostScope": {"hostIds": ["local"], "omittedHostIds": []},
-                                           "totalCount": len(rows), "truncated": False}})
+                                           "totalCount": len(rows) + ("hostlistpartial" in MODE),
+                                           "truncated": "hostlistpartial" in MODE}})
 if argv[:2] == ["repo", "list"]:
     if "repofail" in MODE:
         sys.exit(1)

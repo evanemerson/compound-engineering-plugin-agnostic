@@ -5,10 +5,11 @@ shard holds what this branch did not close.
 
 ## Undone items (2026-11-17)
 
-1. [P2] **CLOSED 2026-11-18 by fix/matrix/orca-host-send-gaps (tab44@matrix)**
-   as measured: orca-lab sent both live on 1.60.0 (msg_6a0b36ef91b6, sender
-   report), and that branch fixes the two gaps it found. Still not sent live
-   by cepa (that branch's item 1, below). Was: L89 a, b: not sent live by cepa. A real `on:` send or a `dispatch:`
+1. [P2] **Fixed on orca-lab's report, 2026-11-18, by fix/matrix/orca-host-send-gaps
+   (tab44@matrix); a live cepa re-run is still owed (that branch's item 1,
+   below).** orca-lab sent both live on cepa 1.60.0 (msg_6a0b36ef91b6, sender
+   report), and that branch fixes the two gaps it found. Was: L89 a, b: not
+   sent live by cepa. A real `on:` send or a `dispatch:`
    send to a finished `--keep-open` host worker writes into a live session
    (and b starts a follow-up dispatch), so this branch measured only the
    reads (`inbox --environment` with the id and with the name). orca-lab can
@@ -25,7 +26,9 @@ shard holds what this branch did not close.
    an id that never existed (`run-show --id run_cepaprobe0000 --json
    --full`: exit 1, `"ok": false`). Orca has no verb that deletes a Run, so
    no throwaway Run could be aged.
-4. [P2] L89 e (shard 2026-11-16 item 3b): `orca-lane.sh create` and `name`
+4. [P2] **Partly addressed 2026-11-18 by fix/matrix/orca-host-send-gaps: `rm`
+   names a host lane as not supported; `create` and `name` still do not
+   support a host repo.** L89 e (shard 2026-11-16 item 3b): `orca-lane.sh create` and `name`
    for a repo added on a host are not supported. The host's `repo list
    --environment` row has its own id and null `connectionId`/`hostId`.
 5. [P3] L89 c: `rm` reads at most one Orca WSL host (10-minute budget); a
@@ -38,7 +41,11 @@ shard holds what this branch did not close.
 
 Findings file: todos/review-2026-11-17-213659-fix-matrix-orca-wsl-host-and-retired-run.md
 
-7. [P2] #13 orca-send.sh follow-up success has no re-read; add `worker-show --dispatch <new>` once its shape for a host follow-up is measured.
+7. [P2] #13 orca-send.sh follow-up success has no re-read. Updated 2026-11-18
+   (fix/matrix/orca-host-send-gaps): the host `worker-show` shape is now
+   measured and used for the chain walk, but neither FOLLOWUP nor CHAIN reads
+   the NEW dispatch (`worker-show --dispatch <new>`, `followUpOf` = the
+   dispatch it followed). Still open; PR #143 review finding 5.
 8. [P2] #14 orca-rebind.sh reads `run_not_found` on this machine's Orca only (fine while a coordinator's Run lives where it runs).
 9. [P2] #15 orca-health.sh: a note or alert for skipped host dispatches, keyed on `workerState`/`dispatchStatus`.
 10. [P3] #17 test gaps: hostread `"local" in cov`; hostagents count, limit, hostIds and agents checks; wslenvs runtimeId fallback; rebind with two WSL hosts; `startswith(me + " on ")`.
@@ -47,11 +54,12 @@ Findings file: todos/review-2026-11-17-213659-fix-matrix-orca-wsl-host-and-retir
 
 ## fix/matrix/orca-host-send-gaps (2026-11-18, tab44@matrix, task_62849e1debfb)
 
-Closed here (orca-lab's 1.60.0 re-measure, msg_6a0b36ef91b6, sender report):
-L89 a (a stored `on:` send exits 0, no operator ask), L89 b (a `followUpOf`
-in the target's follow-up chain counts, proven by `worker-show`), L89 c/e
-(`orca-lane.sh rm` names a host-side lane as not supported), and the release
-note (§12b rule 3, "Release a follow-up chain by its newest dispatch").
+Fixed here on orca-lab's re-measure of cepa 1.60.0 (msg_6a0b36ef91b6, sender
+report): L89 a (a stored `on:` send exits 0, no operator ask), L89 b (a
+`followUpOf` in the target's follow-up chain counts, proven by
+`worker-show`), L89 e for `rm` only (it names a host-side lane as not
+supported), and the release note (§12b rule 3, "Release a follow-up chain by
+its newest dispatch").
 Undone:
 
 1. [P2] L89 a, b, c: not re-run live by cepa. A live `on:` or `dispatch:`
@@ -64,7 +72,28 @@ Undone:
    row (orca-chat-scratch), so a non-main host lane row is assumed to share
    its shape (`repoId`, Linux `path`, `isMainWorktree` false).
 3. [P3] L89 b: a follow-up chain longer than 8 hops exits 5 (`not proven
-   stored`); the longest measured chain is 4 dispatches (3 hops).
+   stored`); the longest measured chain is 4 dispatches (3 hops), probe in
+   orca-send.sh's header (THE FOLLOW-UP CHAIN exit-code entry). PR #143
+   review finding 3: a sender that keeps addressing the first dispatch
+   reaches the cap on its 10th send; §12b now says to send to the printed
+   `dispatch:<new>`.
 4. [P3] Release: no script finds a chain's newest dispatch; §12b rule 3 tells
    the coordinator to read `worker-show`. A helper could walk the chain.
+
+Deferred from the PR #143 review (2026-11-18). Findings file:
+todos/review-2026-11-18-081831-fix-matrix-orca-host-send-gaps.md
+
+5. [P2] #3 orca-send.sh: the hop cap (8) makes a send to a long chain's first
+   dispatch a false exit 5; lift the cap within the time budget, or add an
+   Orca read that names a terminal's newest dispatch.
+6. [P2] #4 orca-send.sh: a stored `on:` send exits 0 on one sender report
+   (an idle worker); measure a busy or asking host worker, or read its state
+   on the host before `not needed`.
+7. [P3] #5 FOLLOWUP and CHAIN never read the new dispatch (see item 7 above).
+8. [P3] #8 test gaps: a flag-shaped `server.environmentId`, a timed-out hop
+   read, UNC host paths, failed `environment list`/`repo list` on the
+   host-lane path, the local home read's argv.
+9. [P3] #11 chain failure reasons do not name the hop or the cause.
+10. [P3] #12 a host-created follow-up's home record is not measured: a CHAIN
+    walk that starts from one may exit 5 falsely.
 

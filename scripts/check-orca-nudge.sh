@@ -111,7 +111,8 @@
 #              case whose row fails only that filter. `"ok": false` makes no
 #              read.
 #   HOSTON   — punch-list L88: the `on:` field becomes `--on <server>`; a
-#              host target is never nudged, and a send stored for it exits 0
+#              host target is never nudged, and a send stored for it (the
+#              target itself, not another handle) exits 0
 #              with no operator ask (L89 a); `on:` with a non-term_ target or a
 #              bad value is refused before any call.
 #   CHAIN    — punch-list L89 b: a follow-up reply whose followUpOf names
@@ -1116,7 +1117,7 @@ if LEGS in ("all", "send"):
           osend_json=fup(followUpOf=DID), inbox_json=NOROW)
     store("FOLLOWUP that exited non-zero fails", 5, [UNPROVEN + "the send exited 1", FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(), osend_rc=1, inbox_json=NOROW)
-    # --- CHAIN (punch-list L89 b; orca-lab's 1.60.0 re-measure): followUpOf
+    # --- CHAIN (punch-list L89 b; orca-lab's re-measure of cepa 1.60.0): followUpOf
     # names the NEWEST dispatch of the target's follow-up chain. The send
     # counts only when worker-show's followUpOf links lead back to the target.
     # Shapes re-measured on Orca 1.4.262, 2026-11-18: a host dispatch's home
@@ -1161,6 +1162,7 @@ if LEGS in ("all", "send"):
     store("CHAIN of 8 hops counts", 0, [chain_line("ctx_l8")], mode="no-nudge", target=FD,
           osend_json=fup(followUpOf="ctx_l8"), inbox_json=NOROW, env_extra=chain(LONG))
     CW = "the follow-up names %s, "
+    DNR = "; a follow-up dispatch may already exist, so do not resend"
     for name, fu, recs, why, home in [
             ("CHAIN stranger's dispatch fails", "ctx_5000", {"ctx_5000": "ctx_4000", "ctx_4000": None},
              CW % "ctx_5000" + "which is not in the follow-up chain of " + FD, None),
@@ -1189,8 +1191,25 @@ if LEGS in ("all", "send"):
         env = chain(recs, home=home)
         if name == "CHAIN with no worker-show reads fails":
             env = {"STUB_WSHOWDIR": os.path.join(TMP, "no-such-dir")}
-        store(name, 5, [UNPROVEN + why, FPASTE], mode="no-nudge", target=FD, osend_json=fup(followUpOf=fu),
+        store(name, 5, [UNPROVEN + why + DNR, FPASTE], mode="no-nudge", target=FD, osend_json=fup(followUpOf=fu),
               inbox_json=NOROW, env_extra=env)
+    # PR #143 review: a hop whose followUpOf is not a ctx_ id is never read,
+    # even when a record for it exists (a flag-shaped id would reach argv).
+    calls = store("CHAIN hop with a flag-shaped id is never read", 5,
+                  [UNPROVEN + CW % "ctx_c0000000000b" + "and the follow-up chain of %s could not be read" % FD + DNR, FPASTE],
+                  mode="no-nudge", target=FD, osend_json=fup(followUpOf="ctx_c0000000000b"), inbox_json=NOROW,
+                  env_extra=chain({"ctx_c0000000000b": "--json",
+                                   "--json": {"ok": True, "result": {"dispatch": {"id": "--json", "followUpOf": "ctx_abcdef"}}}}))
+    bad = [c for c in calls if c[:2] == ["orchestration", "worker-show"] and "--json" in c[3:4]]
+    (ok if not bad else miss)("CHAIN flag-shaped id reaches no argv" if not bad else "CHAIN flag-shaped id reaches no argv: %r" % bad)
+    # The reply's followUpOf must be a ctx_ id before any walk.
+    for name, fu in (("CHAIN flag-shaped followUpOf is not a follow-up", "--json"),
+                     ("CHAIN null followUpOf is not a follow-up", None)):
+        env = chain(dict(HOP, **{"--json": {"ok": True, "result": {"dispatch": {"id": "--json", "followUpOf": "ctx_abcdef"}}}}))
+        calls = store(name, 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge", target=FD, osend_json=fup(followUpOf=fu),
+                      inbox_json=NOROW, env_extra=env)
+        ws = [c for c in calls if c[:2] == ["orchestration", "worker-show"]]
+        (ok if not ws else miss)(name + " makes no worker-show call" if not ws else name + " makes no worker-show call: %r" % ws)
     store("CHAIN new dispatch equal to the target is not a follow-up", 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(followUpOf="ctx_c0000000000b", dispatchId="ctx_abcdef"), inbox_json=NOROW,
           env_extra=chain(HOP))
@@ -1309,7 +1328,7 @@ if LEGS in ("all", "send"):
     store("HOSTON read-back sender form of another handle fails", 5, [NOSTORE + EMPTY1, PASTE], raw=([], on_fields()),
           osend_rc=1, osend_json="", inbox_json=NOROW, inbox_env_json=inbox(brow(frm=OTHER + " on Sidewalk26")),
           env_extra={"ORCA_TERMINAL_HANDLE": H})
-    # L89 a (orca-lab's 1.60.0 re-measure): the host Orca prompts its own
+    # L89 a (orca-lab's re-measure of cepa 1.60.0): the host Orca prompts its own
     # worker, so a stored host send needs no nudge and no operator ask.
     calls = store("HOSTON nudge is not needed, the host prompts its worker", 0,
                   [STORED, "Orca nudge not needed: %s is on Orca server %s, which prompts its own worker (punch-list L89 a)" % (H, SRV)],

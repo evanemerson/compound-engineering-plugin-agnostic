@@ -1803,8 +1803,11 @@ limits.
      worker's follow-up chain, not the target (orca-lab's 1.60.0
      re-measure, sender report). The script then counts the send only when
      Orca's own `worker-show` records lead from that dispatch back to the
-     target, and otherwise exits 5 as not proven stored (L89 b; its header,
-     THE FOLLOW-UP CHAIN, owns the rule and the measurement).
+     target, and otherwise exits 5 as not proven stored, saying not to
+     resend (L89 b; its header, THE FOLLOW-UP CHAIN, owns the rule and the
+     measurement). So send the next message to the `dispatch:<new>` the
+     script printed: that send is the direct follow-up, and the walk stays
+     short.
    - **A host worker's handle takes `on:`** (punch-list L88). A `term_`
      handle that a paired Orca server issued (a worker on an Orca WSL or SSH
      host) is reached only through that server: the block adds the line
@@ -1813,7 +1816,7 @@ limits.
      `--on <server>`. `on:` goes only with a `term_` target. Such a target
      is never nudged from this machine (`orca-nudge.sh` reads only this
      machine's terminals), and needs no nudge: the host Orca prompts its own
-     worker (L89 a, orca-lab's 1.60.0 re-measure, sender report). So with
+     worker (L89 a, orca-lab's re-measure of cepa 1.60.0, sender report). So with
      `nudge`, a send stored for the target prints `Orca nudge not needed: …`
      and exits 0, with no ask to the operator. Orca
      stores such a send only in the host's inbox, so the script re-reads it
@@ -2307,10 +2310,10 @@ limits.
      terminal on the WSL host that starts workers there without `--on`
      gets a clean `worker_done`.
    - **Release a follow-up chain by its newest dispatch** (punch-list L89;
-     orca-lab's 1.60.0 re-measure, sender report). After follow-ups (rule
+     orca-lab's re-measure of cepa 1.60.0, sender report). After follow-ups (rule
      1), `worker-release` of the original dispatch answers state retained,
      reason `ownership_transferred`, and closes nothing; only the newest
-     follow-up's release closes the terminal. Re-measured here read only
+     follow-up's release closes the terminal. Re-measured by PR #143, read only
      (Orca 1.4.262, 2026-11-18, `worker-show --environment
      wsl:ubuntu-24.04 --dispatch <id> --json --full` along a host chain):
      the chain's one terminal resource names the newest dispatch as

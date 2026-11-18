@@ -44,7 +44,7 @@
 #                           never nudged from here: orca-nudge.sh reads this
 #                           machine's `worktree ps`, which does not list a host
 #                           terminal. Nor is it needed: the host Orca prompts
-#                           its own worker (orca-lab's 1.60.0 re-measure,
+#                           its own worker (orca-lab's re-measure of cepa 1.60.0,
 #                           msg_6a0b36ef91b6, sender report: the worker read
 #                           the message and replied). So with `nudge`, a row
 #                           stored for the target prints `Orca nudge not
@@ -58,7 +58,7 @@
 #                           <server>` (its `--help`: "a saved paired Orca
 #                           server (id or name)", the same as `--on`). The
 #                           read-back takes that `from_handle` form only with
-#                           `on:`. This run measured the read itself (Orca
+#                           `on:`. PR #142's run measured the read itself (Orca
 #                           1.4.262, 2026-11-17, host live): `orchestration
 #                           inbox --environment <sel> --limit 3 --json --full`
 #                           answered `"ok": true` with the host's rows for
@@ -135,7 +135,9 @@
 #      re-measure (msg_6a0b36ef91b6, sender report): it is a bare `ctx_…`
 #      naming the NEWEST dispatch of the chain, so every send after the
 #      first carries one. THE FOLLOW-UP CHAIN proves it from Orca's own
-#      records, re-measured here (Orca 1.4.262, 2026-11-18, read only): on
+#      records, re-measured by PR #143 (Orca 1.4.262, 2026-11-18, read only;
+#      the chains found with `orchestration worker-list --environment
+#      wsl:ubuntu-24.04 --limit 100 --json --full`, 15 dispatches): on
 #      the WSL host, `worker-show --environment wsl:ubuntu-24.04 --dispatch
 #      <id> --json --full` gives `result.dispatch.followUpOf` = the dispatch
 #      it followed up (chains of 4, 3 and 3 dispatches, each sharing one
@@ -144,16 +146,19 @@
 #      and a local dispatch's record has no `server` key. So the walk reads
 #      the target's record here, then each hop on the target's server, from
 #      <ctx> back along `followUpOf`, and counts the send only when it
-#      reaches the target within 8 hops. A stranger's dispatch cannot pass:
-#      its `followUpOf` links, written by Orca, end at its own first
-#      dispatch (`null`) without passing the target. A read that fails, an
-#      unknown shape, a loop, `null` before the target or more than 8 hops
+#      reaches the target within the hop cap (8, the `for hop` loop). A
+#      stranger's dispatch cannot pass, by construction (not run against
+#      Orca): its `followUpOf` links, written by Orca, end at its own first
+#      dispatch (`null`) without passing the target. A sender keeps chains
+#      short by sending the next message to the `dispatch:<new>` it was
+#      given: that send is then the direct follow-up, with no walk. A read that fails, an
+#      unknown shape, a loop, `null` before the target or more hops than the cap
 #      exits 5 as `not proven stored` (it may have started a follow-up).
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
-#      <reason>` (stored in a Run mailbox, or `nudge` given for a `run:` or
-#      `dispatch:` target and sent as `no-nudge`), or nothing more
-#      (`no-nudge`).
+#      <reason>` (stored in a Run mailbox, `nudge` given for a `run:` or
+#      `dispatch:` target and sent as `no-nudge`, or a host `term_` target
+#      given `on:` and stored for it, L89 a), or nothing more (`no-nudge`).
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
 #      own lines, its `Ending first line:` included, or this script's own
 #      skip (stored for another handle; orca-nudge.sh missing or would not
@@ -977,7 +982,7 @@ def verdict():
         # a finished `--keep-open` worker starts a follow-up dispatch. The
         # reply then has no `message`, but `dispatchId` (the new dispatch),
         # `followUpOf` and `state: "ready"`. Only that whole shape counts.
-        # L89 b (orca-lab's 1.60.0 re-measure): `followUpOf` is a bare ctx_
+        # L89 b (orca-lab's re-measure of cepa 1.60.0): `followUpOf` is a bare ctx_
         # naming the NEWEST dispatch of the target's follow-up chain, so from
         # the second send on it is not the target: CHAIN, which the caller
         # proves from Orca's own records (THE FOLLOW-UP CHAIN, below).
@@ -1166,7 +1171,10 @@ PY
 case "$cepa_send_got" in
   'CHAIN '*)
     cepa_send_got=${cepa_send_got#CHAIN }
-    cepa_send_chain "${cepa_send_got#* }" || unproven "$cepa_send_chain_why"
+    # A failed walk may follow a follow-up Orca did start: a resend would
+    # start another one (PR #143 review), so the reason says so.
+    cepa_send_chain "${cepa_send_got#* }" \
+      || unproven "$cepa_send_chain_why; a follow-up dispatch may already exist, so do not resend"
     echo "Orca send stored as a follow-up dispatch: ${cepa_send_got%% *} of $cepa_send_target, after ${cepa_send_got#* } in its follow-up chain (punch-list L89 b)"
     [ -z "$cepa_send_downgraded" ] \
       || echo "Orca nudge not needed: $cepa_send_target is a mailbox Orca delivers; sent as no-nudge"
@@ -1291,7 +1299,7 @@ if [ -n "$cepa_send_downgraded" ]; then
 fi
 # A host worker's terminal (L88) is not in this machine's worktree ps, where
 # orca-nudge.sh finds the row it guards on, so it is never nudged from here.
-# Nor does it need it (L89 a, orca-lab's 1.60.0 re-measure, sender report):
+# Nor does it need it (L89 a, orca-lab's re-measure of cepa 1.60.0, sender report):
 # the host Orca prompted its worker itself, which read the message and
 # replied. A row stored for another handle still takes the skip below.
 if [ -n "$cepa_send_on" ] && [ "$cepa_send_mode" = nudge ] && [ "$cepa_send_to" = "$cepa_send_target" ]; then
