@@ -2695,6 +2695,13 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
        says retained/ownership_transferred; release the newest follow-up.
     f also hits follow-up worker_done (#43869).
     Owner: tab44@matrix (dispatched 2026-11-18, operator's choice).
+    FIXED 2026-11-18 — PR #143 (`1bd0e2d`), v1.60.1 (tab44, then tab45 split
+    the orca-lane controls into 24 shards): a exits 0; b accepts a
+    followUpOf in the target's chain (worker-show links, at most 8 hops;
+    operator kept 8 and the `on:` exit 0); c names host-side lanes as not
+    supported; release-by-newest documented in §12b rule 3. Residuals in
+    the 2026-11-17 shard (new section). L89 stays open for the shard's
+    live re-measures; host coordinator gaps are L93.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
