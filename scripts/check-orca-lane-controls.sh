@@ -10,7 +10,7 @@
 # never a skip: the shipped script changed shape and the mutant needs
 # re-reading.
 #
-# Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, HOOKS, BLOCK, WSLHOST) has
+# Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, HOOKS, BLOCK, WSLHOST, HOSTLANE) has
 # at least one mutant here that only its own cases kill; the last control
 # asserts that, so a new leg that also kills an old leg's only mutant shows.
 # It reads each mutant's calibrated MISS set, not its run: every shard proves
@@ -30,6 +30,10 @@
 # cancelled at the bound) — about 10.7s of hosted wall time per check run,
 # 4 at a time. The PR #133 body has the per-shard times. PR #134: 107 mutants
 # on 4 shards took 7m42s to 9m58s (run 41832679426), so it went to 8 shards.
+# PR #143: 145 mutants on 8 shards took 7m11s to 10m24s, two cancelled at the
+# bound (run 44329468205). Each shard pays the unmutated baseline (about 100s
+# locally) before its mutants, so it went to 24 shards, and the check moved
+# out of shard 1's job.
 #
 # STATED LIMITS: a mutant is one substitution; two compensating edits are not
 # modeled. The controls prove each named case can fail, not that the case
@@ -90,14 +94,23 @@ MUTANTS = [
     ('wsl-host-scope', 'if not isinstance(hs, dict) or not hs.get("hostIds") or hs.get("omittedHostIds") != []:', 'if not isinstance(hs, dict):', {'WSLHOST wsl,hostpsomit keeps the lane'}),
     ('wsl-host-trunc', 'if not isinstance(rows, list) or r.get("truncated") is not False \\', 'if not isinstance(rows, list) \\', {'WSLHOST wsl,hostpspartial keeps the lane'}),
     ('wsl-host-path-any', '        if p is None:\n            sys.exit(1)\n        if p == lane:', '        if p == lane:', {'WSLHOST wsl,hostidle,hostotherdistro keeps the lane'}),
-    ('wsl-kind-any', 'od.get("kind") == "wsl"', 'True', {'WSLHOST host ps read before the local one', 'WSLHOST host read with no agent in the lane', 'WSLHOST lane row with no agent on the host', 'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST no WSL host', 'WSLHOST omitted WSL host beside another omitted host keeps the lane', 'WSLHOST omitted host read clean on its server', 'WSLHOST omitted host that is not the WSL host keeps the lane', 'WSLHOST wsl,hostagent keeps the lane', 'WSLHOST wsl,hostidle,hostotherdistro keeps the lane', 'WSLHOST wsl,hostpsfail keeps the lane', 'WSLHOST wsl,hostpsomit keeps the lane', 'WSLHOST wsl,hostpspartial keeps the lane'}),
-    ('wsl-cap-off', '    if len(out) > 1:\n        sys.exit(3)\n', '', {'WSLHOST wsl2 keeps the lane'}),
+    ('wsl-kind-any', 'od.get("kind") == "wsl"', 'True', {'HOSTLANE host main row is not a lane', 'HOSTLANE host repo at another path is not this repo', 'HOSTLANE host-side lane is named not supported', 'HOSTLANE no WSL host keeps the plain refusal', 'HOSTLANE other host lane name keeps the plain refusal', "HOSTLANE reads the host's repo and worktree lists", 'WSLHOST host ps read before the local one', 'WSLHOST host read with no agent in the lane', 'WSLHOST lane row with no agent on the host', 'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST no WSL host', 'WSLHOST omitted WSL host beside another omitted host keeps the lane', 'WSLHOST omitted host read clean on its server', 'WSLHOST omitted host that is not the WSL host keeps the lane', 'WSLHOST wsl,hostagent keeps the lane', 'WSLHOST wsl,hostidle,hostotherdistro keeps the lane', 'WSLHOST wsl,hostpsfail keeps the lane', 'WSLHOST wsl,hostpsomit keeps the lane', 'WSLHOST wsl,hostpspartial keeps the lane'}),
+    ('wsl-cap-off', '    if len(out) > 1:\n        sys.exit(3)\n', '', {'HOSTLANE two WSL hosts are not ruled out', 'WSLHOST wsl2 keeps the lane'}),
     ('wsl-envs-fail-ok', '|| kept "kept $cepa_ln_lane — environment list failed, so an agent', '|| true "kept $cepa_ln_lane — environment list failed, so an agent', {'WSLHOST envfail keeps the lane'}),
     ('wsl-cleared-off', ' >"$cepa_ln_tmp/cleared"', ' >/dev/null', {'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST omitted host read clean on its server'}),
     ('wsl-cleared-any', 'if clr and all(w is not None and w in clr for w in want):', 'if clr:', {'WSLHOST omitted WSL host beside another omitted host keeps the lane', 'WSLHOST omitted host that is not the WSL host keeps the lane'}),
     ('wsl-hostread-note', 'ok, st = True, "hostread "', 'ok, st = True, "counted "', {'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST omitted host read clean on its server'}),
     ('wsl-cleared-no-id', 'printf \'%s %s\\n\' "$cepa_ln_wid" "$cepa_ln_wrt"', 'printf \'%s\\n\' "$cepa_ln_wrt"', {'WSLHOST measured omitted id maps to the WSL host by its id'}),
     ('wsl-cleared-all-to-any', 'all(w is not None and w in clr for w in want)', 'any(w is not None and w in clr for w in want)', {'WSLHOST omitted WSL host beside another omitted host keeps the lane'}),
+    # L89 e: rm of a name only the WSL host lists names it as not supported.
+    ('hostlane-off', 'cepa_ln_hl=$(cepa_ln_hostlane) || { cepa_ln_hlrc=1 cepa_ln_hl=; }', 'cepa_ln_hl=', {'HOSTLANE failed host list is not ruled out', 'HOSTLANE host-side lane is named not supported', 'HOSTLANE partial host list is not ruled out', "HOSTLANE reads the host's repo and worktree lists", 'HOSTLANE two WSL hosts are not ruled out'}),
+    ('hostlane-main-ok', ' or w.get("isMainWorktree") is not False:', ':', {'HOSTLANE host main row is not a lane'}),
+    ('hostlane-any-repo', '\n           and linux(x.get("path"), distro) == main}', '}', {'HOSTLANE host repo at another path is not this repo'}),
+    ('hostlane-basename-any', 'if p and os.path.basename(p) == lane and re', 'if p and re', {'HOSTLANE other host lane name keeps the plain refusal'}),
+    ('hostlane-envs-any', 'w=$(cepa_ln_py wslenvs "$cepa_ln_tmp/hlenvs.json") || return 1\n  [ -n "$w" ] || return 0', 'w="wsl:ubuntu-24.04 -"', {'HOSTLANE no WSL host keeps the plain refusal', 'HOSTLANE two WSL hosts are not ruled out'}),
+    # PR #143 review: a failed or partial host read never says "no lane".
+    ('hostlane-fail-says-none', '    || kept "kept $cepa_ln_lane — no lane of this repo has that name in this machine', '    || true "kept $cepa_ln_lane — no lane of this repo has that name in this machine', {'HOSTLANE failed host list is not ruled out', 'HOSTLANE partial host list is not ruled out', 'HOSTLANE two WSL hosts are not ruled out'}),
+    ('hostlane-partial-ok', 'not isinstance(rows, list) or r.get("truncated") is not False \\\n            or r.get("totalCount") != len(rows) or len(rows) >= LIMIT:\n        sys.exit(1)\n    ids', 'not isinstance(rows, list):\n        sys.exit(1)\n    ids', {'HOSTLANE partial host list is not ruled out'}),
     # L80: the shadow refusal names Orca's control.
     ("shadow-fix-unnamed", 'Worktree Hooks > Advanced, set Command source to \\"orca.yaml only\\", then empty the local setup box, then ask again"',
      'Worktree Hooks, then ask again"', {"HOOKS local-only differing refuses"}),
@@ -237,7 +250,7 @@ HELPER_MUTANTS = [
     ("helper-no-default-patch", 'if patch_in "refs/remotes/origin/$t" "$s"; then ok[$s]=5', 'if false; then ok[$s]=5', None),
     ("helper-gh-failure-ok", '    || { echo "unknown — gh pr list failed for branch $b"; exit 3; }', '    || true', None),
 ]
-LEGS = ["FIELDS", "SCOPE", "READS", "CREATE", "NAME", "RM", "HOOKS", "BLOCK", "WSLHOST"]
+LEGS = ["FIELDS", "SCOPE", "READS", "CREATE", "NAME", "RM", "HOOKS", "BLOCK", "WSLHOST", "HOSTLANE"]
 
 # Calibrated sets for the mutants written None above (kept apart so each
 # mutant line stays readable). Measured by running this file, then read.
@@ -573,7 +586,7 @@ for n in sorted({want_n or 1, NSHARDS}):
         "shards of N=%d partition the %d mutants, none empty: sizes %r" % (n, len(mnames), [len(x) for x in parts]))
 # Planted workflow edits, checked in process: each must make wf_problems red.
 J2, J4 = "\n  orca-lane-2:\n", "\n  orca-lane-4:\n"
-R4 = "        run: bash scripts/check-orca-lane-controls.sh --shard 4/8\n"
+R4 = "        run: bash scripts/check-orca-lane-controls.sh --shard 4/24\n"
 WF_PLANTS = [
     ("two shards in one job", J2, "\n"),
     ("job-level if: false", J4, J4 + "    if: false\n"),
@@ -582,15 +595,15 @@ WF_PLANTS = [
     # and every other job stays.
     ("shard 4 job deleted", (lambda a: wf[a:a + len(J4) + re.search(
         r"(?m)^  (?=[A-Za-z0-9_-]+:[ \t]*$)|\Z", wf[a + len(J4):]).start()] if a >= 0 else J4)(wf.find(J4)), "\n"),
-    ("shard 4 run line commented out", R4, "        # run: bash scripts/check-orca-lane-controls.sh --shard 4/8\n"),
+    ("shard 4 run line commented out", R4, "        # run: bash scripts/check-orca-lane-controls.sh --shard 4/24\n"),
     ("shard 4 run line in a block scalar", R4,
-     "        run: |\n          bash scripts/check-orca-lane-controls.sh --shard 4/8\n"),
+     "        run: |\n          bash scripts/check-orca-lane-controls.sh --shard 4/24\n"),
     ("shard 4 run line with || true", R4, R4[:-1] + " || true\n"),
     ("a quoted mention beside the shard 4 run line", R4,
-     R4 + "      - run: echo bash scripts/check-orca-lane-controls.sh --shard 4/8\n"),
+     R4 + "      - run: echo bash scripts/check-orca-lane-controls.sh --shard 4/24\n"),
     ("shard 2 step without if: always()",
-     "        if: always()\n        run: bash scripts/check-orca-lane-controls.sh --shard 2/8\n",
-     "        run: bash scripts/check-orca-lane-controls.sh --shard 2/8\n"),
+     "        if: always()\n        run: bash scripts/check-orca-lane-controls.sh --shard 2/24\n",
+     "        run: bash scripts/check-orca-lane-controls.sh --shard 2/24\n"),
 ]
 for label, old, new in WF_PLANTS:
     if wf.count(old) != 1:
