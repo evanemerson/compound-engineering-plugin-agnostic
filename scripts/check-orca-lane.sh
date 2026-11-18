@@ -41,8 +41,8 @@
 #   HOSTREPO — punch-list L93 3: a repo in no local `repo list` row but
 #            registered on the one WSL host is named as a WSL-host project,
 #            with no `orca repo add` advice; no host or another path keeps
-#            that advice; two hosts or a failed host read say a host project
-#            is not ruled out.
+#            that advice; two hosts, a failed host read or a host row of an
+#            unknown shape say a host project is not ruled out.
 #   CREATE — happy create (exact create argv, parked detached, park branch
 #            deleted, show by id); a name taken in Orca or in git; a park
 #            branch that exists; a failed create; a suffixed path; a
@@ -517,8 +517,13 @@ for name, mode in (("HOSTREPO no WSL host keeps the repo add advice", "nolocalre
 HRFAIL = ("ORCA lane: lanes unchanged — Orca has no repo at %s, and the Orca WSL host's repo list could not be "
           "read, so a project on that host is not ruled out" % W.main)
 for name, mode in (("HOSTREPO failed host repo list is not ruled out", "wsl,nolocalrepo,hostrepofail"),
-                   ("HOSTREPO two WSL hosts are not ruled out", "wsl2,nolocalrepo")):
+                   ("HOSTREPO host repo row of an unknown shape is not ruled out", "wsl,nolocalrepo,hostrepobadrow"),
+                   ("HOSTREPO failed environment list is not ruled out", "wsl,nolocalrepo,envfail")):
     expect(name, W.run(F(cli=CLI, action="name"), mode=mode), rc=1, first=HRFAIL)
+# PR #144 review: two WSL hosts are said apart from a failed read.
+expect("HOSTREPO two WSL hosts are not ruled out", W.run(F(cli=CLI, action="name"), mode="wsl2,nolocalrepo"), rc=1,
+       first=("ORCA lane: lanes unchanged — Orca has no repo at %s, and more than one Orca WSL host is added, so a "
+              "project on one of them is not ruled out" % W.main), lacks=("could not be read",))
 W.done()
 
 # ---- CREATE

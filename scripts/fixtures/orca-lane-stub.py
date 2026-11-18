@@ -107,7 +107,8 @@ verb = argv[:2]
 # non-main host lane of the first state repo; `hostlanemain` lists it as a main
 # row; `hostlaneother` under a host repo at another path; `hostlistfail` fails
 # the host worktree list; `hostlistpartial` marks it truncated. L93 3:
-# `hostrepofail` fails the host repo list, and `nolocalrepo` leaves every
+# `hostrepofail` fails the host repo list, `hostrepobadrow` adds a row that is
+# not an object to it, and `nolocalrepo` leaves every
 # repo out of this machine's `repo list` (a WSL-host-only project).
 if verb in (["repo", "list"], ["worktree", "list"]) and "--environment" in argv:
     hr = st["repos"][0]
@@ -117,7 +118,7 @@ if verb in (["repo", "list"], ["worktree", "list"]) and "--environment" in argv:
             save(); sys.exit(1)
         out({"id": "x", "ok": True, "result": {"repos": [
             {"id": "host-" + hr["id"], "path": hpath, "displayName": os.path.basename(hpath),
-             "connectionId": None, "hostId": None}]}})
+             "connectionId": None, "hostId": None}] + (["x"] if "hostrepobadrow" in MODE else [])}})
     if "hostlistfail" in MODE:
         save(); sys.exit(1)
     rows = [{"id": "host-%s::%s" % (hr["id"], hpath), "repoId": "host-" + hr["id"], "path": hpath,

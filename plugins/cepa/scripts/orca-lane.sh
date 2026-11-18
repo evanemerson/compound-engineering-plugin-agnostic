@@ -111,8 +111,9 @@
 # (two reads, 5 s each, no retry): a row at this main checkout's path keeps
 # everything with `<path> is a project on the Orca WSL host <id>` and says to
 # run lane commands from a session on that host, never `orca repo add`, which
-# would register the repo twice. A failed host read, or two WSL hosts, says a
-# host project is not ruled out; no WSL host, or no row at this path, keeps
+# would register the repo twice. A failed host read, a host repo row of an
+# unknown shape, or two WSL hosts (said apart) says a host project is not
+# ruled out; no WSL host, or no row at this path, keeps
 # the `orca repo add` advice.
 #
 # Paths (review finding #5): Orca returns Windows UNC paths. A path
@@ -877,6 +878,10 @@ elif mode == "hostrepo":
     main, distro = args
     if not isinstance(r, dict) or not isinstance(r.get("repos"), list):
         sys.exit(1)
+    # A row of another shape is a read this reader cannot vouch for, so it
+    # never turns into the `orca repo add` advice (PR #144 review).
+    if not all(isinstance(x, dict) for x in r["repos"]):
+        sys.exit(1)
     if any(isinstance(x, dict) and linux(x.get("path"), distro) == main for x in r["repos"]):
         print("yes")
 elif mode == "rmres":
@@ -903,13 +908,14 @@ cepa_ln_distro=${WSL_DISTRO_NAME:-}
 # the Orca WSL host is in no local `repo list` row, and `orca repo add` would
 # register it twice. Prints the WSL host's id when the one WSL host has a repo
 # at this main checkout; nothing, exit 0, when there is no WSL host or no such
-# repo; exit 1 when a read fails or has an unknown shape, or more than one WSL
-# host is added. Two reads (`environment list`, `repo list --environment`),
+# repo; exit 1 when a read fails or has an unknown shape; exit 3 when more
+# than one WSL host is added (PR #144 review: said apart). Two reads (`environment list`, `repo list --environment`),
 # 5 s each, no retry, only on the way to `kept`.
 cepa_ln_hostrepo() {
-  local w id rt h
+  local w id rt h rc=0
   cepa_ln_orca "$cepa_ln_tmp/hrenvs.json" 0 5 environment list --json || return 1
-  w=$(cepa_ln_py wslenvs "$cepa_ln_tmp/hrenvs.json") || return 1
+  w=$(cepa_ln_py wslenvs "$cepa_ln_tmp/hrenvs.json") || rc=$?
+  [ "$rc" = 0 ] || { [ "$rc" = 3 ] && return 3; return 1; }
   [ -n "$w" ] || return 0
   read -r id rt <<<"$w"
   cepa_ln_orca "$cepa_ln_tmp/hrrepos.json" 0 5 repo list --environment "$id" --json || return 1
@@ -923,10 +929,13 @@ cepa_ln_rc=0
 cepa_ln_repo=$(cepa_ln_py repo "$cepa_ln_tmp/repos.json" "$cepa_ln_main" "$cepa_ln_distro") || cepa_ln_rc=$?
 if [ "$cepa_ln_rc" = 2 ]; then
   cepa_ln_hrrc=0
-  cepa_ln_hr=$(cepa_ln_hostrepo) || { cepa_ln_hrrc=1 cepa_ln_hr=; }
+  cepa_ln_hr=$(cepa_ln_hostrepo) || { cepa_ln_hrrc=$? cepa_ln_hr=; }
   [ -z "$cepa_ln_hr" ] \
     || kept "${cepa_ln_lane:-lanes} unchanged — $cepa_ln_main is a project on the Orca WSL host $cepa_ln_hr, not in this machine's Orca (punch-list L93)" \
             "run this lane command from a session on WSL host $cepa_ln_hr; do not add this repo to this machine's Orca"
+  [ "$cepa_ln_hrrc" != 3 ] \
+    || kept "${cepa_ln_lane:-lanes} unchanged — Orca has no repo at $cepa_ln_main, and more than one Orca WSL host is added, so a project on one of them is not ruled out" \
+            "check orca repo list --environment <WSL host> on each host: if the repo is there, run this lane command from a session on that host; if not, add it to Orca (orca repo add), then ask this session to run the block again"
   [ "$cepa_ln_hrrc" = 0 ] \
     || kept "${cepa_ln_lane:-lanes} unchanged — Orca has no repo at $cepa_ln_main, and the Orca WSL host's repo list could not be read, so a project on that host is not ruled out" \
             "check orca repo list --environment <WSL host>: if the repo is there, run this lane command from a session on that host; if not, add it to Orca (orca repo add), then ask this session to run the block again"

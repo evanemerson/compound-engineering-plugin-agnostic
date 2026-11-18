@@ -1807,11 +1807,11 @@ limits.
      resend (L89 b; its header, THE FOLLOW-UP CHAIN, owns the rule and the
      measurement). So send the next message to the `dispatch:<new>` the
      script printed: that send is the direct follow-up, and the walk stays
-     short. A plain `dispatch:` send is bounded at 60 s, and when its call
-     fails (a timeout) the script re-reads Orca for the follow-up it may
-     have started before it exits 5; it exits 0 only when that follow-up is
-     proven (L93 1; its header, THE FOLLOW-UP RE-READ). An exit 5 there
-     still means do not resend.
+     short. A plain `dispatch:` send has a longer time bound, and when its
+     call fails (a timeout) the script re-reads Orca for the follow-up it
+     may have started before it exits 5; it exits 0 only when that
+     follow-up is proven (L93 1; its header, THE FOLLOW-UP RE-READ and TIME
+     BUDGET). An exit 5 there still means do not resend.
    - **A host worker's handle takes `on:`** (punch-list L88). A `term_`
      handle that a paired Orca server issued (a worker on an Orca WSL or SSH
      host) is reached only through that server: the block adds the line
