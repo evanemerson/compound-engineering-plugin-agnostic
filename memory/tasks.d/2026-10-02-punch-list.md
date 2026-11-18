@@ -2744,7 +2744,7 @@ L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
     memory/tasks.d/2026-11-17-fix-matrix-orca-wsl-host-and-retired-run.md
     items 3 and 8.
 L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host cannot reach Windows Orca.**
-    status: pending
+    status: completed
     severity: P2
     owner: matrix (tab46@matrix, items 1-3; item 3 added 2026-11-18 by the operator)
     From orca-lab coord@main (msg_9dce386e6069, 2026-11-18; sender-reported).
@@ -2767,6 +2767,16 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
        the operator removed. Fix: when the local `repo list` has no row
        but `repo list --environment <host>` has the path, say it is a
        WSL-host project and lane commands run from a session on that host.
+    **CLOSED 2026-11-18** — PR #144 (`b7ae23d`), v1.60.2, tab46@matrix.
+    1: a plain `dispatch:` send has a 60 s bound; on a failed call an
+    owner-snapshot re-read (terminal owner before/after; new owner's
+    followUpOf is the old owner, chained to the target) exits 0 only on
+    proof, else exit 5 "do not resend". 2: §12b documents the one-way
+    host→Windows route. 3: orca-lane.sh names a WSL-host-only repo and
+    never advises `orca repo add` for it. Residuals: shard
+    memory/tasks.d/2026-11-18-fix-matrix-orca-host-dispatch-timeout.md
+    (orca-lab live re-measure asked 2026-11-18; 2 deferred review
+    findings).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
