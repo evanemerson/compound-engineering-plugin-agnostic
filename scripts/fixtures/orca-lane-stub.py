@@ -106,14 +106,19 @@ verb = argv[:2]
 # path, repoId and isMainWorktree. `hostlane` lists STUB_HOST_LANE as a
 # non-main host lane of the first state repo; `hostlanemain` lists it as a main
 # row; `hostlaneother` under a host repo at another path; `hostlistfail` fails
-# the host worktree list; `hostlistpartial` marks it truncated.
+# the host worktree list; `hostlistpartial` marks it truncated. L93 3:
+# `hostrepofail` fails the host repo list, `hostrepobadrow` adds a row that is
+# not an object to it, and `nolocalrepo` leaves every
+# repo out of this machine's `repo list` (a WSL-host-only project).
 if verb in (["repo", "list"], ["worktree", "list"]) and "--environment" in argv:
     hr = st["repos"][0]
     hpath = hr["path"] if "hostlaneother" not in MODE else "/srv/elsewhere"
     if verb == ["repo", "list"]:
+        if "hostrepofail" in MODE:
+            save(); sys.exit(1)
         out({"id": "x", "ok": True, "result": {"repos": [
             {"id": "host-" + hr["id"], "path": hpath, "displayName": os.path.basename(hpath),
-             "connectionId": None, "hostId": None}]}})
+             "connectionId": None, "hostId": None}] + (["x"] if "hostrepobadrow" in MODE else [])}})
     if "hostlistfail" in MODE:
         save(); sys.exit(1)
     rows = [{"id": "host-%s::%s" % (hr["id"], hpath), "repoId": "host-" + hr["id"], "path": hpath,
@@ -132,7 +137,7 @@ if argv[:2] == ["repo", "list"]:
     out({"id": "x", "ok": True, "result": {"repos": [
         {"id": r["id"], "path": unc(r["path"]), "displayName": os.path.basename(r["path"]),
          "hookSettings": r.get("hook", HOOK)}
-        for r in st["repos"]]}})
+        for r in st["repos"] if "nolocalrepo" not in MODE]}})
 if verb == ["worktree", "list"]:
     st["lists"] = st.get("lists", 0) + 1
     if "listfail" in MODE or ("listfail2" in MODE and st["lists"] >= 2) or ("listfail23" in MODE and st["lists"] in (2, 3)):

@@ -338,7 +338,12 @@ case "$1 $2" in
     if [ "${3-}" = --environment ]; then printf '%s' "${STUB_TLIST_ENV-}"; exit "${STUB_TLIST_ENV_RC:-0}"; fi
     printf '%s' "${STUB_TLIST-}"; exit "${STUB_TLIST_RC:-0}" ;;
   "environment list") printf '%s' "${STUB_ENVS-}"; exit "${STUB_ENVS_RC:-0}" ;;
-  "orchestration worker-list") printf '%s' "${STUB_WLIST-}"; exit "${STUB_WLIST_RC:-0}" ;;
+  "orchestration worker-list")
+    # L93 1: STUB_WLIST_PRE, when set, answers the first call (orca-send.sh's
+    # read of the terminal's owner before a dispatch: send).
+    read -r n <"$STUB_LOG.wl"; n=$((n + 1)); echo "$n" >"$STUB_LOG.wl"
+    if [ "$n" = 1 ] && [ -n "${STUB_WLIST_PRE+x}" ]; then printf '%s' "$STUB_WLIST_PRE"; exit 0; fi
+    printf '%s' "${STUB_WLIST-}"; exit "${STUB_WLIST_RC:-0}" ;;
   "orchestration worker-show")
     # L89 b: a read on a host server (--environment after the dispatch id)
     # answers from $STUB_WSHOWDIR/env.
@@ -366,6 +371,13 @@ open(os.path.join(BIN, "sleep"), "w").write('''#!/usr/bin/env bash
 echo "$1" >>"$STUB_SLEEPS"
 echo $(( $(cat "$STUB_CLOCK") + $1 )) >"$STUB_CLOCK"
 ''')
+# L93 1: `timeout` logs its bound and the Orca verb to STUB_TIMEOUTS when a
+# case sets it, then runs the real timeout.
+open(os.path.join(BIN, "timeout"), "w").write('''#!/usr/bin/env bash
+[ -z "${STUB_TIMEOUTS-}" ] || echo "$3 $5 $6" >>"$STUB_TIMEOUTS"
+exec %s "$@"
+''' % shutil.which("timeout"))
+os.chmod(os.path.join(BIN, "timeout"), 0o755)
 for f in ("date", "sleep"):
     os.chmod(os.path.join(BIN, f), 0o755)
 # orca-health.sh's life reads (L82): the real git unless STUB_GIT names how
@@ -431,7 +443,7 @@ def run(args, show_json=None, ps_json=None, show_rc=0, ps_rc=0,
         env["CEPA_ORCA_OUTBOX_DIR"] = os.path.join(TMP, "no-outbox")
     if path is not None:
         env["PATH"] = path
-    for f in ("err", "ps", "rc", "rs"):
+    for f in ("err", "ps", "rc", "rs", "wl"):
         open(log + "." + f, "w").write("0\n")
     psdir = os.path.join(TMP, "ps")
     shutil.rmtree(psdir, ignore_errors=True)
@@ -1077,6 +1089,9 @@ if LEGS in ("all", "send"):
            "Orca nudge not needed: dispatch:ctx_abcdef is a mailbox Orca delivers; sent as no-nudge"],
           target="dispatch:ctx_abcdef", osend_json=json.dumps({"ok": True, "result": {}}),
           inbox_json=inbox(brow(to=FUP)))
+    def after_send(calls):
+        k = next((i for i, c in enumerate(calls) if c[:2] in (["orchestration", "send"], ["orchestration", "reply"])), 0)
+        return calls[k:]
     # --- FOLLOWUP (punch-list L89 b; orca-lab, Orca 1.4.262): a dispatch:
     # send to a finished --keep-open worker starts a follow-up dispatch, and
     # the reply has no result.message.
@@ -1094,7 +1109,7 @@ if LEGS in ("all", "send"):
     FPASTE = END + "Needed from you: paste the block below into " + FD
     calls = store("FOLLOWUP dispatch send carried as a follow-up dispatch counts", 0, [FUP_LINE], mode="no-nudge",
                   target=FD, osend_json=fup(), inbox_json=NOROW)
-    check = [c[:2] for c in calls] == [["orchestration", "send"]]
+    check = [c[:2] for c in after_send(calls)] == [["orchestration", "send"]]
     (ok if check else miss)("FOLLOWUP makes no inbox call" if check else "FOLLOWUP makes no inbox call: %r" % calls)
     store("FOLLOWUP with nudge says it is not needed", 0,
           [FUP_LINE, "Orca nudge not needed: %s is a mailbox Orca delivers; sent as no-nudge" % FD],
@@ -1115,7 +1130,10 @@ if LEGS in ("all", "send"):
     # stored" (rule 3 counts it only with its lifecycle).
     store("FOLLOWUP shape on a worker_done is not a follow-up", 5, [NOSTORE + NOMID, PASTE_RC], argv=WARGS,
           osend_json=fup(followUpOf=DID), inbox_json=NOROW)
-    store("FOLLOWUP that exited non-zero fails", 5, [UNPROVEN + "the send exited 1", FPASTE], mode="no-nudge",
+    def fdnr(why):
+        return "; a re-read proved no follow-up (%s), but one may exist, so do not resend" % why
+    FDNR = fdnr("the terminal's owner before the send was not read")
+    store("FOLLOWUP that exited non-zero fails", 5, [UNPROVEN + "the send exited 1" + FDNR, FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(), osend_rc=1, inbox_json=NOROW)
     # --- CHAIN (punch-list L89 b; orca-lab's re-measure of cepa 1.60.0): followUpOf
     # names the NEWEST dispatch of the target's follow-up chain. The send
@@ -1143,7 +1161,7 @@ if LEGS in ("all", "send"):
     calls = store("CHAIN newest dispatch of the target's chain counts", 0, [chain_line("ctx_c0000000000b")],
                   mode="no-nudge", target=FD, osend_json=fup(followUpOf="ctx_c0000000000b"), inbox_json=NOROW,
                   env_extra=chain(HOP))
-    ws = [c for c in calls if c[:2] == ["orchestration", "worker-show"]]
+    ws = [c for c in after_send(calls) if c[:2] == ["orchestration", "worker-show"]]
     want = [["orchestration", "worker-show", "--dispatch", "ctx_abcdef", "--json", "--full"]] + [
         ["orchestration", "worker-show", "--dispatch", x, "--environment", "wsl:ubuntu-24.04", "--json", "--full"]
         for x in ("ctx_c0000000000b", "ctx_c0000000000a")]
@@ -1208,13 +1226,150 @@ if LEGS in ("all", "send"):
         env = chain(dict(HOP, **{"--json": {"ok": True, "result": {"dispatch": {"id": "--json", "followUpOf": "ctx_abcdef"}}}}))
         calls = store(name, 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge", target=FD, osend_json=fup(followUpOf=fu),
                       inbox_json=NOROW, env_extra=env)
-        ws = [c for c in calls if c[:2] == ["orchestration", "worker-show"]]
+        ws = [c for c in after_send(calls) if c[:2] == ["orchestration", "worker-show"]]
         (ok if not ws else miss)(name + " makes no worker-show call" if not ws else name + " makes no worker-show call: %r" % ws)
     store("CHAIN new dispatch equal to the target is not a follow-up", 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(followUpOf="ctx_c0000000000b", dispatchId="ctx_abcdef"), inbox_json=NOROW,
           env_extra=chain(HOP))
     store("CHAIN new dispatch equal to followUpOf is not a follow-up", 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge",
           target=FD, osend_json=fup(followUpOf=NEWD), inbox_json=NOROW, env_extra=chain(HOP))
+    # --- FRESH (punch-list L93 1; orca-lab, Orca 1.4.262, a coord@main ON the
+    # WSL host, sender report): a dispatch: send exited 124 and printed
+    # nothing, yet started a follow-up. THE FOLLOW-UP RE-READ reads the owner
+    # of the target's terminal (worker-list `resource.ownerDispatchId`) before
+    # the send and again after it: it counts only when the owner changed and
+    # the new owner follows up the old one. Shapes re-measured read only on the
+    # host, 2026-11-18 (`worker-list --environment wsl:ubuntu-24.04 --limit
+    # 100 --json --full`, 18 rows): only a chain's newest dispatch carries the
+    # terminal resource. STUB_WLIST_PRE answers the read before the send.
+    T_IN = _time.strftime("%Y-%m-%d %H:%M:%S", _time.gmtime(1000000 - 5))
+    T_OUT = _time.strftime("%Y-%m-%d %H:%M:%S", _time.gmtime(1000000 - 121))
+
+    def drec(i, fu, at=T_OUT, h=H):
+        x = {"id": i, "followUpOf": fu, "createdAt": at}
+        if h is not None:
+            x["assigneeHandle"] = h
+        return {"ok": True, "result": {"dispatch": x}}
+
+    def wl(*rows):
+        return json.dumps({"ok": True, "result": {"workers": [
+            {"dispatchId": i, "resource": None if h is None else {"terminalHandle": h, "ownerDispatchId": o}}
+            for i, h, o in rows]}})
+    TGT = drec("ctx_abcdef", None)
+    FRECS = {"ctx_abcdef": TGT, NEWD: drec(NEWD, "ctx_abcdef", T_IN)}
+    PRE = wl(("ctx_abcdef", H, "ctx_abcdef"), ("ctx_00000000ffff", OTHER, "ctx_00000000ffff"))
+    FWL = wl((NEWD, H, NEWD), ("ctx_abcdef", None, None), ("ctx_00000000ffff", OTHER, "ctx_00000000ffff"))
+    TO124 = "the send exited 124 and printed nothing"
+    FRESH_LINE = ("Orca send stored as a follow-up dispatch: dispatch:%s of %s, found by a re-read, though %s "
+                  "(punch-list L93)" % (NEWD, FD, TO124))
+
+    def fresh(name, rc, want, recs=FRECS, pre=PRE, wlist=FWL, home=None, env=None, extra=None, **kw):
+        e = dict(chain(recs, home=home, env=env), STUB_WLIST=wlist)
+        if pre is not None:
+            e["STUB_WLIST_PRE"] = pre
+        e.update(extra or {})
+        kw.setdefault("mode", "no-nudge")
+        return store(name, rc, want, target=FD, osend_json="", osend_rc=124, inbox_json=NOROW, env_extra=e, **kw)
+    TLOG = os.path.join(TMP, "timeouts")
+    open(TLOG, "w").close()
+    calls = fresh("FRESH timed-out dispatch send whose follow-up is found counts", 0, [FRESH_LINE],
+                  extra={"STUB_TIMEOUTS": TLOG})
+    HOME_RD = ["orchestration", "worker-show", "--dispatch", "ctx_abcdef", "--json", "--full"]
+    ENV = ["--environment", "wsl:ubuntu-24.04"]
+    TGT_RD = ["orchestration", "worker-show", "--dispatch", "ctx_abcdef"] + ENV + ["--json", "--full"]
+    WL_RD = ["orchestration", "worker-list"] + ENV + ["--limit", "100", "--json", "--full"]
+    want = [HOME_RD, TGT_RD, WL_RD, HOME_RD, TGT_RD, WL_RD,
+            ["orchestration", "worker-show", "--dispatch", NEWD] + ENV + ["--json", "--full"]]
+    got = [c for c in calls if c[:2] in (["orchestration", "worker-show"], ["orchestration", "worker-list"])]
+    order = [c[:2] for c in calls]
+    check = got == want and order.index(["orchestration", "send"]) == 3
+    (ok if check else miss)("FRESH reads the terminal's owner before the send and after it" if check
+                            else "FRESH reads the terminal's owner before the send and after it: %r" % calls)
+    # The send to a dispatch: target is bounded at 60 s; every read at 15.
+    bounds = [l.split() for l in open(TLOG) if l.strip()]
+    sb = [b for b in bounds if b[1:] == ["orchestration", "send"]]
+    check = sb == [["60", "orchestration", "send"]] and all(b[0] == "15" for b in bounds if b not in sb) and len(bounds) > 1
+    (ok if check else miss)("FRESH dispatch send is bounded at 60 s, its reads at 15" if check else
+                            "FRESH dispatch send is bounded at 60 s, its reads at 15: %r" % bounds)
+    open(TLOG, "w").close()
+    store("FRESH term_ send stays bounded at 15 s", 0, [STORED], mode="no-nudge", env_extra={"STUB_TIMEOUTS": TLOG})
+    bounds = [l.split() for l in open(TLOG) if l.strip()]
+    check = bool(bounds) and all(b[0] == "15" for b in bounds)
+    (ok if check else miss)("FRESH term_ send stays bounded at 15 s (log)" if check else
+                            "FRESH term_ send stays bounded at 15 s (log): %r" % bounds)
+    fresh("FRESH with nudge says it is not needed", 0,
+          [FRESH_LINE, "Orca nudge not needed: %s is a mailbox Orca delivers; sent as no-nudge" % FD], mode="nudge")
+    fresh("FRESH local target reads this machine's records", 0, [FRESH_LINE], env="", home=TGT)
+    C0B = "ctx_c0000000000b"
+    fresh("FRESH follow-up after a chain hop counts", 0, [FRESH_LINE],
+          recs=dict(FRECS, **{NEWD: drec(NEWD, C0B, T_IN), C0B: drec(C0B, "ctx_abcdef")}),
+          pre=wl((C0B, H, C0B)))
+
+    def fun(why):
+        return [UNPROVEN + TO124 + fdnr(why), FPASTE]
+    NOPRE = "the terminal's owner before the send was not read"
+    NOONE = "no single dispatch owns the target's terminal"
+    SHAPE = "the target's record or the worker list has a shape this reader does not know"
+    NOTFU = "the terminal's owner %s does not follow up ctx_abcdef, its owner before the send" % NEWD
+    for name, why, kw in [
+            # PR #144 review (P1): an earlier send's follow-up still owns the
+            # terminal, and this send started none. Never "stored".
+            ("FRESH earlier follow-up that still owns the terminal fails",
+             "the target's terminal is still owned by %s, so no follow-up was seen" % C0B,
+             dict(recs=dict(FRECS, **{C0B: drec(C0B, "ctx_abcdef", T_IN)}), pre=wl((C0B, H, C0B)), wlist=wl((C0B, H, C0B)))),
+            ("FRESH owner that did not change fails", "the target's terminal is still owned by ctx_abcdef, so no follow-up was seen",
+             dict(wlist=PRE)),
+            ("FRESH new owner that follows another dispatch fails", NOTFU,
+             dict(recs=dict(FRECS, **{NEWD: drec(NEWD, "ctx_5000", T_IN)}))),
+            ("FRESH new owner that follows nothing fails", NOTFU, dict(recs=dict(FRECS, **{NEWD: drec(NEWD, None, T_IN)}))),
+            # Its followUpOf reaches argv only as a ctx_ id.
+            ("FRESH new owner that follows a flag-shaped id fails", NOTFU,
+             dict(recs=dict(FRECS, **{NEWD: drec(NEWD, "--json", T_IN), "--json": drec("--json", "ctx_abcdef")}))),
+            ("FRESH new owner record of another id fails", "%s could not be read" % NEWD,
+             dict(recs=dict(FRECS, **{NEWD: drec("ctx_other", "ctx_abcdef", T_IN)}))),
+            ("FRESH unreadable new owner fails", "%s could not be read" % NEWD,
+             dict(recs={"ctx_abcdef": TGT})),
+            ("FRESH old owner outside the target's chain fails",
+             "the follow-up names ctx_5000, which is not in the follow-up chain of %s" % FD,
+             dict(recs=dict(FRECS, **{NEWD: drec(NEWD, "ctx_5000", T_IN), "ctx_5000": drec("ctx_5000", None)}),
+                  pre=wl(("ctx_5000", H, "ctx_5000")))),
+            ("FRESH with no owner row fails", NOONE, dict(wlist=wl(("ctx_abcdef", None, None)))),
+            ("FRESH two owner rows fail", NOONE, dict(wlist=wl((NEWD, H, NEWD), ("ctx_f011040f0002", H, "ctx_f011040f0002")))),
+            ("FRESH owner row of another terminal fails", NOONE, dict(wlist=wl((NEWD, OTHER, NEWD)))),
+            ("FRESH row that does not own the terminal fails", NOONE, dict(wlist=wl((NEWD, H, "ctx_abcdef")))),
+            ("FRESH owner row of a bad shape fails", NOONE, dict(wlist=wl(("ctx_a;b", H, "ctx_a;b")))),
+            ("FRESH worker list that is not ok fails", SHAPE, dict(wlist=json.dumps({"ok": False}))),
+            ("FRESH worker list with no row list fails", SHAPE, dict(wlist=json.dumps({"ok": True, "result": {"workers": "x"}}))),
+            ("FRESH unreadable worker list fails", "the worker list could not be read", dict(extra={"STUB_WLIST_RC": "1"})),
+            ("FRESH owner read failed before the send fails", NOPRE, dict(pre=json.dumps({"ok": False}))),
+            ("FRESH owner before the send with no row fails", NOPRE, dict(pre=wl())),
+            # A row with no terminal handle must not match a target with none.
+            ("FRESH target with no terminal fails", NOPRE,
+             dict(recs=dict(FRECS, ctx_abcdef=drec("ctx_abcdef", None, h=None)),
+                  pre=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": "ctx_abcdef", "resource": {"ownerDispatchId": "ctx_abcdef"}}]}}),
+                  wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": NEWD, "resource": {"ownerDispatchId": NEWD}}]}}))),
+            ("FRESH target record of another id fails", NOPRE,
+             dict(recs=dict(FRECS, ctx_abcdef=drec("ctx_other", None)))),
+            ("FRESH unreadable home record fails", NOPRE, dict(home={"ok": False}))]:
+        calls = fresh(name, 5, fun(why), **kw)
+        bad = [c for c in calls if c[:2] == ["orchestration", "worker-show"] and c[3] in ("ctx_a;b", "--json")]
+        if bad:
+            miss("%s: a bad id reached argv %r" % (name, bad))
+    # Only a failed call takes the re-read: an exit-0 reply of an unknown
+    # shape never reads the worker list after the send, and a worker_done
+    # never reads it at all.
+    calls = store("FRESH exit-0 reply with no message is not re-read", 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge",
+                  target=FD, osend_json=json.dumps({"ok": True, "result": {}}), inbox_json=NOROW,
+                  env_extra=dict(chain(FRECS), STUB_WLIST=FWL, STUB_WLIST_PRE=PRE))
+    wlc = [c for c in after_send(calls) if c[:2] == ["orchestration", "worker-list"]]
+    (ok if not wlc else miss)("FRESH exit-0 reply makes no worker-list call after the send" if not wlc else
+                              "FRESH exit-0 reply makes no worker-list call after the send: %r" % wlc)
+    calls = store("FRESH timed-out worker_done is not re-read", 5, [NOSTORE + TO124, PASTE_RC], argv=WARGS,
+                  osend_json="", osend_rc=124, inbox_json=NOROW, env_extra=dict(chain(FRECS), STUB_WLIST=FWL, STUB_WLIST_PRE=PRE))
+    wlc = [c for c in calls if c[:2] in (["orchestration", "worker-list"], ["orchestration", "worker-show"])
+           and calls.index(c) < next(i for i, x in enumerate(calls) if x[:2] == ["orchestration", "send"])]
+    (ok if not wlc else miss)("FRESH worker_done reads no terminal owner before the send" if not wlc else
+                              "FRESH worker_done reads no terminal owner before the send: %r" % wlc)
     # Each row is this session's (from_handle H), so only its own fault
     # can reject it.
     for name, brw in [("READBACK row older than the window", brow(at=T_OLD, frm=H)),

@@ -1807,7 +1807,11 @@ limits.
      resend (L89 b; its header, THE FOLLOW-UP CHAIN, owns the rule and the
      measurement). So send the next message to the `dispatch:<new>` the
      script printed: that send is the direct follow-up, and the walk stays
-     short.
+     short. A plain `dispatch:` send has a longer time bound, and when its
+     call fails (a timeout) the script re-reads Orca for the follow-up it
+     may have started before it exits 5; it exits 0 only when that
+     follow-up is proven (L93 1; its header, THE FOLLOW-UP RE-READ and TIME
+     BUDGET). An exit 5 there still means do not resend.
    - **A host worker's handle takes `on:`** (punch-list L88). A `term_`
      handle that a paired Orca server issued (a worker on an Orca WSL or SSH
      host) is reached only through that server: the block adds the line
@@ -1821,6 +1825,15 @@ limits.
      and exits 0, with no ask to the operator. Orca
      stores such a send only in the host's inbox, so the script re-reads it
      there (L89 a; the `on:` field in its header owns the measurement).
+     The route runs one way only (L93 2; orca-lab, Orca 1.4.262, sender
+     report): on the WSL host `environment list --json` is
+     `environments: []`, so a host session's send to a Windows `term_`
+     fails `terminal_not_found`. A mixed setup needs the Windows side to
+     poll (rule 8) or the operator to relay, until every repo is on the
+     host (the operator's plan). A repo that only the WSL host registers
+     takes its lane commands from a session on that host: `orca-lane.sh`
+     on Windows names it and never advises `orca repo add` (L93 3; its
+     header).
      When a send fails with the WSL interop error (stderr holding
      `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
      sessions in the L26 re-probe, 2026-10-31), the script will
