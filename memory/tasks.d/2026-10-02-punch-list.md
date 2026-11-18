@@ -2611,7 +2611,7 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
 L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
     status: pending
     severity: P2
-    owner: orca-lab measures first (operator 2026-11-17), then a cepa worker
+    owner: unassigned (cepa worker; orca-lab measured 2026-11-17, below)
     2026-11-17: measurement request a–e sent to coord:orca-lab; no live
     coord@main there, so it waits in outbox orca-lab/20261117T210051Z-nXBfXT3O.md.
     Re-raised 2026-11-17 by orca-lab coord@main through the operator's
@@ -2634,6 +2634,31 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     Workaround today: remove the WSL host in Orca. The operator did so
     2026-11-16. Every item needs a measurement on a live host first, so
     the next step is an orca-lab measurement, then a cepa worker.
+    2026-11-17 MEASURED by orca-lab coord@main on Orca 1.4.262, live WSL
+    host (msg_d1cfc739cb31; table in orca-lab
+    docs/research/2026-11-15-wsl-host-test.md "cepa L89 measurements", its
+    PR #36; sender-reported, not re-run here). Owner now: a cepa worker.
+    perm: a new WSL host no longer blocks workers (Orca #43116).
+    a (item 2): `on:` send delivers (msg_ id returned) but exit 5 — the
+      row is only in the HOST inbox (`orchestration inbox --environment
+      <host>`, to_handle = host term_, run_id run_unbound). Fix: re-read
+      with `--environment <on value>`.
+    b (item 1): `dispatch:` send to a done --keep-open host worker starts
+      a follow-up dispatch; reply has no result.message (keys: delivery,
+      dispatchId, followUpOf, state "ready", …), so exit 5.
+    c (item 3): `worktree ps --json --environment <host>` gives a Linux
+      path, hostId "local", environment.id wsl:ubuntu-24.04; agent rows
+      have no cwd; local `worktree ps` has no row; omittedHostIds [].
+    d (item 5): `environment list --json` has a row: id wsl:ubuntu-24.04,
+      runtimeId (new each re-add), orcadDeployment.kind wsl, no
+      connectionDependency.
+    e (item 3b): `repo list --environment <host>`: connectionId and
+      hostId null.
+    f NEW: every host worker_done is rejected ("unknown dispatch ctx_… /
+      unknown task task_…"): the host Orca does not know the local Run.
+    g NEW: orca-health.sh alerts `orca-unreadable:worker-list` for a Run
+      holding a host dispatch: those rows have `projection: null`, and
+      the parser needs projection.outcome (sys.exit(1)); recurs hourly.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
