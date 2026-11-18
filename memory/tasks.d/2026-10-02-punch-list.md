@@ -2680,7 +2680,20 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     (items 1-12: live a/b sends, host create/name, host-worker alerts while
     #43869 is open, 6 deferred review findings). Next: orca-lab re-measures
     a, b, c, g on the live host with 1.60.0 (request sent 2026-11-17).
-    owner now: unassigned (waits on orca-lab's re-measure).
+    owner now: unassigned.
+    RE-MEASURED 2026-11-17 by orca-lab on 1.60.0, live host (msg_6a0b36ef91b6;
+    sender-reported). g OK; c OK for a local lane with the host added.
+    Gaps, the next worker's scope:
+    a: stored `on:` send exits 1 with "tell term_… to check its inbox", but
+       Orca prompted the host worker itself. Fix: exit 0, no operator ask.
+    b: followUpOf is bare `ctx_…` naming the LATEST dispatch in the chain,
+       so a 2nd send to the same `dispatch:` is a false exit 5. Fix: accept
+       any dispatch in the target's follow-up chain.
+    c: a host-side lane (created with `--environment`) is refused "no lane
+       of this repo has that name"; say host lanes are not supported (e).
+    release: `worker-release` of the original dispatch after follow-ups
+       says retained/ownership_transferred; release the newest follow-up.
+    f also hits follow-up worker_done (#43869).
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
