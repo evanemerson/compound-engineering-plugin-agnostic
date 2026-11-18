@@ -2731,6 +2731,24 @@ L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
     deleted is not measured, Orca has no delete verb). Residuals: shard
     memory/tasks.d/2026-11-17-fix-matrix-orca-wsl-host-and-retired-run.md
     items 3 and 8.
+L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host cannot reach Windows Orca.**
+    status: pending
+    severity: P2
+    owner: matrix (tab46@matrix, start after PR #143 merges; operator 2026-11-18)
+    From orca-lab coord@main (msg_9dce386e6069, 2026-11-18; sender-reported).
+    The operator plans to move every repo to WSL-host projects only. A
+    coord@main on the host (Orca 1.4.262, cepa 1.60.0) ran health, lane
+    create/rm, worker-start, `term_` send + nudge and release: all ok, and
+    worker_done was accepted (no #43869 on one server).
+    1. `dispatch:` send to a done --keep-open worker on the host: rc 5,
+       "the send exited 124 and printed nothing", twice; both were
+       delivered (each started a follow-up, worker replied). Fix: a longer
+       timeout for `dispatch:` targets, or on 124 re-read `worker-list`
+       for a new dispatch whose follow-up chain starts at the target.
+    2. The host's `environment list` is empty, so host → Windows Orca
+       sends fail (terminal_not_found). Windows → host works. One line in
+       §12b: a mixed setup needs the Windows side to poll or the operator
+       to relay; it ends when every repo is on the host.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
