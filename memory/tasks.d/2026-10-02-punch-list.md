@@ -2609,7 +2609,7 @@ L88. **orca-send.sh cannot message a worker on an Orca WSL host, and reports a d
        found. The false exit 5 also writes a send-failed alert.
     Production repos stay on \\wsl.localhost until this is fixed.
 L89. **Orca WSL host support is still unproven: the open residuals of L85 and L88.**
-    status: pending
+    status: completed
     severity: P2
     owner: unassigned (after #142; waits on orca-lab re-measure, below)
     2026-11-17: measurement request a–e sent to coord:orca-lab; no live
@@ -2707,6 +2707,13 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     found the chain); release-by-newest closed the terminal. c not
     reachable: the scratch repo is now a host-only project, so rm stops
     earlier; that new advice gap is L93 item 3.
+    **CLOSED 2026-11-18** — #142 (1.60.0), #143 (1.60.1), #144 (1.60.2).
+    orca-lab re-measured live on the WSL host: a, b, g pass; release by
+    newest closes the terminal; host-only repo lane advice passes
+    (msg_201730c8762e, msg_b834ec17e82b). f is upstream (orca#43869).
+    orca-lab has nothing open with cepa. Residuals stay in the shards
+    memory/tasks.d/2026-11-17-fix-matrix-orca-wsl-host-and-retired-run.md
+    and memory/tasks.d/2026-11-18-fix-matrix-orca-host-dispatch-timeout.md.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
@@ -2777,6 +2784,11 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
     memory/tasks.d/2026-11-18-fix-matrix-orca-host-dispatch-timeout.md
     (orca-lab live re-measure asked 2026-11-18; 2 deferred review
     findings).
+    RE-MEASURED 2026-11-18 by orca-lab on 1.60.2 (msg_b834ec17e82b): two
+    host `dispatch:` sends rc 0 in 2.3 s and 2.5 s by the direct path;
+    the 124 re-read path did not run live (the slow sends did not recur;
+    they followed a lane create). Windows rm of a host-only lane gives
+    the WSL-host message, no `orca repo add`: PASS.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
