@@ -10,7 +10,7 @@
 # never a skip: the shipped script changed shape and the mutant needs
 # re-reading.
 #
-# Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, HOOKS, BLOCK) has
+# Every leg of the check (FIELDS, SCOPE, READS, CREATE, NAME, RM, HOOKS, BLOCK, WSLHOST) has
 # at least one mutant here that only its own cases kill; the last control
 # asserts that, so a new leg that also kills an old leg's only mutant shows.
 # It reads each mutant's calibrated MISS set, not its run: every shard proves
@@ -68,8 +68,7 @@ MUTANTS = [
     ("extra-line", '[ -z "${cepa_ln_rest//[[:space:]]/}" ] || refuse', 'true || refuse',
      {"FIELDS line after fields"}),
     # SCOPE
-    ("distro-any", "if not distro or m.group(1) != distro:", "if not distro:",
-     {"SCOPE another distro's path is UNKNOWN"}),
+    ('distro-any', 'if not distro or m.group(1) != distro:', 'if not distro:', {"SCOPE another distro's path is UNKNOWN", 'WSLHOST wsl,hostidle,hostotherdistro keeps the lane'}),
     ("list-unscoped", 'worktree list --repo "id:$cepa_ln_rid" --limit 500 --json', 'worktree list --limit 500 --json',
      None),
     # READS
@@ -84,6 +83,21 @@ MUTANTS = [
     ("omitted-scope-shape", 'if not isinstance(om, list) or not isinstance(cov, list):', 'if not isinstance(om, list):', None),
     ("omitted-note-off", 'cepa_ln_note() {\n  local st ids', 'cepa_ln_note() {\n  return 0\n  local st ids', None),
     ("omitted-note-after-ending", '  echo "ORCA lane: $1"\n  cepa_ln_note\n', '  echo "ORCA lane: $1"\n', None),
+    # L89 c: rm reads the one Orca WSL host's worktree ps and matches by path.
+    ('wsl-host-read-off', 'if [ -n "$cepa_ln_wsl" ]; then\n  read -r cepa_ln_wid', 'if false; then\n  read -r cepa_ln_wid', {'WSLHOST host ps read before the local one', 'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST omitted host read clean on its server', 'WSLHOST wsl,hostagent keeps the lane', 'WSLHOST wsl,hostidle,hostotherdistro keeps the lane', 'WSLHOST wsl,hostpsfail keeps the lane', 'WSLHOST wsl,hostpsomit keeps the lane', 'WSLHOST wsl,hostpspartial keeps the lane'}),
+    ('wsl-host-agents-ignored', '[ "$cepa_ln_hn" = 0 ] \\\n    || kept', 'true \\\n    || kept', {'WSLHOST wsl,hostagent keeps the lane'}),
+    ('wsl-host-psfail-ok', '    || kept "kept $cepa_ln_lane — worktree ps on the Orca WSL host $cepa_ln_wid failed', '    || true "kept $cepa_ln_lane — worktree ps on the Orca WSL host $cepa_ln_wid failed', {'WSLHOST wsl,hostpsfail keeps the lane'}),
+    ('wsl-host-scope', 'if not isinstance(hs, dict) or not hs.get("hostIds") or hs.get("omittedHostIds") != []:', 'if not isinstance(hs, dict):', {'WSLHOST wsl,hostpsomit keeps the lane'}),
+    ('wsl-host-trunc', 'if not isinstance(rows, list) or r.get("truncated") is not False \\', 'if not isinstance(rows, list) \\', {'WSLHOST wsl,hostpspartial keeps the lane'}),
+    ('wsl-host-path-any', '        if p is None:\n            sys.exit(1)\n        if p == lane:', '        if p == lane:', {'WSLHOST wsl,hostidle,hostotherdistro keeps the lane'}),
+    ('wsl-kind-any', 'od.get("kind") == "wsl"', 'True', {'WSLHOST host ps read before the local one', 'WSLHOST host read with no agent in the lane', 'WSLHOST lane row with no agent on the host', 'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST no WSL host', 'WSLHOST omitted WSL host beside another omitted host keeps the lane', 'WSLHOST omitted host read clean on its server', 'WSLHOST omitted host that is not the WSL host keeps the lane', 'WSLHOST wsl,hostagent keeps the lane', 'WSLHOST wsl,hostidle,hostotherdistro keeps the lane', 'WSLHOST wsl,hostpsfail keeps the lane', 'WSLHOST wsl,hostpsomit keeps the lane', 'WSLHOST wsl,hostpspartial keeps the lane'}),
+    ('wsl-cap-off', '    if len(out) > 1:\n        sys.exit(3)\n', '', {'WSLHOST wsl2 keeps the lane'}),
+    ('wsl-envs-fail-ok', '|| kept "kept $cepa_ln_lane — environment list failed, so an agent', '|| true "kept $cepa_ln_lane — environment list failed, so an agent', {'WSLHOST envfail keeps the lane'}),
+    ('wsl-cleared-off', ' >"$cepa_ln_tmp/cleared"', ' >/dev/null', {'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST omitted host read clean on its server'}),
+    ('wsl-cleared-any', 'if clr and all(w is not None and w in clr for w in want):', 'if clr:', {'WSLHOST omitted WSL host beside another omitted host keeps the lane', 'WSLHOST omitted host that is not the WSL host keeps the lane'}),
+    ('wsl-hostread-note', 'ok, st = True, "hostread "', 'ok, st = True, "counted "', {'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST omitted host read clean on its server'}),
+    ('wsl-cleared-no-id', 'printf \'%s %s\\n\' "$cepa_ln_wid" "$cepa_ln_wrt"', 'printf \'%s\\n\' "$cepa_ln_wrt"', {'WSLHOST measured omitted id maps to the WSL host by its id'}),
+    ('wsl-cleared-all-to-any', 'all(w is not None and w in clr for w in want)', 'any(w is not None and w in clr for w in want)', {'WSLHOST omitted WSL host beside another omitted host keeps the lane'}),
     # L80: the shadow refusal names Orca's control.
     ("shadow-fix-unnamed", 'Worktree Hooks > Advanced, set Command source to \\"orca.yaml only\\", then empty the local setup box, then ask again"',
      'Worktree Hooks, then ask again"', {"HOOKS local-only differing refuses"}),
@@ -223,7 +237,7 @@ HELPER_MUTANTS = [
     ("helper-no-default-patch", 'if patch_in "refs/remotes/origin/$t" "$s"; then ok[$s]=5', 'if false; then ok[$s]=5', None),
     ("helper-gh-failure-ok", '    || { echo "unknown — gh pr list failed for branch $b"; exit 3; }', '    || true', None),
 ]
-LEGS = ["FIELDS", "SCOPE", "READS", "CREATE", "NAME", "RM", "HOOKS", "BLOCK"]
+LEGS = ["FIELDS", "SCOPE", "READS", "CREATE", "NAME", "RM", "HOOKS", "BLOCK", "WSLHOST"]
 
 # Calibrated sets for the mutants written None above (kept apart so each
 # mutant line stays readable). Measured by running this file, then read.
@@ -236,13 +250,10 @@ EXPECT = {
                               "READS omitted host, local not covered, refusal names the host"},
     "omitted-always-unknown": {"READS omitted host, local covered, create counts", "READS omitted host, local covered, name counts",
                                "READS omitted host, local covered, rm counts", 'READS the omitted-host note is the last line'},
-    "omitted-strict-off": {"READS ps omits a host, local covered, rm keeps the lane", 'READS the note comes before the Ending line'},
+    'omitted-strict-off': {'READS ps omits a host, local covered, rm keeps the lane', 'READS the note comes before the Ending line', 'WSLHOST omitted WSL host beside another omitted host keeps the lane', 'WSLHOST omitted host that is not the WSL host keeps the lane'},
     "omitted-scope-shape": {"READS listnohost is UNKNOWN for create", "READS listnohost is UNKNOWN for name",
                             "READS listnohost is UNKNOWN for rm"},
-    "omitted-note-off": {"READS a refused read's note comes before the Ending line", "READS omitted host, local covered, create counts", "READS omitted host, local covered, name counts",
-                         "READS omitted host, local covered, rm counts",
-                         "READS omitted host, local not covered, refusal names the host",
-                         "READS ps omits a host, local covered, rm keeps the lane", 'READS the note comes before the Ending line', 'READS the omitted-host note is the last line'},
+    'omitted-note-off': {"READS a refused read's note comes before the Ending line", 'READS omitted host, local covered, create counts', 'READS omitted host, local covered, name counts', 'READS omitted host, local covered, rm counts', 'READS omitted host, local not covered, refusal names the host', 'READS ps omits a host, local covered, rm keeps the lane', 'READS the note comes before the Ending line', 'READS the omitted-host note is the last line', 'WSLHOST measured omitted id maps to the WSL host by its id', 'WSLHOST omitted host read clean on its server', 'WSLHOST omitted host that is not the WSL host keeps the lane'},
     "omitted-note-after-ending": {"READS a refused read's note comes before the Ending line", 'READS the note comes before the Ending line'},
     "ps-failure-ok": {"READS psfail keeps the lane"},
     "basename-unchecked": {"CREATE suffixed path kept"},

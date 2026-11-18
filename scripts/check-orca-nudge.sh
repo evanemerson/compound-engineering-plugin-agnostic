@@ -314,7 +314,10 @@ case "$1 $2" in
     cat "$STUB_PSDIR/out.$((n < STUB_PS_N ? n : STUB_PS_N))" ;;
   "terminal send") printf '%s' "$STUB_SEND"; exit "$STUB_SEND_RC" ;;
   "orchestration send"|"orchestration reply") printf '%s' "${STUB_OSEND-}"; exit "${STUB_OSEND_RC:-0}" ;;
-  "orchestration inbox") printf '%s' "${STUB_INBOX-}"; exit "${STUB_INBOX_RC:-0}" ;;
+  "orchestration inbox")
+    # L89 a: a host's own inbox (--environment) answers from STUB_INBOX_ENV.
+    if [ "${3-}" = --environment ]; then printf '%s' "${STUB_INBOX_ENV-}"; exit "${STUB_INBOX_ENV_RC:-0}"; fi
+    printf '%s' "${STUB_INBOX-}"; exit "${STUB_INBOX_RC:-0}" ;;
   "orchestration run-current") printf '%s' "${STUB_RUNCUR-}"; exit "${STUB_RUNCUR_RC:-0}" ;;
   "orchestration run-use") printf '%s' "${STUB_RUNUSE-}"; exit "${STUB_RUNUSE_RC:-0}" ;;
   "orchestration run-show")
@@ -739,10 +742,11 @@ if LEGS in ("all", "send"):
     PASTE_ANY = END + "Needed from you: paste the block below into the target session"
 
     def store(name, rc, want, mode="nudge", typ="question", target=H, osend_json=None, osend_rc=0,
-              inbox_json=None, inbox_rc=0, stdin=STDIN, argv=None, called=True, env_extra=None, session=None,
+              inbox_json=None, inbox_rc=0, inbox_env_json="", stdin=STDIN, argv=None, called=True, env_extra=None, session=None,
               raw=None, script=None, **kw):
         env = {"STUB_OSEND": osend_json if osend_json is not None else osend(), "STUB_OSEND_RC": str(osend_rc),
-               "STUB_INBOX": inbox_json if inbox_json is not None else inbox(), "STUB_INBOX_RC": str(inbox_rc)}
+               "STUB_INBOX": inbox_json if inbox_json is not None else inbox(), "STUB_INBOX_RC": str(inbox_rc),
+               "STUB_INBOX_ENV": inbox_env_json}
         env.update(env_extra or {})
         args = argv if argv is not None else ["orca-ide", target, typ, mode]
         # raw=(args, stdin) runs the script exactly so: the FIELDS cases.
@@ -1062,6 +1066,47 @@ if LEGS in ("all", "send"):
            "Orca nudge not needed: dispatch:ctx_abcdef is a mailbox Orca delivers; sent as no-nudge"],
           target="dispatch:ctx_abcdef", osend_json=json.dumps({"ok": True, "result": {}}),
           inbox_json=inbox(brow(to=FUP)))
+    # --- FOLLOWUP (punch-list L89 b; orca-lab, Orca 1.4.262): a dispatch:
+    # send to a finished --keep-open worker starts a follow-up dispatch, and
+    # the reply has no result.message.
+    # An inbox with no row for this send.
+    NOROW = inbox({"id": "msg_000000000002", "to_handle": OTHER})
+    FD, NEWD = "dispatch:ctx_abcdef", "ctx_f011040f0001"
+
+    def fup(**kw):
+        r = {"delivery": {"mode": "follow_up"}, "dispatchId": NEWD, "followUpOf": "ctx_abcdef", "state": "ready",
+             "effects": {"terminal": "reused"}}
+        r.update(kw)
+        return json.dumps({"ok": True, "result": r})
+    FUP_LINE = "Orca send stored as a follow-up dispatch: dispatch:%s of %s (punch-list L89)" % (NEWD, FD)
+    NOMID = "the reply has no result.message.id"
+    FPASTE = END + "Needed from you: paste the block below into " + FD
+    calls = store("FOLLOWUP dispatch send carried as a follow-up dispatch counts", 0, [FUP_LINE], mode="no-nudge",
+                  target=FD, osend_json=fup(), inbox_json=NOROW)
+    check = [c[:2] for c in calls] == [["orchestration", "send"]]
+    (ok if check else miss)("FOLLOWUP makes no inbox call" if check else "FOLLOWUP makes no inbox call: %r" % calls)
+    store("FOLLOWUP with nudge says it is not needed", 0,
+          [FUP_LINE, "Orca nudge not needed: %s is a mailbox Orca delivers; sent as no-nudge" % FD],
+          target=FD, osend_json=fup(), inbox_json=NOROW)
+    store("FOLLOWUP followUpOf as an address counts", 0, [FUP_LINE], mode="no-nudge", target=FD,
+          osend_json=fup(followUpOf=FD), inbox_json=NOROW)
+    for name, js in [("FOLLOWUP of another dispatch fails", fup(followUpOf="ctx_000000000000")),
+                     ("FOLLOWUP not ready fails", fup(state="failed")),
+                     ("FOLLOWUP new dispatch equal to the target fails", fup(dispatchId="ctx_abcdef")),
+                     ("FOLLOWUP new dispatch of a bad shape fails", fup(dispatchId="ctx_a;b")),
+                     ("FOLLOWUP beside a message is not a follow-up", json.dumps({"ok": True, "result": dict(
+                         json.loads(fup())["result"], message={"subject": SUBJ})}))]:
+        # PR #142 review: not read back, a plain dispatch: send may still have
+        # started a follow-up, so it is unproven, never "no message stored".
+        store(name, 5, [UNPROVEN + NOMID, FPASTE], mode="no-nudge", target=FD, osend_json=js, inbox_json=NOROW)
+    store("FOLLOWUP shape for a term_ target fails", 5, [NOSTORE + NOMID, PASTE], mode="no-nudge",
+          osend_json=fup(followUpOf=H), inbox_json=NOROW)
+    # A worker_done is never a follow-up, and its failure stays "no message
+    # stored" (rule 3 counts it only with its lifecycle).
+    store("FOLLOWUP shape on a worker_done is not a follow-up", 5, [NOSTORE + NOMID, PASTE_RC], argv=WARGS,
+          osend_json=fup(followUpOf=DID), inbox_json=NOROW)
+    store("FOLLOWUP that exited non-zero fails", 5, [UNPROVEN + "the send exited 1", FPASTE], mode="no-nudge",
+          target=FD, osend_json=fup(), osend_rc=1, inbox_json=NOROW)
     # Each row is this session's (from_handle H), so only its own fault
     # can reject it.
     for name, brw in [("READBACK row older than the window", brow(at=T_OLD, frm=H)),
@@ -1081,7 +1126,7 @@ if LEGS in ("all", "send"):
           mode="no-nudge", target="run:run_abc", osend_rc=1, osend_json="",
           inbox_json=inbox(brow(to="run:run_other", frm=H)), env_extra={"ORCA_TERMINAL_HANDLE": H})
     store("READBACK dispatch target does not take a term_ row", 5,
-          [NOSTORE + "the reply has no result.message.id", END + "Needed from you: paste the block below into dispatch:ctx_abcdef"],
+          [UNPROVEN + "the reply has no result.message.id", END + "Needed from you: paste the block below into dispatch:ctx_abcdef"],
           mode="no-nudge", target="dispatch:ctx_abcdef", osend_json=json.dumps({"ok": True, "result": {}}),
           inbox_json=inbox(brow(to=H, frm=H)), env_extra={"ORCA_TERMINAL_HANDLE": H})
     # With no clock there is no window: no read-back.
@@ -1151,13 +1196,33 @@ if LEGS in ("all", "send"):
     def on_fields(target=H, typ="question", mode="no-nudge", on=SRV):
         return "cli: orca-ide\ntarget: %s\ntype: %s\nnudge: %s\non: %s\nfile: %s\n" % (
             target, typ, mode, on, msg_file(STDIN))
-    calls = store("HOSTON no-nudge stores", 0, [STORED], raw=([], on_fields()))
+    # L89 a (orca-lab, Orca 1.4.262): the row is only in the HOST's inbox,
+    # so this machine's inbox here holds no row for H.
+    calls = store("HOSTON no-nudge stores", 0, [STORED], raw=([], on_fields()),
+                  inbox_json=NOROW, inbox_env_json=inbox())
     oc = [strip_req(c) for c in calls if c[:2] == ["orchestration", "send"]]
     want = OSEND_ARGV[:4] + ["--on", SRV] + OSEND_ARGV[4:]
     (ok if oc == [want] else miss)("HOSTON argv carries --on" if oc == [want] else "HOSTON argv carries --on: %r" % oc)
+    ic = [c for c in calls if c[:2] == ["orchestration", "inbox"]]
+    want = [INBOX_ARGV[:2] + ["--environment", SRV] + INBOX_ARGV[2:]]
+    (ok if ic == want else miss)("HOSTON re-reads the host's inbox" if ic == want else
+                                 "HOSTON re-reads the host's inbox: %r" % ic)
+    store("HOSTON row only in this machine's inbox does not count", 5,
+          [NOSTORE + "%s is not in the inbox for %s" % (MID, H), PASTE], raw=([], on_fields()),
+          inbox_json=inbox(), inbox_env_json=NOROW)
+    # The read-back: the host names this sender `<handle> on <machine>`.
+    store("HOSTON read-back takes the host's sender form", 0, [back_line(EMPTY1), STORED], raw=([], on_fields()),
+          osend_rc=1, osend_json="", inbox_json=NOROW, inbox_env_json=inbox(brow(frm=H + " on Sidewalk26")),
+          env_extra={"ORCA_TERMINAL_HANDLE": H})
+    store("READBACK host sender form without on fails", 5, [NOSTORE + EMPTY1, PASTE], mode="no-nudge",
+          osend_rc=1, osend_json="", inbox_json=inbox(brow(frm=H + " on Sidewalk26")),
+          env_extra={"ORCA_TERMINAL_HANDLE": H})
+    store("HOSTON read-back sender form of another handle fails", 5, [NOSTORE + EMPTY1, PASTE], raw=([], on_fields()),
+          osend_rc=1, osend_json="", inbox_json=NOROW, inbox_env_json=inbox(brow(frm=OTHER + " on Sidewalk26")),
+          env_extra={"ORCA_TERMINAL_HANDLE": H})
     calls = store("HOSTON nudge is skipped, the host terminal is not on this machine", 1,
                   [STORED, "Orca nudge skipped: %s is on Orca server %s, and orca-nudge.sh reads only this machine's terminals" % (H, SRV),
-                   END_H], raw=([], on_fields(mode="nudge")))
+                   END_H], raw=([], on_fields(mode="nudge")), inbox_json=NOROW, inbox_env_json=inbox())
     check = not sends(calls) and not [c for c in calls if c[:2] == ["worktree", "ps"]]
     (ok if check else miss)("HOSTON makes no nudge call" if check else "HOSTON makes no nudge call: %r" % calls)
     for name, fields, why, end in [
@@ -1961,6 +2026,30 @@ if LEGS in ("all", "health"):
     health("HEALTH worker-list with no workers field", 1, unread("worker-list"), wlist=json.dumps({"ok": True, "result": {}}))
     health("HEALTH worker-list row with no projection", 1, unread("worker-list"),
            wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": D1}]}}))
+    # L89 g (measured on Orca 1.4.262, run_5d80668f22e7): a host dispatch
+    # lists with no projection and a `server` object. It is skipped; the rest
+    # of the Run is still read.
+    HOSTROW = {"dispatchId": "ctx_0000000a0e57", "taskId": "task_00000000a0e5", "workerState": "succeeded",
+               "dispatchStatus": "completed", "agentTerminalHandle": None, "terminalState": None, "resource": None,
+               "server": {"environmentId": "wsl:ubuntu-24.04", "name": "Ubuntu-24.04 (WSL)", "asOf": "2026-11-18T01:21:01Z"}}
+
+    def hwl_host(*rows):
+        d = json.loads(hwl(*rows))
+        d["result"]["workers"].insert(0, dict(HOSTROW))
+        return json.dumps(d)
+    health("HEALTH host dispatch with no projection is skipped", 0, [HOK], calls_want=HCALLS,
+           wlist=hwl_host((D1, "in_progress"), (D2, "succeeded")))
+    health("HEALTH host dispatch row with a bad id is unreadable", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, dispatchId="ctx_a;b")]}}))
+    health("HEALTH host dispatch with projection null is skipped", 0, [HOK], calls_want=HCALLS,
+           wlist=hwl_host((D1, "in_progress"), (D2, "succeeded")).replace('"server"', '"projection": null, "server"', 1))
+    health("HEALTH local server row with no projection is unreadable", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, server={"environmentId": "local"})]}}))
+    d_ = json.loads(hwl((D1, "in_progress"), (D2, "succeeded")))
+    d_["result"]["workers"][0]["server"] = dict(HOSTROW["server"])
+    health("HEALTH server row with a projection is still read", 0, [HOK], calls_want=HCALLS, wlist=json.dumps(d_))
+    health("HEALTH host dispatch row with no environment id is unreadable", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, server={"name": "x"})]}}))
     health("HEALTH more than 20 live workers", 1,
            ["ORCA alert: orca-unreadable:worker-cap:%d — more than 20 dispatches are live, or worker-list has more pages; some were not read"
             % HOUR] + HSUM1,
@@ -2090,7 +2179,13 @@ if LEGS in ("all", "health"):
     RUSE = ["orchestration", "run-use", "--id", RB_RUN, "--json"]
     RSHOW = ["orchestration", "run-show", "--id", RB_RUN, "--json", "--full"]
     TLIST = ["terminal", "list", "--json"]
-    FULL = [RCUR, RSHOW, TLIST, RSHOW, RUSE, RSHOW]
+    # L89 d: with the holder absent, environment list is read for WSL hosts.
+    ENVL = ["environment", "list", "--json"]
+    FULL = [RCUR, RSHOW, TLIST, ENVL, RSHOW, RUSE, RSHOW]
+    # An environment list with no WSL host: one paired SSH server.
+    NOWSL = json.dumps({"ok": True, "result": {"environments": [
+        {"id": "612deff4-eb4e-49ff-a87f-298432410f71", "name": "app.example", "runtimeId": "f68aea96-2486-4a4a-956a-4da5fcc3136f",
+         "connectionDependency": "ssh-tunnel", "orcadDeployment": {"sshTargetId": "ssh-1", "localPort": 61139, "remotePort": 6768}}]}})
     TO_LIST = [RCUR, RSHOW, TLIST]
     NAMED = "cli: orca-ide\nrun: %s\n" % RB_RUN
     ASKEND = "Ending first line: Needed from you: "
@@ -2102,7 +2197,7 @@ if LEGS in ("all", "health"):
                "STUB_RUNSHOW": show if show is not None else rrun(RB_RUN, DEAD),
                "STUB_RUNSHOW2": show2 if show2 is not None else rrun(RB_RUN, H, 3),
                "STUB_TLIST": tl if tl is not None else tlist(H, OTHER),
-               "STUB_RUNUSE": json.dumps({"ok": True, "result": {}}), "STUB_RUNSHOW_N": "2"}
+               "STUB_RUNUSE": json.dumps({"ok": True, "result": {}}), "STUB_RUNSHOW_N": "2", "STUB_ENVS": NOWSL}
         if me:
             env["ORCA_TERMINAL_HANDLE"] = me
         env.update(env_extra or {})
@@ -2146,9 +2241,36 @@ if LEGS in ("all", "health"):
     # L46: a named Run is taken only when run-current agrees or confirm names it.
     rebind("REBIND named Run that run-current does not report asks", 1, ownask("run_other"),
            cur=rrun("run_other", OTHER), calls_want=[RCUR])
-    rebind("REBIND named Run with no current Run asks", 1, ownask("no Run"), cur=NORUN, calls_want=[RCUR])
+    rebind("REBIND named Run with no current Run asks", 1, ownask("no Run"), cur=NORUN, calls_want=[RCUR, RSHOW])
     rebind("REBIND bound here with another run field asks", 1, ownask(RB_RUN, "run_other"),
-           cur=rrun(RB_RUN, H), stdin="cli: orca-ide\nrun: run_other\n", calls_want=[RCUR])
+           cur=rrun(RB_RUN, H), stdin="cli: orca-ide\nrun: run_other\n",
+           calls_want=[RCUR])
+    # L92: a Run Orca deleted (run_not_found, measured on Orca 1.4.262 for an
+    # unknown id) is retired, before or instead of any ask.
+    GONE = json.dumps({"ok": False, "error": {"code": "run_not_found", "message": "Run %s was not found." % RB_RUN}})
+    RETIRED = ["ORCA rebind: retired — Run retired; create a new one: run-show reports run_not_found for %s, so Orca "
+               "deleted it or it never existed; nothing was changed (punch-list L92)" % RB_RUN,
+               ASKEND + "nothing; this session creates a new Run (cepa:autonomy §12b rule 2)"]
+    rebind("REBIND retired Run says so", 2, RETIRED, show=GONE, env_extra={"STUB_RUNSHOW_RC": "1"},
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND retired Run that run-current does not report says so", 2, RETIRED, cur=NORUN, show=GONE,
+           env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR, RSHOW])
+    rebind("REBIND confirmed retired Run says so", 2, RETIRED, cur=NORUN, show=GONE,
+           stdin="cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN), env_extra={"STUB_RUNSHOW_RC": "1"},
+           calls_want=[RCUR, RSHOW])
+    # A gone named Run while run-current reports another may be a typo: it
+    # still asks, naming both (PR #142 review).
+    rebind("REBIND gone named Run while run-current reports another asks", 1, ownask("run_other"),
+           cur=rrun("run_other", OTHER), show=GONE, env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR])
+    OTHERERR = json.dumps({"ok": False, "error": {"code": "runtime_timeout"}})
+    rebind("REBIND run-show error before the ownership ask still asks", 1, ownask("no Run"), cur=NORUN, show=OTHERERR,
+           env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR, RSHOW])
+    rebind("REBIND run_not_found with ok true is not retired", 1, ownask("no Run"), cur=NORUN,
+           show=json.dumps({"ok": True, "error": {"code": "run_not_found"}}), env_extra={"STUB_RUNSHOW_RC": "1"},
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND run-show error other than run_not_found fails", 3,
+           ["ORCA rebind failed: run-show for %s failed" % RB_RUN, FAILEND], show=OTHERERR,
+           env_extra={"STUB_RUNSHOW_RC": "1"}, calls_want=[RCUR, RSHOW])
     rebind("REBIND confirmed named Run re-binds", 0, [DONE],
            stdin="cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN), cur=rrun("run_other", OTHER),
            calls_want=FULL)
@@ -2188,7 +2310,6 @@ if LEGS in ("all", "health"):
     ENVS = json.dumps({"ok": True, "result": {"environments": [
         {"id": "env-wsl-1", "name": "Ubuntu-24.04 (WSL)", "runtimeId": "wsl:ubuntu-24.04"},
         {"id": "612deff4-eb4e-49ff-a87f-298432410f71", "name": "app.example", "runtimeId": "f68aea96-2486-4a4a-956a-4da5fcc3136f"}]}})
-    ENVL = ["environment", "list", "--json"]
 
     def hlist(env):
         return ["terminal", "list", "--environment", env, "--json"]
@@ -2264,15 +2385,70 @@ if LEGS in ("all", "health"):
            ["ORCA rebind: ask — terminal list failed, so whether %s is still open is unknown; nothing was changed" % DEAD,
             ASKEND + "check whether terminal %s is still open" % DEAD], env_extra={"STUB_TLIST_RC": "1"},
            calls_want=TO_LIST)
+    # L89 d (orca-lab, Orca 1.4.262): a WSL host's environment row, with
+    # orcadDeployment.kind wsl. Its terminals are read on its own server even
+    # when the local list names no omitted host.
+    WSLENV = {"id": "wsl:ubuntu-24.04", "name": "Ubuntu-24.04 (WSL)", "runtimeId": "8c1f0000-0000-4000-8000-00000000a0e5",
+              "orcadDeployment": {"kind": "wsl", "distro": "Ubuntu-24.04", "localPort": 6801, "remotePort": 6800}}
+
+    def wenvs(*extra):
+        d = json.loads(NOWSL)
+        d["result"]["environments"] += [dict(WSLENV)] + list(extra)
+        return json.dumps(d)
+    WNOTE = ("ORCA rebind: note — read the Orca WSL host(s) wsl:ubuntu-24.04 on their own server; none holds %s "
+             "(punch-list L89)" % DEAD)
+    WEND = ASKEND + "bring WSL host wsl:ubuntu-24.04 online or remove it in Orca, then ask this session to run the re-bind again"
+    rebind("REBIND WSL host read on its server, holder absent: re-binds", 0, [WNOTE, DONE],
+           env_extra={"STUB_ENVS": wenvs(), "STUB_TLIST_ENV": tlist(OTHER)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("wsl:ubuntu-24.04"), RSHOW, RUSE, RSHOW])
+    rebind("REBIND WSL host holds the holder: asks as live", 1,
+           ["ORCA rebind: ask — %s is held by %s, which is still open on the Orca WSL host wsl:ubuntu-24.04; a live "
+            "coordinator's Run is never taken" % (RB_RUN, DEAD),
+            ASKEND + "say whether terminal %s or this one coordinates %s" % (DEAD, RB_RUN)],
+           env_extra={"STUB_ENVS": wenvs(), "STUB_TLIST_ENV": tlist(DEAD)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("wsl:ubuntu-24.04")])
+    rebind("REBIND WSL host list fails asks", 1,
+           ["ORCA rebind: ask — the Orca WSL host wsl:ubuntu-24.04 runs on this machine, and its own terminal list "
+            "(--environment wsl:ubuntu-24.04) failed, so whether %s is still open there is unknown; nothing was changed" % DEAD, WEND],
+           env_extra={"STUB_ENVS": wenvs(), "STUB_TLIST_ENV_RC": "1"},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("wsl:ubuntu-24.04")])
+    rebind("REBIND WSL host list partial asks", 1,
+           ["ORCA rebind: ask — the Orca WSL host wsl:ubuntu-24.04 runs on this machine, and its own terminal list "
+            "(--environment wsl:ubuntu-24.04) returned a partial or unknown shape, so whether %s is still open there is "
+            "unknown; nothing was changed" % DEAD, WEND],
+           env_extra={"STUB_ENVS": wenvs(), "STUB_TLIST_ENV": tlist(OTHER, trunc=True)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("wsl:ubuntu-24.04")])
+    ENVASK = ASKEND + "check whether terminal %s is still open, then ask this session to run the re-bind again" % DEAD
+    rebind("REBIND environment list fails asks", 1,
+           ["ORCA rebind: ask — environment list failed, so whether an Orca WSL host of this machine holds %s is "
+            "unknown; nothing was changed" % DEAD, ENVASK],
+           env_extra={"STUB_ENVS_RC": "1"}, calls_want=TO_LIST + [ENVL])
+    ESHAPE = ["ORCA rebind: ask — environment list returned a shape this reader does not know, so whether an Orca WSL "
+              "host of this machine holds %s is unknown; nothing was changed" % DEAD, ENVASK]
+    rebind("REBIND environment list not ok asks", 1, ESHAPE, env_extra={"STUB_ENVS": json.dumps({"ok": False})},
+           calls_want=TO_LIST + [ENVL])
+    rebind("REBIND WSL host id of a bad shape asks", 1, ESHAPE,
+           env_extra={"STUB_ENVS": json.dumps({"ok": True, "result": {"environments": [dict(WSLENV, id="--json")]}})},
+           calls_want=TO_LIST + [ENVL])
+    rebind("REBIND six WSL hosts ask", 1, ESHAPE,
+           env_extra={"STUB_ENVS": json.dumps({"ok": True, "result": {"environments": [
+               dict(WSLENV, id="wsl:d%d" % i) for i in range(6)]}})}, calls_want=TO_LIST + [ENVL])
+    # Named as omitted too: read once, by the omitted-host step.
+    rebind("REBIND omitted WSL host is read once", 0,
+           ["ORCA rebind: note — terminal list left out host(s) runtime:%s; each was read on its own server and does not "
+            "hold %s (punch-list L85)" % (WSLENV["runtimeId"], DEAD), DONE],
+           tl=tlist(H, omitted=("runtime:" + WSLENV["runtimeId"],)),
+           env_extra={"STUB_ENVS": wenvs(), "STUB_TLIST_ENV": tlist(OTHER)},
+           calls_want=[RCUR, RSHOW, TLIST, ENVL, hlist("wsl:ubuntu-24.04"), RSHOW, RUSE, RSHOW])
     # PR #116 review: the recheck right before run-use.
     rebind("REBIND Run moved before run-use asks", 1,
            ["ORCA rebind: ask — %s moved while this session checked it (run-show now reports %s %s 3, was %s %s 2); "
             "nothing was changed" % (RB_RUN, RB_RUN, OTHER, RB_RUN, DEAD),
             ASKEND + "say whether this session should still coordinate %s (then it runs the re-bind again)" % RB_RUN],
-           show2=rrun(RB_RUN, OTHER, 3), env_extra={"STUB_RUNSHOW_N": "1"}, calls_want=TO_LIST + [RSHOW])
+           show2=rrun(RB_RUN, OTHER, 3), env_extra={"STUB_RUNSHOW_N": "1"}, calls_want=TO_LIST + [ENVL, RSHOW])
     rebind("REBIND failed recheck fails", 3,
            ["ORCA rebind failed: run-show for %s failed on the recheck before run-use; nothing was changed" % RB_RUN,
-            FAILEND], env_extra={"STUB_RUNSHOW_N": "1", "STUB_RUNSHOW2_RC": "1"}, calls_want=TO_LIST + [RSHOW])
+            FAILEND], env_extra={"STUB_RUNSHOW_N": "1", "STUB_RUNSHOW2_RC": "1"}, calls_want=TO_LIST + [ENVL, RSHOW])
     # L46 (#113 finding 11): done only when run-show shows this terminal one
     # generation higher; run-show reads the Run by id, so it is the proof.
     def genfail(got):
@@ -2416,11 +2592,11 @@ if LEGS in ("all", "health"):
     RB_ENV = {"CEPA_PLUGIN_ROOT": rb_plug, "ORCA_TERMINAL_HANDLE": H, "STUB_RUNCUR": rrun(RB_RUN, DEAD),
               "STUB_RUNSHOW": rrun(RB_RUN, DEAD), "STUB_RUNSHOW2": rrun(RB_RUN, H, 3),
               "STUB_TLIST": tlist(H, OTHER), "STUB_RUNUSE": json.dumps({"ok": True, "result": {}}),
-              "STUB_RUNSHOW_N": "2"}
+              "STUB_RUNSHOW_N": "2", "STUB_ENVS": NOWSL}
     run_block("RULE2BLOCK without a run line never takes run-current's Run", fill2(), RB_ENV, 0, norunask(), [RCUR])
     run_block("RULE2BLOCK with a run line re-binds the named Run", fill2(RB_RUN), RB_ENV, 0, [DONE], FULL)
     run_block("RULE2BLOCK with a run line asks when run-current does not agree", fill2(RB_RUN),
-              dict(RB_ENV, STUB_RUNCUR=NORUN), 0, ownask("no Run"), [RCUR])
+              dict(RB_ENV, STUB_RUNCUR=NORUN), 0, ownask("no Run"), [RCUR, RSHOW])
     run_block("RULE2BLOCK with run and confirm lines re-binds", fill2(RB_RUN, RB_RUN), dict(RB_ENV, STUB_RUNCUR=NORUN),
               0, [DONE], FULL)
     run_block("RULE2BLOCK shell text in the run line runs nothing", fill2("run_x$(touch %s)" % MARK), RB_ENV, 0,

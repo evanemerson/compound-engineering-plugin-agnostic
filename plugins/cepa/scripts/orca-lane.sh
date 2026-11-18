@@ -55,8 +55,9 @@
 # live-agent reads before `rm` (`worktree ps`, `terminal list`) never count
 # with a host left out: a WSL host runs on this machine, so an agent there
 # can sit in the lane's directory while no row here shows it (PR #138
-# review). So `rm` still refuses while a WSL host is added, now naming it;
-# `name` and `create` no longer do. Measured on Orca 1.4.259
+# review). Up to 1.59.0 `rm` therefore refused while a WSL host was added;
+# `name` and `create` did not. THE WSL HOST below lifts that for `rm` only by
+# a measured read matched by path (operator's "Keep strict", 2026-11-16). Measured on Orca 1.4.259
 # (WSL), 2026-11-16, read only, with `worktree ps --json`, `worktree list
 # --json` and `terminal list --json`: `worktree ps` and `worktree list` rows carry
 # `hostId`, `terminal list` rows `executionHostId`, all `local`, and each
@@ -65,8 +66,35 @@
 # was omitted at the time, so the omitted shape is the sender's. Either way
 # a note line names the omitted hosts (`ORCA lane note: …`): before the
 # Ending line when there is one, else last.
-# Stated limit: a repo added on a host (not on `local`) is not supported; the
-# script resolves only the local registration (residual, PR body).
+#
+# THE WSL HOST (punch-list L89 c). Measured on Orca 1.4.262 (WSL), 2026-11-17,
+# read only, with the Ubuntu-24.04 WSL host added (this run re-measured
+# orca-lab's report): `environment list --json` has its row (`id`
+# `wsl:ubuntu-24.04`, `orcadDeployment.kind` `wsl`, a `runtimeId`); this
+# machine's `worktree ps` and `terminal list` leave it out as
+# `runtime:wsl%3Aubuntu-24.04` (the env id, URL-encoded); its own `worktree
+# ps --environment wsl:ubuntu-24.04 --limit 500 --json` is complete in its
+# own scope (`hostIds: ["local"]`, `omittedHostIds: []`, `truncated: false`,
+# `totalCount` equal to its rows) with Linux `path`s, and its agent rows have
+# no cwd (orca-lab). So before `rm`'s live-agent read, the script reads
+# `environment list`, then, for the one `kind: wsl` row, that host's own
+# `worktree ps`: an agent on a row whose path is the lane's keeps the lane,
+# and so does a failed or partial host read, an unknown shape, or more than
+# one WSL host. A host read with no agent in the lane's directory clears
+# that host: the local read then counts when every host it left out is a
+# cleared host (by `runtime:<id or runtimeId>`, URL-decoded), with a note
+# line. Any other omitted host still keeps the lane. Both reads are bounded
+# at 5 s with no retry, to stay inside the 10-minute budget below. What the
+# match proves: no host worktree row at the lane's path has an agent. The
+# host Orca starts agents only in worktrees it has registered, which list
+# with their path; a shell on the host that only `cd`s into the lane is not
+# seen, as a plain local terminal is not (stated limits, below).
+# Stated limit: a repo added on a host (not on `local`) is not supported by
+# `create` or `name`; the script resolves only the local registration. The
+# host's own `repo list --environment <host>` row has its own `id`, a Linux
+# `path`, and `connectionId`/`hostId` null (orca-lab, L89 e, not re-run
+# here), so nothing in it ties to the local registration, and a host create
+# would need `--environment` on every call (residual, PR body).
 #
 # Paths (review finding #5): Orca returns Windows UNC paths. A path
 # `\\wsl.localhost\<distro>\a\b` becomes `/a/b` only when <distro> equals
@@ -158,7 +186,8 @@
 #              and passed to orca-lane-reflog.sh (L77 item 1). An override it
 #              cannot use refuses here, before the reflog test.
 #           4. Refuse when `worktree ps` shows an agent on the lane, or the
-#              read is not complete. A finished agent blocks as well (`done`
+#              read is not complete. First (L89 c), the one Orca WSL host's
+#              own `worktree ps` is read and matched by path (THE WSL HOST). A finished agent blocks as well (`done`
 #              also marks an idle live session, T1); when every agent is done,
 #              the Ending line lists the terminal handles to close (L77 item
 #              3), from one `terminal list` read.
@@ -297,9 +326,9 @@
 #     once can both pass step 1. One coord@main per repo makes it rare; the
 #     basename check in step 3 then stops the second.
 #   - `rm` runs the repo's archive hook with Orca's own bound; the script
-#     bounds the call at 300 s. Worst case about 575 s of bounded calls:
+#     bounds the call at 300 s. Worst case about 589 s of bounded calls:
 #     four reads at 2 x 17 s, the fetch 62 s, the trunk read 12 s, the reflog
-#     check 62 s, rm 302 s; local git work (measured 2-10 s on the 2026-11-01
+#     check 62 s, rm 302 s, and the two WSL host reads (L89) at 7 s each; local git work (measured 2-10 s on the 2026-11-01
 #     lanes) comes on top. The `terminal list` read is not in that sum: it
 #     runs only on the way to `kept`, so `rm` never follows it. Run the block
 #     with a tool timeout of 10 minutes. A call the bound killed reads as
@@ -363,6 +392,7 @@ cepa_ln_note() {
   cepa_ln_noted=1
   case "$st" in
     counted) echo "ORCA lane note: Orca left host(s) $ids out of its reads; this lane is on this machine (host local), so they cannot hold its rows and the reads counted" ;;
+    hostread) echo "ORCA lane note: Orca left host(s) $ids out of worktree ps; each is an Orca WSL host this run read on its own server, and no host worktree row at this lane's path has an agent, so the live-agent check counted (punch-list L89)" ;;
     strict) echo "ORCA lane note: Orca left host(s) $ids out of worktree ps or terminal list; an agent on a host of this machine can sit in this lane's directory, so the live-agent check did not count; bring the host online or remove it in Orca, then ask again" ;;
     *) echo "ORCA lane note: Orca left host(s) $ids out of its reads and did not cover this machine (host local), so the read did not count; bring the host online or remove it in Orca, then ask again" ;;
   esac
@@ -479,7 +509,7 @@ cepa_ln_orca() {
 # the read is not complete, which the caller treats as UNKNOWN.
 cepa_ln_py() {
   python3 -I -c '
-import json, os, re, sys
+import json, os, re, sys, urllib.parse
 mode, f = sys.argv[1], sys.argv[2]
 args = sys.argv[3:]
 LIMIT = 500
@@ -526,8 +556,20 @@ def complete(r, key, strict=False):
         # machine, so an agent there can sit in the lane directory while
         # the rows of this machine show none (PR #138 review): never counted.
         ok = "local" in cov and not strict
+        # L89 c: an omitted host that is an Orca WSL host this run already
+        # read on its own server (no agent in the lane directory) is cleared.
+        st = "counted " if ok else "strict " if strict else "refused "
+        if strict and "local" in cov:
+            try:
+                clr = set(open(os.path.join(os.path.dirname(f), "cleared")).read().split())
+            except OSError:
+                clr = set()
+            want = [urllib.parse.unquote(x[len("runtime:"):]) if isinstance(x, str) and x.startswith("runtime:") else None
+                    for x in om]
+            if clr and all(w is not None and w in clr for w in want):
+                ok, st = True, "hostread "
         with open(os.path.join(os.path.dirname(f), "omitted"), "w") as o:
-            o.write(("counted " if ok else "strict " if strict else "refused ") + names + "\n")
+            o.write(st + names + "\n")
         if not ok:
             sys.exit(1)
     return rows
@@ -737,6 +779,52 @@ elif mode == "terms":
         if x.get("orphaned") is True and x["handle"] not in hs:
             hs.append(x["handle"])
     print(live, noterm, *hs)
+elif mode == "wslenvs":
+    # L89 c/d: the environment list rows of Orca WSL hosts (they run on this
+    # machine). Prints `<id> <runtimeId>` per host; more than one exits 3.
+    envs = r.get("environments") if isinstance(r, dict) else None
+    if not isinstance(envs, list):
+        sys.exit(1)
+    out = []
+    for e in envs:
+        if not isinstance(e, dict):
+            sys.exit(1)
+        od = e.get("orcadDeployment")
+        if isinstance(od, dict) and od.get("kind") == "wsl":
+            i, rt = e.get("id"), e.get("runtimeId")
+            if not (isinstance(i, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", i)):
+                sys.exit(1)
+            if not (isinstance(rt, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", rt)):
+                rt = "-"
+            out.append("%s %s" % (i, rt))
+    if len(out) > 1:
+        sys.exit(3)
+    print("\n".join(out))
+elif mode == "hostagents":
+    # L89 c: a WSL host read (`worktree ps --environment <id>`). Complete in
+    # its own scope (hosts named, none left out), then the agents of every
+    # row whose path is this lane. Agent rows have no cwd (orca-lab), so the
+    # worktree path is the only match.
+    lane, distro = args
+    rows = r.get("worktrees") if isinstance(r, dict) else None
+    hs = r.get("hostScope") if isinstance(r, dict) else None
+    if not isinstance(rows, list) or r.get("truncated") is not False \
+            or r.get("totalCount") != len(rows) or len(rows) >= LIMIT:
+        sys.exit(1)
+    if not isinstance(hs, dict) or not hs.get("hostIds") or hs.get("omittedHostIds") != []:
+        sys.exit(1)
+    n = 0
+    for w in rows:
+        if not isinstance(w, dict):
+            sys.exit(1)
+        p = linux(w.get("path"), distro)
+        if p is None:
+            sys.exit(1)
+        if p == lane:
+            if not isinstance(w.get("agents"), list):
+                sys.exit(1)
+            n += len(w["agents"])
+    print(n)
 elif mode == "rmres":
     if d.get("ok") is True:
         print("removed" if isinstance(r, dict) and r.get("removed") is True else "unknown")
@@ -1156,6 +1244,35 @@ if [ -n "$cepa_ln_lost" ]; then
     *) kept "kept $cepa_ln_lane — HEAD reflog holds a commit no origin ref has, and whether it landed is unknown (${cepa_ln_rlast:-no output})" \
          "check gh auth status and the network, then ask again" ;;
   esac
+fi
+# THE WSL HOST (punch-list L89 c; header): an Orca WSL host runs on this
+# machine, and this machine's worktree ps has no row for its agents. So the
+# host's own worktree ps is read and matched by path first. One host at most;
+# 5-second bounds, no retry (the 10-minute budget, header).
+cepa_ln_orca "$cepa_ln_tmp/envs.json" 0 5 environment list --json \
+  || kept "kept $cepa_ln_lane — environment list failed, so an agent on an Orca WSL host cannot be ruled out" \
+          "check $cepa_ln_lane for a live agent, then ask again"
+cepa_ln_wrc=0
+cepa_ln_wsl=$(cepa_ln_py wslenvs "$cepa_ln_tmp/envs.json") || cepa_ln_wrc=$?
+case "$cepa_ln_wrc" in
+  0) ;;
+  3) kept "kept $cepa_ln_lane — more than one Orca WSL host is added, and this script reads one" \
+       "remove the extra WSL host in Orca, or check $cepa_ln_lane for a live agent yourself, then ask again" ;;
+  *) kept "kept $cepa_ln_lane — environment list has a shape this script does not know, so an agent on an Orca WSL host cannot be ruled out" \
+       "check $cepa_ln_lane for a live agent, then ask again" ;;
+esac
+if [ -n "$cepa_ln_wsl" ]; then
+  read -r cepa_ln_wid cepa_ln_wrt <<<"$cepa_ln_wsl"
+  cepa_ln_orca "$cepa_ln_tmp/hps.json" 0 5 worktree ps --environment "$cepa_ln_wid" --limit 500 --json \
+    || kept "kept $cepa_ln_lane — worktree ps on the Orca WSL host $cepa_ln_wid failed, so a live agent there cannot be ruled out" \
+            "bring WSL host $cepa_ln_wid online or remove it in Orca, then ask again"
+  cepa_ln_hn=$(cepa_ln_py hostagents "$cepa_ln_tmp/hps.json" "$r_path" "$cepa_ln_distro") \
+    || kept "kept $cepa_ln_lane — worktree ps on the Orca WSL host $cepa_ln_wid was not a complete read, so a live agent there cannot be ruled out" \
+            "bring WSL host $cepa_ln_wid online or remove it in Orca, then ask again"
+  [ "$cepa_ln_hn" = 0 ] \
+    || kept "kept $cepa_ln_lane — $cepa_ln_hn agent(s) in its directory on the Orca WSL host $cepa_ln_wid" \
+            "close the agent in $cepa_ln_lane on WSL host $cepa_ln_wid, then ask again"
+  printf '%s %s\n' "$cepa_ln_wid" "$cepa_ln_wrt" >"$cepa_ln_tmp/cleared"
 fi
 cepa_ln_orca "$cepa_ln_tmp/ps.json" 1 15 worktree ps --limit 500 --json \
   || kept "kept $cepa_ln_lane — worktree ps failed, so a live agent cannot be ruled out" "check $cepa_ln_lane for a live agent"

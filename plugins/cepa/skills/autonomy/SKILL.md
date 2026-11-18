@@ -1793,7 +1793,12 @@ limits.
      owns what counts as the same message and its limits. Why: on
      2026-11-16 a `dispatch:` send that Orca delivered as a follow-up
      dispatch exited 5 with "the reply has no result.message.id" and wrote a
-     send-failed alert (L88 item 2, sender report; its cause was not found).
+     send-failed alert (L88 item 2). The cause (L89 b, orca-lab on Orca
+     1.4.262, sender report): a `dispatch:` send to a finished `--keep-open`
+     worker starts a follow-up dispatch on it, and the reply names that
+     dispatch, not a message. The script now prints `Orca send stored as a
+     follow-up dispatch: …` for that shape, exit 0 (its header owns what
+     counts). Each such send starts one more dispatch on that worker.
    - **A host worker's handle takes `on:`** (punch-list L88). A `term_`
      handle that a paired Orca server issued (a worker on an Orca WSL or SSH
      host) is reached only through that server: the block adds the line
@@ -1802,10 +1807,9 @@ limits.
      `--on <server>`. `on:` goes only with a `term_` target. Such a target
      is never nudged from this machine (`orca-nudge.sh` reads only this
      machine's terminals): with `nudge` the script prints
-     `Orca nudge skipped: …` and the `tell <handle>` ending line. Not
-     measured here: no host worker was at hand, so the argv follows
-     `send --help` on Orca 1.4.259 and the re-read is the same inbox read
-     (`--help`: "Your own Orca carries it").
+     `Orca nudge skipped: …` and the `tell <handle>` ending line. Orca
+     stores such a send only in the host's inbox, so the script re-reads it
+     there (L89 a; the `on:` field in its header owns the measurement).
      When a send fails with the WSL interop error (stderr holding
      `UtilAcceptVsock` and `accept4 failed 110`, seen under concurrent
      sessions in the L26 re-probe, 2026-10-31), the script will
@@ -2024,6 +2028,10 @@ limits.
      Only Orca's own `"ok": false` is a failure that needs no read. A start
      that failed after it was dispatched shows in rule 8's health check as a
      `failed:` alert (punch-list L60).
+   - **A worker on an Orca host** (`worker-start --on <server>`) gets its
+     spec as `--spec "<text>"`, never `--spec-file`: Orca opened a Linux
+     path as `C:\tmp\…` and failed (orca-lab, Orca 1.4.262, sender report,
+     punch-list L89). It cannot settle its own dispatch (rule 3).
    - **How Orca names a `new-child` worktree** (one-off lanes only; a lane
      made with `create` below is parked with no branch) (measured on Orca 1.4.244 from
      `worktree create --help` and `worker-start --help`; no dry run exists and
@@ -2186,7 +2194,7 @@ limits.
      Orca prompted nothing that was alive until coord@main ran `run-use` by
      hand.
      ```bash
-     # Run with a tool timeout of at least 4 minutes (the script's header
+     # Run with a tool timeout of at least 8 minutes (the script's header
      # states its worst case).
      unset CEPA_ROOT
      for R in "${CEPA_PLUGIN_ROOT:-}/scripts/resolve-plugin-root.sh" \
@@ -2228,6 +2236,14 @@ limits.
      would close the heredoc early and run the lines after it; the session
      reports `ORCA rebind skipped: a field value is not one line` and runs
      nothing.
+     `ORCA rebind: retired — Run retired; create a new one: …` (exit 2,
+     punch-list L92) means `run-show` answered `run_not_found`: from Orca
+     1.4.262 hourly maintenance deletes a Run with no open work and no live
+     coordinator pane for a day. The session creates a new Run with
+     `run-create` (a coord@main with the objective above), and that Run is
+     its named Run from then on; its next `/cepa:handoff` writes the new id
+     as the `Orca Run:` line. The old id names nothing, so it is never passed
+     again. The script's header owns what is and is not measured.
      `ORCA rebind refused: …` or `… skipped: …` means the re-bind did not
      run: the body says so. A handle in the prompt is checked by rule 1's
      open-terminal rule.
@@ -2267,6 +2283,21 @@ limits.
      installed code and its guide's `send` text; not measured on a live
      worker. A worker that gets such a follow-up reads the mail, acts on it
      by its own task's scope, and sends one more `worker_done`.
+   - **A worker on an Orca host gets its `worker_done` rejected** (punch-list
+     L89 f; orca-lab, Orca 1.4.262, live WSL host, sender report). Orca
+     answered every `worker_done` from a worker started with `--on` with
+     "unknown dispatch/task …" and the body attached: the home Orca's mail
+     check looks the dispatch up among its local dispatches, and an `--on`
+     worker's dispatch is a remote one (an Orca 1.4.262 regression, filed
+     as stablyai/orca#43869). `worker-show` still reports the dispatch
+     `succeeded`. The coordinator reads the report from the rejected
+     message, checks it as it checks any worker's claim (§10), and reads
+     `worker-show` for the outcome. Rule 8's health check does not watch
+     such a dispatch (`orca-health.sh` skips its row; HOST DISPATCHES in
+     its header). There is no cepa workaround; the limit holds until
+     #43869 is fixed. Sender report, not measured here: a coordinator in a
+     terminal on the WSL host that starts workers there without `--on`
+     gets a clean `worker_done`.
    - **A worker with no preamble sends its report, never only prints it.**
      When line 2 of its prompt is a `Report to:` line (rule 2), its final
      report sends the Handoff block to that handle with rule 1's send, then

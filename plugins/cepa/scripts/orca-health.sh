@@ -144,6 +144,26 @@
 #                        re-bind block (orca-rebind.sh) fixes it. Keyed by the
 #                        UTC hour, so an ack silences it for that hour only.
 #                        Not raised when the field is absent.
+#   HOST DISPATCHES (punch-list L89 g): a dispatch on an Orca host. orca-lab
+#                        reported its `worker-list` row as `projection: null`
+#                        (Orca 1.4.262, live WSL host). This run re-read
+#                        `worker-list --run run_5d80668f22e7 --json --full`
+#                        on Orca 1.4.262, 2026-11-17, read only: its 10 host
+#                        rows have NO `projection` key, and carry `server`
+#                        (`environmentId` `wsl:ubuntu-24.04`, `name`, `asOf`)
+#                        beside `workerState` and `dispatchStatus`; its 3
+#                        local rows have `projection` and no `server`. So a
+#                        row with a `server` object whose `environmentId` is
+#                        a string other than `local`, a valid dispatch id and
+#                        no projection
+#                        (absent or null) is skipped, never read as unknown:
+#                        before this, one such row made every hourly run
+#                        alert `orca-unreadable:worker-list`. So no alert here
+#                        covers a host worker (exited, long, failed);
+#                        `cepa:autonomy` §12b rule 3 says what a coordinator
+#                        does instead. A row with no projection and no
+#                        `server` (the 1.4.246 short shape), or a bad
+#                        dispatch id, is still unreadable.
 #   orca-unreadable:<what>:<hour>  an Orca call failed, timed out, was not
 #                        started (THE TIME BOUND, below), or returned a shape
 #                        this reader does not know; or the alert directory
@@ -395,6 +415,15 @@ if not isinstance(rows, list):
     sys.exit(1)
 ids, failed = [], []
 for w in rows:
+    # L89 g: a dispatch started on an Orca host (`worker-start --on`) lists
+    # with no projection and a `server` object naming its environment. The
+    # local Orca projects nothing for it, so it is not read here (header,
+    # HOST DISPATCHES); any other row without a projection is still unknown.
+    sv = w.get("server") if isinstance(w, dict) else None
+    if isinstance(sv, dict) and isinstance(sv.get("environmentId"), str) and sv["environmentId"] != "local" \
+            and w.get("projection") is None \
+            and isinstance(w.get("dispatchId"), str) and re.fullmatch(r"ctx_[0-9a-f]{6,32}", w["dispatchId"]):
+        continue
     i, o = w["dispatchId"], w["projection"]["outcome"]
     if not (isinstance(i, str) and re.fullmatch(r"ctx_[0-9a-f]{6,32}", i) and isinstance(o, str)):
         sys.exit(1)
