@@ -2694,6 +2694,7 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     release: `worker-release` of the original dispatch after follow-ups
        says retained/ownership_transferred; release the newest follow-up.
     f also hits follow-up worker_done (#43869).
+    Owner: tab44@matrix (dispatched 2026-11-18, operator's choice).
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
