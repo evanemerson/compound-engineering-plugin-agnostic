@@ -2665,6 +2665,12 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     `orca-lane.sh rm` is the block in every repo. orca-lab offers to
     re-measure fixes live; f goes upstream via orca-lab. Owner:
     tab43@matrix (with L92), dispatched 2026-11-17.
+    f cause (orca-lab, v1.4.262 source): home Orca's check-mail
+    reconciliation (Orca PR #39256) looks the dispatch up in local
+    dispatch_contexts only; an --on worker's is in remote_dispatches.
+    Filed upstream as stablyai/orca#43869; no cepa workaround. A coord in
+    a terminal on the host, starting workers there without --on, gets a
+    clean worker_done.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
