@@ -2746,7 +2746,7 @@ L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
 L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host cannot reach Windows Orca.**
     status: pending
     severity: P2
-    owner: matrix (tab46@matrix, start after PR #143 merges; operator 2026-11-18)
+    owner: matrix (tab46@matrix, items 1-3; item 3 added 2026-11-18 by the operator)
     From orca-lab coord@main (msg_9dce386e6069, 2026-11-18; sender-reported).
     The operator plans to move every repo to WSL-host projects only. A
     coord@main on the host (Orca 1.4.262, cepa 1.60.0) ran health, lane
