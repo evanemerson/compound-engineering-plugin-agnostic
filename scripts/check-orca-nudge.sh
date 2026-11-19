@@ -212,6 +212,12 @@
 #              last failure; a worker_done row, an ack, a bad stage, a last
 #              failure outside the plain shape and a worker-show of another id
 #              each have a case.
+#   HEALTH pages — punch-list L94: worker-list is read page by page through
+#              `--cursor` (STUB_WLPAGES answers by cursor). Finished rows over
+#              several pages are not capped; more than 20 live rows, also
+#              across pages, are; a failed row on a later page alerts; a row
+#              on two pages counts once; a failed page, a bad cursor, a
+#              non-boolean hasMore and more than 10 pages are unreadable.
 #   REBIND omitted — punch-list L85: a host terminal list left out is read
 #              on its own server (environment list, then terminal list
 #              --environment); live there asks, absent everywhere re-binds
@@ -343,6 +349,10 @@ case "$1 $2" in
     # read of the terminal's owner before a dispatch: send).
     read -r n <"$STUB_LOG.wl"; n=$((n + 1)); echo "$n" >"$STUB_LOG.wl"
     if [ "$n" = 1 ] && [ -n "${STUB_WLIST_PRE+x}" ]; then printf '%s' "$STUB_WLIST_PRE"; exit 0; fi
+    # L94: a read with `--cursor C` answers from $STUB_WLPAGES/C.json, and
+    # exits 1 when there is no such page.
+    c=; prev=; for a in "$@"; do [ "$prev" != --cursor ] || c=$a; prev=$a; done
+    if [ -n "$c" ]; then [ -f "${STUB_WLPAGES-/nonexistent}/$c.json" ] || exit 1; cat "$STUB_WLPAGES/$c.json"; exit 0; fi
     printf '%s' "${STUB_WLIST-}"; exit "${STUB_WLIST_RC:-0}" ;;
   "orchestration worker-show")
     # L89 b: a read on a host server (--environment after the dispatch id)
@@ -1963,7 +1973,7 @@ if LEGS in ("all", "health"):
               ["orchestration", "inbox", "--limit", "200", "--json", "--full"]]
 
     def health(name, rc, want, runcur=HRUN, wlist=None, shows=None, inbox_json=None, files=None, acked=(),
-               args=None, me=H, env_extra=None, calls_want=None, keep=False, cwd=HWT, prep=None):
+               args=None, me=H, env_extra=None, calls_want=None, keep=False, cwd=HWT, prep=None, wpages=None):
         if not keep:
             if os.path.isdir(HDIR):
                 os.chmod(HDIR, 0o700)
@@ -1980,11 +1990,17 @@ if LEGS in ("all", "health"):
         os.mkdir(sdir)
         for d, j in (shows if shows is not None else {D1: hshow()}).items():
             open(os.path.join(sdir, d + ".json"), "w").write(j)
+        # L94: later worker-list pages, by the cursor that names them.
+        pdir = os.path.join(TMP, "wlpages")
+        shutil.rmtree(pdir, ignore_errors=True)
+        os.mkdir(pdir)
+        for c, j in (wpages or {}).items():
+            open(os.path.join(pdir, c + ".json"), "w").write(j)
         # L46: the Run is the one the session names (argument 2), read with
         # run-show.
         env = {"CEPA_ORCA_ALERT_DIR": HDIR, "STUB_RUNSHOW": runcur, "STUB_WSHOWDIR": sdir,
                "STUB_WLIST": wlist if wlist is not None else hwl((D1, "in_progress"), (D2, "succeeded")),
-               "STUB_INBOX": inbox_json if inbox_json is not None else hinbox()}
+               "STUB_INBOX": inbox_json if inbox_json is not None else hinbox(), "STUB_WLPAGES": pdir}
         if me:
             env["ORCA_TERMINAL_HANDLE"] = me
         env.update(env_extra or {})
@@ -2320,16 +2336,52 @@ if LEGS in ("all", "health"):
     health("HEALTH server row with a projection is still read", 0, [HOK], calls_want=HCALLS, wlist=json.dumps(d_))
     health("HEALTH host dispatch row with no environment id is unreadable", 1, unread("worker-list"),
            wlist=json.dumps({"ok": True, "result": {"workers": [dict(HOSTROW, server={"name": "x"})]}}))
-    health("HEALTH more than 20 live workers", 1,
-           ["ORCA alert: orca-unreadable:worker-cap:%d — more than 20 dispatches are live, or worker-list has more pages; some were not read"
-            % HOUR] + HSUM1,
+    CAP = "ORCA alert: orca-unreadable:worker-cap:%d — more than 20 dispatches are live; only 20 were read" % HOUR
+    health("HEALTH more than 20 live workers", 1, [CAP] + HSUM1,
            wlist=hwl(*[("ctx_%012x" % i, "in_progress") for i in range(21)]),
            shows={"ctx_%012x" % i: hshow(did="ctx_%012x" % i) for i in range(21)})
-    health("HEALTH worker-list with more pages", 1,
-           ["ORCA alert: orca-unreadable:worker-cap:%d — more than 20 dispatches are live, or worker-list has more pages; some were not read"
+    health("HEALTH 20 live workers is not capped", 0, [HOK],
+           wlist=hwl(*[("ctx_%012x" % i, "in_progress") for i in range(20)]),
+           shows={"ctx_%012x" % i: hshow(did="ctx_%012x" % i) for i in range(20)})
+    # WORKER-LIST PAGES (punch-list L94): every page is read by its cursor.
+    # Shape as measured on Orca 1.4.262 (run_ce7a15d01f88, --limit 5).
+    def hpage(rows, cur=None, total=113):
+        d = json.loads(hwl(*rows))
+        d["result"]["page"] = {"limit": 100, "total": total, "hasMore": cur is not None, "nextCursor": cur}
+        return json.dumps(d)
+    WLC = ["orchestration", "worker-list", "--run", RUN, "--json", "--full"]
+    done = lambda a, b: [("ctx_%012x" % i, "succeeded") for i in range(a, b)]
+    health("HEALTH many finished rows over several pages are not capped", 0, [HOK],
+           wlist=hpage([(D1, "in_progress")] + done(1, 100), "eyJwMiI"),
+           wpages={"eyJwMiI": hpage(done(100, 200), "eyJwMyI"), "eyJwMyI": hpage(done(200, 213))},
+           calls_want=[HCALLS[0], WLC, WLC + ["--cursor", "eyJwMiI"], WLC + ["--cursor", "eyJwMyI"]] + HCALLS[2:])
+    health("HEALTH more than 20 live rows across pages", 1, [CAP] + HSUM1,
+           wlist=hpage([("ctx_%012x" % i, "in_progress") for i in range(11)], "eyJwMiI"),
+           wpages={"eyJwMiI": hpage([("ctx_%012x" % i, "in_progress") for i in range(11, 21)])},
+           shows={"ctx_%012x" % i: hshow(did="ctx_%012x" % i) for i in range(21)})
+    health("HEALTH failed row on a later page alerts", 1, [falert()] + HSUM1,
+           wlist=hpage([(D1, "in_progress")] + done(1, 100), "eyJwMiI"),
+           wpages={"eyJwMiI": hpage(done(100, 112) + [(D2, "failed", "agent_readiness")])},
+           shows={D1: hshow(), D2: fshow()})
+    health("HEALTH a row seen on two pages counts once", 0, [HOK],
+           wlist=hpage([("ctx_%012x" % i, "in_progress") for i in range(20)], "eyJwMiI"),
+           wpages={"eyJwMiI": hpage([("ctx_%012x" % 19, "in_progress")])},
+           shows={"ctx_%012x" % i: hshow(did="ctx_%012x" % i) for i in range(20)})
+    health("HEALTH a later page that fails is unreadable", 1, unread("worker-list"),
+           wlist=hpage([(D1, "in_progress")], "eyJub3BlIg"))
+    health("HEALTH a cursor outside base64url is unreadable", 1, unread("worker-list"),
+           wlist=hpage([(D1, "in_progress")], "-x;id"), wpages={"-x;id": hpage([])})
+    health("HEALTH hasMore that is not a boolean is unreadable", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [], "page": {"hasMore": "yes", "nextCursor": "eyJwMiI"}}}),
+           wpages={"eyJwMiI": hpage([(D1, "in_progress")])})
+    health("HEALTH more than 10 pages", 1,
+           ["ORCA alert: orca-unreadable:worker-pages:%d — worker-list has more than 10 pages; dispatches past them were not read"
             % HOUR] + HSUM1,
-           wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": D1, "projection": {"outcome": "in_progress"}}],
-                                                    "page": {"hasMore": True, "nextCursor": "c1"}}}))
+           wlist=hpage([(D1, "in_progress")], "p1"),
+           wpages={"p%d" % i: hpage([], "p%d" % (i + 1)) for i in range(1, 12)})
+    health("HEALTH 10 pages is read whole", 0, [HOK],
+           wlist=hpage([(D1, "in_progress")], "p1"),
+           wpages=dict({"p%d" % i: hpage([], "p%d" % (i + 1)) for i in range(1, 9)}, p9=hpage([])))
     health("HEALTH worker-list last page is read", 0, [HOK],
            wlist=json.dumps({"ok": True, "result": {"workers": [{"dispatchId": D1, "projection": {"outcome": "in_progress"}}],
                                                     "page": {"hasMore": False}}}))

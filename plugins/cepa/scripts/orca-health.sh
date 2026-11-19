@@ -167,12 +167,42 @@
 #   orca-unreadable:<what>:<hour>  an Orca call failed, timed out, was not
 #                        started (THE TIME BOUND, below), or returned a shape
 #                        this reader does not know; or the alert directory
-#                        could not be read; or more than 20 dispatches are
-#                        live or worker-list has more pages. The Run's health
-#                        is then unknown. Its key carries the UTC hour, so an
-#                        ack silences it for that hour only, and while it is
+#                        could not be read; or (`worker-cap`) more than 20
+#                        dispatches are live, so only 20 are read with
+#                        `worker-show`; or (`worker-pages`) worker-list has
+#                        more than 10 pages. The Run's health is then
+#                        unknown. Its key carries the UTC hour, so an ack
+#                        silences it for that hour only, and while it is
 #                        acked the summary reads `ORCA health: unknown — …`,
-#                        never `ok`.
+#                        never `ok`. The hour key stays for `worker-cap`: the
+#                        dispatches past 20 are unwatched for as long as the
+#                        cap holds, so it asks again each hour it still does.
+#   WORKER-LIST PAGES (punch-list L94): `worker-list` returns at most 100
+#                        rows, newest first, with `page` {limit, total,
+#                        hasMore, nextCursor}; `--cursor <nextCursor>` reads
+#                        the next page. Before this, a `hasMore: true` page
+#                        raised `worker-cap` every hour on a Run of 113
+#                        finished dispatches (orca-lab, msg_d8ae581e7f1c,
+#                        Orca 1.4.262, run_9239ee3a4180: 100 rows, 0
+#                        in_progress, total 113; sender-reported, not
+#                        re-measured here). Now every page is read, up to 10
+#                        (1000 rows; a Run of 113 costs 2 calls), so a failed
+#                        row on a later page still alerts (L60) and only live
+#                        rows count toward the cap. Re-measured on Orca
+#                        1.4.262, 2026-11-19, read only, with `worker-list
+#                        --run <run> --limit 5 --json --full`, then
+#                        `--cursor <nextCursor>` until `hasMore` was false:
+#                        run_ce7a15d01f88 (21 rows) and run_5682a0ed1455 (25
+#                        rows) each took 5 pages and returned every row once;
+#                        each call took about 0.7 seconds. The
+#                        `--terminal-state` filter does not replace this: it
+#                        filters terminal accounting, not the dispatch, and
+#                        run_5682a0ed1455's three failed rows read
+#                        `terminalState: retained`, so an
+#                        `active|release_pending|release_unknown` read
+#                        would miss them. Each page call is under THE TIME
+#                        BOUND; one that fails or is not started makes the
+#                        whole list unreadable.
 #   outbox:<repo>:<newest file>  THE OUTBOX (punch-list L61): messages this
 #                        checkout sent to `coord:<repo>` (orca-send.sh) that
 #                        are still pending or were refused. One alert per
@@ -406,13 +436,44 @@ fi
 mkdir -p "$cepa_h_tmp/show"
 if [ -n "$cepa_h_run" ]; then
   cepa_h_ids=
-  if cepa_h_orca "$cepa_h_tmp/workers.json" orchestration worker-list --run "$cepa_h_run" --json --full \
-      && cepa_h_ids=$(python3 -I -c '
+  # L94: worker-list pages hold 100 rows, newest first, and finished rows
+  # fill them, so every page is read (WORKER-LIST PAGES, header) up to 10.
+  cepa_h_pg=0 cepa_h_cur= cepa_h_wlok=1 cepa_h_wf=()
+  while :; do
+    if [ "$cepa_h_pg" -ge 10 ]; then : >"$cepa_h_tmp/pages"; break; fi
+    cepa_h_pg=$((cepa_h_pg + 1))
+    cepa_h_wl=(orchestration worker-list --run "$cepa_h_run" --json --full)
+    [ -z "$cepa_h_cur" ] || cepa_h_wl+=(--cursor "$cepa_h_cur")
+    cepa_h_orca "$cepa_h_tmp/workers.$cepa_h_pg.json" "${cepa_h_wl[@]}" || { cepa_h_wlok=0; break; }
+    cepa_h_wf+=("$cepa_h_tmp/workers.$cepa_h_pg.json")
+    # The next cursor, or nothing on the last page. A page with no `page`
+    # object is the last one (an Orca that does not page); `hasMore` that is
+    # not a boolean, or a cursor outside base64url, is unreadable.
+    cepa_h_cur=$(python3 -I -c '
 import json, re, sys
 d = json.load(open(sys.argv[1]))
-rows = d["result"]["workers"] if d.get("ok") is True else sys.exit(1)
-if not isinstance(rows, list):
+p = d["result"].get("page") if d.get("ok") is True and isinstance(d.get("result"), dict) else sys.exit(1)
+if p is None:
+    sys.exit(0)
+m = p["hasMore"]
+if m is False:
+    sys.exit(0)
+c = p["nextCursor"]
+if m is not True or not (isinstance(c, str) and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_=-]{0,4095}", c)):
     sys.exit(1)
+print(c)
+' "$cepa_h_tmp/workers.$cepa_h_pg.json" 2>/dev/null) || { cepa_h_wlok=0; break; }
+    [ -n "$cepa_h_cur" ] || break
+  done
+  if [ "$cepa_h_wlok" = 1 ] && cepa_h_ids=$(python3 -I -c '
+import json, re, sys
+rows, seen = [], set()
+for f in sys.argv[4:]:
+    d = json.load(open(f))
+    r = d["result"]["workers"] if d.get("ok") is True else sys.exit(1)
+    if not isinstance(r, list):
+        sys.exit(1)
+    rows += r
 ids, failed = [], []
 for w in rows:
     # L89 g: a dispatch started on an Orca host (`worker-start --on`) lists
@@ -427,18 +488,21 @@ for w in rows:
     i, o = w["dispatchId"], w["projection"]["outcome"]
     if not (isinstance(i, str) and re.fullmatch(r"ctx_[0-9a-f]{6,32}", i) and isinstance(o, str)):
         sys.exit(1)
+    if i in seen:
+        continue   # a row that moved to a later page as new ones came in
+    seen.add(i)
     if o == "in_progress":
         ids.append(i)
     elif o == "failed":
         # L60: where it failed, as Orca names the stage.
         det = (w["projection"].get("stage") or {}).get("detail")
         failed.append("%s %s" % (i, det if isinstance(det, str) and re.fullmatch(r"[a-z_]{1,40}", det) else "unknown"))
-page = d["result"].get("page")
-if len(ids) > 20 or (isinstance(page, dict) and page.get("hasMore") is not False and "hasMore" in page):
+# L94: the cap counts live rows only; finished rows on more pages never do.
+if len(ids) > 20:
     open(sys.argv[2], "w").close()
 open(sys.argv[3], "w").write("".join(x + "\n" for x in failed))
 print(" ".join(ids[:20]))
-' "$cepa_h_tmp/workers.json" "$cepa_h_tmp/capped" "$cepa_h_tmp/failed.ids" 2>/dev/null); then
+' _ "$cepa_h_tmp/capped" "$cepa_h_tmp/failed.ids" "${cepa_h_wf[@]}" 2>/dev/null); then
     for d in $cepa_h_ids; do
       cepa_h_orca "$cepa_h_tmp/show/$d.json" orchestration worker-show --dispatch "$d" --json --full \
         || : >"$cepa_h_tmp/show/$d.fail"
@@ -841,7 +905,9 @@ if run:
     if os.path.exists(os.path.join(tmp, "workers.fail")):
         unreadable("worker-list")
     if os.path.exists(os.path.join(tmp, "capped")):
-        unreadable("worker-cap", "more than 20 dispatches are live, or worker-list has more pages; some were not read")
+        unreadable("worker-cap", "more than 20 dispatches are live; only 20 were read")
+    if os.path.exists(os.path.join(tmp, "pages")):
+        unreadable("worker-pages", "worker-list has more than 10 pages; dispatches past them were not read")
     for n in listdir(os.path.join(tmp, "show"), "show-dir"):
         if n.endswith(".fail"):
             unreadable("worker-show")
