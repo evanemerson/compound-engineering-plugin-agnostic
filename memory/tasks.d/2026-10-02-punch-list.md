@@ -2792,7 +2792,7 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
 L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more than 100 dispatch rows.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: matrix (tab48@matrix; operator 2026-11-19)
     From orca-lab coord@main (msg_d8ae581e7f1c, 2026-11-19; sender-reported;
     the operator sees it often and asked to stop it). Orca 1.4.262, Run
     run_9239ee3a4180: `worker-list --run … --json --full` returns 100 rows
