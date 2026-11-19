@@ -62,7 +62,7 @@ every gated start refuses with `STACK gate: not found`, by design.
 |---|---|
 | Docker repo (artist360, dpc-pro, contexthub, helm) | the full `orca.yaml` contract, a `worktree-init` that meets "Setup", a gated `make up`, the worktree properties |
 | Non-Docker repo (kcprimetime, youtube, artist360-docs, dpc-insider-www, dpc-pro-docs, ci-ops-self-hosted) | `orca.yaml` only: no `scripts.archive`, no gate |
-| farmtender | out of scope: its `cepa.local.md` sets `lanes: none` (CONFIGURATION.md), which turns off `/cepa:setup`'s check |
+| farmtender | out of scope; it opts out of `/cepa:setup`'s lane check with the `lanes` key (CONFIGURATION.md) |
 
 Each Docker repo keeps its own `worktree-init` code (shared code is the later
 item L64). This skill is what that code is checked against.
@@ -132,8 +132,9 @@ The contract, item by item:
    target it calls. Why: `timeout` puts its child in a background process
    group, so a child that touches the Setup tab's terminal stops, and the
    step hangs (punch-list L78 has the evidence). `--foreground` signals only
-   the direct child, so a grandchild can outlive the bound: add `-k <n>` and
-   `</dev/null`, as L78's fix did.
+   the direct child, so a grandchild can outlive the bound. Adding `-k <n>`
+   and `</dev/null`, as L78's fix did, is advised hardening, not the rule:
+   `/cepa:setup` does not check it (punch-list L91).
 
 ## The stack gate
 

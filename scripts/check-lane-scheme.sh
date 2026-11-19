@@ -20,9 +20,9 @@
 # STATED LIMITS: no case covers a file unreadable by permissions (chmod does
 # not stop root, and CI may run as root); a dangling symlink and a FIFO stand
 # in for it. No case runs without PyYAML (the YAML NOT CHECKED row). The
-# farmtender case names the temp root only: no case builds a git common dir.
-# Fleet repos
-# are not read here, so the corpus result is not reproducible from this repo.
+# farmtender case names only the temp root: the probe matches no repo name.
+# Fleet repos are not read here, so the corpus result is not reproducible
+# from this repo.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SCRIPT="$(realpath "${1:-plugins/cepa/scripts/lane_scheme.py}")" python3 - <<'PY'
@@ -312,21 +312,34 @@ CASES = [
     ("timeout --foreground without -k or </dev/null is fine",
      [("Makefile", "timeout --foreground -k 10 300 $(DEV_COMPOSE) exec -T web migrate </dev/null",
        "timeout --foreground 300 $(DEV_COMPOSE) exec web migrate")], set(), {"timeout": {"OK"}}),
-    # L90: the repo opt-out. Each case also voids orca.yaml, so a skip shows as
-    # no yaml-parse row and a checked repo as a yaml-parse MISS.
-    ("lanes: none opts out", [("orca.yaml", None, "- a\n"), ("cepa.local.md", None, "# x\n\n## Conventions\n- lanes: none\n")],
-     set(), {"yaml-parse": None, "kind": {"INFO"}, "opt-out": None}),
-    ("lanes: none with no list marker, in backticks", [("orca.yaml", None, "- a\n"),
-     ("cepa.local.md", None, "## Conventions\n  lanes: `none`   # no Orca lanes\n")],
-     set(), {"yaml-parse": None, "kind": {"INFO"}}),
-    ("lanes: none outside Conventions is checked", [("orca.yaml", None, "- a\n"),
-     ("cepa.local.md", None, "## Stack\n- lanes: none\n\n## Conventions\n- trunk: dev\n")],
-     {"yaml-parse"}, {"opt-out": {"INFO"}}),
-    ("lanes: none in a fenced block is checked", [("orca.yaml", None, "- a\n"),
-     ("cepa.local.md", None, "## Conventions\n```markdown\n- lanes: none\n```\n- trunk: dev\n")],
-     {"yaml-parse"}, {"opt-out": None}),
-    ("lanes: another value is checked", [("orca.yaml", None, "- a\n"), ("cepa.local.md", None, "## Conventions\n- lanes: orca\n")],
-     {"yaml-parse"}, {"opt-out": {"INFO"}}),
+    # L90: the repo opt-out (lane_scheme.py's header owns the rules). Each
+    # case deletes orca.yaml: a skipped repo prints only `opted-out`, and a
+    # checked one prints the orca-yaml row. Fences, comments and indented
+    # code are examples; every unclear shape is checked.
+] + [("lanes: " + n, [("orca.yaml", None, None), ("cepa.local.md", None, body)], set(),
+      {"opted-out": {"INFO"}, "orca-yaml": None, "opt-out": None} if skip
+      else {"opted-out": None, "orca-yaml": {"INFO"}, "opt-out": note})
+     for n, body, skip, note in [
+    ("none opts out", "# x\n\n## Conventions\n- lanes: none\n", True, None),
+    ("no marker, backticks, comment, upper case", "## Conventions\n  lanes: `NONE`   # no Orca lanes\n", True, None),
+    ("* marker under a ### subheading", "## Conventions\n### Lanes\n* lanes: none\n", True, None),
+    ("after a ~~~ fence holding ```", "## Conventions\n~~~\n```\n~~~\n- lanes: none\n", True, None),
+    ("none in another section is checked", "## Stack\n- lanes: none\n\n## Conventions\n- trunk: dev\n", False, {"INFO"}),
+    ("none under an H1 after Conventions is checked", "## Conventions\n- trunk: dev\n# Appendix\n- lanes: none\n", False, {"INFO"}),
+    ("none in a fenced block is checked", "## Conventions\n```markdown\n- lanes: none\n```\n", False, None),
+    ("none inside a nested fence is checked", "## Conventions\n````markdown\n```bash\n- lanes: none\n```\n````\n", False, None),
+    ("none after a fence line with an info string is checked", "## Conventions\n```\n```python\n- lanes: none\n```\n", False, None),
+    ("none in an HTML comment is checked", "## Conventions\n<!--\n- lanes: none\n-->\n", False, None),
+    ("none in a one-line HTML comment is checked", "## Conventions\n<!-- - lanes: none -->\n", False, None),
+    ("none as indented code is checked", "## Conventions\n\n    - lanes: none\n", False, {"INFO"}),
+    ("none in a numbered list is checked", "## Conventions\n1. lanes: none\n", False, {"INFO"}),
+    ("two keys are checked", "## Conventions\n- lanes: none\n- lanes: orca\n", False, {"INFO"}),
+    ("another value is checked", "## Conventions\n- lanes: orca\n", False, {"INFO"}),
+    ("none after an unclosed fence is checked", "## Conventions\n```\n- lanes: none\n", False, {"INFO"}),
+    ("none after an unclosed comment is checked", "## Conventions\n<!--\n- lanes: none\n", False, {"INFO"}),
+]] + [
+    ("lanes: none with an orca.yaml is checked", [("cepa.local.md", None, "## Conventions\n- lanes: none\n")],
+     set(), {"opted-out": None, "opt-out": {"INFO"}, "yaml-parse": {"OK"}}),
     ("cepa.local.md a FIFO is checked", [("cepa.local.md", None, ("fifo",))], set(), {"opt-out": {"INFO"}, "yaml-parse": {"OK"}}),
 ]
 for name, ops, want, rowwant in CASES:

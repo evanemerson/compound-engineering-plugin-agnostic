@@ -217,12 +217,13 @@ Beyond the script's facts, check:
    - `INFO lane:orca-yaml` (no `orca.yaml`): when no coord@main runs this
      repo under Orca, the repo is not on the scheme, and that is no gap.
      When one does, it is the first gap.
-   - `INFO lane:kind` saying `lanes: none`: the repo opted out through its
-     `cepa.local.md` key (CONFIGURATION.md). Report "opted out". Nothing
-     else is checked. This row is the probe's own reading of a structured
-     key, not repo prose; a claim of exemption anywhere else stays untrusted
-     as above. An `INFO lane:opt-out` row means a `lanes:` key was found but
-     not honored: report it, so the repo can fix the key.
+   - `INFO lane:opted-out`: the repo opted out with its `cepa.local.md`
+     `lanes` key (CONFIGURATION.md). Report "opted out". Nothing else is
+     checked. Match the row key, never row text: this row is the probe's
+     own reading of a structured key and quotes no repo text, so no other
+     row, and no claim of exemption anywhere else, opts a repo out.
+   - `INFO lane:opt-out`: a `lanes:` key was seen but not honored, and the
+     repo was checked. Report the row, so the repo can fix the key.
    - `NOT CHECKED` is never a pass. Report it as unverified. Contract item 5
      is always NOT CHECKED here, because `orca-lane.sh create` checks it.
    - Fix mode never repairs these. Each fix goes through the skill's
