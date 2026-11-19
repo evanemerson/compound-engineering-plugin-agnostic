@@ -2799,7 +2799,7 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
     they followed a lane create). Windows rm of a host-only lane gives
     the WSL-host message, no `orca repo add`: PASS.
 L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more than 100 dispatch rows.**
-    status: pending
+    status: completed
     severity: P2
     owner: matrix (tab48@matrix; operator 2026-11-19)
     From orca-lab coord@main (msg_d8ae581e7f1c, 2026-11-19; sender-reported;
@@ -2814,6 +2814,16 @@ L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more tha
     (`--terminal-state active|release_pending|release_unknown`). Failed
     rows on later pages are not read today either: keep L60 complete.
     Reply to coord:orca-lab when it ships; it re-measures on that Run.
+    **CLOSED 2026-11-19** — PR #146 (`1314148`), v1.60.4 (re-bumped by
+    coord@main after #145 took 1.60.3). tab48: health reads every
+    worker-list page (--cursor, --limit 100, at most 10 pages) and raises
+    worker-cap only on >20 in_progress; a failed row on any page still
+    alerts (L60). Failed rows sit at terminalState retained, so a
+    --terminal-state filter would lose them (measured). tab49 split the
+    nudge controls into 32 shards (3m00s-5m10s of 10). Residuals: shard
+    memory/tasks.d/2026-11-19-fix-matrix-health-worker-cap-pages.md (a Run
+    past 1000 rows raises worker-pages hourly; 2 P3 test gaps). orca-lab
+    told 2026-11-19. Note: each shard is now mostly fixed baseline (~2 min).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
