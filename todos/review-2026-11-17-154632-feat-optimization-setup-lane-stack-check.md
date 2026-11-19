@@ -63,8 +63,8 @@ summary:
   pending: 0
   ready: 0
   skipped: 0
-  applied: 25
-  deferred: 7
+  applied: 28
+  deferred: 4
   completed: 0
 ---
 
@@ -518,7 +518,7 @@ Status names L67 (1.58.0); step 2 names what `lane:` probes and what stays by
 hand; wraps fixed.
 
 ### 26
-- status: deferred
+- status: applied
 - severity: P2
 - agent: architecture-reviewer
 - category: Scope ownership
@@ -534,6 +534,8 @@ The skill owns the scope; the probe matches a directory name, untested.
 Decide between a per-repo opt-out key (cepa.local.md) and reading the skill's
 table; add a case either way.
 
+
+**Resolution:** Applied in PR #145 (L90): the `lanes: none` key in cepa.local.md; cases and mutants added.
 ### 27
 - status: deferred
 - severity: P3
@@ -583,7 +585,7 @@ Stated limit; check 8 tells the reader to read the line.
 Require the refusal or gate before the compose call on the same control path.
 
 ### 30
-- status: deferred
+- status: applied
 - severity: P3
 - agent: previous-comments-reviewer
 - category: Contract
@@ -598,6 +600,8 @@ The skill asks for both; the probe checks the first half (stated limit).
 **Fix:**
 Decide whether `-k` is required, then tighten `bare_timeouts`.
 
+
+**Resolution:** Applied in PR #145 (L91): decided `-k` is not required; the skill marks it advised, and a case pins `--foreground` alone.
 ### 31
 - status: deferred
 - severity: P3
@@ -615,7 +619,7 @@ This diff edits step 2 but not that finding (out of L67's scope).
 Leave to its owner.
 
 ### 32
-- status: deferred
+- status: applied
 - severity: P3
 - agent: silent-failure-hunter
 - category: Diagnostics
@@ -631,7 +635,9 @@ fails toward a false MISS.
 **Fix:**
 Say in the `kind` row which source named the repo.
 
+**Resolution:** Applied in PR #145: `repo_name` is deleted; the probe matches no repo name.
+
 ---
 
-**Summary:** 32 findings (2 P1, 16 P2, 14 P3) — 25 applied, 7 deferred
+**Summary:** 32 findings (2 P1, 16 P2, 14 P3) — 28 applied, 4 deferred
 **Next step:** Run `/cepa:triage` (batch auto-apply by default; pass `interactive` for one-at-a-time).

@@ -19,9 +19,9 @@ Usage: python3 lane_scheme.py [<repo root>]     (default: the current dir)
   Imported by scripts/check-lane-stack.sh (ORCA_KEYS, load_orca_yaml), so the
   skill's own orca.yaml example and every repo's file go through one parser.
 
-POPULATION (what it reads): at the repo root, `orca.yaml`; `CLAUDE.md` (for
-contract item 6 only); the first of `GNUmakefile`, `makefile`, `Makefile`
-(make's own order); the compose files named `compose*` or `docker-compose*`
+POPULATION (what it reads): at the repo root, `cepa.local.md` (only the
+`lanes:` key, below); `orca.yaml`; `CLAUDE.md` (for contract item 6 only);
+the first of `GNUmakefile`, `makefile`, `Makefile` (make's own order); the compose files named `compose*` or `docker-compose*`
 with a .yml or .yaml extension; and whether `.worktreeinclude` exists. A
 repo is a Docker repo when it has such a compose file or its Makefile runs
 `docker compose`. Then the "setup closure": the Makefile targets
@@ -36,8 +36,17 @@ other file is unreadable, never absent.
 NON-POPULATION (what it cannot see — each is a stated limit):
   - contract item 5 (Orca's saved hook settings): Orca state, not a file.
     `orca-lane.sh create` refuses a shadow (its header, H1).
-  - the farmtender exclusion is the skill's ("Which repos need what"), matched
-    by the main checkout's directory name; a repo opt-out is not read.
+  - the opt-out (punch-list L90; CONFIGURATION.md documents the key). This
+    header owns what is read. One `lanes:` line (list marker `-`/`*`
+    optional, at most 3 spaces in) under a `## Conventions` heading, outside
+    fenced code and HTML comments, with the value `none` (any case; quotes,
+    backticks and a trailing `# comment` stripped), skips the check with an
+    `INFO lane:opted-out` row that carries no repo text. Every other shape
+    is checked: a key under another `#`/`##` heading, a second key, another
+    value, a `lanes:` line in another form, an unreadable file, an unclosed
+    fence or comment, or a repo that also has an `orca.yaml`. Each gets an
+    `INFO lane:opt-out` row. A `###` heading stays inside its section. No
+    repo name is matched.
   - files a Makefile `include`s; scripts that a script calls; a target run
     only from a script; a compose file outside the repo root unless the
     Makefile runs compose.
@@ -56,14 +65,15 @@ NON-POPULATION (what it cannot see — each is a stated limit):
     branch that does not guard the start still reads as OK; /cepa:setup reads
     the line. A start whose target is named prod/proxy, or whose every -f
     file is a prod/proxy/traefik file, is INFO, not checked.
-  - contract item 7: `timeout --foreground` alone passes. The skill also asks
-    for `-k <n>` and `</dev/null`; that half is not checked.
+  - contract item 7: `timeout --foreground` alone passes, by decision L91.
+    The skill's item 7 owns which part is the rule and which the advised
+    hardening. check-lane-scheme.sh pins the decision with a case.
   - `compose run` is not a start site here (#20 names up, start, restart).
   - per-branch `worktree.sharedDirectories` names are the PER_BRANCH list.
   - `stack-gate.sh --count` is not called: this check is static. The running
     stack count belongs to orca-health.sh (punch-list L61).
 """
-import glob, os, re, subprocess, sys
+import glob, os, re, sys
 
 # The top-level keys Orca 1.4.245's parser reads, measured 2026-11-02 in its
 # out/shared/orca-yaml.js (lane-stack skill, "The `orca.yaml` contract").
@@ -461,22 +471,84 @@ def read(path):
         return None, str(e)
 
 
-def repo_name(root):
-    try:
-        cd = subprocess.run(["git", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                            capture_output=True, text=True, timeout=10).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        cd = ""
-    return os.path.basename(os.path.dirname(cd)) if cd else os.path.basename(os.path.realpath(root))
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+LANES_RE = re.compile(r"^ {0,3}(?:[-*]\s+)?lanes\s*:\s*(.*)$", re.I)
+LOOSE_LANES_RE = re.compile(r"\blanes\s*\**\s*:", re.I)
+
+
+def lanes_key(root):
+    """The repo opt-out: the `lanes:` key under `## Conventions` in
+    cepa.local.md (CONFIGURATION.md). Returns (value, notes). value is the
+    one key's value, or None when there is no single key to honor; notes are
+    why a `lanes:` line was seen but not read, one INFO row each. Fenced code
+    (CommonMark: a closing fence is the same character, at least as long, with
+    no info string), an HTML comment and an indented code line are examples,
+    never the key. Every unclear case returns None: the repo is checked."""
+    path = os.path.join(root, "cepa.local.md")
+    if not os.path.lexists(path):
+        return None, []
+    text, err = read(path)
+    if err:
+        return None, ["cepa.local.md is unreadable (%s): the `lanes:` opt-out is not read" % one(err)]
+    section, fence, comment = None, None, False
+    found, notes = [], []
+    for n, line in enumerate(text.split("\n"), 1):
+        line = line.rstrip("\r")
+        if fence:
+            f = FENCE_RE.match(line)
+            if f and f.group(1)[0] == fence[1][0] and len(f.group(1)) >= len(fence[1]) and not f.group(2).strip():
+                fence = None
+            continue
+        if comment:
+            if "-->" in line:
+                comment, line = False, line.split("-->", 1)[1]
+            else:
+                continue
+        line = re.sub(r"<!--.*?-->", "", line)
+        if "<!--" in line:
+            comment, line = True, line.split("<!--", 1)[0]
+        f = FENCE_RE.match(line)
+        if f and not (f.group(1)[0] == "`" and "`" in f.group(2)):
+            fence = (n, f.group(1))
+            continue
+        h = re.match(r"^ {0,3}(#{1,2})\s+(.*?)\s*#*\s*$", line)
+        if h:
+            section = h.group(2) if h.group(1) == "##" else "# " + h.group(2)
+            continue
+        k = LANES_RE.match(line)
+        if k:
+            if section == "Conventions":
+                found.append((n, k.group(1).split("#", 1)[0].strip().strip("`\"'")))
+            else:
+                notes.append("cepa.local.md line %d has a `lanes:` key outside ## Conventions: not read" % n)
+        elif LOOSE_LANES_RE.search(line):
+            notes.append("cepa.local.md line %d looks like a `lanes:` key but is not in the form read "
+                         "(`- lanes: none`, at most 3 spaces in): not read" % n)
+    if fence:
+        notes.append("cepa.local.md has a code fence opened at line %d that never closes: no `lanes:` key after it is read" % fence[0])
+    if comment:
+        notes.append("cepa.local.md has an HTML comment that never closes: no `lanes:` key after it is read")
+    if len(found) > 1:
+        notes.append("cepa.local.md has %d `lanes:` keys in ## Conventions (lines %s): none is read"
+                     % (len(found), ", ".join(str(x) for x, _ in found)))
+        return None, notes
+    if found and found[0][1].lower() != "none":
+        notes.append("cepa.local.md `lanes: %s` is not a value this check reads (only `none`)" % one(found[0][1], 40))
+        return None, notes
+    return (found[0][1] if found else None), notes
 
 
 def check(root):
     r = Report()
-    name = repo_name(root)
-    if name == "farmtender":
-        r.add("INFO", "kind", "farmtender is out of the lane scheme's scope (lane-stack skill) — not checked")
-        return r
     yml = os.path.join(root, "orca.yaml")
+    lanes, notes = lanes_key(root)
+    if lanes is not None and os.path.lexists(yml):
+        notes.append("cepa.local.md sets `lanes: none`, but the repo has an orca.yaml: the opt-out is not honored")
+    elif lanes is not None:
+        r.add("INFO", "opted-out", "cepa.local.md sets `lanes: none` (## Conventions) — not checked")
+        return r
+    for note in notes:
+        r.add("INFO", "opt-out", note + ", so the repo is checked")
     if not os.path.lexists(yml):
         r.add("INFO", "orca-yaml", "no orca.yaml — this repo is not on the lane scheme; a repo coordinated under Orca needs one (lane-stack skill)")
         return r
