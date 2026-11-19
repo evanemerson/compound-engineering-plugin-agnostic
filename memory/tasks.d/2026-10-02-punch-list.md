@@ -2717,7 +2717,7 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: optimization (tab47@optimization, with L91; operator 2026-11-19)
     PR #141 review finding #26 (deferred; operator 2026-11-17 chose to file
     it). `lane_scheme.py` skips farmtender by its directory name. Fix: a
     `cepa.local.md` opt-out key (tab42's pick), or read the lane-stack
@@ -2726,7 +2726,7 @@ L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory n
 L91. **Lane contract item 7 passes `timeout --foreground` without `-k` or `</dev/null`.**
     status: pending
     severity: P3
-    owner: unassigned
+    owner: optimization (tab47@optimization, with L90)
     PR #141 review finding #30 (deferred; operator 2026-11-17). Tighten the
     check only if the lane-stack skill makes `-k` a hard rule. Same review
     file as L90.
@@ -2792,7 +2792,7 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
 L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more than 100 dispatch rows.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: matrix (tab48@matrix; operator 2026-11-19)
     From orca-lab coord@main (msg_d8ae581e7f1c, 2026-11-19; sender-reported;
     the operator sees it often and asked to stop it). Orca 1.4.262, Run
     run_9239ee3a4180: `worker-list --run … --json --full` returns 100 rows
