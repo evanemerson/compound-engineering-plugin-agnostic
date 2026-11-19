@@ -66,6 +66,18 @@ MUTANTS = [
     # TIMEOUT
     ("timeout-unseen", '            if re.search(r"(?:^|[\\s(])timeout\\s", seg) and "--foreground" not in seg \\\n',
      "            if False \\\n"),
+    ("foreground-needs-k", '            if re.search(r"(?:^|[\\s(])timeout\\s", seg) and "--foreground" not in seg \\\n',
+     '            if re.search(r"(?:^|[\\s(])timeout\\s", seg) and not ("--foreground" in seg and "-k" in seg) \\\n'),
+    # the cepa.local.md opt-out (L90)
+    ("optout-ignored", '    if lanes is not None and lanes.lower() == "none":', "    if False:"),
+    ("optout-any-value", '    if lanes is not None and lanes.lower() == "none":', "    if lanes is not None:"),
+    ("optout-any-section", '        if section == "Conventions" and value is None:', "        if value is None:"),
+    ("optout-in-fence", "        if fence:\n            continue\n", ""),
+    ("optout-marker-required", r'LANES_RE = re.compile(r"^\s*(?:[-*]\s+)?lanes', r'LANES_RE = re.compile(r"^\s*[-*]\s+lanes'),
+    ("optout-backticks-kept", """.strip().strip("`\\"'")""", ".strip()"),
+    ("optout-unread-silent", "    if lerr:\n", "    if False:\n"),
+    ("skip-by-dir-name", "def check(root):\n    r = Report()\n",
+     'def check(root):\n    r = Report()\n    if os.path.basename(root) == "farmtender":\n        return r\n'),
     ("timeout-T-alone", '                    and not (re.search(r"(?:^|\\s)-T(?:\\s|$)", seg) and "</dev/null" in seg.replace(" ", "")):',
      '                    and not (re.search(r"(?:^|\\s)-T(?:\\s|$)", seg)):'),
     ("timeout-devnull-alone", '                    and not (re.search(r"(?:^|\\s)-T(?:\\s|$)", seg) and "</dev/null" in seg.replace(" ", "")):',

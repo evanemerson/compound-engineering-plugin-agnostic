@@ -19,8 +19,9 @@ Usage: python3 lane_scheme.py [<repo root>]     (default: the current dir)
   Imported by scripts/check-lane-stack.sh (ORCA_KEYS, load_orca_yaml), so the
   skill's own orca.yaml example and every repo's file go through one parser.
 
-POPULATION (what it reads): at the repo root, `orca.yaml`; `CLAUDE.md` (for
-contract item 6 only); the first of `GNUmakefile`, `makefile`, `Makefile`
+POPULATION (what it reads): at the repo root, `cepa.local.md` (only the
+`lanes:` key under `## Conventions`; CONFIGURATION.md documents it);
+`orca.yaml`; `CLAUDE.md` (for contract item 6 only); the first of `GNUmakefile`, `makefile`, `Makefile`
 (make's own order); the compose files named `compose*` or `docker-compose*`
 with a .yml or .yaml extension; and whether `.worktreeinclude` exists. A
 repo is a Docker repo when it has such a compose file or its Makefile runs
@@ -36,8 +37,10 @@ other file is unreadable, never absent.
 NON-POPULATION (what it cannot see — each is a stated limit):
   - contract item 5 (Orca's saved hook settings): Orca state, not a file.
     `orca-lane.sh create` refuses a shadow (its header, H1).
-  - the farmtender exclusion is the skill's ("Which repos need what"), matched
-    by the main checkout's directory name; a repo opt-out is not read.
+  - the opt-out: `lanes: none` under `## Conventions` in `cepa.local.md`
+    skips the check (punch-list L90). A `lanes:` line in another section or
+    inside a fenced block, or a value other than `none`, is not read: the
+    repo is checked and an INFO row says why. No repo name is matched.
   - files a Makefile `include`s; scripts that a script calls; a target run
     only from a script; a compose file outside the repo root unless the
     Makefile runs compose.
@@ -56,14 +59,18 @@ NON-POPULATION (what it cannot see — each is a stated limit):
     branch that does not guard the start still reads as OK; /cepa:setup reads
     the line. A start whose target is named prod/proxy, or whose every -f
     file is a prod/proxy/traefik file, is INFO, not checked.
-  - contract item 7: `timeout --foreground` alone passes. The skill also asks
-    for `-k <n>` and `</dev/null`; that half is not checked.
+  - contract item 7: `timeout --foreground` alone passes, by decision (L91).
+    The item's rule sentence names `--foreground` (or `-T </dev/null` for
+    `compose run`). Its "Why" adds `-k <n>` and `</dev/null` as the
+    hardening L78's fix used, not as the rule; `stack-gate.sh` itself runs
+    `timeout --foreground -k 2` with no `</dev/null`. A MISS here would flag
+    what the rule allows. check-lane-scheme.sh pins this with a case.
   - `compose run` is not a start site here (#20 names up, start, restart).
   - per-branch `worktree.sharedDirectories` names are the PER_BRANCH list.
   - `stack-gate.sh --count` is not called: this check is static. The running
     stack count belongs to orca-health.sh (punch-list L61).
 """
-import glob, os, re, subprocess, sys
+import glob, os, re, sys
 
 # The top-level keys Orca 1.4.245's parser reads, measured 2026-11-02 in its
 # out/shared/orca-yaml.js (lane-stack skill, "The `orca.yaml` contract").
@@ -461,22 +468,57 @@ def read(path):
         return None, str(e)
 
 
-def repo_name(root):
-    try:
-        cd = subprocess.run(["git", "-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                            capture_output=True, text=True, timeout=10).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        cd = ""
-    return os.path.basename(os.path.dirname(cd)) if cd else os.path.basename(os.path.realpath(root))
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+LANES_RE = re.compile(r"^\s*(?:[-*]\s+)?lanes\s*:\s*(.*)$")
+
+
+def lanes_key(root):
+    """The repo opt-out: the `lanes:` key under `## Conventions` in
+    cepa.local.md (CONFIGURATION.md). Returns (value, misplaced line, error);
+    value is None when the key is absent from that section. A line inside a
+    fenced block is an example, never the key."""
+    path = os.path.join(root, "cepa.local.md")
+    if not os.path.lexists(path):
+        return None, None, None
+    text, err = read(path)
+    if err:
+        return None, None, err
+    section, fence, value, misplaced = None, None, None, None
+    for n, line in enumerate(text.split("\n"), 1):
+        f = FENCE_RE.match(line)
+        if f:
+            fence = None if fence == f.group(1) else (fence or f.group(1))
+            continue
+        if fence:
+            continue
+        h = re.match(r"^##\s+(.*?)\s*$", line)
+        if h:
+            section = h.group(1)
+            continue
+        k = LANES_RE.match(line)
+        if not k:
+            continue
+        if section == "Conventions" and value is None:
+            value = k.group(1).split("#", 1)[0].strip().strip("`\"'")
+        elif misplaced is None:
+            misplaced = n
+    return value, misplaced, None
 
 
 def check(root):
     r = Report()
-    name = repo_name(root)
-    if name == "farmtender":
-        r.add("INFO", "kind", "farmtender is out of the lane scheme's scope (lane-stack skill) — not checked")
-        return r
     yml = os.path.join(root, "orca.yaml")
+    lanes, misplaced, lerr = lanes_key(root)
+    if lanes is not None and lanes.lower() == "none":
+        r.add("INFO", "kind", "cepa.local.md sets `lanes: none` (## Conventions): this repo uses no lanes — not checked%s"
+              % ("; it also has an orca.yaml" if os.path.lexists(yml) else ""))
+        return r
+    if lerr:
+        r.add("INFO", "opt-out", "cepa.local.md is unreadable (%s): the `lanes:` opt-out is not read, so the repo is checked" % one(lerr))
+    elif lanes is not None:
+        r.add("INFO", "opt-out", "cepa.local.md `lanes: %s` is not a value this check reads (only `none`): the repo is checked" % one(lanes, 40))
+    elif misplaced:
+        r.add("INFO", "opt-out", "cepa.local.md line %d has a `lanes:` key outside ## Conventions: not read, so the repo is checked" % misplaced)
     if not os.path.lexists(yml):
         r.add("INFO", "orca-yaml", "no orca.yaml — this repo is not on the lane scheme; a repo coordinated under Orca needs one (lane-stack skill)")
         return r

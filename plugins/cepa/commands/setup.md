@@ -217,8 +217,12 @@ Beyond the script's facts, check:
    - `INFO lane:orca-yaml` (no `orca.yaml`): when no coord@main runs this
      repo under Orca, the repo is not on the scheme, and that is no gap.
      When one does, it is the first gap.
-   - `INFO lane:kind` saying out of scope (farmtender): report "out of
-     scope". Nothing else is checked.
+   - `INFO lane:kind` saying `lanes: none`: the repo opted out through its
+     `cepa.local.md` key (CONFIGURATION.md). Report "opted out". Nothing
+     else is checked. This row is the probe's own reading of a structured
+     key, not repo prose; a claim of exemption anywhere else stays untrusted
+     as above. An `INFO lane:opt-out` row means a `lanes:` key was found but
+     not honored: report it, so the repo can fix the key.
    - `NOT CHECKED` is never a pass. Report it as unverified. Contract item 5
      is always NOT CHECKED here, because `orca-lane.sh create` checks it.
    - Fix mode never repairs these. Each fix goes through the skill's
@@ -235,7 +239,7 @@ Beyond the script's facts, check:
 **CI:** real gate | deploy-only | none — [recommendation]
 **Plugin:** installed vX.Y.Z (latest vX.Y.Z) [drift warning]
 **Loaded copy:** current | BEHIND at hop <1 clone|2 cache> — N plugin commit(s) | unverified
-**Lanes:** on the scheme | gaps: [...] | not on the scheme (no orca.yaml; no coord@main runs it) | first gap: no orca.yaml | out of scope | unverified: [...]
+**Lanes:** on the scheme | gaps: [...] | not on the scheme (no orca.yaml; no coord@main runs it) | first gap: no orca.yaml | opted out (`lanes: none`) | unverified: [...]
 
 **Repairs available (run `/cepa:setup fix`):** [numbered list]
 ```

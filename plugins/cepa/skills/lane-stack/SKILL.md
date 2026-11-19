@@ -62,7 +62,7 @@ every gated start refuses with `STACK gate: not found`, by design.
 |---|---|
 | Docker repo (artist360, dpc-pro, contexthub, helm) | the full `orca.yaml` contract, a `worktree-init` that meets "Setup", a gated `make up`, the worktree properties |
 | Non-Docker repo (kcprimetime, youtube, artist360-docs, dpc-insider-www, dpc-pro-docs, ci-ops-self-hosted) | `orca.yaml` only: no `scripts.archive`, no gate |
-| farmtender | out of scope |
+| farmtender | out of scope: its `cepa.local.md` sets `lanes: none` (CONFIGURATION.md), which turns off `/cepa:setup`'s check |
 
 Each Docker repo keeps its own `worktree-init` code (shared code is the later
 item L64). This skill is what that code is checked against.
