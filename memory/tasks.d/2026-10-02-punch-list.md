@@ -2789,6 +2789,22 @@ L93. **A coordinator on the WSL host: `dispatch:` sends time out, and the host c
     the 124 re-read path did not run live (the slow sends did not recur;
     they followed a lane create). Windows rm of a host-only lane gives
     the WSL-host message, no `orca repo add`: PASS.
+L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more than 100 dispatch rows.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From orca-lab coord@main (msg_d8ae581e7f1c, 2026-11-19; sender-reported;
+    the operator sees it often and asked to stop it). Orca 1.4.262, Run
+    run_9239ee3a4180: `worker-list --run … --json --full` returns 100 rows
+    (0 in_progress) and page {limit 100, total 113, hasMore true,
+    nextCursor}. orca-health.sh (~line 437) writes `capped` on hasMore, so
+    it raises `orca-unreadable:worker-cap:<UTC hour>`; each ack silences
+    one hour. Only finished workers fill the pages. Fix: follow
+    `nextCursor` (`--cursor`) until hasMore is false and cap only on >20
+    in_progress rows, or read only rows that can be live
+    (`--terminal-state active|release_pending|release_unknown`). Failed
+    rows on later pages are not read today either: keep L60 complete.
+    Reply to coord:orca-lab when it ships; it re-measures on that Run.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
