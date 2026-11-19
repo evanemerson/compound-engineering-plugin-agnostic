@@ -202,7 +202,12 @@
 #                        `active|release_pending|release_unknown` read
 #                        would miss them. Each page call is under THE TIME
 #                        BOUND; one that fails or is not started makes the
-#                        whole list unreadable.
+#                        whole list unreadable. Each call passes `--limit
+#                        100` (the most `worker-list --help` allows), so the
+#                        page size is not Orca's default. STATED LIMIT: a Run
+#                        past 1000 rows raises `worker-pages` each hour even
+#                        when nothing is live, the L94 symptom at ten times
+#                        the size.
 #   outbox:<repo>:<newest file>  THE OUTBOX (punch-list L61): messages this
 #                        checkout sent to `coord:<repo>` (orca-send.sh) that
 #                        are still pending or were refused. One alert per
@@ -438,23 +443,25 @@ if [ -n "$cepa_h_run" ]; then
   cepa_h_ids=
   # L94: worker-list pages hold 100 rows, newest first, and finished rows
   # fill them, so every page is read (WORKER-LIST PAGES, header) up to 10.
-  cepa_h_pg=0 cepa_h_cur= cepa_h_wlok=1 cepa_h_wf=()
+  cepa_h_pg=0 cepa_h_cur= cepa_h_wlok=1 cepa_h_wf=() cepa_h_seen=" "
   while :; do
     if [ "$cepa_h_pg" -ge 10 ]; then : >"$cepa_h_tmp/pages"; break; fi
     cepa_h_pg=$((cepa_h_pg + 1))
-    cepa_h_wl=(orchestration worker-list --run "$cepa_h_run" --json --full)
+    cepa_h_wl=(orchestration worker-list --run "$cepa_h_run" --limit 100 --json --full)
     [ -z "$cepa_h_cur" ] || cepa_h_wl+=(--cursor "$cepa_h_cur")
     cepa_h_orca "$cepa_h_tmp/workers.$cepa_h_pg.json" "${cepa_h_wl[@]}" || { cepa_h_wlok=0; break; }
     cepa_h_wf+=("$cepa_h_tmp/workers.$cepa_h_pg.json")
     # The next cursor, or nothing on the last page. A page with no `page`
-    # object is the last one (an Orca that does not page); `hasMore` that is
-    # not a boolean, or a cursor outside base64url, is unreadable.
+    # object is the last one only when it holds under 100 rows (an Orca that
+    # does not page); a full one, `hasMore` absent or not a boolean, or a
+    # cursor outside base64url or starting with `-` (it would read as an
+    # option), is unreadable. So is a cursor seen before: a loop.
     cepa_h_cur=$(python3 -I -c '
 import json, re, sys
 d = json.load(open(sys.argv[1]))
 p = d["result"].get("page") if d.get("ok") is True and isinstance(d.get("result"), dict) else sys.exit(1)
 if p is None:
-    sys.exit(0)
+    sys.exit(0 if len(d["result"].get("workers") or []) < 100 else 1)   # the row reader checks the shape
 m = p["hasMore"]
 if m is False:
     sys.exit(0)
@@ -464,17 +471,19 @@ if m is not True or not (isinstance(c, str) and re.fullmatch(r"[A-Za-z0-9_][A-Za
 print(c)
 ' "$cepa_h_tmp/workers.$cepa_h_pg.json" 2>/dev/null) || { cepa_h_wlok=0; break; }
     [ -n "$cepa_h_cur" ] || break
+    [[ $cepa_h_seen != *" $cepa_h_cur "* ]] || { cepa_h_wlok=0; break; }
+    cepa_h_seen+="$cepa_h_cur "
   done
   if [ "$cepa_h_wlok" = 1 ] && cepa_h_ids=$(python3 -I -c '
 import json, re, sys
-rows, seen = [], set()
+rows = []
 for f in sys.argv[4:]:
     d = json.load(open(f))
     r = d["result"]["workers"] if d.get("ok") is True else sys.exit(1)
     if not isinstance(r, list):
         sys.exit(1)
     rows += r
-ids, failed = [], []
+ids, failed, byid = [], [], {}
 for w in rows:
     # L89 g: a dispatch started on an Orca host (`worker-start --on`) lists
     # with no projection and a `server` object naming its environment. The
@@ -488,9 +497,13 @@ for w in rows:
     i, o = w["dispatchId"], w["projection"]["outcome"]
     if not (isinstance(i, str) and re.fullmatch(r"ctx_[0-9a-f]{6,32}", i) and isinstance(o, str)):
         sys.exit(1)
-    if i in seen:
-        continue   # a row that moved to a later page as new ones came in
-    seen.add(i)
+    # A row read on two pages (it moved as new ones came in) counts once, as
+    # its most settled copy: failed, then another outcome, then in_progress.
+    rank = {"in_progress": 0, "failed": 2}.get(o, 1)
+    if i not in byid or rank > byid[i][0]:
+        byid[i] = (rank, w)
+for i, (_, w) in byid.items():
+    o = w["projection"]["outcome"]
     if o == "in_progress":
         ids.append(i)
     elif o == "failed":

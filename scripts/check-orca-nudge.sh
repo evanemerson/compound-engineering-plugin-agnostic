@@ -1968,7 +1968,7 @@ if LEGS in ("all", "health"):
     HSUM1 = ["ORCA health: 1 alert — ask the operator (§12b rule 8)",
              "Ending first line: Needed from you: check the Orca alerts below"]
     HCALLS = [["orchestration", "run-show", "--id", RUN, "--json", "--full"],
-              ["orchestration", "worker-list", "--run", RUN, "--json", "--full"],
+              ["orchestration", "worker-list", "--run", RUN, "--limit", "100", "--json", "--full"],
               ["orchestration", "worker-show", "--dispatch", D1, "--json", "--full"],
               ["orchestration", "inbox", "--limit", "200", "--json", "--full"]]
 
@@ -2349,7 +2349,7 @@ if LEGS in ("all", "health"):
         d = json.loads(hwl(*rows))
         d["result"]["page"] = {"limit": 100, "total": total, "hasMore": cur is not None, "nextCursor": cur}
         return json.dumps(d)
-    WLC = ["orchestration", "worker-list", "--run", RUN, "--json", "--full"]
+    WLC = HCALLS[1]
     done = lambda a, b: [("ctx_%012x" % i, "succeeded") for i in range(a, b)]
     health("HEALTH many finished rows over several pages are not capped", 0, [HOK],
            wlist=hpage([(D1, "in_progress")] + done(1, 100), "eyJwMiI"),
@@ -2363,6 +2363,10 @@ if LEGS in ("all", "health"):
            wlist=hpage([(D1, "in_progress")] + done(1, 100), "eyJwMiI"),
            wpages={"eyJwMiI": hpage(done(100, 112) + [(D2, "failed", "agent_readiness")])},
            shows={D1: hshow(), D2: fshow()})
+    health("HEALTH a row live on page 1 and failed on page 2 alerts", 1, [falert()] + HSUM1,
+           wlist=hpage([(D1, "in_progress"), (D2, "in_progress")], "eyJwMiI"),
+           wpages={"eyJwMiI": hpage([(D2, "failed", "agent_readiness")])},
+           shows={D1: hshow(), D2: fshow()})
     health("HEALTH a row seen on two pages counts once", 0, [HOK],
            wlist=hpage([("ctx_%012x" % i, "in_progress") for i in range(20)], "eyJwMiI"),
            wpages={"eyJwMiI": hpage([("ctx_%012x" % 19, "in_progress")])},
@@ -2370,7 +2374,19 @@ if LEGS in ("all", "health"):
     health("HEALTH a later page that fails is unreadable", 1, unread("worker-list"),
            wlist=hpage([(D1, "in_progress")], "eyJub3BlIg"))
     health("HEALTH a cursor outside base64url is unreadable", 1, unread("worker-list"),
-           wlist=hpage([(D1, "in_progress")], "-x;id"), wpages={"-x;id": hpage([])})
+           wlist=hpage([(D1, "in_progress")], "a;id"), wpages={"a;id": hpage([])})
+    health("HEALTH a cursor that starts with a dash is unreadable", 1, unread("worker-list"),
+           wlist=hpage([(D1, "in_progress")], "-abc"), wpages={"-abc": hpage([])})
+    health("HEALTH a cursor with dash, equals and underscore is followed", 0, [HOK],
+           wlist=hpage([(D1, "in_progress")], "a-b=_9"), wpages={"a-b=_9": hpage([])})
+    health("HEALTH a cursor seen before is unreadable", 1, unread("worker-list"),
+           wlist=hpage([(D1, "in_progress")], "p1"), wpages={"p1": hpage([], "p2"), "p2": hpage([], "p1")})
+    health("HEALTH a page with no hasMore is unreadable", 1, unread("worker-list"),
+           wlist=json.dumps({"ok": True, "result": {"workers": [], "page": {"nextCursor": None}}}))
+    health("HEALTH a full page with no page object is unreadable", 1, unread("worker-list"),
+           wlist=hwl(*([(D1, "in_progress")] + done(1, 100))))
+    health("HEALTH a short page with no page object is the last", 0, [HOK],
+           wlist=hwl(*([(D1, "in_progress")] + done(1, 99))))
     health("HEALTH hasMore that is not a boolean is unreadable", 1, unread("worker-list"),
            wlist=json.dumps({"ok": True, "result": {"workers": [], "page": {"hasMore": "yes", "nextCursor": "eyJwMiI"}}}),
            wpages={"eyJwMiI": hpage([(D1, "in_progress")])})
@@ -2378,7 +2394,8 @@ if LEGS in ("all", "health"):
            ["ORCA alert: orca-unreadable:worker-pages:%d — worker-list has more than 10 pages; dispatches past them were not read"
             % HOUR] + HSUM1,
            wlist=hpage([(D1, "in_progress")], "p1"),
-           wpages={"p%d" % i: hpage([], "p%d" % (i + 1)) for i in range(1, 12)})
+           wpages={"p%d" % i: hpage([], "p%d" % (i + 1)) for i in range(1, 12)},
+           calls_want=[HCALLS[0], WLC] + [WLC + ["--cursor", "p%d" % i] for i in range(1, 10)] + HCALLS[2:])
     health("HEALTH 10 pages is read whole", 0, [HOK],
            wlist=hpage([(D1, "in_progress")], "p1"),
            wpages=dict({"p%d" % i: hpage([], "p%d" % (i + 1)) for i in range(1, 9)}, p9=hpage([])))
