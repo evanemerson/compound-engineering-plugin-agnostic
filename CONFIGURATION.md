@@ -31,6 +31,7 @@ This is the file that makes cepa framework-agnostic. Create `cepa.local.md` in y
 - base_templates: [<list of base templates by audience>]
 - service_layer: <true/false>
 - docker_compose_file: <path to your dev compose file>
+- lanes: <none — only in a repo that uses no Orca lanes>
 
 ## Review Agents (Active)
 - security-sentinel
@@ -173,6 +174,14 @@ Project-specific rules that don't fit into stack or compliance.
 - `base_templates`: Your template hierarchy. `architecture-reviewer` verifies new templates extend the correct base.
 - `service_layer`: If true, `architecture-reviewer` enforces that business logic lives in `services/`, not in views or serializers.
 - `docker_compose_file`: Which compose file to check. `deployment-verifier` and `schema-drift-detector` use this for container-related checks.
+- `lanes`: Write `- lanes: none` here, once, only in a repo that uses no
+  Orca lanes and has no `orca.yaml`. Then `/cepa:setup` skips its lane &
+  stack check (check 8). Omit the key in every other repo. A key the check
+  does not honor leaves the check on, and the report says why. The exact
+  rules for what is read are owned by the header of
+  `plugins/cepa/scripts/lane_scheme.py`. Which repos are out of the scheme
+  is the `cepa:lane-stack` skill's call ("Which repos need what"); this key
+  is how such a repo says so.
 
 ### Review Agents (Active)
 

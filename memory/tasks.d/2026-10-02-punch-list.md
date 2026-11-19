@@ -2715,7 +2715,7 @@ L89. **Orca WSL host support is still unproven: the open residuals of L85 and L8
     memory/tasks.d/2026-11-17-fix-matrix-orca-wsl-host-and-retired-run.md
     and memory/tasks.d/2026-11-18-fix-matrix-orca-host-dispatch-timeout.md.
 L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory name.**
-    status: pending
+    status: completed
     severity: P2
     owner: optimization (tab47@optimization, with L91; operator 2026-11-19)
     PR #141 review finding #26 (deferred; operator 2026-11-17 chose to file
@@ -2723,13 +2723,22 @@ L90. **`/cepa:setup` lane check leaves out farmtender by a hardcoded directory n
     `cepa.local.md` opt-out key (tab42's pick), or read the lane-stack
     skill's "Which repos need what" table. Review file:
     todos/review-2026-11-17-154632-feat-optimization-setup-lane-stack-check.md.
+    **CLOSED 2026-11-19** — PR #145 (`7e454c8`), v1.60.3, tab47@optimization.
+    A `- lanes: none` line under `## Conventions` in a repo's own
+    cepa.local.md opts it out (honored only while it has no orca.yaml);
+    documented in CONFIGURATION.md, cited by lane-stack and setup.md check
+    8. No repo name is hardcoded. Hand-off to farmtender's coord@main sent
+    2026-11-19. Review: todos/review-2026-11-19-060756-fix-optimization-setup-lane-opt-out.md.
 L91. **Lane contract item 7 passes `timeout --foreground` without `-k` or `</dev/null`.**
-    status: pending
+    status: completed
     severity: P3
     owner: optimization (tab47@optimization, with L90)
     PR #141 review finding #30 (deferred; operator 2026-11-17). Tighten the
     check only if the lane-stack skill makes `-k` a hard rule. Same review
     file as L90.
+    **CLOSED 2026-11-19** — PR #145 (`7e454c8`), no check change: item 7's
+    rule is `--foreground`; the lane-stack skill now marks `-k` and
+    `</dev/null` as advised, not checked.
 L92. **`orca-rebind.sh` does not name a Run that Orca 1.4.262 retired.**
     status: completed
     severity: P2

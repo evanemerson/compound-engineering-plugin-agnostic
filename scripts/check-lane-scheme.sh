@@ -19,9 +19,10 @@
 #
 # STATED LIMITS: no case covers a file unreadable by permissions (chmod does
 # not stop root, and CI may run as root); a dangling symlink and a FIFO stand
-# in for it. No case runs without PyYAML (the YAML NOT CHECKED row). No case
-# sets the repo name to farmtender (that needs a git common dir). Fleet repos
-# are not read here, so the corpus result is not reproducible from this repo.
+# in for it. No case runs without PyYAML (the YAML NOT CHECKED row). The
+# farmtender case names only the temp root: the probe matches no repo name.
+# Fleet repos are not read here, so the corpus result is not reproducible
+# from this repo.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 CEPA_LS_SCRIPT="$(realpath "${1:-plugins/cepa/scripts/lane_scheme.py}")" python3 - <<'PY'
@@ -94,9 +95,9 @@ trap 'dc stop' EXIT
 BASE = {"orca.yaml": YAML, "Makefile": MAKEFILE, "docker-compose.dev.yml": "services: {}\n",
         "docker-compose.prod.yml": "services: {}\n", "CLAUDE.md": "# demo\n"}
 
-def run(files):
+def run(files, name="demo"):
     with tempfile.TemporaryDirectory() as d:
-        root = os.path.join(d, "demo")
+        root = os.path.join(d, name)
         os.makedirs(root)
         for path, body in files.items():
             if body is None:
@@ -307,6 +308,39 @@ CASES = [
                                       ("Makefile", None, None)],
      {"archive", "setup-closure"}, {"make-up": None, "wt-name": None, "start:up": None}),
     ("no orca.yaml", [("orca.yaml", None, None)], set(), {"orca-yaml": {"INFO"}, "kind": None}),
+    # L91: contract item 7's rule is `--foreground`; -k and </dev/null are its "Why"
+    ("timeout --foreground without -k or </dev/null is fine",
+     [("Makefile", "timeout --foreground -k 10 300 $(DEV_COMPOSE) exec -T web migrate </dev/null",
+       "timeout --foreground 300 $(DEV_COMPOSE) exec web migrate")], set(), {"timeout": {"OK"}}),
+    # L90: the repo opt-out (lane_scheme.py's header owns the rules). Each
+    # case deletes orca.yaml: a skipped repo prints only `opted-out`, and a
+    # checked one prints the orca-yaml row. Fences, comments and indented
+    # code are examples; every unclear shape is checked.
+] + [("lanes: " + n, [("orca.yaml", None, None), ("cepa.local.md", None, body)], set(),
+      {"opted-out": {"INFO"}, "orca-yaml": None, "opt-out": None} if skip
+      else {"opted-out": None, "orca-yaml": {"INFO"}, "opt-out": note})
+     for n, body, skip, note in [
+    ("none opts out", "# x\n\n## Conventions\n- lanes: none\n", True, None),
+    ("no marker, backticks, comment, upper case", "## Conventions\n  lanes: `NONE`   # no Orca lanes\n", True, None),
+    ("* marker under a ### subheading", "## Conventions\n### Lanes\n* lanes: none\n", True, None),
+    ("after a ~~~ fence holding ```", "## Conventions\n~~~\n```\n~~~\n- lanes: none\n", True, None),
+    ("none in another section is checked", "## Stack\n- lanes: none\n\n## Conventions\n- trunk: dev\n", False, {"INFO"}),
+    ("none under an H1 after Conventions is checked", "## Conventions\n- trunk: dev\n# Appendix\n- lanes: none\n", False, {"INFO"}),
+    ("none in a fenced block is checked", "## Conventions\n```markdown\n- lanes: none\n```\n", False, None),
+    ("none inside a nested fence is checked", "## Conventions\n````markdown\n```bash\n- lanes: none\n```\n````\n", False, None),
+    ("none after a fence line with an info string is checked", "## Conventions\n```\n```python\n- lanes: none\n```\n", False, None),
+    ("none in an HTML comment is checked", "## Conventions\n<!--\n- lanes: none\n-->\n", False, None),
+    ("none in a one-line HTML comment is checked", "## Conventions\n<!-- - lanes: none -->\n", False, None),
+    ("none as indented code is checked", "## Conventions\n\n    - lanes: none\n", False, {"INFO"}),
+    ("none in a numbered list is checked", "## Conventions\n1. lanes: none\n", False, {"INFO"}),
+    ("two keys are checked", "## Conventions\n- lanes: none\n- lanes: orca\n", False, {"INFO"}),
+    ("another value is checked", "## Conventions\n- lanes: orca\n", False, {"INFO"}),
+    ("none after an unclosed fence is checked", "## Conventions\n```\n- lanes: none\n", False, {"INFO"}),
+    ("none after an unclosed comment is checked", "## Conventions\n<!--\n- lanes: none\n", False, {"INFO"}),
+]] + [
+    ("lanes: none with an orca.yaml is checked", [("cepa.local.md", None, "## Conventions\n- lanes: none\n")],
+     set(), {"opted-out": None, "opt-out": {"INFO"}, "yaml-parse": {"OK"}}),
+    ("cepa.local.md a FIFO is checked", [("cepa.local.md", None, ("fifo",))], set(), {"opt-out": {"INFO"}, "yaml-parse": {"OK"}}),
 ]
 for name, ops, want, rowwant in CASES:
     files, err = dict(BASE), ""
@@ -321,6 +355,11 @@ for name, ops, want, rowwant in CASES:
     bad = ["%s is %s" % (k, rows.get(k)) for k, v in rowwant.items() if rows.get(k) != v]
     case("CASE " + name, p.returncode == 0 and not p.stderr and got == want and not bad,
          "rc=%d MISS %s, want %s; %s; stderr %r" % (p.returncode, sorted(got), sorted(want), "; ".join(bad), p.stderr[-400:]))
+
+# L90: no repo is skipped by its name. BASE in a root named farmtender is checked.
+p, rows = run(BASE, "farmtender")
+case("CASE a repo named farmtender is checked", p.returncode == 0 and not p.stderr and not misskeys(rows)
+     and rows.get("yaml-parse") == {"OK"}, "rc=%d rows %s stderr %r" % (p.returncode, rows, p.stderr[-400:]))
 
 sys.exit(1 if misses else 0)
 PY
