@@ -2824,6 +2824,12 @@ L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more tha
     memory/tasks.d/2026-11-19-fix-matrix-health-worker-cap-pages.md (a Run
     past 1000 rows raises worker-pages hourly; 2 P3 test gaps). orca-lab
     told 2026-11-19. Note: each shard is now mostly fixed baseline (~2 min).
+    Re-measure NOT DONE (orca-lab msg_d423aff712df, 2026-11-21,
+    sender-reported): run_9239ee3a4180 was a Windows Run, and the WSL host
+    cannot read it. On host Run run_7f3bdcea1a3b (0 workers), 1.60.4 printed
+    no worker-cap alert, which proves nothing above 100 rows. orca-lab
+    re-checks when one of its host Runs passes 100 worker rows, and reports
+    only if it alerts.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
