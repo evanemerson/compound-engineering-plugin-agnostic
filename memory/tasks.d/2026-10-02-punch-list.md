@@ -2830,6 +2830,44 @@ L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more tha
     no worker-cap alert, which proves nothing above 100 rows. orca-lab
     re-checks when one of its host Runs passes 100 worker rows, and reports
     only if it alerts.
+
+L95. **Handoff before compact: a two-strike PreCompact plugin hook.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From orca-lab coord@main (msg_b56ad51ef3e5, 2026-11-21; orca-lab L21;
+    sender-reported; the operator has not chosen it in this session). Research: orca-lab
+    `docs/research/2026-11-19-handoff-before-compact.md` (read with
+    `gh api repos/evanemerson/orca-lab/contents/docs/research/2026-11-19-handoff-before-compact.md`).
+    Proposed design: first `auto` compact in a session is blocked and a
+    per-session flag file is written; a PostToolUse/UserPromptSubmit hook
+    sees the flag and adds context telling the session to finish its step,
+    make state durable, and end with `Needed from you: run /cepa:handoff`.
+    Second `auto` compact is allowed, with handoff-shaped summary
+    instructions (role and name, branch, PR, Run and dispatch ids, open
+    items, next step). Risk: between strikes the context can hit the hard
+    limit and the request fails instead of compacting. Constraints (sender
+    measured): no PreCompact hook exists in `~/.claude/settings.json` or the
+    Orca profile settings; the hook must sit beside Orca's own hook entries,
+    never replace them; PreCompact cannot start `/cepa:handoff` itself
+    (disable-model-invocation).
+
+L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches after cepa runs.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From orca-lab coord@main (msg_b56ad51ef3e5, 2026-11-21; orca-lab L23;
+    sender-reported). dpc-pro had 20 `.claude/worktrees/agent-*` folders
+    (made 2026-11-05 and 2026-11-11 under cepa runs) and 59
+    `worktree-agent-*` branches; the operator deleted the folders
+    2026-11-20 and dpc-pro's coord@main deleted the branches (all tips on
+    origin). Ask: find which dispatch path leaves Agent-tool worktrees
+    behind (an isolated dispatch that ends changed, a reader dispatched
+    with isolation, or a command whose §11b cleanup block does not run)
+    and close it. Not yet checked here: whether §11b's KEPT guards (e.g.
+    "has status lines", "existed before") explain them, and whether other
+    repos hold the same leftovers (a read-only check per repo goes to that
+    repo's coord@main).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
