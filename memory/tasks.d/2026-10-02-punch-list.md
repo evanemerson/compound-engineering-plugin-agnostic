@@ -2868,6 +2868,38 @@ L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches aft
     "has status lines", "existed before") explain them, and whether other
     repos hold the same leftovers (a read-only check per repo goes to that
     repo's coord@main).
+
+L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca threads on the root.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From orca-lab coord@main (msg_304b19dbda9c, 2026-11-23; sender-reported,
+    Orca 1.4.264, cepa 1.60.4). Alert 1795389024-4JM95YWl (send_unproven,
+    reply to msg_a3c163427775, 23:10 UTC 2026-11-22): the reply
+    msg_8c3c1d725bce WAS stored, with thread_id msg_2d7d0932caa4 (the
+    thread root), because msg_a3c163427775 was itself a reply. Checked
+    here: `orca-send.sh:1131` and `:1201` compare `thread_id` to the
+    target. So every reply to a reply exits 5 and writes an alert although
+    it stored. Fix options (sender's): accept thread_id equal to the target
+    OR to the target's own thread_id (read the target row first), or match
+    a reply-to/parent field if Orca returns one. The sender of that reply
+    was an `orca_session_id:` address, so the alert's sender read "unknown"
+    (see L98).
+
+L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address (Chat and bot sessions).**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From orca-lab coord@main (msg_0aba81bb605b, 2026-11-23; sender-reported).
+    evan-skills (term_df1c30ed) replying to an ai-lab Chat session that
+    sends as `orca_session_id:34fefe5b-…` failed "the reply names no valid
+    recipient" (alert 1795407661-YzWoMsSw, target msg_4e91e2044470); the
+    block was pasted by hand. Checked here: `orca-send.sh:1141` holds that
+    refusal. Matters for an Orca bot as coord@main: bot and Chat sessions
+    are addressed by session id, so no cepa mail can reach one. orca-lab
+    will measure a bot pilot (Windows app 1.4.269 has `bot` commands; the
+    WSL host is still 1.4.264) and send results; wait for them before
+    designing the send side.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
