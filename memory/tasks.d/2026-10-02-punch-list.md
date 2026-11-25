@@ -2832,7 +2832,10 @@ L94. **`orca-health.sh` worker-cap alert fires every hour on a Run with more tha
     only if it alerts.
 
 L95. **Handoff before compact: a two-strike PreCompact plugin hook.**
-    status: pending
+    status: completed
+    Closed 2026-11-24: cancelled by the operator in coord@main's own
+    conversation (orca-lab's cancel, outbox 20261123T185105Z-5y6D7LLN, was
+    relayed data; the operator confirmed it). Not built: no PreCompact hook.
     severity: P2
     owner: unassigned
     From orca-lab coord@main (msg_b56ad51ef3e5, 2026-11-21; orca-lab L21;
@@ -2900,6 +2903,45 @@ L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address
     will measure a bot pilot (Windows app 1.4.269 has `bot` commands; the
     WSL host is still 1.4.264) and send results; wait for them before
     designing the send side.
+
+L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) as an unknown shape.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    From dpc-pro coord@main (outbox 20261123T184816Z-ZzkhPnO8, 2026-11-23;
+    sender-reported) and measured here 2026-11-24 on Orca 1.4.272:
+    `orchestration run-show --id run_2010992e1390 --json --full` returned
+    `result.run.coordinator_handle: null`, `consumer_generation: 2`, and a new
+    `result.removedWork` key. `orca-rebind.sh` with `run:` and `confirm:`
+    printed "ORCA rebind failed: run-show returned a shape this reader does
+    not know". Sender's cause: `cepa_rb_read_run` requires the handle to match
+    `term_[0-9a-f-]{36}`, so null exits 1 (not checked here). A Run with no
+    holder is the simplest re-bind case. Workaround used by dpc-pro and here:
+    `run-create` a new Run (this repo: run_eea6896207ea).
+
+L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    From orca-lab coord@main (outbox 20261123T221226Z-V1IMzqej, 2026-11-23;
+    sender-reported). Seen 2026-11-21/22: send-failed:1795220283-wtiMVv6g,
+    1795220286-tsqnxFHs and 1795389024-4JM95YWl appeared in several
+    coordinators' health checks; the operator was asked about the same alerts
+    in several tabs. Sender's options: fill repo/worktree from the dispatch or
+    target when the writer knows them; let one ack of a repo-less alert count
+    for all; or show it only to the coordinator whose Run or terminal it
+    names. Related: L98 (`orca_session_id:` senders give "unknown").
+
+L101. **A merge approval relayed by Orca message does not pass the worker's auto-mode classifier.**
+    status: pending
+    severity: P3
+    owner: unassigned
+    Note only, no fix asked. From orca-lab coord@main (same outbox file as
+    L100; sender-reported): on 2026-11-23 an evan-skills worker could not
+    merge its PR #3, because the approval came as an Orca message relayed from
+    another session, not typed in that tab. The worker stopped and asked. This
+    matters for a bot coord@main (L98): an approval given in a bot's chat may
+    not count in a worker's terminal. Wait for orca-lab's bot pilot results.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
