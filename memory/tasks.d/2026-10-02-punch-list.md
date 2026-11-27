@@ -2906,7 +2906,7 @@ L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address
 
 L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) as an unknown shape.**
     status: pending
-    severity: P2
+    severity: P1
     owner: unassigned
     From dpc-pro coord@main (outbox 20261123T184816Z-ZzkhPnO8, 2026-11-23;
     sender-reported) and measured here 2026-11-24 on Orca 1.4.272:
@@ -2918,6 +2918,14 @@ L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) 
     `term_[0-9a-f-]{36}`, so null exits 1 (not checked here). A Run with no
     holder is the simplest re-bind case. Workaround used by dpc-pro and here:
     `run-create` a new Run (this repo: run_eea6896207ea).
+    Raised to P1 on 2026-11-27 (operator's choice): a third repo hit it.
+    artist360-docs' run_e22ec5eef1f5 (outbox 20261124T135518Z-ODlMZKs6, via
+    orca-lab L26; sender-reported): run-show ok, coordinator_handle null,
+    consumer_generation 2, legacy 0; with run: and confirm: the same
+    "unknown shape" failure. Sender context: after the 2026-11-23 WSL server
+    restart (1.4.264 -> 1.4.272) old Runs survive with dead or null holders,
+    so this case is now common. Expected: null holder = free Run; with
+    confirm:, take it with run-use and prove consumer_generation + 1.
 
 L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**
     status: pending
@@ -2942,6 +2950,30 @@ L101. **A merge approval relayed by Orca message does not pass the worker's auto
     another session, not typed in that tab. The worker stopped and asked. This
     matters for a bot coord@main (L98): an approval given in a bot's chat may
     not count in a worker's terminal. Wait for orca-lab's bot pilot results.
+
+L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) cannot re-bind, receive `coord:` mail, or know to drain its outbox.**
+    status: pending
+    severity: P2
+    owner: unassigned
+    Two reports, both sender-reported, not measured here:
+    (a) artist360-docs via orca-lab (outbox 20261124T135518Z-ODlMZKs6): a
+    coordinator prompt with an `Orca Run:` line started in an Orca structured
+    chat (ORCA_STRUCTURED_SESSION and ORCA_CHAT_SCRATCH_DIR set,
+    ORCA_TERMINAL_HANDLE empty) failed at the re-bind: "ORCA rebind refused:
+    ORCA_TERMINAL_HANDLE is not a term_ handle". It worked after a restart in
+    a terminal tab. Their question: should a coordinator refuse, or warn on
+    its first line, when it starts with no terminal handle?
+    (b) artist360 coord@main (Claude cross-session message, 2026-11-27):
+    `coord:<repo>` never resolves to a structured-session coord@main.
+    orca-send.sh's resolver needs a live `term_` handle in `terminal list`,
+    and `run-use` leaves the Run's `coordinator_handle` null for that session.
+    So every `coord:artist360` send since 2026-11-24 sat pending in
+    ~/.local/state/cepa/outbox/artist360/ (3 files), and nothing told the
+    structured coordinator to run rule 8's outbox drain each turn. Their asks:
+    resolve `coord:<repo>` to a structured coordinator (for example by
+    ORCA_AGENT_SESSION_ID or the Run's agent session, or fall back to Claude
+    cross-session messaging), and/or make that coordinator's turn start show
+    pending outbox files. Related: L98 (`orca_session_id:` addresses), L99.
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
