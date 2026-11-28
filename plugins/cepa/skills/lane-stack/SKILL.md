@@ -29,7 +29,7 @@ start target, the worktree properties, and the coord@main first prompt.
 
 **Status (2026-11-27): the gate (L66, 1.53.0), the `coord:<repo>` outbox
 (L61, 1.54.0), the build lock (L70, 1.55.0), the `/cepa:setup` lane
-check (L67, 1.59.0), and the pull mode and holder file (L70, 1.61.0) have
+check (L67, 1.59.0), and the pull mode and holder file (L70, 1.62.0) have
 shipped.** A loaded plugin older than one of these
 fails the first prompt's step 0, its step 1 outbox drain, or its step 2
 build checks, stops setup and `make up` at the pull (an older gate reads

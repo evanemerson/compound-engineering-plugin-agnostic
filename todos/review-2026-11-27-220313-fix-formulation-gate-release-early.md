@@ -256,13 +256,13 @@ Comment rewritten to the new order.
 - action_class: mechanical
 - file: plugins/cepa/skills/lane-stack/SKILL.md
 - lines: Status block
-- title: Status block did not list the 1.61.0 pull mode
+- title: Status block did not list the 1.62.0 pull mode
 
 **Problem:**
-A gate older than 1.61.0 reads `--pull` as a project name and exits 2.
+A gate older than 1.62.0 reads `--pull` as a project name and exits 2.
 
 **Fix:**
-Status names L70 1.61.0 and the pull failure.
+Status names L70 1.62.0 and the pull failure.
 
 ### 12
 - status: applied
