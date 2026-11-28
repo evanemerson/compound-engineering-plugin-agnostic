@@ -75,8 +75,8 @@
 #              stub ran exactly when the line is not `skipped`, an empty stderr
 #              (bar the SIGKILL notice on the hang case), an empty TMPDIR, and
 #              that no name was evaluated as shell. hostile-json-in-cwd runs
-#              from a directory of the worktree that holds the planted
-#              `json.py` (as FIXTURES does) and a rename that is not ok:true;
+#              from a directory inside the worktree (so `<repo>` resolves)
+#              that holds the planted `json.py`, with a rename that is not ok:true;
 #              it must read failed, and the planted file must not run. The
 #              cli cases (punch-list
 #              L46: the block once spliced `<cli>` unquoted, so shell text in
@@ -213,7 +213,8 @@ HOSTILE_JSON = ('import os, sys\n'
                 'sys.exit(0)\n')
 
 def plant_json(d):
-    open(os.path.join(d, "json.py"), "w").write(HOSTILE_JSON)
+    with open(os.path.join(d, "json.py"), "w") as f:
+        f.write(HOSTILE_JSON)
     mark = os.path.join(d, "json-ran")
     if os.path.exists(mark):
         os.remove(mark)
@@ -574,7 +575,10 @@ run_title("cli-path-is-env", 'ORCA title: set "%s" on term_self-1' % TITLE, WT,
 # A json.py in the cwd must not be imported (review 125030 #15). The cwd is a
 # directory inside the worktree, so <repo> still resolves.
 HOSTILE_DIR = os.path.join(WT, "hostile")
-os.makedirs(HOSTILE_DIR)
+try:
+    os.makedirs(HOSTILE_DIR, exist_ok=True)
+except OSError as e:
+    miss("TITLE: cannot make %s: %r" % (HOSTILE_DIR, e)); finish()
 run_title("hostile-json-in-cwd", NOT_OK, HOSTILE_DIR, stub_body='echo \'{"ok": false}\'', env=TERM_ENV,
           hostile_json=True)
 

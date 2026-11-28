@@ -12,15 +12,18 @@
 # when one leg has several assertions: then the MISS line must also hold the
 # substring, so a mutant is killed by its own assertion and not by another one
 # of that leg. A mutant in EXACT must turn red ONLY on its killer: every MISS
-# line it causes must be a hit. EXACT holds the mutants written to show that a
-# case catches something no other case does. Every leg and every CITES check family has at least
-# one mutant here that names it; FIXTURES cases that share one code path (the
+# line it causes must be a hit, bar a line whose only complaint is a time
+# bound (`took Xs, bound Ys`, which load on a runner can cause), and the
+# check's run must reach its `checks passed` footer. EXACT holds the mutants
+# written to show that a case catches something no other case does. Every leg
+# and every CITES check family has at least one mutant here that names it; FIXTURES cases that share one code path (the
 # several malformed-JSON answers) share one mutant.
 #
 # Mutants run four at a time, each against its own copies. Each run of the
 # check takes a few seconds because its hang cases use the shorter test bound
 # (see BOUNDS and TITLE-BOUNDS in the check's header); the whole set took
-# about 3.5 minutes locally on 2026-10-31. On
+# about 3.5 minutes locally on 2026-10-31, before punch-list L52 added five
+# mutants (one of them, pipe-read-to-brace, waits out a 15 s case bound). On
 # 2026-10-30 the hang cases waited out the shipped 12 s per mutant, and the
 # controls overran the residual-integrity job's 10-minute bound (run
 # 41072902545).
@@ -34,7 +37,7 @@ set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
 
 python3 - <<'PY'
-import concurrent.futures, os, shutil, subprocess, sys, tempfile
+import concurrent.futures, os, re, shutil, subprocess, sys, tempfile
 
 HOME = "plugins/cepa/skills/autonomy/SKILL.md"
 SITES = "plugins/cepa/commands"
@@ -258,10 +261,10 @@ MUTANTS = [
      ("TITLE-SURFACES", "rule 6 says A coordinator also names its own tab on its first turn")),
     ("skill-runs-rename", "skill", "Then it names the\n   worker's tab (rule 6)",
      "Then it runs `/rename <role>@<wt>` in the\n   worker's tab (rule 6)",
-     ("TITLE-SURFACES", "/SKILL.md line ")),
+     ("TITLE-SURFACES", "Then it runs `/rename")),
     ("task-launches-named", "task.md", "apply `cepa:autonomy` §12 —",
      "start the worker with `claude --name tab3@wt`, then apply `cepa:autonomy` §12 —",
-     ("TITLE-SURFACES", "/commands/task.md line ")),
+     ("TITLE-SURFACES", "start the worker with `claude --name tab3@wt`")),
     # handoff.md cites rule 1 twice; the second wraps, so remove both.
     ("handoff-no-rule1", "handoff.md", ("§12b rule 1", "§12b\n  rule 1)"), ("§12b", "§12b)"),
      "handoff.md cites §12b rule 1"),
@@ -271,6 +274,8 @@ MUTANTS = [
 EXACT = {"env-trusts-exit", "env-bare-orca-any-os", "pipe-read-to-brace", "no-isolated-python",
          "title-no-isolated-python", "rule6-no-set-name-ban", "rule6-no-show-ban",
          "rule6-no-coord-first-turn", "skill-runs-rename", "task-launches-named"}
+# A MISS whose only complaint is a time bound: load, not the mutant.
+TIMING = re.compile(r"^[\w-]+: took [\d.]+s, bound [\d.]+s$")
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-orca-ctl-")
 
@@ -286,7 +291,10 @@ def run(skill, sites):
                            capture_output=True, text=True, timeout=600)
     except subprocess.TimeoutExpired:
         return None, []
-    return r.returncode, [l[5:] for l in r.stdout.splitlines() if l.startswith("MISS ")]
+    misses = [l[5:] for l in r.stdout.splitlines() if l.startswith("MISS ")]
+    if not re.search(r"^-- \d+/\d+ checks passed --$", r.stdout, re.M):
+        misses.append("NO-FOOTER: the check stopped before its footer: %r" % r.stderr.strip()[-200:])
+    return r.returncode, misses
 
 def copy_tree(name):
     d = os.path.join(TMP, name)
@@ -328,9 +336,9 @@ def mutate(name, target, old, new, killer):
     leg, sub = killer if isinstance(killer, tuple) else (killer, "")
     hit = [m for m in misses if (m.startswith(leg + ":") or m == "CITES: " + leg) and sub in m]
     label = "%s %r" % (leg, sub) if sub else leg
-    if rc != 0 and hit and name in EXACT and len(hit) != len(misses):
-        return False, "%s: red on more than %s (MISS lines: %r)" % (
-            name, label, [m for m in misses if m not in hit][:2])
+    extra = [m for m in misses if m not in hit and not TIMING.match(m)]
+    if rc != 0 and hit and name in EXACT and extra:
+        return False, "%s: red on more than %s (MISS lines: %r)" % (name, label, extra[:2])
     if rc != 0 and hit:
         return True, "%s killed by %s" % (name, label)
     return False, "%s: not killed by %s (rc=%s, MISS lines: %r)" % (name, label, rc, misses[:2])
