@@ -11,7 +11,7 @@
 
 ## 2026-11-01 — tab25@roles, compound (inline)
 
-- [ ] P3 — proposed CLAUDE.md rule (operator's call): **a leg that runs a fenced block selects it by a line no mutant edits.** In #116, HEALTHBLOCK found rule 8's block by its `orca-health.sh" "${` call line and RULE2BLOCK's regex needed the quote and `|| true`, so three mutants of exactly those texts went red because the block was not found — the controls read green while the behaviour went untested. Probe: run a mutant and read its MISS lines; `output []` on every case of a leg means the selector, not the block, failed. Fixed here by selecting on `cepa_health_args=$(cat` and tolerating both edits in the regex.
+- [x] P3 — proposed CLAUDE.md rule (operator's call): **a leg that runs a fenced block selects it by a line no mutant edits.** In #116, HEALTHBLOCK found rule 8's block by its `orca-health.sh" "${` call line and RULE2BLOCK's regex needed the quote and `|| true`, so three mutants of exactly those texts went red because the block was not found — the controls read green while the behaviour went untested. Probe: run a mutant and read its MISS lines; `output []` on every case of a leg means the selector, not the block, failed. Fixed here by selecting on `cepa_health_args=$(cat` and tolerating both edits in the regex. Recorded 2026-11-27 (PR #150, L56): repo CLAUDE.md "A leg that runs a fenced block selects it by a line no mutant edits"; instances and the open mechanical check are in `memory/tasks.d/2026-11-27-docs-matrix-shard-flip-and-block-select-rules.md`.
 
 ## 2026-11-01 — /cepa:review of #116 round 2 (todos/review-2026-11-01-223000.md)
 
