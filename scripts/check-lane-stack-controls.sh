@@ -52,24 +52,32 @@ MUTANTS = [
     ("make-ungated", '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --no-build; \\\n',
      '\t  $(DEV_COMPOSE) up -d --no-build; \\\n',
      {"MAKE lane starts through gate", "MAKE lane builds before the gate", "MAKE lane gate refusal propagates",
-      "MAKE BUILD=1 rebuilds"}),
+      "MAKE BUILD=1 rebuilds", "MAKE lane pulls after the build, before the gate"}),
     # L68: the build stays outside the gate, and the gated start never builds.
     ("make-build-under-gate",
      '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \\\n\t    echo "STACK build: failed — this lane\'s stack was not started"; exit 1; }; \\\n'
+     '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" --pull "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \\\n\t    echo "STACK pull: failed — this lane\'s stack was not started"; exit 1; }; \\\n'
      '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --no-build; \\\n',
+     '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" --pull "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \\\n\t    echo "STACK pull: failed — this lane\'s stack was not started"; exit 1; }; \\\n'
      '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --build; \\\n',
      {"MAKE lane starts through gate", "MAKE lane builds before the gate", "MAKE lane build failure starts nothing",
-      "MAKE BUILD=1 rebuilds", "MAKE BUILD=0 does not rebuild"}),
+      "MAKE BUILD=1 rebuilds", "MAKE BUILD=0 does not rebuild", "MAKE lane pulls after the build, before the gate"}),
     ("make-start-may-build", '-- $(DEV_COMPOSE) up -d --no-build; \\\n', '-- $(DEV_COMPOSE) up -d; \\\n',
-     {"MAKE lane starts through gate", "MAKE lane builds before the gate", "MAKE BUILD=1 rebuilds"}),
+     {"MAKE lane starts through gate", "MAKE lane builds before the gate", "MAKE BUILD=1 rebuilds",
+      "MAKE lane pulls after the build, before the gate"}),
     ("make-build-failure-ignored", '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \\\n\t    echo "STACK build: failed — this lane\'s stack was not started"; exit 1; }; \\\n',
      '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE); \\\n',
      {"MAKE lane build failure starts nothing"}),
+    # L70 items 2-3: the lane pulls through the gate's pull mode, before the start.
+    ("make-pull-dropped", '\t  bash "$$CEPA_ROOT/scripts/stack-gate.sh" --pull "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \\\n\t    echo "STACK pull: failed — this lane\'s stack was not started"; exit 1; }; \\\n',
+     '', {"MAKE lane pulls after the build, before the gate", "MAKE lane pull failure starts nothing"}),
+    ("make-pull-failure-ignored", '--pull "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \\\n\t    echo "STACK pull: failed — this lane\'s stack was not started"; exit 1; }; \\\n',
+     '--pull "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE); \\\n', {"MAKE lane pull failure starts nothing"}),
     # L70: the lane build goes through the gate's build mode, and BUILD=1 rebuilds.
     ("make-build-bypasses-lock", '$(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || {',
      '"$$COMPOSE_PROJECT_NAME" -- true; $(DEV_COMPOSE) build || {',
      {"MAKE lane builds before the gate", "MAKE BUILD=1 rebuilds", "MAKE lane build failure starts nothing",
-      "MAKE BUILD=0 does not rebuild"}),
+      "MAKE BUILD=0 does not rebuild", "MAKE lane pull failure starts nothing"}),
     ("make-build-any-value", '$(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME"',
      '$(if $(BUILD),--rebuild,--build) "$$COMPOSE_PROJECT_NAME"', {"MAKE BUILD=0 does not rebuild"}),
     ("make-build1-ignored", '$(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME"', '--build "$$COMPOSE_PROJECT_NAME"',

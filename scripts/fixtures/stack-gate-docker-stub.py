@@ -36,6 +36,20 @@ Strict like real docker where the gate depends on it:
           `end <project> <time>` to $STUB_BUILD_LOG around a sleep of
           $STUB_BUILD_SLEEP seconds, adds the built images to the image
           store, and exits $STUB_BUILD_RC (default 0).
+  compose [<flag> <value>…] pull --help   prints a help text with
+          --ignore-buildable and --policy; $STUB_COMPOSE_OLD=all leaves out
+          both, =policy leaves out --policy (Compose before that flag),
+          =buildable leaves out --ignore-buildable only.
+          $STUB_DOCKER_FAIL=pull-help exits 1.
+  compose [<flag> <value>…] pull --ignore-buildable --policy missing   only
+          this exact form (any other pull exits 64). Appends
+          `pull <project>` to $STUB_BUILD_LOG and exits $STUB_PULL_RC
+          (default 0).
+  compose [<flag> <value>…] up -d --no-build   adds one running container of
+          $COMPOSE_PROJECT_NAME to the state (models a stack coming up).
+  compose [<flag> <value>…] stop   marks every container of
+          $COMPOSE_PROJECT_NAME exited. $STUB_DOCKER_FAIL=stop exits 1 and
+          changes nothing.
   image inspect [--format <t>] [--] <ref…>   exits 1 unless every ref is in
           the JSON list in $STUB_DOCKER_IMAGES (a missing file is empty).
 """
@@ -169,6 +183,42 @@ if argv[:1] == ["compose"]:
                 json.dump(sorted(set(have) | set(built)), f)
         note("end")
         sys.exit(int(os.environ.get("STUB_BUILD_RC", "0")))
+    if rest == ["pull", "--help"]:
+        if FAIL == "pull-help":
+            sys.exit(1)
+        old = os.environ.get("STUB_COMPOSE_OLD", "")
+        print("Usage:  docker compose pull [OPTIONS] [SERVICE...]\n\nOptions:")
+        if old not in ("all", "buildable"):
+            print("      --ignore-buildable       Ignore images that can be built")
+        print("      --ignore-pull-failures   Pull what it can")
+        if old not in ("all", "policy"):
+            print('      --policy string          Apply pull policy ("missing"|"always")')
+        print("  -q, --quiet                  Pull without printing progress information")
+        sys.exit(0)
+    if rest == ["pull", "--ignore-buildable", "--policy", "missing"]:
+        blog = os.environ.get("STUB_BUILD_LOG")
+        if blog:
+            with open(blog, "a") as f:
+                f.write(f"pull {proj} {time.time():.3f}\n")
+        sys.exit(int(os.environ.get("STUB_PULL_RC", "0")))
+    if rest == ["stop"] and FAIL == "stop":
+        print("stop failed", file=sys.stderr)
+        sys.exit(1)
+    if rest in (["up", "-d", "--no-build"], ["stop"]):
+        with open(STATE, "r+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            rows = json.load(f)
+            if rest == ["stop"]:
+                for r in rows:
+                    if r.get("project") == proj:
+                        r["state"] = "exited"
+            else:
+                import hashlib
+                rows.append({"project": proj, "wd": "/w/" + proj, "state": "running",
+                             "id": hashlib.sha256(f"{proj}-up-{len(rows)}".encode()).hexdigest(),
+                             "started": "2026-11-02T12:00:00Z"})
+            f.seek(0); f.truncate(); json.dump(rows, f)
+        sys.exit(0)
     print(f"stub docker: unsupported compose {argv}", file=sys.stderr)
     sys.exit(64)
 

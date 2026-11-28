@@ -12,7 +12,7 @@
 - [ ] P3 — `plugins/cepa/scripts/orca-rebind.sh` cepa_rb_orca — no 90-second start gate or wedge stop; run-use not retried on the pre-delivery vsock error (finding 17).
 - [ ] P3 — `scripts/check-orca-nudge.sh` REBIND leg — untested branches: run-show fail/shape, re-read shape, three retry flags, the vsock `&&`, cli arms, missing tools, `run` twice, bound-here with a `run:` field (finding 18).
 - [ ] P3 — `plugins/cepa/commands/handoff.md` allowed-tools — the `run-current` grant names `orca-ide` only, as every Orca grant does (finding 19).
-- [ ] P3 — `memory/tasks.d/2026-10-02-punch-list.md` L45 — close it after merge and the two plugin-refresh hops (coord@main is the only writer) (finding 20).
+- [x] P3 — `memory/tasks.d/2026-10-02-punch-list.md` L45 — close it after merge and the two plugin-refresh hops (coord@main is the only writer) (finding 20). Closed 2026-11-27 (PR #150, L51 probe): L45 is completed.
 
 ## 2026-11-01 — tab25@roles, L46 (PR #116)
 

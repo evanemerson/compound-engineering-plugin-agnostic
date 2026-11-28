@@ -5,7 +5,7 @@
 Source: `todos/review-2026-10-22-150000.md` (findings 21, 22). 20 of 22
 findings were applied in the PR.
 
-- [ ] **P3 — Close punch-list L7 when #91 merges.** The punch list still reads
+- [x] **P3 — Close punch-list L7 when #91 merges.** Closed 2026-11-27 (PR #150, L51 probe): L7 is completed. The punch list still reads
   `status: pending`; this PR's residual note says done. coord@main is the
   punch list's only writer. `file: memory/tasks.d/2026-10-02-punch-list.md` ·
   `action_class: judgment` · `confidence: 90`

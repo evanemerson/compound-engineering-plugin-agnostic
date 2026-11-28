@@ -27,9 +27,10 @@
 #   MAKE      the `make up` example block is RUN in throwaway git repos with
 #             a stub gate and a stub compose: the main checkout starts
 #             directly; a lane builds first through the gate's build mode
-#             (`--build <project> -- <compose>`, L68/L70), then starts only
-#             through the gate, with `<project> -- <compose> up -d
-#             --no-build`; `BUILD=1` passes `--rebuild` in a lane and
+#             (`--build <project> -- <compose>`, L68/L70), pulls through
+#             `--pull <project> -- <compose>` (L70; a failed pull starts
+#             nothing), then starts only through the gate, with `<project>
+#             -- <compose> up -d --no-build`; `BUILD=1` passes `--rebuild` in a lane and
 #             `--build` to compose in the main checkout, and only the
 #             exact value 1 does (`BUILD=0` builds as usual); a failed build
 #             starts nothing and never reaches the start gate; a gate refusal
@@ -65,9 +66,11 @@
 # not prove any repo's real Makefile is gated (that is /cepa:setup's check 8,
 # plugins/cepa/scripts/lane_scheme.py, tested by scripts/check-lane-scheme.sh).
 # The SETUP leg reads this skill only, never a repo's `worktree-init`, and it
-# does not run the hang (the pty probe is in L78). No leg checks the Setup
-# order (build, then the gate, then `.env` and migrations under it) or its two
-# build preconditions: they are prose only. The TEMPLATE leg checks anchors,
+# does not run the hang (the pty probe is in L78). No leg here checks the
+# Setup order or its two build preconditions: the order's bash block is run
+# by scripts/check-stack-gate.sh (its SETUP leg, L70), the preconditions are
+# prose only. The Pull and Lock-busy bullets of "The stack gate" and the pull
+# wording of first-prompt step 2 are prose only too: no leg reads them. The TEMPLATE leg checks anchors,
 # not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }
@@ -150,7 +153,8 @@ MAKE_CASES = ("MAKE main starts directly", "MAKE lane starts through gate",
               "MAKE lane gate refusal propagates", "MAKE lane without gate refuses",
               "MAKE lane unset project refuses", "MAKE lane non-wt project refuses",
               "MAKE severed lane refuses", "MAKE BUILD=1 rebuilds",
-              "MAKE BUILD=0 does not rebuild")
+              "MAKE BUILD=0 does not rebuild", "MAKE lane pulls after the build, before the gate",
+              "MAKE lane pull failure starts nothing")
 ms = blocks("make")
 tools = [t for t in ("git", "make") if not shutil.which(t)]
 if len(ms) != 1 or tools:
@@ -163,7 +167,8 @@ else:
         comp = os.path.join(d, "compose")
         with open(comp, "w") as f:
             f.write('#!/usr/bin/env bash\necho "START $*"\n'
-                    'if [ -n "${STUB_BUILD_FAIL:-}" ] && [ "${1:-}" = build ]; then exit 1; fi\n')
+                    'if [ -n "${STUB_BUILD_FAIL:-}" ] && [ "${1:-}" = build ]; then exit 1; fi\n'
+                    'if [ -n "${STUB_PULL_FAIL:-}" ] && [ "${1:-}" = pull ]; then exit 1; fi\n')
         os.chmod(comp, 0o755)
         with open(mk, "w") as f:
             f.write("DEV_COMPOSE = %s\nworktree-guard:\n\t@true\n" % comp + ms[0])
@@ -173,7 +178,8 @@ else:
             f.write("#!/usr/bin/env bash\necho %s\n" % root)
         with open(os.path.join(root, "scripts", "stack-gate.sh"), "w") as f:
             f.write('#!/usr/bin/env bash\necho "GATE $*"\n'
-                    'case "$1" in --build|--rebuild) shift 3; "$@" build; exit $?;; esac\n'
+                    'case "$1" in --build|--rebuild) shift 3; "$@" build; exit $?;;\n'
+                    '  --pull) shift 3; "$@" pull; exit $?;; esac\n'
                     'if [ -n "${STUB_REFUSE:-}" ]; then echo "STACK gate: refused — stub"; exit 3; fi\n'
                     'shift 2\n"$@"\n')
         # A caller's GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (a hook) would
@@ -213,6 +219,7 @@ else:
             up = "START up -d --no-build"
             gate_line = "GATE %s -- %s up -d --no-build" % (proj, comp)
             build_line = "GATE --build %s -- %s" % (proj, comp)
+            pull_line = "GATE --pull %s -- %s" % (proj, comp)
             def lines(r):
                 return r.stdout.splitlines()
             def nothing(r):  # nothing built, nothing started, gate never called
@@ -228,6 +235,15 @@ else:
             case("MAKE lane builds before the gate",
                  build_line in ls and "START build" in ls and gate_line in ls
                  and ls.index(build_line) + 1 == ls.index("START build") < ls.index(gate_line), show(r))
+            case("MAKE lane pulls after the build, before the gate",
+                 pull_line in ls and "START pull" in ls and "START build" in ls and gate_line in ls
+                 and ls.index("START build") < ls.index(pull_line)
+                 and ls.index(pull_line) + 1 == ls.index("START pull") < ls.index(gate_line), show(r))
+            r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_PULL_FAIL="1")
+            case("MAKE lane pull failure starts nothing",
+                 r.returncode != 0 and "START pull" in lines(r)
+                 and not any(l.startswith(("START up", "GATE " + proj)) for l in lines(r))
+                 and "STACK pull: failed" in r.stdout, show(r))
             r = make(lane, CEPA_PLUGIN_ROOT=root, COMPOSE_PROJECT_NAME=proj, STUB_BUILD_FAIL="1")
             case("MAKE lane build failure starts nothing",
                  r.returncode != 0 and "START build" in lines(r)
