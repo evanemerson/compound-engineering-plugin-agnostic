@@ -73,11 +73,17 @@ if verb == "orchestration send":
     to = opt("--to")
     n = len(st.setdefault("sent", [])) + 1
     # A bot: send is stored for the bot's chat, as Orca does (L103 C1).
-    if isinstance(to, str) and to.startswith("bot:") and "store_to" not in st:
-        to = "orca_session_id:" + st.get("bot_chat", "0" * 36)
+    # L104: a bot whose Home chat is bound to a Run (state "bot_run") gets it
+    # in that Run, with Orca's botRequest payload (Orca 1.4.280,
+    # msg_ede2e13a5255). Mode botrun_nopayload stores it with no payload.
+    bot_to = isinstance(to, str) and to.startswith("bot:")
+    if bot_to and "store_to" not in st:
+        to = ("run:" + st["bot_run"]) if "bot_run" in st else "orca_session_id:" + st.get("bot_chat", "0" * 36)
     m = {"id": "msg_%012x" % (0xabc000 + n), "to_handle": st.get("store_to", to), "from_handle": "term_" + "1" * 36,
          "type": opt("--type"), "subject": opt("--subject"), "body": opt("--body"),
-         "thread_id": None, "created_at": "2026-11-02 01:00:00"}
+         "thread_id": None, "created_at": "2026-11-02 01:00:00",
+         "payload": json.dumps({"botRequest": {"from": "your owner's agent"}})
+         if bot_to and "bot_run" in st and "botrun_nopayload" not in MODE else None}
     st["sent"].append(m)
     out({"id": "x", "ok": True, "result": {"message": m}})
 # L103 C2: `bot list` (Orca 1.4.280: result.bots[{name, ...}]) and `bot
@@ -100,6 +106,11 @@ if verb == "bot chats":
         {"id": st.get("bot_chat", "0" * 36), "title": "Home", "home": True, "closed": "botchats_closed" in MODE}]}})
 if verb == "orchestration inbox":
     out({"id": "x", "ok": True, "result": {"messages": list(reversed(st.get("sent", [])))}})
+# L104: `run-show --id` (result.run{id, objective, coordinator_handle}).
+# State "bot_run_coord" is that Run's coordinator_handle (default null).
+if verb == "orchestration run-show":
+    out({"id": "x", "ok": True, "result": {"run": {"id": opt("--id"), "objective": "x",
+                                                   "coordinator_handle": st.get("bot_run_coord")}}})
 if verb == "orchestration run-current":
     out({"id": "x", "ok": True, "result": {"run": None}})
 if verb == "terminal show":

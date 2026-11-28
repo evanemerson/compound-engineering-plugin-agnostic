@@ -162,7 +162,7 @@ MUTANTS = [
     ("SEND", "objective-raw-name", "if m and slug(m.group(1)) == repo and", "if m and m.group(1) == repo and", None),
     # L103 C2: a bot named <repo>-bot is the coordinator, ahead of the Run list.
     ("SEND", "bot-first-skipped", '    BOT) cepa_send_bot=bot:$cepa_send_coord-bot ;;', '    BOT) cepa_send_bot= ;;',
-     {'RESOLVE a bot named <repo>-bot is sent to, ahead of the Run list', 'RESOLVE a bot send stored for a Run stays pending', 'RESOLVE a bot send to a closed chat stays pending', 'RESOLVE a bot target given nudge is sent as no-nudge'}),
+     {'RESOLVE a bot named <repo>-bot is sent to, ahead of the Run list', 'RESOLVE a bot send stored for a Run Orca did not route stays pending', 'RESOLVE a bot send stored for a Run with a terminal coordinator stays pending', 'RESOLVE a bot send stored for a Run with no bot request stays pending', "RESOLVE a bot send stored for its Run with Orca's bot request is delivered", 'RESOLVE a bot send stored for its Run with no open Home chat stays pending', 'RESOLVE a bot send to a closed chat stays pending', 'RESOLVE a bot target given nudge is sent as no-nudge'}),
     ("SEND", "bot-name-prefix", 'b.get("name") == sys.argv[2] and', 'str(b.get("name")).startswith(sys.argv[2][:-4]) and',
      {"RESOLVE a prefix repo's bot is not the coordinator", "RESOLVE a bot named for the bare repo is not the coordinator"}),
     ("SEND", "bot-two-is-one", 'print("BOT" if n == 1 else "AMBIG" if n > 1 else "NONE")', 'print("BOT" if n >= 1 else "NONE")',
@@ -175,8 +175,12 @@ MUTANTS = [
       "RESOLVE a bot list of an unknown shape falls back to the terminal coord@main",
       "RESOLVE an Orca with no bot command falls back to the terminal coord@main"}),
     ("SEND", "bot-delivered-to-name", '[[ $cepa_send_target != bot:* ]] || cepa_send_dn=${cepa_send_n%.md}.drained.md', ':',
-     {"RESOLVE a bot named <repo>-bot is sent to, ahead of the Run list",
-      "RESOLVE a bot target given nudge is sent as no-nudge"}),
+     {'RESOLVE a bot named <repo>-bot is sent to, ahead of the Run list', "RESOLVE a bot send stored for its Run with Orca's bot request is delivered", 'RESOLVE a bot target given nudge is sent as no-nudge'}),
+    # L104: a bot whose Home chat is bound to a Run gets the send there; it is
+    # delivered only with Orca's bot request, a Run with no terminal
+    # coordinator, and an open Home chat.
+    ("SEND", "botrun-proof-skipped", 'if [[ $cepa_send_target == bot:* && $cepa_send_to == run:* ]]; then', 'if false; then', {'RESOLVE a bot send stored for a Run with a terminal coordinator stays pending', "RESOLVE a bot send stored for its Run with Orca's bot request is delivered", 'RESOLVE a bot send stored for its Run with no open Home chat stays pending'}),
+    ("SEND", "botrun-botreq-skipped", '            and not any(botreq(x) for x in mine_rows):\n        sys.exit(5)', '            and False:\n        sys.exit(5)', {'RESOLVE a bot send stored for a Run Orca did not route stays pending', 'RESOLVE a bot send stored for a Run with no bot request stays pending'}),
     ("SEND", "bot-nudged", '[ "$cepa_send_mode" != nudge ] || cepa_send_mode=no-nudge cepa_send_downgraded=1', ':',
      {"RESOLVE a bot target given nudge is sent as no-nudge"}),
     # BLOCK
@@ -243,7 +247,7 @@ EXPECT = {
     'alert-slug-unchecked': {'TARGET double dash is refused and kept in _invalid',
         'TARGET leading dash is refused and kept in _invalid'},
     'pending-ending': {'RESOLVE a bad cursor is unreadable', 'RESOLVE a failed run-list is unreadable', 'RESOLVE a failed worktree ps is unreadable', 'RESOLVE a handle absent from terminal list is not live', 'RESOLVE a live coord@main in a linked worktree is a mismatch', "RESOLVE a live coord@main in another repo's main checkout is a mismatch", 'RESOLVE a prefix repo never matches', 'RESOLVE a run-list in the 1.4.246 short shape is unreadable', 'RESOLVE a terminal that is not connected is not live', 'RESOLVE a truncated terminal list is unreadable', 'RESOLVE an objective that only contains the name never matches', 'RESOLVE an objective that runs on past coord@main never matches', 'RESOLVE an open tab with no live pty is not live', 'RESOLVE two bots of the same name are ambiguous', 'RESOLVE two live coord@main handles are ambiguous'},
-    'unproven-refused': {'RESOLVE a bot send stored for a Run stays pending', 'RESOLVE a bot send to a closed chat stays pending', 'RESOLVE an unproven send stays pending'},
+    'unproven-refused': {'RESOLVE a bot send stored for a Run Orca did not route stays pending', 'RESOLVE a bot send stored for a Run with a terminal coordinator stays pending', 'RESOLVE a bot send stored for a Run with no bot request stays pending', 'RESOLVE a bot send stored for its Run with no open Home chat stays pending', 'RESOLVE a bot send to a closed chat stays pending', 'RESOLVE an unproven send stays pending'},
     'objective-raw-name': {'RESOLVE an objective named by the raw directory matches its slug'},
     "refused-not-moved": {"TARGET escalation refuses a coord address and keeps it as refused",
                           "TARGET reply refuses a coord address and keeps it as refused",

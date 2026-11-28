@@ -34,7 +34,10 @@
 #             `.drained`, never nudged, no Run-list read); a prefix repo's
 #             bot, a bot named for the bare repo and two bots of one name are
 #             not; a failed, shapeless or missing bot list falls back to the
-#             terminal coord@main; a bot send stored for a Run stays pending.
+#             terminal coord@main. L104: a bot send stored for the bot's Run
+#             is delivered with Orca's bot request, a Run with no terminal
+#             coordinator and an open Home chat; with any one missing, or for
+#             a Run Orca did not route as a bot send, it stays pending.
 #   PRUNE   — files older than 7 days go in every status; a pending or
 #             refused one leaves an outbox_pruned alert, a delivered one none,
 #             and one already acked (L87) none.
@@ -371,13 +374,29 @@ check("RESOLVE a bot send to a closed chat stays pending",
       rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
       and any(l.startswith("Orca send failed: not proven stored — ") and "not an open chat of bot:dpc-pro-bot" in l
               for l in out), "rc=%s files=%s out=%s" % (rc, fl, out))
-reset()
-rc, out = send({"target": "coord:dpc-pro"}, st=state(bots=["dpc-pro-bot"], store_to="run:run_000000000001"))
-fl = files()
-check("RESOLVE a bot send stored for a Run stays pending",
-      rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
-      and "Orca send failed: not proven stored — the reply names no valid recipient" in out,
-      "rc=%s files=%s out=%s" % (rc, fl, out))
+# L104: a bot whose Home chat is bound to a Run gets the send in that Run.
+botsend("a bot send stored for its Run with Orca's bot request is delivered",
+        state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001"), 0, "bot:dpc-pro-bot",
+        want_line="Orca send stored: msg_000000abc001 for run:run_000000000001")
+for label, st, why in (
+        ("a bot send stored for a Run with no bot request stays pending",
+         state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001", mode=["botrun_nopayload"]),
+         "without Orca's bot request"),
+        ("a bot send stored for a Run with a terminal coordinator stays pending",
+         state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001", bot_run_coord=HR),
+         "a Run with a terminal coordinator"),
+        ("a bot send stored for its Run with no open Home chat stays pending",
+         state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001", mode=["botchats_closed"]),
+         "has no open Home chat"),
+        ("a bot send stored for a Run Orca did not route stays pending",
+         state(bots=["dpc-pro-bot"], store_to="run:run_000000000001"), "without Orca's bot request")):
+    reset()
+    rc, out = send({"target": "coord:dpc-pro"}, st=st)
+    fl = files()
+    check("RESOLVE " + label,
+          rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
+          and any(l.startswith("Orca send failed: not proven stored — ") and why in l for l in out),
+          "rc=%s files=%s out=%s" % (rc, fl, out))
 reset()
 rc, out = send({"target": "coord:dpc-pro"}, st=state(store_to="bogus"))
 fl = files()
