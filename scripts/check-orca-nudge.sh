@@ -113,11 +113,24 @@
 #              and `bot chats --bot <name> --json` argv are pinned; it counts
 #              only for an open chat of that bot, never nudged. A closed or
 #              unlisted chat, an id only quoted in a chat's text, another
-#              bot's list, a failed, not-ok or non-JSON list, a Run or bot
-#              recipient, and no recipient are `not proven stored`; the
-#              read-back takes only a chat row. BOTREF: an empty name, a
+#              bot's list, a failed, not-ok or non-JSON list, a dispatch or
+#              bot recipient, a Run with no bot request, and no recipient are
+#              `not proven stored`; the read-back takes a chat or a Run row,
+#              never another address. BOTREF: an empty name, a
 #              leading dash, shell text, a space, 106 characters and `on:` are
 #              refused before any call.
+#   BOTRUN   — punch-list L104: a bot whose Home chat is bound to a Run gets
+#              its mail in `run:<id>`. The send, re-read, `run-show --id <id>`
+#              and `bot chats` argv are pinned; it counts only when THIS msg
+#              id's row for that Run has a payload that parses to an object
+#              with a `botRequest` object, run-show names that Run with
+#              `coordinator_handle` null, and the bot lists an open Home chat.
+#              Each one missing is `not proven stored` on its own: another msg
+#              id's bot request, botRequest only quoted (a payload value, a
+#              string, a payload that is not JSON or not Orca's string, the
+#              body), a terminal coordinator, another Run's record, a failed,
+#              not-ok or shapeless run-show, a closed or non-Home chat, a Home
+#              flag given as text. Read back from the Run too; never nudged.
 #   WDONE    — orca-send.sh's `worker_done` mode (§12b rule 3, punch-list
 #              L35). The argv is pinned, with the preamble's IDs and a request
 #              id the retry reuses. It counts only when `result.lifecycle`
@@ -1298,8 +1311,14 @@ if LEGS in ("all", "send"):
             ("BOT chats not ok are unreadable", 5, BUNREAD, {"chats": bchats(ok=False)}),
             ("BOT chats that fail are unreadable", 5, BUNREAD, {"chats": "", "chats_rc": 1}),
             ("BOT chats not JSON are unreadable", 5, BUNREAD, {"chats": "Home 2fe95de0"}),
-            ("BOT stored for a Run is not a bot", 5, UNPROVEN + "the reply names no valid recipient",
-             {"osend_json": osend(to="run:run_abc", warnings=False)}),
+            # L104: a Run is a bot's recipient only with all of BOTRUN's proof.
+            ("BOT stored for a Run with no bot request is not proven", 5,
+             UNPROVEN + "%s is stored for run:run_abc without Orca's bot request, so it is not proven a send to %s"
+             % (MID, BOT), {"osend_json": osend(to="run:run_abc", warnings=False),
+                            "inbox_json": inbox({"id": MID, "to_handle": "run:run_abc"})}),
+            ("BOT stored for a dispatch is not a bot", 5, UNPROVEN + "the reply names no valid recipient",
+             {"osend_json": osend(to="dispatch:ctx_abc", warnings=False),
+              "inbox_json": inbox({"id": MID, "to_handle": "dispatch:ctx_abc"})}),
             ("BOT stored for the bot address is not a chat", 5, UNPROVEN + "the reply names no valid recipient",
              {"osend_json": osend(to=BOT, warnings=False)}),
             ("BOT with no recipient and no row is not stored", 5,
@@ -1316,8 +1335,127 @@ if LEGS in ("all", "send"):
         osend_json=osend(to=None, warnings=False), inbox_json=inbox(brow(to=BCHAT, typ="handoff")))
     bot("BOT a name of 105 characters is accepted", 0, ["Orca send stored: %s for %s" % (MID, BCHAT)],
         mode="no-nudge", target="bot:" + "a" * 105, chats=bchats(bot="a" * 105))
-    bot("BOT read back skips a row for a Run", 5, [NOSTORE + EMPTY1, BPASTE], osend_rc=1, osend_json="",
+    bot("BOT read back of a Run row is not proven", 5,
+        [UNPROVEN + "%s; the inbox holds %s for run:run_abc with this send's text, but no Orca reply names it, and "
+         "no Orca read ties that Run to %s" % (EMPTY1, MID, BOT), BPASTE], osend_rc=1, osend_json="",
         inbox_json=inbox(brow(to="run:run_abc", typ="handoff")))
+    bot("BOT read back skips a row for another address", 5, [NOSTORE + EMPTY1, BPASTE], osend_rc=1, osend_json="",
+        inbox_json=inbox(brow(to="dispatch:ctx_abc", typ="handoff")))
+
+    # --- BOTRUN (punch-list L104): a bot whose Home chat is bound to a Run
+    # gets its mail in that Run (Orca 1.4.280: msg_ede2e13a5255 stored for
+    # run:run_cf8f7c0d2b33). It counts only when THIS row's payload holds
+    # Orca's botRequest object, run-show names a Run with no terminal
+    # coordinator, and the bot has an open Home chat. Never nudged.
+    BRUN = "run:run_cf8f7c0d2b33"
+    BRPAY = json.dumps({"botRequest": {"from": "your owner's agent", "kind": "handoff: the job is yours now"}})
+    BRSTORED = "Orca send stored: %s for %s" % (MID, BRUN)
+
+    def brshow(rid="run_cf8f7c0d2b33", coord=None, ok=True, drop=False):
+        run = {"id": rid, "objective": "orca-lab-bot pilot (L25)", "coordinator_handle": coord}
+        if drop:
+            del run["coordinator_handle"]
+        return json.dumps({"id": "5be1", "ok": ok, "result": {"run": run, "removedWork": {"coverage": "complete"}}})
+
+    def botrun(name, rc, want, runshow=None, runshow_rc=0, inbox_json=None, **kw):
+        env = {"STUB_RUNSHOW": runshow if runshow is not None else brshow(), "STUB_RUNSHOW_RC": str(runshow_rc)}
+        return bot(name, rc, want, osend_json=kw.pop("osend_json", osend(to=BRUN, warnings=False)),
+                   inbox_json=inbox_json if inbox_json is not None else
+                   inbox({"id": MID, "to_handle": BRUN, "payload": BRPAY}), env_extra=env, **kw)
+    calls = botrun("BOTRUN send stored for the bot's Run counts", 0, [BRSTORED, BNN])
+    want = [["orchestration", "send", "--to", BOT, "--type", "handoff", "--subject", SUBJ, "--body", BODY,
+             "--retry-request", "<uuid>", "--json", "--full"], INBOX_ARGV,
+            ["orchestration", "run-show", "--id", "run_cf8f7c0d2b33", "--json", "--full"],
+            ["bot", "chats", "--bot", "orca-lab-bot", "--json"]]
+    check = [strip_req(c) for c in calls] == want
+    (ok if check else miss)("BOTRUN argv and order, no nudge" if check else "BOTRUN argv and order, no nudge: %r" % calls)
+    # PR #155 review (adversarial): a Run row found only by its text may be an
+    # identical send to ANOTHER bot, so a read-back never counts it.
+    def brback(why):
+        return UNPROVEN + "%s; the inbox holds %s for %s with this send's text, but no Orca reply names it, and no " \
+            "Orca read ties that Run to %s" % (why, MID, BRUN, BOT)
+    for name, kw, why in [
+            ("BOTRUN a Run row read back is not proven", {"osend_rc": 1, "osend_json": ""}, EMPTY1),
+            ("BOTRUN with no recipient, a Run row read back is not proven",
+             {"osend_json": osend(to=None, warnings=False)}, "the reply names no recipient for " + BOT)]:
+        calls = botrun(name, 5, [brback(why), BPASTE], inbox_json=inbox(brow(to=BRUN, typ="handoff", payload=BRPAY)), **kw)
+        check = not [c for c in calls if c[:2] in (["orchestration", "run-show"], ["bot", "chats"])]
+        (ok if check else miss)(name + " reads no Run or chats" if check else name + " reads no Run or chats: %r" % calls)
+    # The adversarial scenario: the same text went to bot b first; this send
+    # to bot:orca-lab-bot failed and stored nothing; the inbox holds only b's
+    # Run row, with its bot request.
+    botrun("BOTRUN a read-back of another bot's Run row is not stored as this bot's", 5,
+           [brback(EMPTY1).replace(BRUN, "run:run_ofbotb"), BPASTE], osend_rc=1, osend_json="",
+           inbox_json=inbox(brow(to="run:run_ofbotb", typ="handoff", payload=BRPAY)),
+           runshow=brshow(rid="run_ofbotb"))
+    BRNOREQ = UNPROVEN + "%s is stored for %s without Orca's bot request, so it is not proven a send to %s" % (MID, BRUN, BOT)
+    BRCOORD = UNPROVEN + "%s is stored for %s, a Run with a terminal coordinator, so it is not proven a send to %s" % (MID, BRUN, BOT)
+    BRUNREAD = UNPROVEN + "the Run run_cf8f7c0d2b33 could not be read, so %s is not proven a send to %s" % (MID, BOT)
+    BRHOME = UNPROVEN + "%s is stored for %s, but %s has no open Home chat" % (MID, BRUN, BOT)
+    OTHERMID = "msg_0000000000aa"
+    for name, rc, want, kw in [
+            # (1) THIS msg id, for that Run.
+            ("BOTRUN row missing from the inbox", 5, NOSTORE + "%s is not in the inbox for %s" % (MID, BRUN),
+             {"inbox_json": inbox({"id": OTHERMID, "to_handle": BRUN, "payload": BRPAY})}),
+            ("BOTRUN row for another Run is not stored", 5, NOSTORE + "%s is not in the inbox for %s" % (MID, BRUN),
+             {"inbox_json": inbox({"id": MID, "to_handle": "run:run_other", "payload": BRPAY})}),
+            ("BOTRUN a bot request on another msg id does not count", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": OTHERMID, "to_handle": BRUN, "payload": BRPAY},
+                                  {"id": MID, "to_handle": BRUN})}),
+            # (2) Orca's botRequest object in THIS row's parsed payload.
+            ("BOTRUN no payload is not proven", 5, BRNOREQ, {"inbox_json": inbox({"id": MID, "to_handle": BRUN})}),
+            ("BOTRUN a null payload is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": None})}),
+            ("BOTRUN a payload with no botRequest is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"taskId": "t"})})}),
+            # Quoted shapes: the word, not the object.
+            ("BOTRUN botRequest quoted as a payload value is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"note": "botRequest"})})}),
+            ("BOTRUN botRequest that is not an object is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"botRequest": "yes"})})}),
+            ("BOTRUN botRequest that is a list is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"botRequest": [{}]})})}),
+            ("BOTRUN botRequest in a payload that is not JSON is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": 'x {"botRequest":{}}'})}),
+            ("BOTRUN a payload given as an object, not Orca's string, is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": {"botRequest": {}}})}),
+            ("BOTRUN botRequest quoted in the body is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "body": BRPAY, "subject": BRPAY})}),
+            # (3) run-show: ok, that id, coordinator_handle null.
+            ("BOTRUN a Run with a terminal coordinator is not proven", 5, BRCOORD,
+             {"runshow": brshow(coord="term_" + "a" * 8 + "-1111-4222-8333-" + "b" * 12)}),
+            ("BOTRUN a run-show of another Run is not proven", 5,
+             UNPROVEN + "run-show of run_cf8f7c0d2b33 answered for another Run, so %s is not proven a send to %s" % (MID, BOT),
+             {"runshow": brshow(rid="run_other")}),
+            ("BOTRUN a Run with no coordinator field is unreadable", 5, BRUNREAD, {"runshow": brshow(drop=True)}),
+            ("BOTRUN a run-show not ok is unreadable", 5, BRUNREAD, {"runshow": brshow(ok=False)}),
+            ("BOTRUN a run-show that fails is unreadable", 5, BRUNREAD, {"runshow": "", "runshow_rc": 1}),
+            ("BOTRUN a run-show not JSON is unreadable", 5, BRUNREAD, {"runshow": "run_cf8f7c0d2b33 coordinator_handle null"}),
+            # (4) bot chats: an open Home chat of that bot.
+            ("BOTRUN a closed Home chat is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": True, "closed": True}])}),
+            # PR #155 review: home and open must hold on ONE chat.
+            ("BOTRUN a closed Home chat beside an open other chat is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": True, "closed": True},
+                                     {"id": "cfb3024d-bf6a-4d25-a938-498a738592f8", "home": False, "closed": False}])}),
+            ("BOTRUN only a chat that is not Home is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": False, "closed": False}])}),
+            ("BOTRUN a Home flag quoted as text is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": "true", "title": "home: true", "closed": False}])}),
+            ("BOTRUN chats of another bot are unreadable", 5, BUNREAD, {"chats": bchats(bot="fleet")}),
+            ("BOTRUN chats that fail are unreadable", 5, BUNREAD, {"chats": "", "chats_rc": 1})]:
+        calls = botrun(name, rc, [want, BPASTE], **kw)
+        (ok if not sends(calls) else miss)(name + " is not nudged" if not sends(calls) else
+                                           name + " is not nudged: %r" % sends(calls))
+    # L104: Orca refuses a reply to a message a bot sent; the reason says
+    # how to answer a bot instead.
+    store("BOT a reply to a bot's message says to send to the bot", 5,
+          [NOSTORE + 'Orca did not return "ok": true (bot_reply_not_yours); a bot is answered with a send to '
+           "bot:<name>, not a reply", PASTE_Q], argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY,
+          osend_rc=1, osend_json=osend(ok=False, message=False, error={"code": "bot_reply_not_yours", "message": "x"}))
+    store("BOT the bot-reply code on a send that is not a reply adds no hint", 5,
+          [NOSTORE + 'Orca did not return "ok": true (bot_reply_not_yours)', BPASTE], target=BOT, typ="handoff",
+          osend_rc=1, osend_json=osend(ok=False, message=False, error={"code": "bot_reply_not_yours", "message": "x"}))
     for name, tgt in [("BOTREF empty name", "bot:"), ("BOTREF name starts with a dash", "bot:-x"),
                       ("BOTREF name with shell text", "bot:a;rm"), ("BOTREF name too long", "bot:" + "a" * 106),
                       ("BOTREF name with a space", "bot:a b")]:
