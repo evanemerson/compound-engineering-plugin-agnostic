@@ -261,9 +261,11 @@
 # for `dispatch:<ctx>`, that worker's own Dispatch, and Orca prompted the
 # worker itself (punch-list L105; sender-measured on Orca 1.4.280). Such a
 # row gets no nudge only when one bounded `worker-show --dispatch <ctx> --json
-# --full` names that Dispatch `dispatched`, with the target as both its
-# `assigneeHandle` and its `terminal.handle` (THE OWN DISPATCH). A failed or
-# timed-out read, any other answer, or a host (`on:`) send keeps the skip.
+# --full` read (THE VSOCK RETRY applies) names that `ctx_` Dispatch
+# `dispatched`, with the target as both its `assigneeHandle` and its
+# `terminal.handle` (the THE OWN DISPATCH comment at the re-route skip). A
+# failed or timed-out read, any other answer, or a host (`on:`) send keeps
+# the skip.
 #
 # THE READ-BACK (punch-list L84). "Read Orca's state before reporting a
 # failure" (L79, #134 learning 3). A send whose call failed in a way that
@@ -1686,10 +1688,12 @@ if [ "$cepa_send_to" != "$cepa_send_target" ]; then
   fi
   # THE OWN DISPATCH (L105; header, THE RE-READ): a term_ send stored for
   # dispatch:<ctx> reached the target only when that Dispatch is the
-  # target's own, live. One bounded worker-show proves it; a failed read,
+  # target's own, live. One bounded worker-show read (THE VSOCK RETRY
+  # applies) proves it; a ctx id is required, so no flag-shaped id reaches
+  # the CLI. A failed read,
   # a timeout or any other answer keeps the skip below. A host send (`on:`)
   # is not measured, so it keeps the skip too.
-  if [[ $cepa_send_to == dispatch:* && $cepa_send_target == term_* ]] && [ -z "$cepa_send_on" ] \
+  if [[ $cepa_send_to == dispatch:ctx_* && $cepa_send_target == term_* ]] && [ -z "$cepa_send_on" ] \
       && cepa_send_orca "$cepa_send_tmp/own.json" orchestration worker-show \
         --dispatch "${cepa_send_to#dispatch:}" --json --full \
       && python3 -I - "$cepa_send_tmp/own.json" "${cepa_send_to#dispatch:}" "$cepa_send_target" <<'PY' >/dev/null 2>&1

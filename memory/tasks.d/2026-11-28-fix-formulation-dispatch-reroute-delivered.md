@@ -10,7 +10,7 @@ Dispatch `dispatched`, with the target as both `dispatch.assigneeHandle` and
 
 Shape measured here (read only, Orca 1.4.280, this worker's own Dispatch
 ctx_a6ec452b7e3a): `result.terminal` is an OBJECT whose `handle` is the
-terminal. The sender's D2 wording (`result.terminal == target`) would never
+terminal. The sender's wording in L105 item D2 (`result.terminal == target`) would never
 match, so the script reads `result.terminal.handle`. A case pins the bare
 string shape as a skip.
 
@@ -30,3 +30,34 @@ string shape as a skip.
   claim that Orca prompts the worker comes from the sender's measurement. It
   was not measured here. `file: memory/tasks.d/2026-10-02-punch-list.md` ·
   `action_class: judgment` · `confidence: 80`
+
+## 2026-11-28 — /cepa:review on PR #154
+
+Six readers ran (reliability, security, previous-comments, silent-failure,
+test coverage, comments); no P1. Applied in the PR: the re-route proof now
+requires a `ctx_` Dispatch id (security + reliability, corroborated), the
+header and inline comment name THE VSOCK RETRY and where THE OWN DISPATCH
+lives, a `terminal: null` case, and a case plus mutant for a non-`ctx_` id.
+Findings file: `todos/` (this run's review file).
+
+- [ ] **P2 — A re-route skip writes no `nudge_skipped` alert (older gap; now
+  also reached by a failed own-Dispatch read).** The header says every nudge
+  skip but one on the target's own row writes an alert; the
+  `stored for another handle` skip (and the chat and downgraded skips) write
+  none. A session that drops its ending line leaves the mail unread with no
+  orca-health.sh trace. Fix needs a reason in orca-health.sh's REASONS list,
+  which this lane must not edit (tab54 owns it now): either add the alert and
+  the reason together, or change the header to name these skips as alert-free.
+  `file: plugins/cepa/scripts/orca-send.sh` · `action_class: judgment` ·
+  `confidence: 80`
+- [ ] **P3 — The skip line does not say why the own-Dispatch proof failed**
+  (read failed, timed out, not dispatched, another terminal). An operator sees
+  one line for four causes. `file: plugins/cepa/scripts/orca-send.sh` ·
+  `action_class: judgment` · `confidence: 70`
+- [ ] **P3 — `dispatched` is read after the send, not at store time.** A
+  worker that ends between the store and the read, or a `dispatched` row whose
+  terminal has exited, gives "not needed" for mail nobody is prompted about.
+  The window is small. Orca's worker-show also carries `projection.liveness`
+  (measured `verdict: live` here); requiring it would close most of the gap.
+  `file: plugins/cepa/scripts/orca-send.sh` · `action_class: judgment` ·
+  `confidence: 40`

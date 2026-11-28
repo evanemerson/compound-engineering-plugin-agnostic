@@ -916,6 +916,16 @@ if LEGS in ("all", "send"):
     check = ws == [["orchestration", "worker-show", "--dispatch", OWN_CTX, "--json", "--full"]] and not sends(calls)
     (ok if check else miss)("STORE own Dispatch reads one worker-show and no nudge" if check else
                              "STORE own Dispatch reads one worker-show and no nudge: %r" % calls)
+    # A Dispatch id that is not a ctx_ id never reaches worker-show (PR #154
+    # review): its record would prove it, but it is never read.
+    BADID = "abc"
+    open(os.path.join(OWND, BADID + ".json"), "w").write(json.dumps({"ok": True, "result": {
+        "dispatch": {"id": BADID, "status": "dispatched", "assigneeHandle": H}, "terminal": {"handle": H}}}))
+    calls = store("STORE own Dispatch id that is not a ctx id is a skip", 1,
+                  ["Orca send stored: %s for dispatch:%s" % (MID, BADID), SK + "Orca stored it for dispatch:%s, not the target" % BADID,
+                   END + "Needed from you: tell dispatch:%s to check its Orca inbox" % BADID],
+                  osend_json=osend(to="dispatch:" + BADID), inbox_json=inbox({"id": MID, "to_handle": "dispatch:" + BADID}),
+                  env_extra={"STUB_WSHOWDIR": OWND})
     for name, env in [
             ("STORE another terminal's Dispatch is a skip",
              lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": OTHER},
@@ -934,6 +944,9 @@ if LEGS in ("all", "send"):
             ("STORE own Dispatch target quoted in another terminal field is a skip",
              lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": H},
                                              "terminal": {"handle": OTHER, "title": H}}})),
+            ("STORE own Dispatch terminal null is a skip",
+             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": H},
+                                             "terminal": None}})),
             ("STORE own Dispatch worker-show fails is a skip", lambda: own_rec(False)),
             ("STORE own Dispatch worker-show times out is a skip",
              lambda: dict(own_rec(), STUB_ERR_VERB="orchestration worker-show", STUB_ERR_TIMES="9", STUB_ERR="", STUB_ERR_RC="124")),
