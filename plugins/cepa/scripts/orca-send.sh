@@ -274,7 +274,7 @@
 # space aside), and the same type and subject (a reply: the same thread_id
 # as the target, never its root, THE REPLY THREAD, instead), stored for the target itself (a
 # `dispatch:` target: for any dispatch, as L88 item 2's rewrite was; a
-# `bot:` target: for an `orca_session_id:` or a `run:`, then proven by THE BOT ADDRESS). A worker_done also needs the payload's
+# `bot:` target: for an `orca_session_id:`, then proven by THE BOT ADDRESS; a `run:` row found this way is `not proven stored`, A BOT'S RUN). A worker_done also needs the payload's
 # dispatch, task and outcome, and then `worker-show` must report the dispatch
 # `completed` or `failed` as the outcome asks, else it is `not proven stored`.
 # Found, it prints `Orca send read back: <id> is in the inbox from this send,
@@ -307,9 +307,10 @@
 # A `coord:` send adds one `bot list` read before the Run list (THE BOT
 # FIRST), and a `bot:` send one `bot chats` read after the re-read (and one
 # `run-show` before it when Orca stored it for a Run, L104), each at most
-# 34 s; a bot is never nudged, so a bot send takes at most about 175 s (bot
-# list, send, re-read, run-show, chats), and a failed bot list then adds the
-# terminal resolver's reads.
+# 34 s; a bot is never nudged, so a `coord:` send that resolves to a bot
+# takes at most about 170 s (bot list, send, re-read, run-show, chats: 5
+# reads of 34 s), a direct `bot:` send about 136 s, and a failed bot list
+# then adds the terminal resolver's reads.
 # A session that runs the block again after a failure makes a new request id,
 # so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
@@ -382,30 +383,44 @@
 # report): a raw `send --to bot:orca-lab-bot` stores and wakes the bot with a
 # new turn. Read here (Orca 1.4.280, 2026-11-27, read only): such rows have
 # `to_handle` `orca_session_id:<uuid>`, and `bot chats --bot orca-lab-bot
-# --json` lists that uuid as the bot's Home chat id. So a bot send counts
-# only with the usual proof (ok, a msg_ id, the re-read row) for an
-# `orca_session_id:` recipient, AND `bot chats --bot <name> --json` lists
-# that uuid as a chat of the bot that is not `closed`. A row for any other
-# address, or a chat list that cannot be read, is `not proven stored`. Orca
+# --json` lists that uuid as the bot's Home chat id. So a bot send stored
+# for an `orca_session_id:` counts only with the usual proof (ok, a msg_ id,
+# the re-read row) AND `bot chats --bot <name> --json` listing that uuid as a
+# chat of the bot that is not `closed`. A `run:` recipient has its own proof
+# (A BOT'S RUN, below). A row for any other address, or a chat list that
+# cannot be read, is `not proven stored`. Orca
 # wakes the bot, so a bot is never nudged: `nudge` is sent as `no-nudge`,
 # as for a `run:` target.
-#   A BOT'S RUN (punch-list L104). A bot whose Home chat is bound to a Run gets
-#   its mail in that Run. Measured by coord@main (Orca 1.4.280, 2026-11-28):
-#   a send to `coord:orca-lab` resolved to `bot:orca-lab-bot` and was stored
-#   as msg_ede2e13a5255 for `run:run_cf8f7c0d2b33`, and the bot's Home chat
-#   showed it as its last question. 1.61.0 read that row as `not proven
-#   stored`, kept a pending outbox copy and wrote an alert. Re-read here (the
-#   same Orca and date, read only): `inbox --limit 2000 --json --full` (429
-#   rows) has 12 rows for that Run. 11 are bot sends, and each has a `payload`
-#   whose JSON holds a `botRequest` object. The 12th is a worker_done from the
-#   bot's own worker, with no botRequest. Over the whole inbox, 18 rows hold
-#   one: 11 for that Run and 7 for `orca_session_id:` chats that `bot chats`
-#   lists for orca-lab-bot or fleet, so every one is mail to a bot. The probe:
-#   `python3 -c 'import json,sys,collections; r=json.load(sys.stdin)
-#   ["result"]["messages"]; b=[x for x in r if isinstance(json.loads(
-#   x.get("payload") or "null"),dict) and isinstance(json.loads(x["payload"])
-#   .get("botRequest"),dict)]; print(len(r), len(b), collections.Counter(
-#   x["to_handle"] for x in b))'`. This script never passes `--payload`.
+#   A BOT'S RUN (punch-list L104). orca-lab-bot, whose Home chat is bound to
+#   a Run, gets its mail in that Run; fleet, with no Run, in its chat. When
+#   Orca binds or unbinds a chat's Run is not measured, so both forms are
+#   taken. Measured by coord@main (Orca 1.4.280, 2026-11-28; its report): a
+#   send to `coord:orca-lab` resolved to `bot:orca-lab-bot` and was stored as
+#   msg_ede2e13a5255 for `run:run_cf8f7c0d2b33`; 1.61.0 read it as `not
+#   proven stored` (alert 1795840460-hEHPRYn7, outbox copy
+#   orca-lab/20261128T043420Z-nNqTGeyx.md left pending). Re-read here, read
+#   only, the same Orca, 2026-11-28 07:00 UTC, with the inbox saved by
+#   `orchestration inbox --limit 2000 --json --full > inbox.json`:
+#       python3 - inbox.json run:run_cf8f7c0d2b33 <<'EOF'
+#       import json, sys, collections
+#       rows = json.load(open(sys.argv[1]))["result"]["messages"]
+#       def br(x):
+#           try:
+#               q = json.loads(x.get("payload") or "null")
+#           except (TypeError, ValueError):
+#               return False
+#           return isinstance(q, dict) and isinstance(q.get("botRequest"), dict)
+#       run = [x for x in rows if x.get("to_handle") == sys.argv[2]]
+#       print(len(rows), len(run), sum(map(br, run)))
+#       print(collections.Counter(x["to_handle"] for x in rows if br(x)))
+#       EOF
+#   It printed 471 rows, 17 for that Run, 12 of them with a `botRequest`
+#   object; every row with one (12 for that Run, 8 for `orca_session_id:`
+#   chats) is mail to a bot: each chat id is one `bot chats --bot <name>
+#   --all --json` lists for orca-lab-bot, fleet or helm-bot. The other 5 rows
+#   for the Run are worker_done reports and one bot's answer (`botAnswer`).
+#   The counts grow with the inbox; the probe is the claim. botRequest marks
+#   mail to A bot, never which one. This script never passes `--payload`.
 #   No Orca read names a bot's Run: `bot list` rows hold id, name, agent,
 #   paused, linked, specialty, chats; `bot chats --json` rows hold id, title,
 #   lastActivityAt, lastAsked, lastSaid, home, self, closed (lastAsked is the
@@ -415,25 +430,30 @@
 #   refuses (`session_caller_chat_not_declarable`); the bot's `bot.json`
 #   holds id, name, agent, avatar, members. So a bot send stored for
 #   `run:<id>` counts only when the usual proof holds AND (1) the re-read row
-#   with THIS msg id for that `run:` has a `payload` that parses to an object
-#   with a `botRequest` object, (2) `run-show --id <id>` is ok, names that
-#   id, and has `coordinator_handle` null (no terminal coordinator), and (3)
-#   `bot chats --bot <name> --json` lists a chat with `home: true` and
-#   `closed: false`. STATED GAP: the tie of that Run to THIS bot is Orca's own
-#   routing of `bot:<name>`, not proven by a second record. It is the same
-#   trust the script gives Orca when it moves a `term_` send to a `run:`
-#   mailbox (THE RE-READ). Text matching on lastAsked was weighed and not
-#   taken (coord@main, 2026-11-28): it would match the subject, and the bot's
-#   wake can change it before the read.
+#   with THIS msg id (the one Orca's send reply gave) for that `run:` has a
+#   `payload` that parses to an object with a `botRequest` object, (2)
+#   `run-show --id <id>` is ok, names that id, and has `coordinator_handle`
+#   null (no terminal coordinator), and (3) `bot chats --bot <name> --json`
+#   lists one chat with both `home: true` and `closed: false`. A Run row
+#   found only by THE READ-BACK (no Orca reply names its id) is never counted:
+#   an identical send to ANOTHER bot within the window would match it, and
+#   (2) and (3) hold for any bot's Run (PR #155 review). STATED GAP: (2) and
+#   (3) are sanity checks, not proof of the recipient. The tie of that Run
+#   to THIS bot is Orca's own routing of `bot:<name>`, given back as the
+#   send reply's msg id and `to_handle`, and not proven by a second record:
+#   the same trust the script gives Orca when it moves a `term_` send to a
+#   `run:` mailbox (THE RE-READ). Text matching on lastAsked was weighed and
+#   not taken (coord@main, 2026-11-28): it would match the subject, and the
+#   bot's wake can change it before the read.
 #   Not measured: the `send` reply's own `to_handle` for a bot (no test send
 #   was made here: a bot is made only when its owner accepts a card). One with
-#   no `to_handle` is read back (THE READ-BACK takes an `orca_session_id:` or
-#   a `run:` row, then the proof above), and one with any other address is
-#   `not proven stored`.
+#   no `to_handle` is read back (THE READ-BACK takes an `orca_session_id:`
+#   row, then the chats proof; a `run:` row is `not proven stored`, above),
+#   and one with any other address is `not proven stored`.
 #   A REPLY TO A BOT is refused by Orca (coord@main, Orca 1.4.280,
 #   2026-11-28: a terminal's reply to msg_ceda090dbc42, which a bot sent,
-#   answered `bot_reply_not_yours`). The refusal exits 5 as before, and its
-#   reason adds that a bot is answered with a send to `bot:<name>`.
+#   answered `bot_reply_not_yours`). A refused reply exits 5 as before, and
+#   its reason adds that a bot is answered with a send to `bot:<name>`.
 #
 # THE CHAT SENDER AND RECIPIENT (punch-list L98, L103 C1). A Chat or bot
 # session has no ORCA_TERMINAL_HANDLE. Its identity is ORCA_AGENT_SESSION_ID
@@ -1535,7 +1555,7 @@ case "$cepa_send_got" in
     # Orca 1.4.280 refuses a terminal's reply to a message a bot sent
     # (`bot_reply_not_yours`, coord@main 2026-11-28, msg_ceda090dbc42): the
     # reason says how a bot is answered (punch-list L104).
-    case "$cepa_send_why" in *'(bot_reply_not_yours)')
+    [ "$cepa_send_type" != reply ] || case "$cepa_send_why" in *'(bot_reply_not_yours)')
       fail "$cepa_send_why; a bot is answered with a send to bot:<name>, not a reply" ;; esac
     case "$cepa_send_why" in 'Orca did not return "ok": true'*) fail "$cepa_send_why" ;; esac
     # With no clock there is no window, so any older row would match.
@@ -1562,6 +1582,13 @@ case "$cepa_send_got" in
         unproven "$cepa_send_why"
       fi
       fail "$cepa_send_why"
+    fi
+    # L104 (PR #155 review): a read-back finds the row by its text, not by an
+    # id Orca gave this send, and no Orca read ties a Run to a bot. So a Run
+    # row read back for a bot may be an identical send to ANOTHER bot: it is
+    # never counted as stored.
+    if [[ $cepa_send_target == bot:* && ${cepa_send_back#* } == run:* ]]; then
+      unproven "$cepa_send_why; the inbox holds ${cepa_send_back%% *} for ${cepa_send_back#* } with this send's text, but no Orca reply names it, and no Orca read ties that Run to $cepa_send_target"
     fi
     echo "Orca send read back: ${cepa_send_back%% *} is in the inbox from this send, though $cepa_send_why (punch-list L84)"
     cepa_send_got=$cepa_send_back
@@ -1664,14 +1691,16 @@ if [[ $cepa_send_target == bot:* && $cepa_send_to == run:* ]]; then
     || unproven "the Run ${cepa_send_to#run:} could not be read, so $cepa_send_id is not proven a send to $cepa_send_target"
   python3 -I - "$cepa_send_tmp/botrun.json" "${cepa_send_to#run:}" <<'PY' >/dev/null 2>&1
 import json, sys
-# Exit 1: the Run was read whole and has a coordinator, or another id. Any
-# other answer is unreadable (2).
+# Exit 1: the Run was read whole and has a coordinator; 3: the record is of
+# another Run. Any other answer is unreadable (2).
 try:
     d = json.load(open(sys.argv[1]))
     r = d["result"]["run"] if isinstance(d, dict) and d.get("ok") is True else None
     if not isinstance(r, dict) or "coordinator_handle" not in r:
         sys.exit(2)
-    ok = r.get("id") == sys.argv[2] and r["coordinator_handle"] is None
+    if r.get("id") != sys.argv[2]:
+        sys.exit(3)
+    ok = r["coordinator_handle"] is None
 except Exception:
     sys.exit(2)
 sys.exit(0 if ok else 1)
@@ -1679,6 +1708,7 @@ PY
   case $? in
     0) ;;
     1) unproven "$cepa_send_id is stored for $cepa_send_to, a Run with a terminal coordinator, so it is not proven a send to $cepa_send_target" ;;
+    3) unproven "run-show of ${cepa_send_to#run:} answered for another Run, so $cepa_send_id is not proven a send to $cepa_send_target" ;;
     *) unproven "the Run ${cepa_send_to#run:} could not be read, so $cepa_send_id is not proven a send to $cepa_send_target" ;;
   esac
   cepa_send_orca "$cepa_send_tmp/chats.json" bot chats --bot "${cepa_send_target#bot:}" --json \
