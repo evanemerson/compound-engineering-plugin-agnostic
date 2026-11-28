@@ -3092,7 +3092,7 @@ L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to th
 L105. **`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**
     status: pending
     severity: P2
-    owner: unassigned — next after tab55 (L104) merges; both edit orca-send.sh
+    owner: formulation (tab57@formulation; re-route branch only, beside tab55)
     From orca-lab (msg_ceda090dbc42, 2026-11-28, sent by orca-lab-bot from a
     bot chat with orca-send.sh — which itself re-measures 1.61.0 C1/C2 bot ->
     terminal coord@main as working; orca-lab L30; evidence orca-lab
