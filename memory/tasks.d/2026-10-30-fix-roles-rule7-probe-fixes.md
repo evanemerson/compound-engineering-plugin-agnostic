@@ -23,7 +23,7 @@ Canonical findings: `todos/review-2026-10-30-192000.md` (findings 3-7, 9, 10, 14
 - [x] P3 — The idle-session rationale is unpinned; leave unless it drifts — `scripts/check-orca-turn-endings.sh` (finding 10). Closed 2026-11-01 (L49): no change (L48 D2).
 - [x] P3 — coord@main: update punch-list L25/L27 text at merge — `memory/tasks.d/2026-10-02-punch-list.md` (finding 14). Closed 2026-11-01 by triage: L25 and L27 CLOSED.
 - [ ] P3 — #98 finding 13 (options-as-text vs `Decisions`) still unsettled in rule 7 — §12b rule 7 (finding 15).
-- [ ] P3 — Shards drift behind finding status flips; `/cepa:compound` a "flip the shard line with the finding" rule (finding 16).
+- [x] P3 — Shards drift behind finding status flips; `/cepa:compound` a "flip the shard line with the finding" rule (finding 16). Applied 2026-11-27 (PR #150, L51): repo CLAUDE.md "Flip the shard line in the commit that closes its item".
 
 ## Deferred from /cepa:review of PR #100 commit 21cd031 (2026-10-30)
 
