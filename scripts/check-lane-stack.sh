@@ -27,10 +27,10 @@
 #   MAKE      the `make up` example block is RUN in throwaway git repos with
 #             a stub gate and a stub compose: the main checkout starts
 #             directly; a lane builds first through the gate's build mode
-#             (`--build <project> -- <compose>`, L68/L70), then starts only
-#             through the gate, with `<project> -- <compose> up -d
-#             --no-build`, after a pull through `--pull <project> --
-#             <compose>` (L70; a failed pull starts nothing); `BUILD=1` passes `--rebuild` in a lane and
+#             (`--build <project> -- <compose>`, L68/L70), pulls through
+#             `--pull <project> -- <compose>` (L70; a failed pull starts
+#             nothing), then starts only through the gate, with `<project>
+#             -- <compose> up -d --no-build`; `BUILD=1` passes `--rebuild` in a lane and
 #             `--build` to compose in the main checkout, and only the
 #             exact value 1 does (`BUILD=0` builds as usual); a failed build
 #             starts nothing and never reaches the start gate; a gate refusal
@@ -69,7 +69,8 @@
 # does not run the hang (the pty probe is in L78). No leg here checks the
 # Setup order or its two build preconditions: the order's bash block is run
 # by scripts/check-stack-gate.sh (its SETUP leg, L70), the preconditions are
-# prose only. The TEMPLATE leg checks anchors,
+# prose only. The Pull and Lock-busy bullets of "The stack gate" and the pull
+# wording of first-prompt step 2 are prose only too: no leg reads them. The TEMPLATE leg checks anchors,
 # not the meaning of each step.
 set -u
 cd "$(dirname "$0")/.." || { echo "MISS cannot enter repo root"; exit 1; }

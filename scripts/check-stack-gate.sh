@@ -66,7 +66,8 @@
 #   PULL      — `--pull` (L70 item 3) runs exactly `pull --ignore-buildable
 #               --policy missing` with the project name, with no lock (it
 #               returns while the start lock is held); a Compose whose
-#               `pull --help` lacks either flag, or fails, is never sent them
+#               `pull --help` lacks either flag (each one alone, and both),
+#               or fails, is never sent them
 #               and skips with rc 0; a failed pull's code comes through;
 #               inside a gated command it refuses.
 #   HOLDER    — the holder file (L70 item 4): a `lock busy` refusal names a
@@ -75,13 +76,20 @@
 #               not exist) never blocks a start and is never named as the
 #               holder; a live pid whose start time differs is not trusted,
 #               and the start time recorded is the pid's real field 22;
-#               no file says `holder unknown`.
+#               no file, a file with no valid pid, and a file with no start
+#               time each say `holder unknown`; a stale file is overwritten
+#               by the next holder; hostile values print as `?`; the lane is
+#               the git top level, and a newline in it adds no field; a
+#               failed write WARNs and the start goes on.
+#               The live holder waits on a release file, not a sleep, so a
+#               loaded runner cannot end it before the waiter reads it.
 #   SETUP     — the Setup bash block of the lane-stack skill (L70 item 2),
 #               RUN with this gate and the stub: pull, then the gated
 #               `up -d --no-build`, then migrations with the start lock
 #               already free, then `compose stop`; a migration that fails
 #               after the lock is released still stops the stack and fails
-#               setup; a refused start migrates nothing.
+#               setup; a refused start migrates nothing; a failed pull starts
+#               nothing; a failed final `compose stop` fails setup.
 #
 # The stub is strict where the gate depends on docker's behavior: unknown ps
 # flags exit 64, ids are 12 characters without --no-trunc, `label=` and
@@ -744,6 +752,7 @@ else:
     ok()
 for case, env in [("PULL a Compose without the flags skips", {"STUB_COMPOSE_OLD": "all"}),
                   ("PULL a Compose without --policy skips", {"STUB_COMPOSE_OLD": "policy"}),
+                  ("PULL a Compose without --ignore-buildable skips", {"STUB_COMPOSE_OLD": "buildable"}),
                   ("PULL a failed pull --help skips", {"STUB_DOCKER_FAIL": "pull-help"})]:
     e = Env()
     r = e.run(pargs, env)
@@ -779,7 +788,8 @@ with open("/proc/sys/kernel/pid_max") as f:
     DEAD_PID = int(f.read()) + 7   # above pid_max: no process can have it
 
 e = Env(conf="lock_wait_seconds=1\n")
-pa = e.popen(["a-wt-a", "--", "bash", "-c", f"touch {e.root}/entered; sleep 3"])
+RELEASE = 'touch {r}/entered; t=0; until [ -e {r}/release ] || [ $t -ge 600 ]; do sleep 0.05; t=$((t+1)); done'
+pa = e.popen(["a-wt-a", "--", "bash", "-c", RELEASE.format(r=e.root)])
 PROCS.append(pa)
 deadline = time.time() + 30
 while not os.path.exists(f"{e.root}/entered") and time.time() < deadline:
@@ -804,6 +814,7 @@ if want not in r.stderr:
     miss("HOLDER a waiting start names the live holder", f"{want!r} not in the waiting line: {r.stderr!r}")
 else:
     ok()
+open(f"{e.root}/release", "w").close()
 pa.wait(timeout=30)
 if os.path.exists(holder_path(e)):
     miss("HOLDER the file is gone once the command returns", "stack-gate.holder still exists")
@@ -835,10 +846,102 @@ e.hold_lock(6)
 r = e.run(["n-wt-x", "--"] + e.touch_cmd())
 expect_refused("HOLDER no holder file says unknown", e, r, ["lock busy", "holder unknown (no holder file)"])
 
+def live_start(pid):
+    with open(f"/proc/{pid}/stat") as f:
+        return f.read().rsplit(") ", 1)[1].split()[19]
+
+
+e = Env(conf="lock_wait_seconds=1\n")
+holder = e.hold_lock(6)
+os.makedirs(os.path.dirname(holder_path(e)), exist_ok=True)
+with open(holder_path(e), "w") as f:
+    f.write(f"pid={holder.pid}\npid_start={live_start(holder.pid)}\nproject=a-wt-a\x1b[31m$(touch {e.root}/PWN)\n"
+            f"lane=;evil\x07\nstarted=\x1b]0;x\x07\n")
+r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+bad = [c for c in "\x1b\x07$" if c in r.stdout + r.stderr]
+if bad or os.path.exists(f"{e.root}/PWN") or "held by a-wt-a?" not in r.stdout:
+    miss("HOLDER hostile values print as ?", f"bad {bad!r}, out {r.stdout!r} err {r.stderr!r}")
+else:
+    ok()
+for body in ("project=x\n", "pid=abc\npid_start=1\n", "pid=../self\npid_start=1\n"):
+    e = Env(conf="lock_wait_seconds=1\n")
+    e.hold_lock(6)
+    os.makedirs(os.path.dirname(holder_path(e)), exist_ok=True)
+    with open(holder_path(e), "w") as f:
+        f.write(body)
+    r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+    if "holder unknown (the holder file names no pid)" not in r.stdout or "held by" in r.stdout + r.stderr:
+        miss("HOLDER a file with no valid pid names no holder", f"body {body!r}: out {r.stdout!r}")
+        break
+else:
+    ok()
+e = Env(conf="lock_wait_seconds=1\n")
+holder = e.hold_lock(6)
+write_holder(e, holder.pid, "unknown")
+r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+expect_refused("HOLDER a file with no start time is not called reused", e, r,
+               [f"holder unknown (the holder file has no start time; pid {holder.pid} is running and may be it)"])
+# A stale file left by a killed gate is replaced by the next real holder.
+e = Env(conf="lock_wait_seconds=1\n")
+write_holder(e, DEAD_PID, 1)
+pa = e.popen(["a-wt-a", "--", "bash", "-c", RELEASE.format(r=e.root)])
+PROCS.append(pa)
+deadline = time.time() + 30
+while not os.path.exists(f"{e.root}/entered") and time.time() < deadline:
+    time.sleep(0.05)
+r = e.run(["b-wt-b", "--"] + e.touch_cmd())
+open(f"{e.root}/release", "w").close()
+pa.wait(timeout=30)
+expect_refused("HOLDER a stale file is overwritten by the next holder", e, r, [f"held by a-wt-a (lane {os.path.basename(e.root)}, pid {pa.pid}"])
+# The lane is the caller's git top level, filtered on write.
+e = Env()
+top = os.path.join(e.root, "lane\npid=1")
+sub = os.path.join(top, "sub")
+os.makedirs(sub)
+gi = subprocess.run(["git", "init", "-q", top], capture_output=True, text=True,
+                    env={k: v for k, v in e.env.items() if not k.startswith("GIT_")})
+copy = os.path.join(e.root, "holder-copy")
+r = subprocess.run(["bash", SCRIPT, "n-wt-x", "--", "cp", holder_path(e), copy], env=e.env,
+                   capture_output=True, text=True, timeout=60, cwd=sub)
+lines = open(copy).read().splitlines() if os.path.exists(copy) else []
+lane_line = [l for l in lines if l.startswith("lane=")]
+if gi.returncode != 0 or r.returncode != 0 or not lane_line or not lane_line[0].startswith("lane=lane"):
+    miss("HOLDER the lane is the git top level", f"git {gi.returncode} {gi.stderr!r}, rc {r.returncode}, holder {lines!r}, err {r.stderr!r}")
+else:
+    ok()
+if len([l for l in lines if l.startswith("pid=")]) != 1:
+    miss("HOLDER a newline in the lane adds no field", f"holder {lines!r}")
+else:
+    ok()
+# A failed write warns and the start goes on (skipped as root).
+e = Env()
+cdir = os.path.join(e.home, ".config", "cepa")
+os.makedirs(cdir)
+os.chmod(cdir, 0o500)
+probe = os.path.join(cdir, "probe")
+try:
+    open(probe, "w").close()
+    os.unlink(probe)
+    writable = True
+except OSError:
+    writable = False
+if writable:
+    ok()  # running as root: a read-only directory cannot be made
+else:
+    r = e.run(["n-wt-x", "--"] + e.touch_cmd())
+    left = [n for n in os.listdir(cdir) if n.startswith("stack-gate.holder")]
+    if r.returncode != 0 or not e.ran() or "WARN — cannot write" not in r.stderr or left:
+        miss("HOLDER a failed write warns and the start goes on", f"rc {r.returncode}, ran {e.ran()}, left {left}, err {r.stderr!r}")
+    else:
+        ok()
+os.chmod(cdir, 0o700)
+
 # ---------------- SETUP ----------------
 SETUP_CASES = ("SETUP migrations run after the lock is released",
                "SETUP a failed migration after release stops the stack",
-               "SETUP a refused start migrates nothing")
+               "SETUP a refused start migrates nothing",
+               "SETUP a failed pull starts nothing",
+               "SETUP a failed final stop fails setup")
 try:
     skill = open(SKILL, encoding="utf-8").read()
 except OSError as err:
@@ -903,6 +1006,18 @@ lane_migrate() {{
     st = steps(e)
     if r.returncode != 3 or "up" in st or any(x.startswith("migrate") for x in st) or "STACK gate: refused" not in r.stdout:
         miss(SETUP_CASES[2], f"rc {r.returncode}, steps {st}; out {r.stdout!r}")
+    else:
+        ok()
+    e = Env()
+    r = setup(e, {"STUB_PULL_RC": "4"})
+    if r.returncode != 4 or steps(e) != ["env", "isolation", "pull", "stop"] or running(e):
+        miss(SETUP_CASES[3], f"rc {r.returncode}, steps {steps(e)}, running {len(running(e))}; err {r.stderr!r}")
+    else:
+        ok()
+    e = Env()
+    r = setup(e, {"STUB_DOCKER_FAIL": "stop"})
+    if r.returncode == 0 or steps(e) != want or "stop n-wt-x by hand" not in r.stderr:
+        miss(SETUP_CASES[4], f"rc {r.returncode}, steps {steps(e)}; err {r.stderr!r}")
     else:
         ok()
 

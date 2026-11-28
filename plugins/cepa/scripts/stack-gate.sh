@@ -4,8 +4,9 @@
 # plan-review decisions #14 and #19). It counts the RUNNING worktree stacks on
 # this machine and the free memory, and starts the caller's stack only when
 # both are inside the limits. The lane & stack skill owns WHEN a repo calls
-# it (every target that runs `compose up`, `restart` or `start` in a lane,
-# and setup before it writes anything); this script owns HOW.
+# it (every target that runs `compose up`, `restart` or `start` in a lane;
+# setup calls it for the start only, after its build, its `.env` and its
+# pull); this script owns HOW.
 #
 # Why: dpc-pro's `worktree-init` counted stacks with `docker ps -a` and only
 # at create, so stopped stacks filled the limit and a later `compose up` or
@@ -49,10 +50,13 @@
 #     A start that waits prints one `waiting` line on stderr first.
 #     Nesting: the command runs with CEPA_STACK_GATE_HELD=<project>; a gate
 #     for the same project inside it runs at once (no lock, no count), so a
-#     gated setup can call a start-only target that is gated too. A gate for
-#     a different project inside it waits like any other start. `--build`
-#     inside it refuses, so a gated setup never calls `make up` (it builds):
-#     it starts with `compose up -d --no-build`.
+#     gated command can call a start-only target that is gated too. A gate
+#     for a different project inside it waits like any other start.
+#     `--build` and `--pull` inside it refuse, so a gated command never
+#     calls `make up` (it builds and pulls). A repo setup that still gates
+#     its whole init (`stack-gate.sh <p> -- make worktree-init-stack`) and
+#     pulls or builds inside it now fails there with exit 3: move it to the
+#     lane-stack skill's Setup block.
 #     The lock follows $HOME: a start under another HOME (sudo, another WSL
 #     distro on the same Docker) takes a different lock. Stated, not handled.
 #     Holder file (L70 item 4): once a start holds the lock, it writes
@@ -66,8 +70,10 @@
 #     blocks. It names a holder only when that pid is running AND its start
 #     time equals the recorded one; else it says `holder unknown (stale
 #     holder file: …)`, so a dead or reused pid is never shown as a live
-#     holder. A gate killed by SIGKILL leaves the file; the next start that
-#     takes the lock overwrites it. A failed write prints a WARN and the
+#     holder. `not running` means not running in this pid namespace: a
+#     holder in a container, another WSL distro or under sudo with the same
+#     HOME reads as stale. A gate killed by SIGTERM or SIGKILL leaves the
+#     file; the next start that takes the lock overwrites it. A failed write prints a WARN and the
 #     start goes on. Values are read, never sourced, and printed through
 #     the same [A-Za-z0-9._/-] filter as the listing. The build lock has no
 #     holder file.
@@ -517,26 +523,36 @@ cepa_sg_pull_mode() {
   exit $?
 }
 
-# Field 22 (starttime) of /proc/<pid>/stat; returns 1 when the pid is gone.
-# The fields after the command name start at field 3, so it is the 20th.
+# Sets cepa_sg_pst to field 22 (starttime) of /proc/<pid>/stat; returns 1
+# when the pid is gone. The fields after the command name start at field 3,
+# so it is the 20th. Built-ins only, so no child inherits the lock's fd.
 cepa_sg_pstart() {
-  local st
-  st=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+  local st=""
+  cepa_sg_pst=""
+  { IFS= read -r st <"/proc/$1/stat"; } 2>/dev/null || [ -n "$st" ] || return 1
   st="${st##*) }"
   # shellcheck disable=SC2086 # split the numeric fields on purpose
   set -- $st
   [[ ${20:-} =~ ^[0-9]+$ ]] || return 1
-  printf '%s' "${20}"
+  cepa_sg_pst="${20}"
 }
 
 # Written once the start lock is held. A label, never a lock (L70 item 4).
+# Every child here runs with the lock's fd closed, so a helper that outlives
+# its call (a git daemon) never holds the lock.
 cepa_sg_write_holder() {
-  local tmp="$cepa_sg_holder.$$" top ps
-  top=$(git rev-parse --show-toplevel 2>/dev/null) || top="$PWD"
-  ps=$(cepa_sg_pstart "$$") || ps=unknown
+  local tmp="$cepa_sg_holder.$$" top ps now
+  top=$(timeout --foreground -k 1 5 git rev-parse --show-toplevel 2>/dev/null {cepa_sg_fd}<&-) && [ -n "$top" ] ||
+    top="$PWD"
+  if cepa_sg_pstart "$$"; then ps="$cepa_sg_pst"; else ps=unknown; fi
+  # Filtered on write too: a lane directory named with a newline would
+  # otherwise add its own pid= and project= lines to the record.
+  top="${top##*/}"
+  top="${top//[!A-Za-z0-9._\/-]/?}"
+  TZ=UTC printf -v now '%(%Y-%m-%dT%H:%M:%SZ)T' -1
   if ! printf 'pid=%s\npid_start=%s\nproject=%s\nlane=%s\nstarted=%s\n' "$$" "$ps" "$cepa_sg_proj" \
-    "${top##*/}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$tmp" 2>/dev/null || ! mv -f "$tmp" "$cepa_sg_holder" 2>/dev/null; then
-    rm -f "$tmp" 2>/dev/null
+    "$top" "$now" >"$tmp" 2>/dev/null || ! mv -f "$tmp" "$cepa_sg_holder" 2>/dev/null {cepa_sg_fd}<&-; then
+    rm -f "$tmp" 2>/dev/null {cepa_sg_fd}<&-
     echo "STACK gate: WARN — cannot write $cepa_sg_holder; a lock-busy refusal will not name this start" >&2
   fi
 }
@@ -544,7 +560,7 @@ cepa_sg_write_holder() {
 # Who holds the start lock, from the holder file. Trusted only when its pid
 # runs AND that pid's start time is the recorded one.
 cepa_sg_holder_desc() {
-  local line k v n=0 pid="" pst="" proj="" lane="" since="" cur
+  local line k v n=0 pid="" pst="" proj="" lane="" since=""
   if [ ! -f "$cepa_sg_holder" ] || [ ! -r "$cepa_sg_holder" ]; then
     printf 'holder unknown (no holder file)'
     return 0
@@ -558,9 +574,11 @@ cepa_sg_holder_desc() {
   done <"$cepa_sg_holder"
   if [[ ! $pid =~ ^[0-9]{1,10}$ ]]; then
     printf 'holder unknown (the holder file names no pid)'
-  elif ! cur=$(cepa_sg_pstart "$pid"); then
+  elif ! cepa_sg_pstart "$pid"; then
     printf 'holder unknown (stale holder file: pid %s is not running)' "$pid"
-  elif [ "$cur" != "$pst" ]; then
+  elif [[ ! $pst =~ ^[0-9]+$ ]]; then
+    printf 'holder unknown (the holder file has no start time; pid %s is running and may be it)' "$pid"
+  elif [ "$cepa_sg_pst" != "$pst" ]; then
     printf 'holder unknown (stale holder file: pid %s now belongs to another process)' "$pid"
   else
     printf 'held by %s (lane %s, pid %s, since %s)' "$(cepa_sg_clean "$proj")" "$(cepa_sg_clean "$lane")" \
@@ -582,9 +600,9 @@ shift
 [ "$cepa_sg_mode" != --pull ] || cepa_sg_pull_mode "$@"
 [ "$cepa_sg_mode" = start ] || cepa_sg_build_mode "$@"
 
-# A gated target that calls another gated start-only target for the SAME
-# project (setup runs `stack-gate.sh p -- make start`, and that is gated
-# too; never `make up`, whose --build refuses in here) would wait on
+# A gated command that calls another gated start-only target for the SAME
+# project (`stack-gate.sh p -- make start`, and that is gated too; never
+# `make up`, whose --build refuses in here) would wait on
 # the lock its own parent holds and be refused as "lock busy". The outer gate
 # exports CEPA_STACK_GATE_HELD=<project> to its command; an inner gate for
 # that project runs its command without taking the lock or counting again.
@@ -637,5 +655,5 @@ cepa_sg_write_holder
 CEPA_STACK_GATE_HELD="$cepa_sg_proj" command "$@" {cepa_sg_fd}<&-
 cepa_sg_rc=$?
 # Still under the lock, so the file is this start's own.
-rm -f "$cepa_sg_holder" 2>/dev/null
+rm -f "$cepa_sg_holder" 2>/dev/null {cepa_sg_fd}<&-
 exit "$cepa_sg_rc"

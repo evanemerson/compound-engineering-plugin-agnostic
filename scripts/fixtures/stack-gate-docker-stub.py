@@ -38,7 +38,8 @@ Strict like real docker where the gate depends on it:
           store, and exits $STUB_BUILD_RC (default 0).
   compose [<flag> <value>…] pull --help   prints a help text with
           --ignore-buildable and --policy; $STUB_COMPOSE_OLD=all leaves out
-          both, =policy leaves out --policy (Compose before that flag).
+          both, =policy leaves out --policy (Compose before that flag),
+          =buildable leaves out --ignore-buildable only.
           $STUB_DOCKER_FAIL=pull-help exits 1.
   compose [<flag> <value>…] pull --ignore-buildable --policy missing   only
           this exact form (any other pull exits 64). Appends
@@ -47,7 +48,8 @@ Strict like real docker where the gate depends on it:
   compose [<flag> <value>…] up -d --no-build   adds one running container of
           $COMPOSE_PROJECT_NAME to the state (models a stack coming up).
   compose [<flag> <value>…] stop   marks every container of
-          $COMPOSE_PROJECT_NAME exited.
+          $COMPOSE_PROJECT_NAME exited. $STUB_DOCKER_FAIL=stop exits 1 and
+          changes nothing.
   image inspect [--format <t>] [--] <ref…>   exits 1 unless every ref is in
           the JSON list in $STUB_DOCKER_IMAGES (a missing file is empty).
 """
@@ -186,7 +188,7 @@ if argv[:1] == ["compose"]:
             sys.exit(1)
         old = os.environ.get("STUB_COMPOSE_OLD", "")
         print("Usage:  docker compose pull [OPTIONS] [SERVICE...]\n\nOptions:")
-        if old != "all":
+        if old not in ("all", "buildable"):
             print("      --ignore-buildable       Ignore images that can be built")
         print("      --ignore-pull-failures   Pull what it can")
         if old not in ("all", "policy"):
@@ -199,6 +201,9 @@ if argv[:1] == ["compose"]:
             with open(blog, "a") as f:
                 f.write(f"pull {proj} {time.time():.3f}\n")
         sys.exit(int(os.environ.get("STUB_PULL_RC", "0")))
+    if rest == ["stop"] and FAIL == "stop":
+        print("stop failed", file=sys.stderr)
+        sys.exit(1)
     if rest in (["up", "-d", "--no-build"], ["stop"]):
         with open(STATE, "r+") as f:
             fcntl.flock(f, fcntl.LOCK_EX)

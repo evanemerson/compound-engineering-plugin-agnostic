@@ -27,11 +27,13 @@ start target, the worktree properties, and the coord@main first prompt.
   its header names what the probe cannot see. The rest of the first
   prompt's step 2 is still read by hand.
 
-**Status (2026-11-17): the gate (L66, 1.53.0), the `coord:<repo>` outbox
-(L61, 1.54.0), the build lock (L70, 1.55.0) and the `/cepa:setup` lane
-check (L67, 1.59.0) have shipped.** A loaded plugin older than one of these
+**Status (2026-11-27): the gate (L66, 1.53.0), the `coord:<repo>` outbox
+(L61, 1.54.0), the build lock (L70, 1.55.0), the `/cepa:setup` lane
+check (L67, 1.59.0), and the pull mode and holder file (L70, 1.61.0) have
+shipped.** A loaded plugin older than one of these
 fails the first prompt's step 0, its step 1 outbox drain, or its step 2
-build checks, or prints no `lane:` lines: refresh it first
+build checks, stops setup and `make up` at the pull (an older gate reads
+`--pull` as a project name and exits 2), or prints no `lane:` lines: refresh it first
 (`scripts/check-plugin-freshness.sh`). Without the gate
 every gated start refuses with `STACK gate: not found`, by design.
 
@@ -91,8 +93,8 @@ A Docker repo's `orca.yaml`:
 
 ```yaml
 scripts:
-  # Builds this lane's images outside the gate, then calls the stack gate and
-  # initializes this lane's own stack under the gate's lock, then stops it.
+  # Builds this lane's images outside the gate, writes .env, pulls, starts the
+  # stack through the gate (the start only), migrates after it, then stops it.
   # See "Setup" in cepa's lane-stack skill.
   setup: env -u COMPOSE_PROJECT_NAME make worktree-init
   # Removes this lane's own stack and volumes. Refuses in the main checkout.
@@ -241,9 +243,9 @@ In order:
 3. **Set the stop trap,** a trap that runs `compose stop` on ANY exit, so
    a setup that fails part-way still stops its stack. Then write this
    lane's `.env` and read back the isolation values from Compose's resolved
-   config (property 3). Both run before the gate now (L70): a setup the
-   gate refuses leaves this `.env`, and the refused path below re-creates
-   the lane anyway.
+   config (property 3). Both run before the gate (L70): a setup the gate
+   refuses leaves this `.env`, and the refused path below re-creates the
+   lane anyway.
 4. **Pull, then call the gate for the start only:**
    `stack-gate.sh --pull "$PROJECT" -- <compose command>`, then
    `stack-gate.sh "$PROJECT" -- <compose command> up -d --no-build` (never
@@ -267,8 +269,10 @@ this block with a stub Docker):
 set -eu
 lane_stop() {
   rc=$?
-  COMPOSE_PROJECT_NAME="$PROJECT" "${COMPOSE[@]}" stop ||
+  if ! COMPOSE_PROJECT_NAME="$PROJECT" "${COMPOSE[@]}" stop; then
     echo "STACK setup: compose stop failed — stop $PROJECT by hand" >&2
+    [ "$rc" -ne 0 ] || rc=1
+  fi
   exit "$rc"
 }
 trap lane_stop EXIT
@@ -311,9 +315,9 @@ reads the lane's `Setup` tab as above. It sees `STACK gate: refused`, asks
 the stop question (below), and then runs `orca-lane.sh rm` and `create` for
 that lane. It never re-runs setup by hand.
 
-**When setup fails for another reason** (a build, a migration): a failed
-build started nothing, and after a failed migration the trap has stopped the
-stack. coord@main confirms no container of that lane's
+**When setup fails for another reason** (a build, a pull, a migration): a
+failed build or pull started nothing, and after a failed migration the trap
+has stopped the stack. coord@main confirms no container of that lane's
 project is running (the probe under "The gated start target"), reports the
 Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 `create` for that lane after the cause is fixed.
@@ -456,7 +460,8 @@ lock file, a build arg or a compose `build:` section: plain `make up` keeps
 the old image. After a failed build, the next `make up` builds again. A
 build can wait a long time for another lane's build: run `make up` in the
 background or with a long timeout. If it prints `STACK gate: refused`,
-`STACK build: refused` or `STACK build: failed`, stop and
+`STACK build: refused`, `STACK build: failed` or `STACK pull: failed`,
+stop and
 `ask` your coordinator; do not start the stack another way. When your PR is
 open and reviewed, stop the stack (`compose stop`; keep volumes).
 ```
