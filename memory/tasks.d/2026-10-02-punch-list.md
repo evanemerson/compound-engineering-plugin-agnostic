@@ -3056,6 +3056,14 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     bot:orca-lab-bot stores; C2 coord:orca-lab resolves to the bot; C3
     rebind refuses a null Run it does not own; C4 health and outbox from a
     bot).
+    2026-11-28 orca-lab re-measure (msg_e1b7d7860b11, orca-lab PR #83,
+    sender-measured, Orca 1.4.280, cepa 1.61.0): C3 PASS both ways (no
+    confirm: -> ask, Run unchanged; run: + confirm: -> done, generation
+    3 -> 4). New facts, forwarded to tab54 (msg_b5bbc6c0603b): run-create
+    from a structured session records a `structworker_` holder, not null;
+    null appears when a Run's terminal is closed; a structworker_ holder
+    still reads as an unknown shape in orca-rebind.sh — C4/L102 must cover
+    it.
 
 L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
     status: pending
