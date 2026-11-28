@@ -2886,9 +2886,12 @@ L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches aft
     repo's coord@main).
 
 L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca threads on the root.**
-    status: pending
+    status: completed
     severity: P2
     owner: optimization (tab50@optimization, with L98 and L103 C1–C2)
+    Closed 2026-11-28: PR #149 merged a9d400d (1.61.0; loaded, freshness
+    rc=0), with L97, L98 and L103 C1-C2. Residuals:
+    memory/tasks.d/2026-11-27-fix-optimization-send-bot-addressing.md.
     From orca-lab coord@main (msg_304b19dbda9c, 2026-11-23; sender-reported,
     Orca 1.4.264, cepa 1.60.4). Alert 1795389024-4JM95YWl (send_unproven,
     reply to msg_a3c163427775, 23:10 UTC 2026-11-22): the reply
@@ -2903,9 +2906,12 @@ L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca t
     (see L98).
 
 L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address (Chat and bot sessions).**
-    status: pending
+    status: completed
     severity: P2
     owner: optimization (tab50@optimization)
+    Closed 2026-11-28: PR #149 merged a9d400d (1.61.0; loaded, freshness
+    rc=0), with L97, L98 and L103 C1-C2. Residuals:
+    memory/tasks.d/2026-11-27-fix-optimization-send-bot-addressing.md.
     From orca-lab coord@main (msg_0aba81bb605b, 2026-11-23; sender-reported).
     evan-skills (term_df1c30ed) replying to an ai-lab Chat session that
     sends as `orca_session_id:34fefe5b-…` failed "the reply names no valid
@@ -2958,7 +2964,7 @@ L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) 
 L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**
     status: pending
     severity: P3
-    owner: unassigned
+    owner: optimization (tab54@optimization, with L103 C4)
     From orca-lab coord@main (outbox 20261123T221226Z-V1IMzqej, 2026-11-23;
     sender-reported). Seen 2026-11-21/22: send-failed:1795220283-wtiMVv6g,
     1795220286-tsqnxFHs and 1795389024-4JM95YWl appeared in several
@@ -2982,7 +2988,7 @@ L101. **A merge approval relayed by Orca message does not pass the worker's auto
 L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) cannot re-bind, receive `coord:` mail, or know to drain its outbox.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: optimization (tab54@optimization, with L103 C4)
     Two reports, both sender-reported, not measured here:
     (a) artist360-docs via orca-lab (outbox 20261124T135518Z-ODlMZKs6): a
     coordinator prompt with an `Orca Run:` line started in an Orca structured
@@ -3006,9 +3012,9 @@ L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) c
 L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     status: pending
     severity: P1
-    owner: split — C1+C2 optimization (tab50, with L97/L98); C3 DONE
-      (#148, = L99); C4+C6 next free lane after tab50 merges (with L100,
-      L102, and tab49's orca-health.sh null-holder residual).
+    owner: split — C1+C2 DONE (#149); C3 DONE (#148, = L99); C4+C6
+      optimization (tab54@optimization, with L100, L102, and tab49's
+      orca-health.sh null-holder residual).
     From orca-lab coord@main (outbox 20261127T143049Z-XWjIEHec and
     20261127T234154Z-sgFeoj80, 2026-11-27; sender-measured on Orca 1.4.272
     and 1.4.280; evidence in evanemerson/orca-lab
