@@ -1650,7 +1650,7 @@ L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
 L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
     status: pending
     severity: P3
-    owner: unassigned (via `/cepa:compound`)
+    owner: matrix (tab53@matrix) —  (via `/cepa:compound`)
     review-2026-10-30-192000 #16. L48 measured 7 shard lines that lagged
     findings or punch-list items already closed. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -1740,7 +1740,7 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
 L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mutant edits.**
     status: pending
     severity: P3
-    owner: unassigned (via `/cepa:compound`, with L51)
+    owner: matrix (tab53@matrix) —  (via `/cepa:compound`, with L51)
     From tab25@roles (L46): three of its mutants first went red only because
     the block they mutated was no longer found, not because the leg caught
     the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
@@ -2918,9 +2918,16 @@ L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address
     designing the send side.
 
 L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) as an unknown shape.**
-    status: pending
+    status: completed
     severity: P1
     owner: matrix (tab49@matrix)
+    Closed 2026-11-28: PR #148 merged 6a667f6 (1.60.6 after coord re-bump;
+    loaded, freshness rc=0). A null holder now reads as "holder unknown":
+    no confirm: → ask, change nothing; run: + confirm: → run-use with the
+    same re-read and generation +1 proof. Residuals (orca-health.sh has the
+    same null gap → C4; C2 resolver check; no liveness proof for a confirmed
+    null takeover; removedWork meaning unmeasured):
+    memory/tasks.d/2026-11-27-rebind-null-holder.md.
     From dpc-pro coord@main (outbox 20261123T184816Z-ZzkhPnO8, 2026-11-23;
     sender-reported) and measured here 2026-11-24 on Orca 1.4.272:
     `orchestration run-show --id run_2010992e1390 --json --full` returned
@@ -2999,9 +3006,9 @@ L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) c
 L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     status: pending
     severity: P1
-    owner: split — C1+C2 optimization (tab50, with L97/L98); C3 matrix
-      (tab49, = L99); C4+C6 formulation after those two merge (with L100,
-      L102).
+    owner: split — C1+C2 optimization (tab50, with L97/L98); C3 DONE
+      (#148, = L99); C4+C6 next free lane after tab50 merges (with L100,
+      L102, and tab49's orca-health.sh null-holder residual).
     From orca-lab coord@main (outbox 20261127T143049Z-XWjIEHec and
     20261127T234154Z-sgFeoj80, 2026-11-27; sender-measured on Orca 1.4.272
     and 1.4.280; evidence in evanemerson/orca-lab
