@@ -888,22 +888,23 @@ if LEGS in ("all", "send"):
     # the target worker's own Dispatch is delivered, proven by ONE worker-show.
     # Shape measured here on a live worker-start Dispatch: result.terminal is
     # an object with `handle`, never a bare string.
-    OWN = "ctx_00000000aaaa"
+    OWN_CTX = "ctx_00000000aaaa"
     OWND = os.path.join(TMP, "wshow-own")
     os.makedirs(OWND, exist_ok=True)
 
-    def own_rec(rec=None, **disp):
-        path = os.path.join(OWND, OWN + ".json")
+    def own_rec(rec=None, where=OWND, **disp):
+        os.makedirs(where, exist_ok=True)
+        path = os.path.join(where, OWN_CTX + ".json")
         if rec is None:
-            d = dict({"id": OWN, "status": "dispatched", "assigneeHandle": H}, **disp)
+            d = dict({"id": OWN_CTX, "status": "dispatched", "assigneeHandle": H}, **disp)
             rec = {"ok": True, "result": {"dispatch": d, "terminal": {"handle": H}}}
         if rec is False:
             if os.path.exists(path):
                 os.remove(path)
         else:
             open(path, "w").write(rec if isinstance(rec, str) else json.dumps(rec))
-        return {"STUB_WSHOWDIR": OWND}
-    OWN_TO = "dispatch:" + OWN
+        return {"STUB_WSHOWDIR": where}
+    OWN_TO = "dispatch:" + OWN_CTX
     OWN_STORED = "Orca send stored: %s for %s" % (MID, OWN_TO)
     OWN_SKIP = [OWN_STORED, SK + "Orca stored it for %s, not the target" % OWN_TO,
                 END + "Needed from you: tell %s to check its Orca inbox" % OWN_TO]
@@ -912,26 +913,26 @@ if LEGS in ("all", "send"):
                   [OWN_STORED, "Orca nudge not needed: Orca stored it in %s, the target's Dispatch mailbox, which it prompts" % OWN_TO],
                   env_extra=own_rec(), **OWN_KW)
     ws = [c for c in calls if c[:2] == ["orchestration", "worker-show"]]
-    check = ws == [["orchestration", "worker-show", "--dispatch", OWN, "--json", "--full"]] and not sends(calls)
+    check = ws == [["orchestration", "worker-show", "--dispatch", OWN_CTX, "--json", "--full"]] and not sends(calls)
     (ok if check else miss)("STORE own Dispatch reads one worker-show and no nudge" if check else
                              "STORE own Dispatch reads one worker-show and no nudge: %r" % calls)
     for name, env in [
             ("STORE another terminal's Dispatch is a skip",
-             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN, "status": "dispatched", "assigneeHandle": OTHER},
+             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": OTHER},
                                              "terminal": {"handle": OTHER}}})),
             ("STORE own Dispatch assigned to another terminal is a skip", lambda: own_rec(assigneeHandle=OTHER)),
             ("STORE own Dispatch not dispatched is a skip", lambda: own_rec(status="completed")),
             ("STORE own Dispatch record of another id is a skip", lambda: own_rec(id="ctx_00000000bbbb")),
             ("STORE own Dispatch read not ok is a skip",
-             lambda: own_rec({"ok": False, "result": {"dispatch": {"id": OWN, "status": "dispatched", "assigneeHandle": H},
+             lambda: own_rec({"ok": False, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": H},
                                               "terminal": {"handle": H}}})),
             # Quoted shapes: the target named only as a bare string, or only in
             # another field of the terminal record, is not its terminal.
             ("STORE own Dispatch terminal as a bare string is a skip",
-             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN, "status": "dispatched", "assigneeHandle": H},
+             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": H},
                                              "terminal": H}})),
             ("STORE own Dispatch target quoted in another terminal field is a skip",
-             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN, "status": "dispatched", "assigneeHandle": H},
+             lambda: own_rec({"ok": True, "result": {"dispatch": {"id": OWN_CTX, "status": "dispatched", "assigneeHandle": H},
                                              "terminal": {"handle": OTHER, "title": H}}})),
             ("STORE own Dispatch worker-show fails is a skip", lambda: own_rec(False)),
             ("STORE own Dispatch worker-show times out is a skip",
@@ -1777,7 +1778,7 @@ if LEGS in ("all", "send"):
     # L105: a host send (on:) to a worker's own Dispatch is not measured: it keeps the skip and reads nothing.
     calls = store("HOSTON own Dispatch is a skip", 1, OWN_SKIP, raw=([], on_fields(mode="nudge")),
                   osend_json=osend(to=OWN_TO), inbox_json=NOROW, inbox_env_json=inbox({"id": MID, "to_handle": OWN_TO}),
-                  env_extra=own_rec())
+                  env_extra=own_rec(where=os.path.join(TMP, "wshow-own-host")))
     ws = [c for c in calls if c[:2] == ["orchestration", "worker-show"]]
     (ok if not ws else miss)("HOSTON own Dispatch reads no worker-show" if not ws else
                              "HOSTON own Dispatch reads no worker-show: %r" % ws)
