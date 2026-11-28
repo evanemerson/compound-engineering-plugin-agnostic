@@ -3103,8 +3103,8 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     part C1-C6 is now merged. L103 stays open for orca-lab's C4 re-measure
     (bot health and outbox; probe list items 1-3 of the #153 shard).
 
-L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
-    status: pending
+L104. ~~**`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**~~
+    status: completed
     severity: P1
     owner: matrix (tab55@matrix)
     DECIDED 2026-11-28 (coord@main, tab55's question msg_48f32c0ce9ff):
@@ -3142,6 +3142,17 @@ L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to th
     chat's lastAsked, or a bot/run field), and keep every other proof.
     Side effect: the pending outbox copy will be shown again to orca-lab as
     a duplicate of msg_ede2e13a5255 (orca-lab told).
+    DONE 2026-11-28: PR #155 merged `2138f9e` (1.63.1). tab55 done
+    (msg_70f3e1d7a580), head d079609 = Handoff; coord@main merged origin/main
+    in the lane (manifest conflict only) and re-bumped to 1.63.1 (b17507d),
+    CI 70/70 green. Option A shipped, plus a bot_reply_not_yours hint. The
+    squash subject lost its "(#155)" (coord@main error: a title read ran the
+    merge); main's history is not rewritten, so the PR link is only on
+    GitHub's PR page. matrix parked, branch deleted, tab55's terminal gone
+    from terminal list, loaded plugin 1.63.1 (freshness rc=0). Residuals:
+    `memory/tasks.d/2026-11-28-fix-matrix-bot-send-proof.md` (items 12-16).
+    Item 1 of `2026-11-27-fix-optimization-send-bot-addressing.md` is
+    answered: a bot send's to_handle is run:<id> (flipped there).
 
 
 L105. **`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**

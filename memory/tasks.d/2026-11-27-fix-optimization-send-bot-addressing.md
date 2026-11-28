@@ -5,7 +5,9 @@ this shard holds what this branch did not close.
 
 ## Undone items (2026-11-27)
 
-1. [P2] Not measured: the `orchestration send` reply's own
+1. [x] ANSWERED 2026-11-28 (#155, L104): a bot send is stored with to_handle
+   run:<bot Run>; orca-send.sh now counts it by option A. Original text:
+   [P2] Not measured: the `orchestration send` reply's own
    `result.message.to_handle` for a `bot:<name>` target. No test send was made
    (it wakes the bot). orca-send.sh counts a bot send only when that field is
    an `orca_session_id:` that `bot chats --bot <name> --json` lists as an open
