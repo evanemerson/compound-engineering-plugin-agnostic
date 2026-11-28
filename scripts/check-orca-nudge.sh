@@ -113,11 +113,24 @@
 #              and `bot chats --bot <name> --json` argv are pinned; it counts
 #              only for an open chat of that bot, never nudged. A closed or
 #              unlisted chat, an id only quoted in a chat's text, another
-#              bot's list, a failed, not-ok or non-JSON list, a Run or bot
-#              recipient, and no recipient are `not proven stored`; the
-#              read-back takes only a chat row. BOTREF: an empty name, a
+#              bot's list, a failed, not-ok or non-JSON list, a dispatch or
+#              bot recipient, a Run with no bot request, and no recipient are
+#              `not proven stored`; the read-back takes a chat or a Run row,
+#              never another address. BOTREF: an empty name, a
 #              leading dash, shell text, a space, 106 characters and `on:` are
 #              refused before any call.
+#   BOTRUN   — punch-list L104: a bot whose Home chat is bound to a Run gets
+#              its mail in `run:<id>`. The send, re-read, `run-show --id <id>`
+#              and `bot chats` argv are pinned; it counts only when THIS msg
+#              id's row for that Run has a payload that parses to an object
+#              with a `botRequest` object, run-show names that Run with
+#              `coordinator_handle` null, and the bot lists an open Home chat.
+#              Each one missing is `not proven stored` on its own: another msg
+#              id's bot request, botRequest only quoted (a payload value, a
+#              string, a payload that is not JSON or not Orca's string, the
+#              body), a terminal coordinator, another Run's record, a failed,
+#              not-ok or shapeless run-show, a closed or non-Home chat, a Home
+#              flag given as text. Read back from the Run too; never nudged.
 #   WDONE    — orca-send.sh's `worker_done` mode (§12b rule 3, punch-list
 #              L35). The argv is pinned, with the preamble's IDs and a request
 #              id the retry reuses. It counts only when `result.lifecycle`
@@ -210,6 +223,18 @@
 #              and the key is ackable. A run-show of another Run, or of none,
 #              is unreadable. HEALTHREF: a named Run outside
 #              `run_[A-Za-z0-9_]`, or a third argument, is refused.
+#              BOT MODE (L103 C4): a chat identity (the CHATSENDER shape)
+#              keys the awaited check, checks its own null-holder
+#              run-current Run, and alerts `unbound` only for a term_
+#              holder; from a terminal a null holder is noted (run-current)
+#              or `unbound` (named Run). Outside a checkout the repo is a
+#              `repo:` argument or a `$HOME/.orca/bots/<repo>-bot` home, else
+#              no named repo's file is shown (`orca-unreadable:repo`); a bad,
+#              empty or mismatched `repo:` is refused. L100: a repo-less file
+#              is shown to the session it names, waits an hour when it names
+#              another, is labeled when it names none, and one ack under
+#              acked/_shared/ clears it everywhere; a reason quoting
+#              `repo=unknown` and a second repo line do not move the ack.
 #   REBIND   — orca-rebind.sh (§12b rule 2, punch-list L45, L46), from
 #              argument 5, in the health legs. With no `run:` field the
 #              script only reports (no Run, or one
@@ -230,7 +255,11 @@
 #              confirm that is not equal to run, an unknown or repeated
 #              field, a non-field line, a line after the fields, and a missing
 #              or bad ORCA_TERMINAL_HANDLE are refused with exit 4 before any
-#              call.
+#              call, unless a chat identity stands in for an empty one.
+#              THE CHAT (L102 a): from a chat it reads only run-current (and
+#              run-show for a Run it does not report): its own null-holder
+#              Run is ok, a terminal-held or other Run asks, run_not_found is
+#              retired, and confirm: never leads to run-use.
 #   HEALTH failed — punch-list L60: a dispatch that settled `failed` with no
 #              worker_done row alerts `failed:<dispatch>` with its stage and
 #              last failure; a worker_done row, an ack, a bad stage, a last
@@ -1353,8 +1382,14 @@ if LEGS in ("all", "send"):
             ("BOT chats not ok are unreadable", 5, BUNREAD, {"chats": bchats(ok=False)}),
             ("BOT chats that fail are unreadable", 5, BUNREAD, {"chats": "", "chats_rc": 1}),
             ("BOT chats not JSON are unreadable", 5, BUNREAD, {"chats": "Home 2fe95de0"}),
-            ("BOT stored for a Run is not a bot", 5, UNPROVEN + "the reply names no valid recipient",
-             {"osend_json": osend(to="run:run_abc", warnings=False)}),
+            # L104: a Run is a bot's recipient only with all of BOTRUN's proof.
+            ("BOT stored for a Run with no bot request is not proven", 5,
+             UNPROVEN + "%s is stored for run:run_abc without Orca's bot request, so it is not proven a send to %s"
+             % (MID, BOT), {"osend_json": osend(to="run:run_abc", warnings=False),
+                            "inbox_json": inbox({"id": MID, "to_handle": "run:run_abc"})}),
+            ("BOT stored for a dispatch is not a bot", 5, UNPROVEN + "the reply names no valid recipient",
+             {"osend_json": osend(to="dispatch:ctx_abc", warnings=False),
+              "inbox_json": inbox({"id": MID, "to_handle": "dispatch:ctx_abc"})}),
             ("BOT stored for the bot address is not a chat", 5, UNPROVEN + "the reply names no valid recipient",
              {"osend_json": osend(to=BOT, warnings=False)}),
             ("BOT with no recipient and no row is not stored", 5,
@@ -1371,8 +1406,127 @@ if LEGS in ("all", "send"):
         osend_json=osend(to=None, warnings=False), inbox_json=inbox(brow(to=BCHAT, typ="handoff")))
     bot("BOT a name of 105 characters is accepted", 0, ["Orca send stored: %s for %s" % (MID, BCHAT)],
         mode="no-nudge", target="bot:" + "a" * 105, chats=bchats(bot="a" * 105))
-    bot("BOT read back skips a row for a Run", 5, [NOSTORE + EMPTY1, BPASTE], osend_rc=1, osend_json="",
+    bot("BOT read back of a Run row is not proven", 5,
+        [UNPROVEN + "%s; the inbox holds %s for run:run_abc with this send's text, but no Orca reply names it, and "
+         "no Orca read ties that Run to %s" % (EMPTY1, MID, BOT), BPASTE], osend_rc=1, osend_json="",
         inbox_json=inbox(brow(to="run:run_abc", typ="handoff")))
+    bot("BOT read back skips a row for another address", 5, [NOSTORE + EMPTY1, BPASTE], osend_rc=1, osend_json="",
+        inbox_json=inbox(brow(to="dispatch:ctx_abc", typ="handoff")))
+
+    # --- BOTRUN (punch-list L104): a bot whose Home chat is bound to a Run
+    # gets its mail in that Run (Orca 1.4.280: msg_ede2e13a5255 stored for
+    # run:run_cf8f7c0d2b33). It counts only when THIS row's payload holds
+    # Orca's botRequest object, run-show names a Run with no terminal
+    # coordinator, and the bot has an open Home chat. Never nudged.
+    BRUN = "run:run_cf8f7c0d2b33"
+    BRPAY = json.dumps({"botRequest": {"from": "your owner's agent", "kind": "handoff: the job is yours now"}})
+    BRSTORED = "Orca send stored: %s for %s" % (MID, BRUN)
+
+    def brshow(rid="run_cf8f7c0d2b33", coord=None, ok=True, drop=False):
+        run = {"id": rid, "objective": "orca-lab-bot pilot (L25)", "coordinator_handle": coord}
+        if drop:
+            del run["coordinator_handle"]
+        return json.dumps({"id": "5be1", "ok": ok, "result": {"run": run, "removedWork": {"coverage": "complete"}}})
+
+    def botrun(name, rc, want, runshow=None, runshow_rc=0, inbox_json=None, **kw):
+        env = {"STUB_RUNSHOW": runshow if runshow is not None else brshow(), "STUB_RUNSHOW_RC": str(runshow_rc)}
+        return bot(name, rc, want, osend_json=kw.pop("osend_json", osend(to=BRUN, warnings=False)),
+                   inbox_json=inbox_json if inbox_json is not None else
+                   inbox({"id": MID, "to_handle": BRUN, "payload": BRPAY}), env_extra=env, **kw)
+    calls = botrun("BOTRUN send stored for the bot's Run counts", 0, [BRSTORED, BNN])
+    want = [["orchestration", "send", "--to", BOT, "--type", "handoff", "--subject", SUBJ, "--body", BODY,
+             "--retry-request", "<uuid>", "--json", "--full"], INBOX_ARGV,
+            ["orchestration", "run-show", "--id", "run_cf8f7c0d2b33", "--json", "--full"],
+            ["bot", "chats", "--bot", "orca-lab-bot", "--json"]]
+    check = [strip_req(c) for c in calls] == want
+    (ok if check else miss)("BOTRUN argv and order, no nudge" if check else "BOTRUN argv and order, no nudge: %r" % calls)
+    # PR #155 review (adversarial): a Run row found only by its text may be an
+    # identical send to ANOTHER bot, so a read-back never counts it.
+    def brback(why):
+        return UNPROVEN + "%s; the inbox holds %s for %s with this send's text, but no Orca reply names it, and no " \
+            "Orca read ties that Run to %s" % (why, MID, BRUN, BOT)
+    for name, kw, why in [
+            ("BOTRUN a Run row read back is not proven", {"osend_rc": 1, "osend_json": ""}, EMPTY1),
+            ("BOTRUN with no recipient, a Run row read back is not proven",
+             {"osend_json": osend(to=None, warnings=False)}, "the reply names no recipient for " + BOT)]:
+        calls = botrun(name, 5, [brback(why), BPASTE], inbox_json=inbox(brow(to=BRUN, typ="handoff", payload=BRPAY)), **kw)
+        check = not [c for c in calls if c[:2] in (["orchestration", "run-show"], ["bot", "chats"])]
+        (ok if check else miss)(name + " reads no Run or chats" if check else name + " reads no Run or chats: %r" % calls)
+    # The adversarial scenario: the same text went to bot b first; this send
+    # to bot:orca-lab-bot failed and stored nothing; the inbox holds only b's
+    # Run row, with its bot request.
+    botrun("BOTRUN a read-back of another bot's Run row is not stored as this bot's", 5,
+           [brback(EMPTY1).replace(BRUN, "run:run_ofbotb"), BPASTE], osend_rc=1, osend_json="",
+           inbox_json=inbox(brow(to="run:run_ofbotb", typ="handoff", payload=BRPAY)),
+           runshow=brshow(rid="run_ofbotb"))
+    BRNOREQ = UNPROVEN + "%s is stored for %s without Orca's bot request, so it is not proven a send to %s" % (MID, BRUN, BOT)
+    BRCOORD = UNPROVEN + "%s is stored for %s, a Run with a terminal coordinator, so it is not proven a send to %s" % (MID, BRUN, BOT)
+    BRUNREAD = UNPROVEN + "the Run run_cf8f7c0d2b33 could not be read, so %s is not proven a send to %s" % (MID, BOT)
+    BRHOME = UNPROVEN + "%s is stored for %s, but %s has no open Home chat" % (MID, BRUN, BOT)
+    OTHERMID = "msg_0000000000aa"
+    for name, rc, want, kw in [
+            # (1) THIS msg id, for that Run.
+            ("BOTRUN row missing from the inbox", 5, NOSTORE + "%s is not in the inbox for %s" % (MID, BRUN),
+             {"inbox_json": inbox({"id": OTHERMID, "to_handle": BRUN, "payload": BRPAY})}),
+            ("BOTRUN row for another Run is not stored", 5, NOSTORE + "%s is not in the inbox for %s" % (MID, BRUN),
+             {"inbox_json": inbox({"id": MID, "to_handle": "run:run_other", "payload": BRPAY})}),
+            ("BOTRUN a bot request on another msg id does not count", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": OTHERMID, "to_handle": BRUN, "payload": BRPAY},
+                                  {"id": MID, "to_handle": BRUN})}),
+            # (2) Orca's botRequest object in THIS row's parsed payload.
+            ("BOTRUN no payload is not proven", 5, BRNOREQ, {"inbox_json": inbox({"id": MID, "to_handle": BRUN})}),
+            ("BOTRUN a null payload is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": None})}),
+            ("BOTRUN a payload with no botRequest is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"taskId": "t"})})}),
+            # Quoted shapes: the word, not the object.
+            ("BOTRUN botRequest quoted as a payload value is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"note": "botRequest"})})}),
+            ("BOTRUN botRequest that is not an object is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"botRequest": "yes"})})}),
+            ("BOTRUN botRequest that is a list is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": json.dumps({"botRequest": [{}]})})}),
+            ("BOTRUN botRequest in a payload that is not JSON is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": 'x {"botRequest":{}}'})}),
+            ("BOTRUN a payload given as an object, not Orca's string, is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "payload": {"botRequest": {}}})}),
+            ("BOTRUN botRequest quoted in the body is not proven", 5, BRNOREQ,
+             {"inbox_json": inbox({"id": MID, "to_handle": BRUN, "body": BRPAY, "subject": BRPAY})}),
+            # (3) run-show: ok, that id, coordinator_handle null.
+            ("BOTRUN a Run with a terminal coordinator is not proven", 5, BRCOORD,
+             {"runshow": brshow(coord="term_" + "a" * 8 + "-1111-4222-8333-" + "b" * 12)}),
+            ("BOTRUN a run-show of another Run is not proven", 5,
+             UNPROVEN + "run-show of run_cf8f7c0d2b33 answered for another Run, so %s is not proven a send to %s" % (MID, BOT),
+             {"runshow": brshow(rid="run_other")}),
+            ("BOTRUN a Run with no coordinator field is unreadable", 5, BRUNREAD, {"runshow": brshow(drop=True)}),
+            ("BOTRUN a run-show not ok is unreadable", 5, BRUNREAD, {"runshow": brshow(ok=False)}),
+            ("BOTRUN a run-show that fails is unreadable", 5, BRUNREAD, {"runshow": "", "runshow_rc": 1}),
+            ("BOTRUN a run-show not JSON is unreadable", 5, BRUNREAD, {"runshow": "run_cf8f7c0d2b33 coordinator_handle null"}),
+            # (4) bot chats: an open Home chat of that bot.
+            ("BOTRUN a closed Home chat is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": True, "closed": True}])}),
+            # PR #155 review: home and open must hold on ONE chat.
+            ("BOTRUN a closed Home chat beside an open other chat is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": True, "closed": True},
+                                     {"id": "cfb3024d-bf6a-4d25-a938-498a738592f8", "home": False, "closed": False}])}),
+            ("BOTRUN only a chat that is not Home is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": False, "closed": False}])}),
+            ("BOTRUN a Home flag quoted as text is not proven", 5, BRHOME,
+             {"chats": bchats(chats=[{"id": HOMEC, "home": "true", "title": "home: true", "closed": False}])}),
+            ("BOTRUN chats of another bot are unreadable", 5, BUNREAD, {"chats": bchats(bot="fleet")}),
+            ("BOTRUN chats that fail are unreadable", 5, BUNREAD, {"chats": "", "chats_rc": 1})]:
+        calls = botrun(name, rc, [want, BPASTE], **kw)
+        (ok if not sends(calls) else miss)(name + " is not nudged" if not sends(calls) else
+                                           name + " is not nudged: %r" % sends(calls))
+    # L104: Orca refuses a reply to a message a bot sent; the reason says
+    # how to answer a bot instead.
+    store("BOT a reply to a bot's message says to send to the bot", 5,
+          [NOSTORE + 'Orca did not return "ok": true (bot_reply_not_yours); a bot is answered with a send to '
+           "bot:<name>, not a reply", PASTE_Q], argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY,
+          osend_rc=1, osend_json=osend(ok=False, message=False, error={"code": "bot_reply_not_yours", "message": "x"}))
+    store("BOT the bot-reply code on a send that is not a reply adds no hint", 5,
+          [NOSTORE + 'Orca did not return "ok": true (bot_reply_not_yours)', BPASTE], target=BOT, typ="handoff",
+          osend_rc=1, osend_json=osend(ok=False, message=False, error={"code": "bot_reply_not_yours", "message": "x"}))
     for name, tgt in [("BOTREF empty name", "bot:"), ("BOTREF name starts with a dash", "bot:-x"),
                       ("BOTREF name with shell text", "bot:a;rm"), ("BOTREF name too long", "bot:" + "a" * 106),
                       ("BOTREF name with a space", "bot:a b")]:
@@ -2184,6 +2338,15 @@ if LEGS in ("all", "send"):
                ("send_failed", H, "dispatch:ctx_abcdef123456", "worker_done", 'Orca did not return "ok": true (run_required)'),
                argv=["orca-ide", "dispatch:ctx_abcdef123456", "worker_done", "succeeded", "task_abcdef123456"], osend_rc=1,
                osend_json=json.dumps({"id": "local", "ok": False, "error": {"code": "run_required"}}))
+    # L103 C4: a chat records its orca_session_id: as the sender; a chat
+    # identity in another shape is unknown, as a bad handle is.
+    ACHAT = "2fe95de0-c891-4822-aadd-efec37000852"
+    alert_case("ALERT a chat sender is recorded by its session id", 4,
+               ("send_refused", "orca_session_id:" + ACHAT, H, "question", "the nudge field is not nudge or no-nudge"),
+               me=None, mode="yes", env_extra={"ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": ACHAT})
+    alert_case("ALERT a chat id with shell text is unknown", 4,
+               ("send_refused", "unknown", H, "question", "the nudge field is not nudge or no-nudge"),
+               me=None, mode="yes", env_extra={"ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": ACHAT[:-4] + "$(x)"})
     alert_case("ALERT stored send writes none", 0, None, mode="no-nudge")
     alert_case("ALERT nudge skip writes none", 1, None, ps_json=ps(row("waiting")))
     # L65: a nudge lost to a failed Orca call writes a nudge_skipped file.
@@ -2257,6 +2420,10 @@ if LEGS in ("all", "health"):
     HOK = "ORCA health: ok — Run %s checked" % RUN
     HSUM1 = ["ORCA health: 1 alert — ask the operator (§12b rule 8)",
              "Ending first line: Needed from you: check the Orca alerts below"]
+    QOFF = ("no term_ handle in ORCA_TERMINAL_HANDLE and no chat identity (ORCA_STRUCTURED_SESSION=1 with "
+            "ORCA_AGENT_SESSION_ID)")
+    CHAT_ID = "2fe95de0-c891-4822-aadd-efec37000852"
+    CHAT = {"ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": CHAT_ID}
     HCALLS = [["orchestration", "run-show", "--id", RUN, "--json", "--full"],
               ["orchestration", "worker-list", "--run", RUN, "--limit", "100", "--json", "--full"],
               ["orchestration", "worker-show", "--dispatch", D1, "--json", "--full"],
@@ -2335,12 +2502,158 @@ if LEGS in ("all", "health"):
                 "(%s), at 13:44 UTC, from %s" % (AF, wt, what, why, WORKER))
     health("HEALTH alert file is reported", 1, [af_line()] + HSUM1, files={AF: afile()})
     health("HEALTH alert file of another repo is not", 0,
-           [HOK + " (1 alert file for other worktrees or repos not shown)"], files={AF: afile(repo="other-repo")})
+           [HOK + " (1 alert file for other worktrees, repos or sessions not shown)"], files={AF: afile(repo="other-repo")})
     health("HEALTH alert file of another worktree is not", 0,
-           [HOK + " (1 alert file for other worktrees or repos not shown)"], files={AF: afile(wt="wt2")})
+           [HOK + " (1 alert file for other worktrees, repos or sessions not shown)"], files={AF: afile(wt="wt2")})
     health("HEALTH main checkout sees every worktree", 1, [af_line(wt="wt2")] + HSUM1, files={AF: afile(wt="wt2")},
            cwd=HREPO)
-    health("HEALTH unknown repo shows every file", 1, [af_line(wt="wt2")] + HSUM1, files={AF: afile(wt="wt2")}, cwd=TMP)
+    # BOT MODE (L103 C4 d): outside a git checkout, a session with no repo
+    # sees no named repo's files; a repo: argument or a <repo>-bot home names
+    # it, and it then sees that repo's files as its main checkout would.
+    NOREPO = ("ORCA alert: orca-unreadable:repo:%d — this session is in no git checkout and names no repo (a repo: "
+              "argument, or a bot home named <repo>-bot), so 1 alert or outbox file of named repos were not read "
+              "(BOT MODE)" % (NOW // 3600))
+    health("HEALTH no checkout and no repo hides named repos' files", 1, [NOREPO] + HSUM1, files={AF: afile(wt="wt2")},
+           cwd=TMP)
+    # Inside a checkout whose repo name has no plain form, the repo is
+    # unknown on the reader's side, and every file is shown (never dropped).
+    ODD = os.path.join(TMP, "h repo")
+    ODDWT = os.path.join(TMP, "h repo-wt")
+    for a in (["init", "-q", ODD], ["-C", ODD, "-c", "user.name=c", "-c", "user.email=c@c", "commit", "-q",
+              "--allow-empty", "-m", "c"], ["-C", ODD, "worktree", "add", "-q", "--detach", ODDWT]):
+        subprocess.run(["git"] + a, capture_output=True, check=True)
+    health("HEALTH a checkout with no plain repo name shows every file", 1, [af_line(wt="wt2")] + HSUM1,
+           files={AF: afile(wt="wt2")}, cwd=ODDWT)
+    health("HEALTH repo argument outside a checkout shows that repo's files", 1, [af_line(wt="wt2")] + HSUM1,
+           files={AF: afile(wt="wt2")}, cwd=TMP, args=["orca-ide", "repo:hrepo", RUN])
+    health("HEALTH repo argument outside a checkout hides other repos' files", 0,
+           [HOK + " (1 alert file for other worktrees, repos or sessions not shown)"],
+           files={AF: afile(repo="other-repo")}, cwd=TMP, args=["orca-ide", "repo:hrepo", RUN])
+    health("HEALTH repo argument equal to the checkout's is accepted", 1, [af_line()] + HSUM1, files={AF: afile()},
+           args=["orca-ide", "repo:hrepo", RUN])
+    BHOME = os.path.join(TMP, "bhome")
+    for b in ("hrepo-bot", "fleet", "-bot"):
+        os.makedirs(os.path.join(BHOME, ".orca", "bots", b), exist_ok=True)
+    os.makedirs(os.path.join(TMP, "elsewhere", "hrepo-bot"), exist_ok=True)
+    health("HEALTH a bot home named <repo>-bot shows that repo's files", 1, [af_line(wt="wt2")] + HSUM1,
+           files={AF: afile(wt="wt2")}, cwd=os.path.join(BHOME, ".orca", "bots", "hrepo-bot"),
+           env_extra={"HOME": BHOME})
+    for tag, d in (("a bot home with no -bot suffix", os.path.join(BHOME, ".orca", "bots", "fleet")),
+                   ("a bot home named only -bot", os.path.join(BHOME, ".orca", "bots", "-bot")),
+                   ("a <repo>-bot directory outside the bots home", os.path.join(TMP, "elsewhere", "hrepo-bot"))):
+        health("HEALTH %s is no repo" % tag, 1, [NOREPO] + HSUM1, files={AF: afile(wt="wt2")}, cwd=d,
+               env_extra={"HOME": BHOME})
+    def bot_ack_dir(prep_keys):
+        def f():
+            d = os.path.join(HDIR, "acked", "bot@hrepo")
+            os.makedirs(d, exist_ok=True)
+            for k in prep_keys:
+                open(os.path.join(d, k), "w").close()
+        return f
+    health("HEALTH a bot's acks are its own", 0, [HOK], files={AF: afile(wt="wt2")}, cwd=TMP,
+           args=["orca-ide", "repo:hrepo", RUN], prep=bot_ack_dir(["send-failed:" + AF]))
+    health("HEALTH a bot ack is written under its own directory", 0, ["ORCA ack: send-failed:" + AF],
+           files={AF: afile(wt="wt2")}, cwd=TMP, args=["orca-ide", "repo:hrepo", "ack", "send-failed:" + AF],
+           calls_want=[])
+    good = os.path.exists(os.path.join(HDIR, "acked", "bot@hrepo", "send-failed:" + AF)) \
+        and not os.path.exists(os.path.join(HDIR, "acked", "unknown", "send-failed:" + AF))
+    (ok if good else miss)("HEALTH a bot ack marks bot@<repo>" if good else
+                           "HEALTH a bot ack marks bot@<repo>: %r" % sorted(os.listdir(os.path.join(HDIR, "acked"))))
+    # L100: a file with no recorded repo is shown only to the session it
+    # names; one naming nobody is shown labeled, and one ack clears it in all.
+    REPOLESS = " (no repo recorded; shown to every coordinator, and one ack clears it in all of them, L100)"
+    def rl_file(sender="unknown", target="dispatch:ctx_abcdef123456", age=120, reason=None, extra=""):
+        return afile(repo="unknown", wt="unknown").replace("sender=" + WORKER, "sender=" + sender) \
+            .replace("target=dispatch:ctx_abcdef123456", "target=" + target) \
+            .replace("time=%d" % (NOW - 120), "time=%d" % (NOW - age)) + extra
+    def rl_line(sender="unknown", target="dispatch:ctx_abcdef123456", label=REPOLESS, at="13:44"):
+        return ("ORCA alert: send-failed:%s — unknown: a worker_done send to %s stored nothing "
+                "(Orca did not return \"ok\": true (run_required)), at %s UTC, from %s%s" % (AF, target, at, sender, label))
+    health("HEALTH repo-less file naming no session is shown labeled", 1, [rl_line()] + HSUM1, files={AF: rl_file()})
+    health("HEALTH repo-less file naming no session is shown in a linked worktree too", 1, [rl_line()] + HSUM1,
+           files={AF: rl_file()}, cwd=HWT)
+    health("HEALTH repo-less ack is shared", 0, ["ORCA ack: send-failed:" + AF], files={AF: rl_file()},
+           args=["orca-ide", "ack", "send-failed:" + AF], calls_want=[])
+    good = os.path.exists(os.path.join(HDIR, "acked", "_shared", "send-failed:" + AF)) \
+        and os.path.exists(os.path.join(HDIR, "acked", "wt1", "send-failed:" + AF))
+    (ok if good else miss)("HEALTH repo-less ack marks _shared" if good else
+                           "HEALTH repo-less ack marks _shared: %r" % sorted(os.listdir(os.path.join(HDIR, "acked"))))
+    health("HEALTH one repo-less ack clears it in another coordinator", 0, [HOK], keep=True, cwd=HREPO)
+    health("HEALTH repo-less file naming this terminal is shown unlabeled", 1, [rl_line(sender=H, label="")] + HSUM1,
+           files={AF: rl_file(sender=H)})
+    health("HEALTH repo-less file naming this Run is shown unlabeled", 1,
+           [rl_line(target="run:" + RUN, label="")] + HSUM1, files={AF: rl_file(target="run:" + RUN)})
+    health("HEALTH repo-less file naming another session waits an hour for it", 0,
+           [HOK + " (1 alert file for other worktrees, repos or sessions not shown)"], files={AF: rl_file(sender=OTHER)})
+    health("HEALTH repo-less file naming another Run waits an hour for it", 0,
+           [HOK + " (1 alert file for other worktrees, repos or sessions not shown)"],
+           files={AF: rl_file(target="run:run_other")})
+    health("HEALTH repo-less file targeting another session waits an hour for it", 0,
+           [HOK + " (1 alert file for other worktrees, repos or sessions not shown)"], files={AF: rl_file(target=OTHER)})
+    health("HEALTH repo-less file naming another session with a future time is shown", 1,
+           [rl_line(sender=OTHER, at="13:56")] + HSUM1, files={AF: rl_file(sender=OTHER, age=-600)})
+    # PR #153 review F1: a file the reader cannot parse, but whose last repo=
+    # line is unknown, is still silenced by its ack (the marker is also this
+    # worktree's).
+    UNK = ["ORCA alert: send-failed:%s — an alert file in an unknown shape: %s" % (AF, AF)] + HSUM1
+    health("HEALTH an unknown-shape repo-less file is shown", 1, UNK,
+           files={AF: "cepa-orca-alert 1\ntime=%d\nkind=bogus\nrepo=unknown\n" % NOW})
+    health("HEALTH its ack holds", 0, ["ORCA ack: send-failed:" + AF], keep=True,
+           args=["orca-ide", "ack", "send-failed:" + AF], calls_want=[])
+    health("HEALTH an unknown-shape repo-less file stays acked", 0, [HOK], keep=True)
+    # L100 for the resolver's outbox_* alert files.
+    OF = "999880-OuTbOx12.alert"
+    def rl_ofile(sender="unknown"):
+        return "\n".join(["cepa-orca-alert 1", "time=%d" % (NOW - 120), "kind=outbox_ambiguous", "repo=unknown",
+                          "worktree=unknown", "sender=" + sender, "target=coord:dpc-pro", "type=status",
+                          "reason=more than one live coord@main claims dpc-pro: %s %s" % (H, OTHER)]) + "\n"
+    OKEY = "outbox:dpc-pro:ambiguous:" + OF
+    def rl_oline(sender="unknown", label=REPOLESS):
+        return ("ORCA alert: %s — unknown: orca-send.sh kept a status to coord:dpc-pro pending, not sent (more than one "
+                "live coord@main claims dpc-pro: %s %s), at 13:44 UTC, from %s%s" % (OKEY, H, OTHER, sender, label))
+    health("HEALTH repo-less outbox alert naming no session is shown labeled", 1, [rl_oline()] + HSUM1,
+           files={OF: rl_ofile()})
+    health("HEALTH repo-less outbox alert naming this terminal is shown unlabeled", 1, [rl_oline(H, "")] + HSUM1,
+           files={OF: rl_ofile(H)})
+    health("HEALTH repo-less outbox alert ack", 0, ["ORCA ack: " + OKEY], files={OF: rl_ofile()},
+           args=["orca-ide", "ack", OKEY], calls_want=[])
+    health("HEALTH one repo-less outbox ack clears it in another coordinator", 0, [HOK], keep=True, cwd=HREPO)
+    # A worktree named like the shared ack directory acks as unknown.
+    SHWT = os.path.join(TMP, "_shared")
+    if not os.path.isdir(SHWT):
+        subprocess.run(["git", "-C", HREPO, "worktree", "add", "-q", "--detach", SHWT], capture_output=True, check=True)
+    health("HEALTH a worktree named _shared acks as unknown", 0, ["ORCA ack: send-failed:" + AF], files={AF: afile()},
+           cwd=SHWT, args=["orca-ide", "ack", "send-failed:" + AF], calls_want=[])
+    good = os.path.exists(os.path.join(HDIR, "acked", "unknown", "send-failed:" + AF)) \
+        and not os.path.exists(os.path.join(HDIR, "acked", "_shared", "send-failed:" + AF))
+    (ok if good else miss)("HEALTH a worktree named _shared marks unknown" if good else
+                           "HEALTH a worktree named _shared marks unknown: %r" % sorted(os.listdir(os.path.join(HDIR, "acked"))))
+    health("HEALTH a quoted chat sender in an alert file is an unknown shape", 1, UNK,
+           files={AF: afile().replace("sender=" + WORKER, "sender=orca_session_id:%s $(id)" % CHAT_ID)})
+    health("HEALTH repo-less file naming another session is shown after an hour", 1,
+           [rl_line(sender=OTHER, at="12:46")] + HSUM1, files={AF: rl_file(sender=OTHER, age=3600)})
+    # Quoted shape: `repo=unknown` inside the reason is not the repo line, so
+    # the ack stays this worktree's; two repo lines read as the last one, as
+    # the reader reads them.
+    QREASON = 'the Orca output has a shape this reader does not know'
+    health("HEALTH a quoted repo=unknown in the reason keeps the ack local", 0, ["ORCA ack: send-failed:" + AF],
+           files={AF: afile(reason=QREASON + " repo=unknown")}, args=["orca-ide", "ack", "send-failed:" + AF],
+           calls_want=[])
+    good = os.path.exists(os.path.join(HDIR, "acked", "wt1", "send-failed:" + AF)) \
+        and not os.path.isdir(os.path.join(HDIR, "acked", "_shared"))
+    (ok if good else miss)("HEALTH a quoted repo=unknown marks this worktree only" if good else
+                           "HEALTH a quoted repo=unknown marks this worktree only: %r"
+                           % sorted(os.listdir(os.path.join(HDIR, "acked"))))
+    health("HEALTH two repo lines ack as the last one", 0, ["ORCA ack: send-failed:" + AF],
+           files={AF: afile().replace("repo=hrepo\n", "repo=unknown\nrepo=hrepo\n")},
+           args=["orca-ide", "ack", "send-failed:" + AF], calls_want=[])
+    good = os.path.exists(os.path.join(HDIR, "acked", "wt1", "send-failed:" + AF)) \
+        and not os.path.isdir(os.path.join(HDIR, "acked", "_shared"))
+    (ok if good else miss)("HEALTH two repo lines mark this worktree" if good else
+                           "HEALTH two repo lines mark this worktree: %r" % sorted(os.listdir(os.path.join(HDIR, "acked"))))
+    health("HEALTH a chat sender in an alert file is read", 1,
+           [af_line().replace("from " + WORKER, "from orca_session_id:" + CHAT_ID)] + HSUM1,
+           files={AF: afile().replace("sender=" + WORKER, "sender=orca_session_id:" + CHAT_ID)})
     health("HEALTH refused send reads refused", 1, [af_line(what="was refused before any Orca call")] + HSUM1,
            files={AF: afile(kind="send_refused")})
     for tag, why in (("ps", "worktree ps failed or timed out"), ("show", "terminal show failed or timed out"),
@@ -2590,7 +2903,7 @@ if LEGS in ("all", "health"):
            inbox_json=hinbox(q(QB, 30, frm=H, to=OTHER)))
     health("HEALTH awaited reply at 29 minutes", 0, [HOK], inbox_json=hinbox(q(QB, 29, frm=H, to=OTHER)))
     health("HEALTH awaited reply needs this session's handle", 0,
-           [HOK + " (own-question check off: ORCA_TERMINAL_HANDLE is not a term_ handle)"],
+           [HOK + " (own-question check off: " + QOFF + ")"],
            inbox_json=hinbox(q(QB, 60, frm=H, to=OTHER)), me=None)
     health("HEALTH full inbox window is noted", 0,
            [HOK + " (inbox window full: questions older than 200 rows not read)"],
@@ -2760,7 +3073,64 @@ if LEGS in ("all", "health"):
     health("HEALTH acked unbound is not reported", 0, [HOK], runcur=hrun(OTHER), acked=["unbound:%s:%d" % (RUN, HOUR)])
     health("HEALTH unbound needs a valid holder", 0, [HOK], runcur=hrun("term_x; rm -rf /"))
     health("HEALTH unbound needs this terminal's handle", 0,
-           [HOK + " (own-question check off: ORCA_TERMINAL_HANDLE is not a term_ handle)"], runcur=hrun(OTHER), me="term_x")
+           [HOK + " (own-question check off: " + QOFF + ")"], runcur=hrun(OTHER), me="term_x")
+    # tab49 residual 1, L103 C4 b-c: a null holder is a known shape.
+    CHATOK = HOK + " (inbox read as from a terminal: which mailbox a chat's inbox lists is not measured)"
+    CHATN = "; inbox read as from a terminal: which mailbox a chat's inbox lists is not measured"
+    UNBNULL = ("ORCA alert: unbound:%s:%d — Run %s has no recorded holder (a chat or bot's Run reads so), not this "
+               "terminal, so Orca prompts no terminal for it; run the re-bind block (§12b rule 2), which asks before it "
+               "takes it" % (RUN, HOUR, RUN))
+    health("HEALTH named Run with a null holder alerts unbound from a terminal", 1, [UNBNULL] + HSUM1, runcur=hrun(None))
+    health("HEALTH acked null-holder unbound is not reported", 0, [HOK], runcur=hrun(None),
+           acked=["unbound:%s:%d" % (RUN, HOUR)])
+    health("HEALTH named Run with a null holder is quiet from a chat", 0, [CHATOK], runcur=hrun(None), me=None,
+           env_extra=CHAT)
+    health("HEALTH named Run bound to a terminal alerts unbound from a chat", 1,
+           [UNB.replace("not this terminal", "not this chat"), HSUM1[0] + " (" + CHATN[2:] + ")", HSUM1[1]],
+           runcur=hrun(OTHER), me=None, env_extra=CHAT)
+    NOTE = "ORCA health: ok — no Run named or held here; alert files and own questions checked (%s)"
+    def curunb(what):
+        return ("ORCA alert: unbound:%s:%d — this pane's Run %s %s, not this terminal, so its workers are not checked; "
+                "run the re-bind block (§12b rule 2), which asks before it takes it" % (RUN, HOUR, RUN, what))
+    health("HEALTH terminal's run-current Run with a null holder alerts unbound, not unreadable", 1,
+           [curunb("has no recorded holder (a chat or bot's Run reads so)")] + HSUM1, args=["orca-ide"],
+           env_extra={"STUB_RUNCUR": hrun_cur(None)}, calls_want=[HRCUR, HCALLS[3]])
+    health("HEALTH terminal's acked null-holder run-current unbound is quiet", 0,
+           ["ORCA health: ok — no Run named or held here; alert files and own questions checked"], args=["orca-ide"],
+           env_extra={"STUB_RUNCUR": hrun_cur(None)}, acked=["unbound:%s:%d" % (RUN, HOUR)])
+    # THE STRUCTURED HOLDER (coord@main 2026-11-28; shape measured on Orca
+    # 1.4.280 in worker-list agentTerminalHandle): read as a null holder is.
+    SW = "structworker_3c1f9a2e-808b-408e-94e7-5d2a9b1c0e44"
+    health("HEALTH terminal's run-current Run held by a structured session alerts unbound", 1,
+           [curunb("is held by the structured session " + SW)] + HSUM1, args=["orca-ide"],
+           env_extra={"STUB_RUNCUR": hrun_cur(SW)}, calls_want=[HRCUR, HCALLS[3]])
+    health("HEALTH chat checks its run-current Run held by a structured session", 0, [CHATOK], args=["orca-ide"], me=None,
+           env_extra=dict(CHAT, STUB_RUNCUR=hrun_cur(SW)), calls_want=[HRCUR] + HCALLS[1:])
+    health("HEALTH named Run held by a structured session alerts unbound from a terminal", 1,
+           [UNB.replace(OTHER, SW)] + HSUM1, runcur=hrun(SW))
+    health("HEALTH named Run held by a structured session is quiet from a chat", 0, [CHATOK], runcur=hrun(SW), me=None,
+           env_extra=CHAT)
+    health("HEALTH run-current holder that only quotes structworker_ is unreadable", 1, unread("run-current"),
+           args=["orca-ide"], env_extra={"STUB_RUNCUR": hrun_cur(SW + " $(id)")})
+    health("HEALTH chat checks its run-current Run with a null holder", 0, [CHATOK], args=["orca-ide"], me=None,
+           env_extra=dict(CHAT, STUB_RUNCUR=hrun_cur(None)), calls_want=[HRCUR] + HCALLS[1:])
+    health("HEALTH chat's run-current Run held by a terminal is noted", 0,
+           [NOTE % ("this chat's Run %s is held by %s, not this chat; not checked (§12b rule 2)" % (RUN, OTHER) + CHATN)],
+           args=["orca-ide"], me=None, env_extra=dict(CHAT, STUB_RUNCUR=hrun_cur(OTHER)), calls_want=[HRCUR, HCALLS[3]])
+    health("HEALTH run-current with no holder key is unreadable", 1, unread("run-current"), args=["orca-ide"],
+           env_extra={"STUB_RUNCUR": json.dumps({"ok": True, "result": {"run": {"id": RUN}}})})
+    CQ = "orca_session_id:" + CHAT_ID
+    health("HEALTH chat awaited question keys on its orca_session_id", 1,
+           ["ORCA alert: awaited:%s — your question %s to %s has had no reply for 30 minutes (bound 30)" % (QB, QB, OTHER)]
+           + [HSUM1[0] + " (" + CHATN[2:] + ")", HSUM1[1]], inbox_json=hinbox(q(QB, 30, frm=CQ, to=OTHER)), me=None,
+           env_extra=CHAT)
+    for tag, extra in (("a structured flag other than 1", {"ORCA_STRUCTURED_SESSION": "true"}),
+                       ("no structured flag", {"ORCA_STRUCTURED_SESSION": ""}),
+                       ("a session id with shell text", {"ORCA_AGENT_SESSION_ID": CHAT_ID[:-4] + "$(x)"})):
+        health("HEALTH chat identity needs the measured shape (%s)" % tag, 0, [HOK + " (own-question check off: " + QOFF + ")"],
+               inbox_json=hinbox(q(QB, 60, frm=CQ, to=OTHER)), me=None, env_extra=dict(CHAT, **extra))
+    health("HEALTH a terminal handle wins over a chat identity", 0, [HOK],
+           inbox_json=hinbox(q(QB, 60, frm=CQ, to=OTHER)), env_extra=CHAT)
     health("HEALTH unbound ack prints the key", 0, ["ORCA ack: unbound:%s:%d" % (RUN, HOUR)],
            args=["orca-ide", "ack", "unbound:%s:%d" % (RUN, HOUR)], calls_want=[])
     # Acks: per worktree, checked before they are reported.
@@ -2789,12 +3159,18 @@ if LEGS in ("all", "health"):
             ("HEALTHREF cli shell text", ["orca-ide;id"], "!the cli is not a plain command name"),
             ("HEALTHREF run with shell text", ["orca-ide", "run_x;id"], "!the run is not run_ followed by [A-Za-z0-9_]"),
             ("HEALTHREF run with a dash", ["orca-ide", "run_x-y"], "!the run is not run_ followed by [A-Za-z0-9_]"),
-            ("HEALTHREF run and another argument", ["orca-ide", RUN, "x"], None)]:
-        text = ("usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..." if why is None else
+            ("HEALTHREF run and another argument", ["orca-ide", RUN, "x"], None),
+            ("HEALTHREF repo with shell text", ["orca-ide", "repo:x;id", RUN],
+             "!the repo: argument is not repo: followed by [A-Za-z0-9._@-]"),
+            ("HEALTHREF empty repo", ["orca-ide", "repo:", RUN], "!the repo: argument is not repo: followed by [A-Za-z0-9._@-]"),
+            ("HEALTHREF repo of another checkout", ["orca-ide", "repo:other-repo", RUN],
+             "!the repo: argument names another repo than this checkout's"),
+            ("HEALTHREF repo after the run", ["orca-ide", RUN, "repo:hrepo"], None)]:
+        text = ("usage: orca-health.sh <cli> [repo:<repo>] [<run>] or <cli> [repo:<repo>] ack <key>..." if why is None else
                 why[1:] if why.startswith("!") else "not an alert key: " + why)
         health(name, 4, ["ORCA health refused: " + text], args=args, calls_want=[])
     rc, out, calls = run([], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": HDIR})
-    good = rc == 4 and out == ["ORCA health refused: usage: orca-health.sh <cli> [<run>] or <cli> ack <key>..."] and calls == []
+    good = rc == 4 and out == ["ORCA health refused: usage: orca-health.sh <cli> [repo:<repo>] [<run>] or <cli> [repo:<repo>] ack <key>..."] and calls == []
     (ok if good else miss)("HEALTHREF no args" if good else "HEALTHREF no args: rc=%s out=%r" % (rc, out))
     rc, out, calls = run(["orca-ide"], script=HEALTH_SCRIPT, env_extra={"CEPA_ORCA_ALERT_DIR": "rel/dir"}, cwd=TMP)
     good = rc == 4 and out == ["ORCA health refused: the alert directory is not an absolute path"] and calls == []
@@ -2808,6 +3184,9 @@ if LEGS in ("all", "health"):
     # it, the holder is gone, and the Run did not move; it counts only when
     # run-show then shows this terminal one generation higher.
     RB_RUN = "run_5682a0ed1455"
+    RB_CHAT = "2fe95de0-c891-4822-aadd-efec37000852"
+    RBNOID = ("ORCA_TERMINAL_HANDLE is not a term_ handle, and this session is no chat (ORCA_STRUCTURED_SESSION=1 "
+              "with ORCA_AGENT_SESSION_ID)")
     DEAD = "term_07815dfe-0000-0000-0000-000000000000"
     def rrun(rid, holder, gen=2):
         return json.dumps({"ok": True, "result": {"run": {"id": rid, "coordinator_handle": holder,
@@ -3247,10 +3626,85 @@ if LEGS in ("all", "health"):
             ("REBINDREF field twice", "cli: orca-ide\ncli: orca-ide\n", "the cli field is given twice", {}),
             ("REBINDREF not a field", "cli: orca-ide\n$(id)\n", "a heredoc line is not a <name>: <value> field", {}),
             ("REBINDREF line after fields", "cli: orca-ide\n\nrun-use\n", "the heredoc holds a line after its fields", {}),
-            ("REBINDREF no terminal handle", "cli: orca-ide\n", "ORCA_TERMINAL_HANDLE is not a term_ handle", {"me": None}),
-            ("REBINDREF bad terminal handle", "cli: orca-ide\n", "ORCA_TERMINAL_HANDLE is not a term_ handle",
-             {"me": "term_x"})]:
+            ("REBINDREF no terminal handle", "cli: orca-ide\n", RBNOID, {"me": None}),
+            ("REBINDREF bad terminal handle", "cli: orca-ide\n", RBNOID, {"me": "term_x"}),
+            # THE CHAT needs the measured identity; a bad terminal handle
+            # beside it is still refused (it is not empty).
+            ("REBINDREF chat flag other than 1", "cli: orca-ide\n", RBNOID,
+             {"me": None, "env_extra": {"ORCA_STRUCTURED_SESSION": "yes", "ORCA_AGENT_SESSION_ID": RB_CHAT}}),
+            ("REBINDREF chat id with shell text", "cli: orca-ide\n", RBNOID,
+             {"me": None, "env_extra": {"ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": RB_CHAT[:-4] + "$(x)"}}),
+            ("REBINDREF bad terminal handle beside a chat identity", "cli: orca-ide\n", RBNOID,
+             {"me": "term_x", "env_extra": {"ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": RB_CHAT}})]:
         rebind(name, 4, ["ORCA rebind refused: " + why], stdin=stdin, calls_want=[], **kw)
+    # THE CHAT (L102 a, L103 C4): a chat or bot reports or asks, and never
+    # runs run-use, terminal list or the recheck, confirm: or not.
+    CH = {"ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": RB_CHAT}
+    CHATOK = "ORCA rebind: ok — %s is this chat's Run (its run-current reports it with no recorded holder, as a chat's Run reads)" % RB_RUN
+    def chatask(cur_txt):
+        return ["ORCA rebind: ask — this chat's run-current reports %s, not %s, and a chat never takes a Run it does "
+                "not report (run-use from a chat is not measured), so this chat cannot coordinate %s; nothing was "
+                "changed" % (cur_txt, RB_RUN, RB_RUN),
+                ASKEND + "say whether this chat creates a new Run with run-create (its workers then report there), or "
+                "another session coordinates %s" % RB_RUN]
+    TERMASK = ["ORCA rebind: ask — this chat's run-current reports %s held by terminal %s, and a chat never takes a Run "
+               "from a terminal (run-use from a chat is not measured); nothing was changed" % (RB_RUN, DEAD),
+               ASKEND + "say whether terminal %s or this chat coordinates %s (if this chat, it creates a new Run with "
+               "run-create)" % (DEAD, RB_RUN)]
+    rebind("REBIND chat with no Run says run-create binds one", 0,
+           ["ORCA rebind: ok — no Run named and run-current reports none; this chat binds a Run with run-create "
+            "(cepa:autonomy §12b, bot mode)"], stdin="cli: orca-ide\n", cur=NORUN, me=None, env_extra=CH,
+           calls_want=[RCUR])
+    rebind("REBIND chat's own null-holder Run is ok", 0, [CHATOK], stdin="cli: orca-ide\n", cur=rrun(RB_RUN, None),
+           me=None, env_extra=CH, calls_want=[RCUR])
+    rebind("REBIND chat's own Run in the measured shape is ok", 0, [CHATOK], cur=rmeasured(RB_RUN, None), me=None,
+           env_extra=CH, calls_want=[RCUR])
+    rebind("REBIND chat named Run equal to run-current is ok", 0, [CHATOK], cur=rrun(RB_RUN, None), me=None,
+           env_extra=CH, calls_want=[RCUR])
+    rebind("REBIND chat's run-current Run held by a terminal asks", 1, TERMASK, stdin="cli: orca-ide\n",
+           cur=rrun(RB_RUN, DEAD), me=None, env_extra=CH, calls_want=[RCUR])
+    rebind("REBIND chat named Run held by a terminal asks", 1, TERMASK, cur=rrun(RB_RUN, DEAD), me=None,
+           env_extra=CH, calls_want=[RCUR])
+    rebind("REBIND chat named Run that run-current does not report asks", 1, chatask("no Run"), cur=NORUN,
+           show=rrun(RB_RUN, None), me=None, env_extra=CH, calls_want=[RCUR, RSHOW])
+    rebind("REBIND chat named Run beside another current Run asks", 1, chatask("run_other"),
+           cur=rrun("run_other", None), show=rrun(RB_RUN, None), me=None, env_extra=CH, calls_want=[RCUR, RSHOW])
+    rebind("REBIND chat confirm does not take a Run", 1, chatask("no Run"), stdin=CONFIRMED, cur=NORUN,
+           show=rrun(RB_RUN, None), me=None, env_extra=CH, calls_want=[RCUR, RSHOW])
+    rebind("REBIND chat named Run that is retired says so", 2, RETIRED, cur=NORUN, show=GONE, me=None,
+           env_extra=dict(CH, STUB_RUNSHOW_RC="1"), calls_want=[RCUR, RSHOW])
+    rebind("REBIND chat run-show error is an ask, not retired", 1, chatask("no Run"), cur=NORUN, show=OTHERERR,
+           me=None, env_extra=dict(CH, STUB_RUNSHOW_RC="1"), calls_want=[RCUR, RSHOW])
+    rebind("REBIND chat run-current fails", 3, ["ORCA rebind failed: run-current failed", FAILEND], cur=NORUN,
+           me=None, env_extra=dict(CH, STUB_RUNCUR_RC="1"), calls_want=[RCUR])
+    rebind("REBIND a terminal handle wins over a chat identity", 1, NULLASK, cur=rrun(RB_RUN, None),
+           show=rrun(RB_RUN, None), env_extra=CH, calls_want=[RCUR, RSHOW])
+    # THE STRUCTURED HOLDER (coord@main 2026-11-28): a structworker_ holder is
+    # read as a null one is: never taken without confirm:, no terminal list.
+    RSW = "structworker_3c1f9a2e-808b-408e-94e7-5d2a9b1c0e44"
+    SWASK = ["ORCA rebind: ask — %s is held by the structured session %s (a chat, a bot or its worker), which no "
+             "terminal list shows, so whether it is still live and whether this session coordinates %s is unproven; "
+             "nothing was changed" % (RB_RUN, RSW, RB_RUN),
+             ASKEND + "say whether this session coordinates %s, or a chat or bot does (if this session, it runs the "
+             "re-bind again with a confirm: %s line)" % (RB_RUN, RB_RUN)]
+    rebind("REBIND structured holder without confirm asks", 1, SWASK, cur=rrun(RB_RUN, RSW), show=rrun(RB_RUN, RSW),
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND confirmed structured holder re-binds without a terminal list", 0,
+           ["ORCA rebind: done — %s moved from %s to this terminal" % (RB_RUN, RSW)], stdin=CONFIRMED,
+           cur=rrun(RB_RUN, RSW), show=rrun(RB_RUN, RSW), calls_want=NULLPATH)
+    rebind("REBIND no run field and a structured current Run asks", 1,
+           ["ORCA rebind: ask — this session named no Run; run-current reports %s held by the structured session %s (a "
+            "chat, a bot or its worker), which no terminal list shows, so it is never re-bound without run: and "
+            "confirm: lines; nothing was changed" % (RB_RUN, RSW),
+            ASKEND + "say whether this session coordinates %s, or a chat or bot does (if this session, it runs the "
+            "re-bind again with run: %s and confirm: %s lines)" % (RB_RUN, RB_RUN, RB_RUN)],
+           stdin="cli: orca-ide\n", cur=rrun(RB_RUN, RSW), calls_want=[RCUR])
+    rebind("REBIND chat's own Run held by a structured session is ok", 0,
+           ["ORCA rebind: ok — %s is this chat's Run (its run-current reports it held by the structured session %s)"
+            % (RB_RUN, RSW)], cur=rrun(RB_RUN, RSW), me=None, env_extra=CH, calls_want=[RCUR])
+    rebind("REBIND a holder that only quotes structworker_ fails", 3,
+           ["ORCA rebind failed: run-current returned a shape this reader does not know", FAILEND],
+           cur=rrun(RB_RUN, RSW + " $(id)"), calls_want=[RCUR])
     rebind("REBIND CR and trailing spaces are dropped", 0, [DONE], stdin="cli: orca-ide  \r\nrun: %s\r\n\n" % RB_RUN,
            calls_want=FULL)
 

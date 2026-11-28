@@ -34,7 +34,10 @@
 #             `.drained`, never nudged, no Run-list read); a prefix repo's
 #             bot, a bot named for the bare repo and two bots of one name are
 #             not; a failed, shapeless or missing bot list falls back to the
-#             terminal coord@main; a bot send stored for a Run stays pending.
+#             terminal coord@main. L104: a bot send stored for the bot's Run
+#             is delivered with Orca's bot request, a Run with no terminal
+#             coordinator and an open Home chat; with any one missing, or for
+#             a Run Orca did not route as a bot send, it stays pending.
 #   PRUNE   — files older than 7 days go in every status; a pending or
 #             refused one leaves an outbox_pruned alert, a delivered one none,
 #             and one already acked (L87) none.
@@ -46,8 +49,18 @@
 #             characters replaced, unknown-shape skipped unread, the #10
 #             delivered-to-a-gone-handle rule, refused never shown; ack
 #             moves the file; a linked worktree is refused.
+#   BOT     — punch-list L103 C4, C6: outside a git checkout the drain and
+#             the health check take the repo from a `repo:` argument or a
+#             `$HOME/.orca/bots/<repo>-bot` home; a chat scratch dir, a home
+#             not named `-bot`, and a `<repo>-bot` directory elsewhere are
+#             refused (drain) or read no named repo (health); a repo: of
+#             another checkout, shell text, or empty is refused; a terminal
+#             coord@main still drains (C6); a chat sender is written and
+#             shown as `orca_session_id:<id>`, and one that only quotes a
+#             session id is an unknown shape.
 #   BLOCK   — the rule 8 drain block, extracted from the skill and run under
-#             `bash -e`, passes each argument as one word.
+#             `bash -e`, passes each argument as one word, a repo: line
+#             included.
 #
 # STATED LIMITS: the stub's shapes are the 2026-11-02 measurements; a changed
 # Orca shape is caught only when it is measured again. The `-O` owner checks
@@ -371,13 +384,29 @@ check("RESOLVE a bot send to a closed chat stays pending",
       rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
       and any(l.startswith("Orca send failed: not proven stored — ") and "not an open chat of bot:dpc-pro-bot" in l
               for l in out), "rc=%s files=%s out=%s" % (rc, fl, out))
-reset()
-rc, out = send({"target": "coord:dpc-pro"}, st=state(bots=["dpc-pro-bot"], store_to="run:run_000000000001"))
-fl = files()
-check("RESOLVE a bot send stored for a Run stays pending",
-      rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
-      and "Orca send failed: not proven stored — the reply names no valid recipient" in out,
-      "rc=%s files=%s out=%s" % (rc, fl, out))
+# L104: a bot whose Home chat is bound to a Run gets the send in that Run.
+botsend("a bot send stored for its Run with Orca's bot request is delivered",
+        state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001"), 0, "bot:dpc-pro-bot",
+        want_line="Orca send stored: msg_000000abc001 for run:run_000000000001")
+for label, st, why in (
+        ("a bot send stored for a Run with no bot request stays pending",
+         state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001", mode=["botrun_nopayload"]),
+         "without Orca's bot request"),
+        ("a bot send stored for a Run with a terminal coordinator stays pending",
+         state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001", bot_run_coord=HR),
+         "a Run with a terminal coordinator"),
+        ("a bot send stored for its Run with no open Home chat stays pending",
+         state(bots=["dpc-pro-bot"], bot_chat=BOTC, bot_run="run_000000000001", mode=["botchats_closed"]),
+         "has no open Home chat"),
+        ("a bot send stored for a Run Orca did not route stays pending",
+         state(bots=["dpc-pro-bot"], store_to="run:run_000000000001"), "without Orca's bot request")):
+    reset()
+    rc, out = send({"target": "coord:dpc-pro"}, st=st)
+    fl = files()
+    check("RESOLVE " + label,
+          rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
+          and any(l.startswith("Orca send failed: not proven stored — ") and why in l for l in out),
+          "rc=%s files=%s out=%s" % (rc, fl, out))
 reset()
 rc, out = send({"target": "coord:dpc-pro"}, st=state(store_to="bogus"))
 fl = files()
@@ -632,6 +661,107 @@ check("DRAIN an outbox directory it cannot trust fails, never none",
       and not [l for l in out if "none" in l], "rc=%s out=%s" % (rc, out))
 reset()
 
+# ------------------------------------------------- BOT (L103 C4, C6)
+# A bot home is not a git checkout: the repo is the repo: argument, else the
+# home's own name `<repo>-bot` under $HOME/.orca/bots.
+BOTS = os.path.join(HOME, ".orca", "bots")
+BHOME = os.path.join(BOTS, "dpc-pro-bot")
+for d in (BHOME, os.path.join(BOTS, "fleet"), os.path.join(T, "elsewhere3", "dpc-pro-bot"), os.path.join(T, "chat")):
+    os.makedirs(d, exist_ok=True)
+CHAT_ID = "2fe95de0-c891-4822-aadd-efec37000852"
+reset()
+b1 = stamp(1) + "-Abot0001.md"
+plant("dpc-pro/" + b1, header={"sender": "orca_session_id:" + CHAT_ID}, body="from a chat")
+plant("helm/" + stamp(1) + "-Abot0002.md", body="HELM-TEXT")
+rc, out = drain(["show"], cwd=BHOME)
+shown = [l.split(" — ")[0][len("ORCA outbox file: "):] for l in out if l.startswith("ORCA outbox file: ")]
+check("BOT a <repo>-bot home drains coord:<repo>", rc == 1 and shown == [b1] and not [l for l in out if "HELM-TEXT" in l],
+      "rc=%s out=%s" % (rc, out))
+check("BOT a chat sender prints as a claim",
+      any(l.startswith("  claimed time: ") and "claimed sender: orca_session_id:%s;" % CHAT_ID in l for l in out),
+      "out=%s" % out)
+rc, out = drain(["repo:dpc-pro", "show"], cwd=os.path.join(T, "chat"))
+check("BOT a repo argument outside a checkout drains that repo",
+      rc == 1 and [l for l in out if l.startswith("ORCA outbox file: " + b1)], "rc=%s out=%s" % (rc, out))
+rc, out = drain(["repo:dpc-pro", "show"])
+check("BOT a repo argument equal to the checkout's drains it", rc == 1 and [l for l in out if b1 in l], "rc=%s out=%s" % (rc, out))
+NOREPO = ["ORCA outbox refused: not inside a git checkout, and no repo: argument or <repo>-bot home names a repo"]
+for label, cwd in (("a chat scratch dir", os.path.join(T, "chat")), ("a bot home with no -bot suffix", os.path.join(BOTS, "fleet")),
+                   ("a <repo>-bot directory outside the bots home", os.path.join(T, "elsewhere3", "dpc-pro-bot"))):
+    rc, out = drain(["show"], cwd=cwd)
+    check("BOT %s with no repo argument is refused" % label, rc == 4 and out == NOREPO, "rc=%s out=%s" % (rc, out))
+for label, args, why in (("another repo inside a checkout", ["repo:helm", "show"], "the repo: argument names another repo than this checkout's"),
+                         ("shell text", ["repo:x;id", "show"], "the repo: argument is not repo: followed by [A-Za-z0-9._@-]"),
+                         ("an empty repo", ["repo:", "show"], "the repo: argument is not repo: followed by [A-Za-z0-9._@-]"),
+                         ("a repo argument with no action", ["repo:dpc-pro"],
+                          "usage: orca-outbox.sh <cli> [repo:<repo>] show, or <cli> [repo:<repo>] ack <name>...")):
+    rc, out = drain(args)
+    check("BOT %s is refused" % label, rc == 4 and out == ["ORCA outbox refused: " + why], "rc=%s out=%s" % (rc, out))
+rc, out = drain(["repo:dpc-pro", "show"], cwd=RLANE)
+check("BOT a repo argument does not open a linked worktree",
+      rc == 4 and out == ["ORCA outbox refused: only a main checkout's coordinator drains the outbox"], "out=%s" % out)
+rc, out = drain(["ack", b1], cwd=BHOME)
+check("BOT a bot acks its repo's file",
+      rc == 0 and out == ["ORCA outbox ack: " + b1]
+      and os.path.exists(os.path.join(OBOX, "dpc-pro", "delivered", b1.replace(".md", ".drained.md"))), "rc=%s out=%s" % (rc, out))
+# C6: while repos move, a terminal coord@main of a repo with no bot drains
+# exactly as before, beside a bot home on the same machine.
+reset()
+b2 = stamp(1) + "-Abot0003.md"
+plant("dpc-pro/" + b2)
+rc, out = drain(["show"])
+check("BOT C6 a terminal coord@main still drains beside a bot home",
+      rc == 1 and [l for l in out if l.startswith("ORCA outbox file: " + b2)], "rc=%s out=%s" % (rc, out))
+# A chat's coord: send records its session id as the claimed sender.
+reset()
+rc, out = send({"target": "coord:dpc-pro"}, st=state(runs=[]),
+               extra={"ORCA_TERMINAL_HANDLE": "", "ORCA_STRUCTURED_SESSION": "1", "ORCA_AGENT_SESSION_ID": CHAT_ID})
+fl = [f for f in files() if f.startswith("dpc-pro/") and f.count("/") == 1]
+hdr = open(os.path.join(OBOX, fl[0])).read().split("\n")[:5] if len(fl) == 1 else []
+check("BOT a chat's coord send records its session id as the sender",
+      rc == 6 and "sender=orca_session_id:" + CHAT_ID in hdr, "rc=%s files=%s hdr=%s out=%s" % (rc, fl, hdr, out))
+# Quoted shape: an orca_session_id: sender with text after the id is not the
+# writer's header; it is skipped unread, as any unknown shape is.
+reset()
+plant("dpc-pro/" + stamp(1) + "-Abot0004.md", header={"sender": "orca_session_id:%s $(id)" % CHAT_ID}, body="SENTINEL-BODY-TEXT")
+rc, out = drain(["show"], cwd=BHOME)
+check("BOT a sender that only quotes a session id is an unknown shape",
+      rc == 1 and not [l for l in out if "SENTINEL-BODY-TEXT" in l]
+      and "ORCA outbox: skipped a file in an unknown shape (orca-health.sh alerts it; it is never shown)" in out,
+      "rc=%s out=%s" % (rc, out))
+# The health check from a bot home: its repo is the receiver's, so it gets
+# the inbound note; with no repo it reads no named repo's outbox.
+reset()
+plant("dpc-pro/" + b1, header={"repo": "otherrepo", "worktree": "otherrepo"})
+plant("helm/" + stamp(0.5) + "-Abot0005.md", header={"repo": "otherrepo", "worktree": "otherrepo"})
+rc, out = health([], BHOME)
+check("BOT health from a <repo>-bot home gets the inbound note",
+      any("1 outbox message for coord:dpc-pro wait; rule 8's drain block shows them" in l for l in out)
+      and not [l for l in out if "coord:helm" in l], "rc=%s out=%s" % (rc, out))
+# A chat's own coord: send (sender orca_session_id:) is counted by health,
+# and one that only quotes a session id is an unknown shape there too.
+reset()
+c1 = stamp(0.5) + "-Abot0006.md"
+plant("dpc-pro/" + c1, header={"repo": "otherrepo", "worktree": "otherrepo", "sender": "orca_session_id:" + CHAT_ID})
+rc, out = health([], BHOME)
+check("BOT health reads a chat-sent outbox file",
+      any("1 outbox message for coord:dpc-pro wait; rule 8's drain block shows them" in l for l in out)
+      and not [l for l in out if ":unknown-shape:" in l], "rc=%s out=%s" % (rc, out))
+reset()
+plant("dpc-pro/" + c1, header={"repo": "otherrepo", "worktree": "otherrepo",
+                               "sender": "orca_session_id:%s $(id)" % CHAT_ID})
+rc, out = health([], BHOME)
+check("BOT health reads a quoted chat sender as an unknown shape",
+      rc == 1 and len([l for l in out if ":unknown-shape:" in l]) == 1, "rc=%s out=%s" % (rc, out))
+reset()
+plant("dpc-pro/" + b1, header={"repo": "otherrepo", "worktree": "otherrepo"})
+plant("helm/" + stamp(0.5) + "-Abot0005.md", header={"repo": "otherrepo", "worktree": "otherrepo"})
+rc, out = health([], os.path.join(T, "chat"))
+check("BOT health with no repo reads no named repo's outbox",
+      rc == 1 and any(l.startswith("ORCA alert: orca-unreadable:repo:") and "2 alert or outbox files of named repos" in l
+                      for l in out) and not [l for l in out if l.startswith("ORCA alert: outbox:")], "rc=%s out=%s" % (rc, out))
+reset()
+
 # ---------------------------------------------------------------- BLOCK
 txt = open(SKILL).read()
 m = re.search(r"\*\*A coord@main drains its outbox every turn\.\*\*.*?```bash\n(.*?)\n\s*```", txt, re.S)
@@ -661,6 +791,15 @@ else:
     plant("dpc-pro/" + a)
     rc, out = runblk("orca-ide", "ack\n" + a)
     check("BLOCK the ack form passes each name as one argument", out == ["ORCA outbox ack: " + a], "out=%s" % out)
+    # BOT MODE: a repo: line under <cli> reaches the script as one word.
+    reset()
+    rc, out = runblk("orca-ide", "repo:dpc-pro\nshow", cwd=os.path.join(T, "chat"))
+    check("BLOCK a repo argument line reaches the script", rc == 0 and out == ["ORCA outbox: none for coord:dpc-pro"],
+          "rc=%s out=%s" % (rc, out))
+    rc, out = runblk("orca-ide", "repo:$(touch %s)\nshow" % marker, cwd=os.path.join(T, "chat"))
+    check("BLOCK a repo argument line with shell text runs nothing",
+          not os.path.exists(marker) and out == ["ORCA outbox refused: the repo: argument is not repo: followed by [A-Za-z0-9._@-]"],
+          "out=%s" % out)
     rc, out = runblk("orca-ide", "show", root=False)
     check("BLOCK with the script absent is skipped",
           rc == 0 and out == ["ORCA outbox skipped: orca-outbox.sh not found (set CEPA_PLUGIN_ROOT)"], "out=%s" % out)

@@ -10,8 +10,12 @@
 # exactly once is a MISS, never a skip: the shipped script changed shape and
 # the mutant needs re-reading.
 #
+# A mutant whose name starts with `skill-` substitutes in a temp copy of
+# plugins/cepa/skills/lane-stack/SKILL.md instead (the SETUP leg runs its
+# Setup block), and the check gets both paths.
+#
 # Every leg of the check (USAGE, CONFIG, COUNT, MEM, RUN, LOCK, LIST,
-# COUNTMODE, BUILD) has at least one mutant here whose exact case set lies inside
+# COUNTMODE, BUILD, PULL, HOLDER, SETUP) has at least one mutant here whose exact case set lies inside
 # that leg alone; the last control asserts that, so a new leg that also kills
 # an old leg's only mutant shows.
 #
@@ -26,6 +30,9 @@ python3 - <<'PY'
 import concurrent.futures, os, re, shutil, subprocess, sys, tempfile
 
 SCRIPT = "plugins/cepa/scripts/stack-gate.sh"
+SKILL = "plugins/cepa/skills/lane-stack/SKILL.md"
+HOLDER_LIVE = "HOLDER lock busy names the live holder"
+HOLDER_WAIT = "HOLDER a waiting start names the live holder"
 CHECK = "scripts/check-stack-gate.sh"
 LIST = "LIST every stack, longest idle first, repo and lane"
 
@@ -69,23 +76,23 @@ MUTANTS = [
     ("meminfo-failure-ok", 'cepa_sg_refuse "cannot read MemAvailable from', 'true "cannot read MemAvailable from',
      {"MEM missing file refuses", "MEM no MemAvailable line refuses"}),
     # RUN
-    ("exit-0", 'command "$@" {cepa_sg_fd}<&-\nexit $?', 'command "$@" {cepa_sg_fd}<&-\nexit 0',
+    ("exit-0", 'exit "$cepa_sg_rc"', 'exit 0',
      {"RUN exit code comes through"}),
     ("argv-split", 'command "$@" {cepa_sg_fd}<&-', 'command $@ {cepa_sg_fd}<&-', None),
     # LOCK
     ("no-lock", 'flock -w "$cepa_sg_wait" "$cepa_sg_fd"\n', "true\n",
      {"LOCK two starts on one count", "LOCK held lock refuses after the wait",
-      "LOCK nested gate for another project waits"}),
+      "LOCK nested gate for another project waits", "HOLDER a reused pid is not trusted", "HOLDER a stale holder file is never named", "HOLDER lock busy names the live holder", "HOLDER no holder file says unknown", "HOLDER the file records the pid's start time", "HOLDER a file with no start time is not called reused", "HOLDER a file with no valid pid names no holder", "HOLDER a stale file is overwritten by the next holder", "HOLDER hostile values print as ?"}),
     ("lock-inherited", 'command "$@" {cepa_sg_fd}<&-', 'command "$@" ', {"LOCK not held by a process the command leaves"}),
     ("nested-not-exported", 'CEPA_STACK_GATE_HELD="$cepa_sg_proj" command "$@"', 'command "$@"',
      {"LOCK nested gate for the same project runs"}),
     ("nested-any-project", 'if [ "${CEPA_STACK_GATE_HELD:-}" = "$cepa_sg_proj" ]; then',
      'if [ -n "${CEPA_STACK_GATE_HELD:-}" ]; then', {"LOCK nested gate for another project waits"}),
     ("wait-silent", 'echo "STACK gate: waiting up to ${cepa_sg_wait}s', 'true "STACK gate: waiting up to ${cepa_sg_wait}s',
-     {"LOCK a waiting start says so"}),
+     {"LOCK a waiting start says so", "HOLDER a waiting start names the live holder"}),
     ("home-unchecked", 'if [ -z "${HOME:-}" ]; then', 'if false; then', {"USAGE HOME unset"}),
     ("wait-ignored", 'flock -w "$cepa_sg_wait"', "flock -w 600",
-     {"LOCK held lock refuses after the wait", "LOCK nested gate for another project waits"}),
+     {"LOCK held lock refuses after the wait", "LOCK nested gate for another project waits", "HOLDER a reused pid is not trusted", "HOLDER a stale holder file is never named", "HOLDER lock busy names the live holder", "HOLDER no holder file says unknown", "HOLDER the file records the pid's start time", "HOLDER a file with no start time is not called reused", "HOLDER a file with no valid pid names no holder", "HOLDER a stale file is overwritten by the next holder", "HOLDER hostile values print as ?"}),
     # LIST
     ("shortest-idle-first", "-k1,1n -k2,2nr", "-k1,1n -k2,2n", {LIST}),
     ("unknown-idle-last", "-k1,1n -k2,2nr", "-k1,1nr -k2,2nr", {"LIST unreadable start time sorts first"}),
@@ -94,7 +101,7 @@ MUTANTS = [
     ("oldest-container", '[ "$t" -gt "${newest[$p]}" ]', '[ "$t" -lt "${newest[$p]}" ]', {LIST}),
     ("repo-from-project", 'repo="${w%/.claude/worktrees/*}"; repo="${repo##*/}"', 'repo="${proj%%-wt-*}"', {LIST}),
     ("label-uncleaned", "printf '%s' \"${v//[!A-Za-z0-9._\\/-]/?}\"", "printf '%s' \"$v\"",
-     {"LIST hostile label prints as ?"}),
+     {"LIST hostile label prints as ?", "HOLDER hostile values print as ?"}),
     # COUNTMODE
     ("count-creates-dir", 'then shift; cepa_sg_count_mode "$@"; fi',
      'then shift; mkdir -p "$cepa_sg_dir"; cepa_sg_count_mode "$@"; fi', {"COUNTMODE creates nothing"}),
@@ -177,19 +184,90 @@ MUTANTS = [
      'if false; then\n    cepa_sg_build_refuse', {"BUILD inside a gated command refuses"}),
     ("build-wait-key-ignored", "      build_wait_seconds) cepa_sg_bwait=$val ;;\n", "",
      {"BUILD held build lock refuses after the wait", "BUILD lock outlives a gate killed mid-build"}),
+    # PULL (L70 item 3)
+    ("pull-takes-lock", '  echo "STACK pull: pulling — ', '  mkdir -p "$cepa_sg_dir"; exec {pfd}<"$cepa_sg_dir"; flock "$pfd"\n  echo "STACK pull: pulling — ',
+     {"PULL pulls missing pull-only images, no lock"}),
+    ("pull-every-tag", 'pull --ignore-buildable --policy missing\n', 'pull --ignore-buildable\n',
+     {"PULL pulls missing pull-only images, no lock", "PULL a failed pull's code comes through", "SETUP a failed migration after release stops the stack", "SETUP a refused start migrates nothing", "SETUP migrations run after the lock is released", "SETUP a failed final stop fails setup", "SETUP a failed pull starts nothing"}),
+    ("pull-flags-unchecked", "  if ! grep -qE -- '(^|[[:space:],])--ignore-buildable([[:space:]]|$)' <<<\"$help\" ||\n    ! grep -qE -- '(^|[[:space:],])--policy([[:space:]]|$)' <<<\"$help\"; then",
+     "  if false; then", {"PULL a Compose without the flags skips", "PULL a Compose without --policy skips", "PULL a Compose without --ignore-buildable skips"}),
+    ("pull-policy-unchecked", " ||\n    ! grep -qE -- '(^|[[:space:],])--policy([[:space:]]|$)' <<<\"$help\"; then", "; then",
+     {"PULL a Compose without --policy skips"}),
+    ("pull-help-failure-pulls", 'so its flags cannot be checked; the start pulls what is missing, under the lock"\n    exit 0\n',
+     'so its flags cannot be checked; the start pulls what is missing, under the lock"\n    help="--ignore-buildable --policy"\n',
+     {"PULL a failed pull --help skips"}),
+    ("pull-exit-0", 'pull --ignore-buildable --policy missing\n  exit $?', 'pull --ignore-buildable --policy missing\n  exit 0',
+     {"PULL a failed pull's code comes through", "SETUP a failed pull starts nothing"}),
+    ("pull-under-gate-ok", 'if [ -n "${CEPA_STACK_GATE_HELD:-}" ]; then\n    echo "STACK pull: refused',
+     'if false; then\n    echo "STACK pull: refused', {"PULL inside a gated command refuses"}),
+    ("pull-no-project", '  COMPOSE_PROJECT_NAME="$cepa_sg_proj" command "$@" pull --ignore-buildable', '  COMPOSE_PROJECT_NAME= command "$@" pull --ignore-buildable',
+     {"PULL pulls missing pull-only images, no lock", "PULL a failed pull's code comes through"}),
+    # HOLDER (L70 item 4)
+    ("holder-not-written", 'cepa_sg_write_holder\nCEPA_STACK_GATE_HELD=', 'CEPA_STACK_GATE_HELD=', {HOLDER_LIVE, HOLDER_WAIT, "HOLDER the file records the pid's start time", "HOLDER a failed write warns and the start goes on", "HOLDER a newline in the lane adds no field", "HOLDER a stale file is overwritten by the next holder", "HOLDER the lane is the git top level"}),
+    ("holder-not-removed", 'rm -f "$cepa_sg_holder" 2>/dev/null {cepa_sg_fd}<&-\nexit', 'exit', {"HOLDER the file is gone once the command returns"}),
+    ("holder-not-on-refusal", 'for ${cepa_sg_wait}s; $(cepa_sg_holder_desc)" ;;', 'for ${cepa_sg_wait}s" ;;',
+     {HOLDER_LIVE, "HOLDER a stale holder file is never named", "HOLDER a reused pid is not trusted",
+      "HOLDER no holder file says unknown", "HOLDER a file with no start time is not called reused", "HOLDER a file with no valid pid names no holder", "HOLDER a stale file is overwritten by the next holder", "HOLDER hostile values print as ?"}),
+    ("holder-not-on-wait", "another start's lock on $cepa_sg_dir; $(cepa_sg_holder_desc)\" >&2", "another start's lock on $cepa_sg_dir\" >&2",
+     {HOLDER_WAIT}),
+    ("holder-trusts-dead-pid", '  elif ! cepa_sg_pstart "$pid"; then', '  elif ! cepa_sg_pstart "$pid" && false; then',
+     {"HOLDER a stale holder file is never named"}),
+    ("holder-start-unchecked", '  elif [ "$cepa_sg_pst" != "$pst" ]; then', '  elif false; then', {"HOLDER a reused pid is not trusted"}),
+    ("holder-blocks", 'mkdir -p -m 700 "$cepa_sg_dir" 2>/dev/null || cepa_sg_refuse "cannot create $cepa_sg_dir for the lock"',
+     'mkdir -p -m 700 "$cepa_sg_dir" 2>/dev/null || cepa_sg_refuse "cannot create $cepa_sg_dir for the lock"; [ ! -e "$cepa_sg_holder" ] || cepa_sg_refuse "lock busy — $(cepa_sg_holder_desc)"',
+     {"HOLDER a stale holder file never blocks", "HOLDER a waiting start names the live holder", "HOLDER a stale file is overwritten by the next holder"}),
+    ("holder-wrong-field", '[[ ${20:-} =~ ^[0-9]+$ ]] || return 1\n  cepa_sg_pst="${20}"', '[[ ${19:-} =~ ^[0-9]+$ ]] || return 1\n  cepa_sg_pst="${19}"',
+     {"HOLDER the file records the pid's start time", "HOLDER hostile values print as ?"}),
+    # SETUP (L70 item 2): substitutions in the lane-stack skill's Setup block.
+    ("skill-no-trap", "trap lane_stop EXIT\n", "",
+     {"SETUP migrations run after the lock is released", "SETUP a failed migration after release stops the stack", "SETUP a failed final stop fails setup", "SETUP a failed pull starts nothing"}),
+    ("skill-stop-hides-rc", 'rc=1\n  fi\n  exit "$rc"', 'rc=1\n  fi\n  exit 0',
+     {"SETUP a failed migration after release stops the stack", "SETUP a refused start migrates nothing", "SETUP a failed final stop fails setup", "SETUP a failed pull starts nothing"}),
+    ("skill-migrate-under-lock", 'bash "$GATE" "$PROJECT" -- "${COMPOSE[@]}" up -d --no-build\nlane_migrate\n',
+     'export -f lane_migrate note\nbash "$GATE" "$PROJECT" -- bash -c \'"$@" up -d --no-build && lane_migrate\' _ "${COMPOSE[@]}"\n',
+     {"SETUP migrations run after the lock is released", "SETUP a failed migration after release stops the stack", "SETUP a failed final stop fails setup"}),
+    ("skill-pull-dropped", 'bash "$GATE" --pull "$PROJECT" -- "${COMPOSE[@]}"\n', '',
+     {"SETUP migrations run after the lock is released", "SETUP a failed migration after release stops the stack", "SETUP a failed final stop fails setup", "SETUP a failed pull starts nothing"}),
+    ("skill-stop-failure-ok", '    [ "$rc" -ne 0 ] || rc=1\n', '', {"SETUP a failed final stop fails setup"}),
+    ("skill-pull-ignored", '--pull "$PROJECT" -- "${COMPOSE[@]}"\n', '--pull "$PROJECT" -- "${COMPOSE[@]}" || true\n',
+     {"SETUP a failed pull starts nothing"}),
+    ("pull-buildable-unchecked", "  if ! grep -qE -- '(^|[[:space:],])--ignore-buildable([[:space:]]|$)' <<<\"$help\" ||\n    ! grep", "  if ! grep",
+     {"PULL a Compose without --ignore-buildable skips"}),
+    ("holder-unclean", '"$(cepa_sg_clean "$proj")" "$(cepa_sg_clean "$lane")"', '"$proj" "$lane"',
+     {"HOLDER hostile values print as ?"}),
+    ("holder-any-pid", '  if [[ ! $pid =~ ^[0-9]{1,10}$ ]]; then', '  if false; then',
+     {"HOLDER a file with no valid pid names no holder"}),
+    ("holder-unknown-start-reused", '  elif [[ ! $pst =~ ^[0-9]+$ ]]; then', '  elif false; then',
+     {"HOLDER a file with no start time is not called reused"}),
+    ("holder-no-overwrite", 'cepa_sg_write_holder() {\n', 'cepa_sg_write_holder() {\n  [ ! -e "$cepa_sg_holder" ] || return 0\n',
+     {"HOLDER a stale file is overwritten by the next holder"}),
+    ("holder-lane-pwd", '{cepa_sg_fd}<&-) && [ -n "$top" ] ||\n    top="$PWD"', '{cepa_sg_fd}<&-) && false ||\n    top="$PWD"',
+     {"HOLDER the lane is the git top level"}),
+    ("holder-write-unfiltered", '  top="${top//[!A-Za-z0-9._\\/-]/?}"\n', '',
+     {"HOLDER a newline in the lane adds no field"}),
+    ("holder-warn-silent", '    echo "STACK gate: WARN — cannot write $cepa_sg_holder', '    true "STACK gate: WARN — cannot write $cepa_sg_holder',
+     {"HOLDER a failed write warns and the start goes on"}),
+    ("holder-write-fatal", '    echo "STACK gate: WARN — cannot write $cepa_sg_holder; a lock-busy refusal will not name this start" >&2',
+     '    cepa_sg_refuse "cannot write $cepa_sg_holder"',
+     {"HOLDER a failed write warns and the start goes on"}),
+    ("skill-no-errexit", "set -eu\nlane_stop()", "set -u\nlane_stop()", {"SETUP a refused start migrates nothing", "SETUP a failed pull starts nothing"}),
 ]
 
 src = open(SCRIPT).read()
+skill_src = open(SKILL).read()
 passed = failed = 0
 
 
-def run(text):
+def run(text, skill_text=None):
     d = tempfile.mkdtemp(prefix="cepa-sg-mut-")
     p = os.path.join(d, "stack-gate.sh")
+    sp = os.path.join(d, "SKILL.md")
     with open(p, "w") as f:
         f.write(text)
+    with open(sp, "w") as f:
+        f.write(skill_src if skill_text is None else skill_text)
     try:
-        r = subprocess.run(["bash", CHECK, p], capture_output=True, text=True, timeout=600)
+        r = subprocess.run(["bash", CHECK, p, sp], capture_output=True, text=True, timeout=600)
     finally:
         shutil.rmtree(d, ignore_errors=True)
     cases = set()
@@ -213,11 +291,15 @@ passed += 1
 jobs = {}
 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
     for name, old, new, want in MUTANTS:
-        if src.count(old) != 1:
-            print(f"MISS control {name}: anchor found {src.count(old)} times, want 1")
+        target = skill_src if name.startswith("skill-") else src
+        if target.count(old) != 1:
+            print(f"MISS control {name}: anchor found {target.count(old)} times, want 1")
             failed += 1
             continue
-        jobs[name] = (want, ex.submit(run, src.replace(old, new)))
+        if name.startswith("skill-"):
+            jobs[name] = (want, ex.submit(run, src, skill_src.replace(old, new)))
+        else:
+            jobs[name] = (want, ex.submit(run, src.replace(old, new)))
     results = {n: (w, f.result()) for n, (w, f) in jobs.items()}
 
 for name, (want, (rc, cases, out)) in results.items():
@@ -233,7 +315,7 @@ for name, (want, (rc, cases, out)) in results.items():
     else:
         passed += 1
 
-LEGS = ["USAGE", "CONFIG", "COUNT", "MEM", "RUN", "LOCK", "LIST", "COUNTMODE", "BUILD"]
+LEGS = ["USAGE", "CONFIG", "COUNT", "MEM", "RUN", "LOCK", "LIST", "COUNTMODE", "BUILD", "PULL", "HOLDER", "SETUP"]
 for leg in LEGS:
     own = [n for n, (w, _) in results.items()
            if w and all(c.split(" ", 1)[0] == leg for c in w) and results[n][1][1] == w]

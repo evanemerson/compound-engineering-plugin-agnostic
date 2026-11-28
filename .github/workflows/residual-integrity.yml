@@ -804,11 +804,13 @@ jobs:
     # plugins/cepa/scripts/stack-gate.sh (punch-list L66), which counts the
     # running -wt- stacks and free memory and runs the start under its lock.
     # The check runs it against a stub docker and a fixture meminfo and never
-    # reaches Docker; the controls mutate it. About 15 seconds for the check,
-    # 4 minutes for the controls. Headers own the legs and limits. Static
-    # commands, no workflow-context interpolation.
+    # reaches Docker; the controls mutate it and the lane-stack skill's Setup
+    # block, which the check runs. Measured on a dev box at load 16 on 16
+    # cores, not on a hosted runner (L70 items 2-4): about 24 seconds for the
+    # check, about 18 minutes for the controls, so the limit is 30. Headers own the legs
+    # and limits. Static commands, no workflow-context interpolation.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check stack gate

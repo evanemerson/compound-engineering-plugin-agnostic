@@ -1,0 +1,56 @@
+# Residuals — fix/matrix/bot-send-proof (punch-list L104)
+
+Worker: tab55@matrix (task_7ce1d9e8b21d). coord@main owns the punch list;
+this shard holds what this branch did not close.
+
+## Undone items (2026-11-28)
+
+1. [P2] STATED GAP: no Orca 1.4.280 read ties a `run:<id>` to a bot. A
+   bot send stored for a Run counts on Orca's own routing (the row's
+   `botRequest` payload), plus that Run having no terminal coordinator and
+   the bot having an open Home chat (coord@main chose this, option A,
+   msg_0ae56781f0c4). Fields read and found lacking: `bot list`, `bot chats
+   --json`, `run-show`, `run-list`, `run-current --from orca_session_id:`
+   (refused: `session_caller_chat_not_declarable`), `~/.orca/bots/<name>/bot.json`.
+   Used: the row's `payload.botRequest`, which marks mail to a bot but does
+   not name which bot. A Run row found only by the read-back is never
+   counted (PR #155 review: it may be an identical send to another bot).
+   An Orca field that names a bot's Run (or a chat's bound Run) would close
+   it: ask upstream, or re-check on each Orca upgrade.
+2. [P3] Still not measured: the `orchestration send` reply's own
+   `result.message.to_handle` for a `bot:` target (#149's item 1). No test
+   send was made: `bot create` makes a bot only when its owner accepts a
+   card, so there was no bot of this worker's own to send to. Both stored
+   forms are now accepted; orca-lab's re-measure settles which the reply
+   carries. This is the open half of item 1 in
+   memory/tasks.d/2026-11-27-fix-optimization-send-bot-addressing.md
+   (#149's shard). That shard's line was not edited here (another worker's
+   shard): coord@main may want to note on it that the STORED row is now
+   counted in both forms and only the send reply's field stays open.
+3. [P3] Measured 2026-11-28: a bot's Home chat bound to a Run gets mail in
+   `run:<id>` (orca-lab-bot), and one with no Run in `orca_session_id:<chat>`
+   (fleet). When Orca binds or unbinds that Run is not measured; the script
+   takes either form.
+
+## Undone items from the PR #155 review (2026-11-28)
+
+Findings file: todos/review-2026-11-28-023851-fix-matrix-bot-send-proof.md.
+
+4. [P3] (finding 12) Test gaps left open in the BOTRUN leg: run-show and
+   bot chats `ok` given as a truthy non-true value; `coordinator_handle: ""`;
+   a payload that parses to a non-object (`"[]"`, a double-encoded string);
+   a run-show with no `run` object; the `bot_reply_not_yours` hint on the
+   outbox and alert path — `plugins/cepa/scripts/orca-send.sh` bot-Run leg.
+5. [P3] (finding 13) A `payload` that Orca returns as an object, not a JSON
+   string, reads as no bot request, so every bot-to-Run send would be
+   `not proven stored` (fails closed). Measured as a string on Orca 1.4.280;
+   re-check on each Orca upgrade — `orca-send.sh` re-read `botreq()`.
+6. [P3] (finding 14) A stored row outside the 200-row re-read window exits
+   5 as "no message stored" though it may be stored (from before this PR;
+   the new leg inherits it) — `orca-send.sh` THE RE-READ.
+7. [P3] (finding 15) The `orca_session_id:` bot leg still takes any open
+   chat of the bot, not only its Home chat (#149's deferred item 10) —
+   `orca-send.sh` chat-ownership check.
+8. [P3] (finding 16) #149's shard item 1 still says any bot `to_handle` but
+   `orca_session_id:` is not proven stored; a `run:` form now counts. That
+   shard belongs to another worker: coord@main updates it.
