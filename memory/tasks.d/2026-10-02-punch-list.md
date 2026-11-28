@@ -1749,7 +1749,7 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
 L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mutant edits.**
     status: pending
     severity: P3
-    owner: unassigned — next lane after tab54 and tab55 merge (both edit check-orca-nudge*) —  (via `/cepa:compound`, with L51)
+    owner: matrix (tab59@matrix, 2026-11-28: instance 4 + the mechanical check)
     2026-11-28: rule RECORDED by PR #150 (bfde0cd, CLAUDE.md "A leg that runs
     a fenced block selects it by a line no mutant edits"). Still open: L56
     instance 4 (check-orca-nudge.sh BLOCK leg, mutant
@@ -2077,7 +2077,7 @@ L68. **Gate lock held through a cold `up -d --build` (PR #126 deferred P2 #7).**
 L69. **L61 follow-ups from PR #127's review (finding #15 + P3s #16-#26).**
     status: pending
     severity: P2
-    owner: unassigned (gain, after #127 merges)
+    owner: optimization (tab58@optimization, 2026-11-28: #16-#26)
     #15 (P2): a new coord@main is shown, for 7 days, every message its
     predecessor already received live (plan-review #10's rule). Worker's
     recommended fix: keep the `msg_` id in the delivered file name and show
@@ -3155,8 +3155,8 @@ L104. ~~**`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to 
     answered: a bot send's to_handle is run:<id> (flipped there).
 
 
-L105. **`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**
-    status: pending
+L105. ~~**`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**~~
+    status: completed
     severity: P2
     owner: formulation (tab57@formulation; re-route branch only, beside tab55)
     From orca-lab (msg_ceda090dbc42, 2026-11-28, sent by orca-lab-bot from a
@@ -3177,6 +3177,31 @@ L105. **`orca-send.sh` reports a send re-routed to the target worker's own Dispa
     dispatch: re-route beside run:; D4 tests for own Dispatch, another
     terminal's Dispatch, and worker-show failing. orca-lab re-measures on
     the next release.
+    DONE 2026-11-28: PR #154 merged `8739986` (1.63.2). tab57 done
+    (msg_4afabac741c5), head e8f1034 = Handoff. coord@main merged origin/main
+    in the lane: manifests plus the EXACT kill sets of send-send-short and
+    send-inbox-short in check-orca-nudge-controls.sh conflicted; resolved as
+    the union of both sides minus the case #155 renamed, controls 541/541
+    on the merged tree, CI 70/70 green on dcb1e68. Measured by tab57: Orca's
+    worker-show result.terminal is an object, so D2 reads terminal.handle.
+    formulation parked, branch deleted, tab57's terminal gone from terminal
+    list, loaded plugin 1.63.2 (freshness rc=0). Residuals:
+    `memory/tasks.d/2026-11-28-fix-formulation-dispatch-reroute-delivered.md`;
+    its P2 is filed as L106.
+
+L106. **A re-route, chat or downgraded nudge skip in `orca-send.sh` writes no `nudge_skipped` alert.**
+    status: pending
+    severity: P2
+    owner: unassigned — after tab58 (L69) merges (both edit orca-send.sh)
+    From tab57's review of #154 (finding 1; older than #154). The header says
+    every nudge skip but one on the target's own row writes an alert, but
+    the `stored for another handle` skip, the chat skip and the downgraded
+    skip write none, so a session that drops its ending line leaves mail
+    unread with no orca-health.sh trace. Fix: add the alert and its reason in
+    orca-health.sh's REASONS together, or change the header to name these
+    skips as alert-free. Source:
+    `memory/tasks.d/2026-11-28-fix-formulation-dispatch-reroute-delivered.md`
+    (the P2 line).
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
