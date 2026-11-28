@@ -49,6 +49,10 @@
 #              warning on stderr. Either mktemp failing (the first, or the
 #              second, for the stderr file): `mktemp failed`. Every case
 #              runs with its own TMPDIR and asserts it is empty after.
+#              hostile-json-in-cwd plants a `json.py` in the block's cwd that
+#              exits 0 and marks a file: the probe answers ok:false, so a
+#              block whose python3 is not `-I` reads present, and the mark
+#              shows the planted file ran.
 #   TITLE-BLOCK — 12b rule 6 holds exactly one ```bash block (indented under
 #              its list item). A miss stops the run.
 #   TITLE-BOUNDS — that block bounds the rename with the literal
@@ -70,7 +74,11 @@
 #              (the title is ONE argument with the U+00B7 separator), that the
 #              stub ran exactly when the line is not `skipped`, an empty stderr
 #              (bar the SIGKILL notice on the hang case), an empty TMPDIR, and
-#              that no name was evaluated as shell. The cli cases (punch-list
+#              that no name was evaluated as shell. hostile-json-in-cwd runs
+#              from a directory inside the worktree (so `<repo>` resolves)
+#              that holds the planted `json.py`, with a rename that is not ok:true;
+#              it must read failed, and the planted file must not run. The
+#              cli cases (punch-list
 #              L46: the block once spliced `<cli>` unquoted, so shell text in
 #              it ran) put `;`, `$(…)`, a non-Orca name, a relative path, a
 #              path other than ORCA_CLI_COMMAND (unset, or naming another
@@ -198,8 +206,22 @@ def answer(json_text, after=""):
     return ('if [ "$*" = "status --json" ]; then\ncat <<\'J\'\n%s\nJ\n%s\n'
             'else echo "unexpected argv: $*"; fi' % (json_text, after))
 
+# A json.py that a python3 without -I imports from its cwd: it marks a file
+# beside itself and exits 0, so a probe that reads it says ok:true.
+HOSTILE_JSON = ('import os, sys\n'
+                'open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "json-ran"), "w").close()\n'
+                'sys.exit(0)\n')
+
+def plant_json(d):
+    with open(os.path.join(d, "json.py"), "w") as f:
+        f.write(HOSTILE_JSON)
+    mark = os.path.join(d, "json-ran")
+    if os.path.exists(mark):
+        os.remove(mark)
+    return mark
+
 def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.0, ran=None, calls=None,
-             mktemp_fails_at=None, check_stderr=False):
+             mktemp_fails_at=None, check_stderr=False, hostile_json=False):
     case = os.path.join(TMP, name)
     sd, td = os.path.join(case, "stubs"), os.path.join(case, "tools")
     os.makedirs(sd); os.makedirs(td)
@@ -213,6 +235,7 @@ def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.
     marks = os.path.join(case, "marks")
     tmpd = os.path.join(case, "tmp")
     os.makedirs(marks); os.makedirs(tmpd)
+    json_mark = plant_json(case) if hostile_json else None
     stub(sd, "uname", "echo %s" % uname)
     if mktemp_fails_at is not None:
         # A mktemp that fails on its Nth call and is the real one otherwise.
@@ -248,6 +271,8 @@ def run_case(name, want, stubs=(), env=None, uname="Linux", drop=(), max_took=4.
         bad.append("bare `orca` ran on Linux")
     if check_stderr and r.stderr:
         bad.append("stderr %r" % r.stderr[:120])
+    if json_mark and os.path.exists(json_mark):
+        bad.append("python3 imported the json.py planted in its cwd")
     if os.listdir(tmpd):
         bad.append("left %s in TMPDIR" % os.listdir(tmpd))
     if calls is not None:
@@ -366,6 +391,9 @@ run_case("mktemp-err-file-fails", "ORCA: absent (mktemp failed)", stubs=OK_STUB,
 run_case("env-retry-vsock-then-hangs", ABSENT_FAIL,
          stubs=[("orca-ide", flaky(1, VSOCK).replace(answer(STATUS_OK), HANG))], env=ENV_IDE,
          ran=["orca-ide"], calls=2, max_took=1.2)
+# A json.py in the cwd must not be imported (review 094500 #24).
+run_case("hostile-json-in-cwd", ABSENT_BAD, stubs=[("orca-ide", answer('{"ok": false}'))],
+         hostile_json=True)
 
 # --- TITLE ---
 # 12b rule 6's block, run as the agent runs it: <cli> becomes a stub, the name
@@ -413,7 +441,8 @@ RENAME_OK = 'printf "%s\\n" "$@" >ARGV\necho \'{"id": "r", "ok": true, "result":
 TERM_ENV = {"ORCA_TERMINAL_HANDLE": "term_self-1"}
 
 def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="self",
-              env=None, argv=None, max_took=4.0, fail_tools=(), killed=False, cli="orca-ide"):
+              env=None, argv=None, max_took=4.0, fail_tools=(), killed=False, cli="orca-ide",
+              hostile_json=False):
     name = "title-" + name
     case = os.path.join(TMP, name)
     sd, td, tmpd = (os.path.join(case, d) for d in ("stubs", "tools", "tmp"))
@@ -441,6 +470,7 @@ def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="se
     pwned = os.path.join(cwd, "pwned")
     if os.path.exists(pwned):
         os.remove(pwned)
+    json_mark = plant_json(cwd) if hostile_json else None
     rfd, wfd = os.pipe()  # held open: a CLI reading this stdin never sees EOF
     t0 = time.time()
     try:
@@ -475,6 +505,8 @@ def run_title(name, want, cwd, stub_body=RENAME_OK, sname="tab7@roles", term="se
             bad.append("argv %r, want %r" % (got, argv))
     if os.path.exists(pwned):
         bad.append("a name was evaluated as shell")
+    if json_mark and os.path.exists(json_mark):
+        bad.append("python3 imported the json.py planted in its cwd")
     if bad:
         miss("%s: %s" % (name, "; ".join(bad)))
     else:
@@ -540,6 +572,15 @@ run_title("cli-path-env-differs", skipped("a cli path must equal ORCA_CLI_COMMAN
 run_title("cli-path-is-env", 'ORCA title: set "%s" on term_self-1' % TITLE, WT,
           cli="STUBS/orca-ide", env=dict(TERM_ENV, ORCA_CLI_COMMAND="STUBS/orca-ide"),
           argv=rename_argv("term_self-1"))
+# A json.py in the cwd must not be imported (review 125030 #15). The cwd is a
+# directory inside the worktree, so <repo> still resolves.
+HOSTILE_DIR = os.path.join(WT, "hostile")
+try:
+    os.makedirs(HOSTILE_DIR, exist_ok=True)
+except OSError as e:
+    miss("TITLE: cannot make %s: %r" % (HOSTILE_DIR, e)); finish()
+run_title("hostile-json-in-cwd", NOT_OK, HOSTILE_DIR, stub_body='echo \'{"ok": false}\'', env=TERM_ENV,
+          hostile_json=True)
 
 # --- CITES ---
 sec12 =re.search(r"^## 12\..*?(?=^## |\Z)", text, re.M | re.S)
