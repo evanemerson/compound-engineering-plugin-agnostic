@@ -1650,7 +1650,7 @@ L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
 L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
     status: pending
     severity: P3
-    owner: unassigned (via `/cepa:compound`)
+    owner: matrix (tab53@matrix) —  (via `/cepa:compound`)
     review-2026-10-30-192000 #16. L48 measured 7 shard lines that lagged
     findings or punch-list items already closed. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -1740,7 +1740,7 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
 L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mutant edits.**
     status: pending
     severity: P3
-    owner: unassigned (via `/cepa:compound`, with L51)
+    owner: matrix (tab53@matrix) —  (via `/cepa:compound`, with L51)
     From tab25@roles (L46): three of its mutants first went red only because
     the block they mutated was no longer found, not because the leg caught
     the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
@@ -2886,9 +2886,12 @@ L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches aft
     repo's coord@main).
 
 L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca threads on the root.**
-    status: pending
+    status: completed
     severity: P2
     owner: optimization (tab50@optimization, with L98 and L103 C1–C2)
+    Closed 2026-11-28: PR #149 merged a9d400d (1.61.0; loaded, freshness
+    rc=0), with L97, L98 and L103 C1-C2. Residuals:
+    memory/tasks.d/2026-11-27-fix-optimization-send-bot-addressing.md.
     From orca-lab coord@main (msg_304b19dbda9c, 2026-11-23; sender-reported,
     Orca 1.4.264, cepa 1.60.4). Alert 1795389024-4JM95YWl (send_unproven,
     reply to msg_a3c163427775, 23:10 UTC 2026-11-22): the reply
@@ -2903,9 +2906,12 @@ L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca t
     (see L98).
 
 L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address (Chat and bot sessions).**
-    status: pending
+    status: completed
     severity: P2
     owner: optimization (tab50@optimization)
+    Closed 2026-11-28: PR #149 merged a9d400d (1.61.0; loaded, freshness
+    rc=0), with L97, L98 and L103 C1-C2. Residuals:
+    memory/tasks.d/2026-11-27-fix-optimization-send-bot-addressing.md.
     From orca-lab coord@main (msg_0aba81bb605b, 2026-11-23; sender-reported).
     evan-skills (term_df1c30ed) replying to an ai-lab Chat session that
     sends as `orca_session_id:34fefe5b-…` failed "the reply names no valid
@@ -2918,9 +2924,16 @@ L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address
     designing the send side.
 
 L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) as an unknown shape.**
-    status: pending
+    status: completed
     severity: P1
     owner: matrix (tab49@matrix)
+    Closed 2026-11-28: PR #148 merged 6a667f6 (1.60.6 after coord re-bump;
+    loaded, freshness rc=0). A null holder now reads as "holder unknown":
+    no confirm: → ask, change nothing; run: + confirm: → run-use with the
+    same re-read and generation +1 proof. Residuals (orca-health.sh has the
+    same null gap → C4; C2 resolver check; no liveness proof for a confirmed
+    null takeover; removedWork meaning unmeasured):
+    memory/tasks.d/2026-11-27-rebind-null-holder.md.
     From dpc-pro coord@main (outbox 20261123T184816Z-ZzkhPnO8, 2026-11-23;
     sender-reported) and measured here 2026-11-24 on Orca 1.4.272:
     `orchestration run-show --id run_2010992e1390 --json --full` returned
@@ -2951,7 +2964,7 @@ L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) 
 L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**
     status: pending
     severity: P3
-    owner: unassigned
+    owner: optimization (tab54@optimization, with L103 C4)
     From orca-lab coord@main (outbox 20261123T221226Z-V1IMzqej, 2026-11-23;
     sender-reported). Seen 2026-11-21/22: send-failed:1795220283-wtiMVv6g,
     1795220286-tsqnxFHs and 1795389024-4JM95YWl appeared in several
@@ -2975,7 +2988,7 @@ L101. **A merge approval relayed by Orca message does not pass the worker's auto
 L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) cannot re-bind, receive `coord:` mail, or know to drain its outbox.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: optimization (tab54@optimization, with L103 C4)
     Two reports, both sender-reported, not measured here:
     (a) artist360-docs via orca-lab (outbox 20261124T135518Z-ODlMZKs6): a
     coordinator prompt with an `Orca Run:` line started in an Orca structured
@@ -2999,9 +3012,9 @@ L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) c
 L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     status: pending
     severity: P1
-    owner: split — C1+C2 optimization (tab50, with L97/L98); C3 matrix
-      (tab49, = L99); C4+C6 formulation after those two merge (with L100,
-      L102).
+    owner: split — C1+C2 DONE (#149); C3 DONE (#148, = L99); C4+C6
+      optimization (tab54@optimization, with L100, L102, and tab49's
+      orca-health.sh null-holder residual).
     From orca-lab coord@main (outbox 20261127T143049Z-XWjIEHec and
     20261127T234154Z-sgFeoj80, 2026-11-27; sender-measured on Orca 1.4.272
     and 1.4.280; evidence in evanemerson/orca-lab
@@ -3031,6 +3044,31 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     bot:orca-lab-bot stores; C2 coord:orca-lab resolves to the bot; C3
     rebind refuses a null Run it does not own; C4 health and outbox from a
     bot).
+
+L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
+    status: pending
+    severity: P1
+    owner: matrix (tab55@matrix)
+    Measured here 2026-11-28 on Orca 1.4.280, cepa 1.61.0 (#149): coord@main
+    sent a status to `coord:orca-lab`; orca-send.sh printed "Orca send
+    resolved: coord:orca-lab is bot:orca-lab-bot", then "Orca send failed:
+    not proven stored — the reply names no valid recipient", kept outbox
+    copy orca-lab/20261128T043420Z-nNqTGeyx.md as pending, and wrote alert
+    1795840460-hEHPRYn7. But Orca stored it: `orchestration inbox --limit 30
+    --full --json` row msg_ede2e13a5255, type status, to_handle
+    `run:run_cf8f7c0d2b33`, run_id run_cf8f7c0d2b33, thread_id null,
+    delivered_at 04:34:20Z, read 1; and `bot chats --bot orca-lab-bot
+    --json` shows the Home chat (id 2fe95de0-…, home true, closed false)
+    with lastAsked = that message. So the read-back's bot: leg (it requires
+    to_handle `orca_session_id:`) is wrong for a send TO a bot; #149's own
+    stated gap ("a bot send's own to_handle, not measured"). `bot list`
+    gives no run id (fields: id, name, agent, paused, linked, specialty,
+    chats). Fix: accept to_handle `run:<id>` for a bot: target when the
+    run is provably the bot's (find what proves it — e.g. the bot Home
+    chat's lastAsked, or a bot/run field), and keep every other proof.
+    Side effect: the pending outbox copy will be shown again to orca-lab as
+    a duplicate of msg_ede2e13a5255 (orca-lab told).
+
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
