@@ -3044,6 +3044,31 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     bot:orca-lab-bot stores; C2 coord:orca-lab resolves to the bot; C3
     rebind refuses a null Run it does not own; C4 health and outbox from a
     bot).
+
+L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
+    status: pending
+    severity: P1
+    owner: matrix (tab55@matrix)
+    Measured here 2026-11-28 on Orca 1.4.280, cepa 1.61.0 (#149): coord@main
+    sent a status to `coord:orca-lab`; orca-send.sh printed "Orca send
+    resolved: coord:orca-lab is bot:orca-lab-bot", then "Orca send failed:
+    not proven stored — the reply names no valid recipient", kept outbox
+    copy orca-lab/20261128T043420Z-nNqTGeyx.md as pending, and wrote alert
+    1795840460-hEHPRYn7. But Orca stored it: `orchestration inbox --limit 30
+    --full --json` row msg_ede2e13a5255, type status, to_handle
+    `run:run_cf8f7c0d2b33`, run_id run_cf8f7c0d2b33, thread_id null,
+    delivered_at 04:34:20Z, read 1; and `bot chats --bot orca-lab-bot
+    --json` shows the Home chat (id 2fe95de0-…, home true, closed false)
+    with lastAsked = that message. So the read-back's bot: leg (it requires
+    to_handle `orca_session_id:`) is wrong for a send TO a bot; #149's own
+    stated gap ("a bot send's own to_handle, not measured"). `bot list`
+    gives no run id (fields: id, name, agent, paused, linked, specialty,
+    chats). Fix: accept to_handle `run:<id>` for a bot: target when the
+    run is provably the bot's (find what proves it — e.g. the bot Home
+    chat's lastAsked, or a bot/run field), and keep every other proof.
+    Side effect: the pending outbox copy will be shown again to orca-lab as
+    a duplicate of msg_ede2e13a5255 (orca-lab told).
+
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
