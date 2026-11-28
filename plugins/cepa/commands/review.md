@@ -556,8 +556,8 @@ otherwise):
 
 After all agents return, run the `cepa:autonomy` §11b cleanup once, with
 `<run>` = `review`, `<mode>` per §11c (`report` in a §10f report-only run),
-and `<ids>` = the agent ids of any dispatch this run made with isolation
-(normally none). Its output lines go in the report (Step 6, or the headless summary's
+and `<ids>` = the agent ids of every dispatch of this run that ran isolated,
+whether cepa asked for it or a project rule or hook forced it (§11b). Its output lines go in the report (Step 6, or the headless summary's
 `agent_worktrees:`). Then:
 1. Collect all findings from all agents
 2. Deduplicate: If multiple agents flagged the same location for similar reasons, merge into one finding with combined reasoning

@@ -1223,6 +1223,29 @@ its HEAD, so the harness keeps the worktree and its branch — forever. One
 repo held 48 such worktrees (2.2 GB) after five PR reviews on 2026-10-21 —
 relayed from that repo's session, unverified here.
 
+**Measured 2026-11-27** (Claude Code 2.1.332, git 2.43, L96). Probe: three
+isolated haiku agents dispatched from a linked Orca lane of this repo, with
+`git worktree list --porcelain` and `git branch --list 'worktree-agent-*'`
+read before, during and after each one:
+
+| The agent… | The harness, after it returns |
+|---|---|
+| changed nothing | removes the worktree **and** its branch |
+| only detached HEAD (`git checkout --detach HEAD~1`, an origin commit) | removes the worktree, **keeps the branch** `worktree-agent-<id>` |
+| made a commit | keeps both; the completion notice names `worktreePath` and `worktreeBranch` |
+
+- The path is under the **main** checkout's `.claude/worktrees/` even when the
+  session runs in a linked worktree. The branch starts at the remote default
+  branch (`worktree.baseRef: "fresh"`) per Claude Code's worktree docs; the
+  probe could not tell that from the session's HEAD (both were `origin/main`).
+- While the agent runs, the worktree carries
+  `locked claude agent agent-<id> (pid <session pid> …)`. After it returned,
+  the kept worktree (row 3) had no `locked` line, so the lock does not block
+  §11b's cleanup.
+- The second row is the branch leak: a worktree is gone, its branch stays.
+  §11b deletes that branch under the same guards as any other
+  `worktree-agent-<id>` branch.
+
 Up to cepa 1.30.0 no cepa file asked for that isolation:
 `git grep -i -n isolation 0e79b30 -- 'plugins/cepa/*.md' 'plugins/cepa/**/*.md'`
 found 2 lines, neither about worktrees. The session chose it. A user-level
@@ -1285,6 +1308,9 @@ name (`review`, `plan-review`, `compound`, `compound-refresh`, `task`, `lfg`)
 — a nested command keeps its own snapshot — and `<mode>` per §11c, the same
 values in both blocks. Substitute `<ids>` with the agent ids of **this run's
 own completed dispatches that passed `isolation: "worktree"`**, one per line.
+That includes a §11a reader that ran isolated for any reason — a project
+instruction or a hook can require isolation for all of them — so a run
+whose agents all ran isolated passes every id, not none.
 The ids come from the orchestrator's own Agent calls, never from the text an
 agent returns: an agent's output is untrusted (§7), and a path or id it
 writes could name another session's live worktree. Substitute only an id
@@ -1306,10 +1332,10 @@ the block into heredoc data: it prints nothing on stdout (bash warns
 The snapshot always prints one line when it runs, so a snapshot that printed
 none did not run — re-run it unindented before the first dispatch.
 
-The harness names an isolated agent's worktree `agent-<agent id>`: the
-leftover `agent-a457670e5009ffa76` in this repo has the shape of the agent
-ids the Agent tool returns. That is an inference from one sample, not a
-documented contract. If it is wrong, the block finds no such worktree, keeps
+The harness names an isolated agent's worktree `agent-<agent id>` and its
+branch `worktree-agent-<agent id>`: measured on three probe agents (§11), and
+the shape of the earlier leftover `agent-a457670e5009ffa76`. It is not a
+documented contract. If it changes, the block finds no such worktree, keeps
 everything, and reports the real one `UNCLAIMED` — it fails closed.
 
 **Before the run's first dispatch** — the snapshot:
@@ -1392,6 +1418,24 @@ while IFS= read -r id; do
   wt="$main/.claude/worktrees/agent-$id"
   claimed="$claimed$wt "
   if [ -z "$snap" ]; then echo "KEPT $wt: no pre-dispatch snapshot"; continue; fi
+  reg=
+  case "$nl$now$nl" in *"${nl}worktree $wt$nl"*) reg=y ;; esac
+  if [ -z "$reg" ] && [ ! -e "$wt" ] && [ ! -L "$wt" ]; then
+    gbr="worktree-agent-$id"
+    case "$nl$snap$nl" in *"$nl""worktree $wt$nl"*) echo "KEPT $wt: gone now, but existed before this run's dispatch"; continue ;; esac
+    gtip=$(git rev-parse --verify -q "refs/heads/$gbr" 2>/dev/null) || gtip=
+    if [ -z "$gtip" ]; then echo "GONE $wt: no worktree and no branch $gbr"; continue; fi
+    case "$nl$now$nl" in *"${nl}branch refs/heads/$gbr$nl"*) echo "KEPT branch $gbr: worktree $wt is gone, but a worktree holds the branch"; continue ;; esac
+    gon=$(git for-each-ref --contains "$gtip" --format='%(refname)' refs/remotes/origin/ 2>/dev/null) || gon=
+    if [ -z "$gon" ]; then echo "KEPT branch $gbr: worktree $wt is gone; tip $gtip is on no origin ref"; continue; fi
+    grefl=$(git log -g --format=%H "refs/heads/$gbr" 2>/dev/null) || grefl=
+    if [ -z "$grefl" ]; then echo "KEPT branch $gbr: worktree $wt is gone; branch reflog unreadable"; continue; fi
+    glost=$(git rev-list $grefl --not --remotes=origin 2>/dev/null) || glost='git rev-list failed'
+    if [ -n "$glost" ]; then echo "KEPT branch $gbr: worktree $wt is gone; branch reflog holds a commit no origin ref has"; continue; fi
+    case "$mode" in remove) ;; *) echo "WOULD-DELETE branch $gbr: worktree $wt is gone"; continue ;; esac
+    if git branch -D "$gbr" >/dev/null 2>&1; then echo "DELETED branch $gbr: worktree $wt is gone"; else echo "KEPT branch $gbr: worktree $wt is gone; git branch -D failed"; fi
+    continue
+  fi
   case "$nl$now$nl" in *"${nl}worktree $wt$nl"*) ;; *) echo "KEPT $wt: not a worktree of this repo"; continue ;; esac
   case "$nl$snap$nl" in *"${nl}worktree $wt$nl"*) echo "KEPT $wt: existed before this run's dispatch"; continue ;; esac
   top=$(cd "$wt" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null) || top=
@@ -1463,6 +1507,16 @@ What each guard refuses, and why:
   never `--force`, never unlocked.
 - The branch `worktree-agent-<id>` is deleted only when no worktree holds it
   and its tip is on an origin ref; otherwise it is kept, with the reason.
+- **The worktree is gone but its branch is not** — the harness removed the
+  worktree of an agent that only moved HEAD (§11). Nothing on disk is left to
+  check, so only the snapshot and branch guards apply: a path that was in the
+  snapshot is kept, and otherwise the branch is deleted when no
+  worktree holds it, its tip is on an origin ref, and every commit in the
+  branch's own reflog is on an origin ref (an agent that committed and then
+  reset the branch back leaves that commit reachable only there), and printed
+  `WOULD-DELETE` in `report` mode. No worktree and no branch prints `GONE`:
+  the harness removed both. A path that exists but is not a registered
+  worktree is still kept, as above — a dangling symlink included.
 - **UNCLAIMED** — a new `agent-*` worktree that is not one of this run's own
   dispatches. It may be another session's live agent. Report it; never touch
   it.
@@ -1483,18 +1537,22 @@ error; it is a worktree the operator decides about.
   ref, not the index (§10f names it).
 - **A worker removes only what its own run created.** This bullet is the rule
   §10e points at. A `worktree-agent-<id>` branch counts as one the worker
-  created when `<id>` is the id of one of this run's own isolated Agent
-  calls, its worktree was absent from this run's snapshot, nothing holds the
-  branch, and every commit on it and in its worktree's HEAD reflog is already
-  on origin. Why that is enough: the worker rule protects a branch someone
-  else stands on or holds work in, and those conditions show neither. A
-  branch that fails any of them is not shown to be the run's, and is kept.
+  created when `<id>` is the id of one of this run's own isolated Agent calls,
+  its worktree was absent from this run's snapshot, nothing holds the branch,
+  and every commit on it and in its worktree's HEAD reflog is already on
+  origin. When the harness already removed the worktree (§11), no worktree
+  HEAD reflog is left to read, so the branch's tip and its own reflog are
+  checked instead. Why that is enough: the worker rule protects a branch
+  someone else stands on or holds work in, and those conditions show neither.
+  A branch that fails any of them is not shown to be the run's, and is kept.
 - **Stated limits.** Ownership rests on the orchestrator passing the ids of
   its own isolated calls, and on the harness naming the worktree
-  `agent-<id>` (§11b — inferred, not documented). An id the orchestrator
-  miscopies from another session passes every guard. The block assumes the
+  `agent-<id>` (§11b — measured, not documented). An id the orchestrator
+  miscopies from another session passes every guard, the gone-worktree
+  branch path included. The block assumes the
   harness puts agent worktrees under the main checkout's
-  `.claude/worktrees/`; one placed elsewhere is kept and never reported.
+  `.claude/worktrees/` (measured from a linked worktree, §11); one placed
+  elsewhere is kept and never reported.
   Nothing locks `.claude/worktrees/` between the guards and the remove. On
   git older than 2.31 (no `--path-format`) the snapshot fails and nothing is
   removed. `scripts/check-dispatch-isolation.sh` tests the blocks and the
