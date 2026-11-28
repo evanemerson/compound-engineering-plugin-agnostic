@@ -32,9 +32,17 @@
 #     not this one; no container started), and pass `--no-build`, because a
 #     plain `compose up -d` builds any image that is missing. The gate does
 #     not inspect the command; the caller (the lane-stack skill's `make up`
-#     and setup) owns this. What still runs under the lock: `--no-build`
-#     still pulls a missing pull-only image and waits on `depends_on` health
-#     conditions, and a gated setup init runs its migrations here.
+#     and setup) owns this. Pull first too, outside the gate, with `--pull`
+#     below (L70 item 3). What still runs under the lock: the `depends_on`
+#     health wait of `up -d --no-build` (L70 item 2). It cannot be split
+#     from the start: `up --help` has no flag that skips a `depends_on`
+#     condition, and `--no-deps` starts no dependency at all. Measured,
+#     Compose 5.5.1: `up -d --no-build` with one `service_healthy`
+#     dependency that turns healthy after 6 s took 14.9 s; with
+#     `service_started`, 2.4 s. A health check's own interval and retries
+#     bound that wait. A missing pull-only image is still pulled here when
+#     `--pull` was skipped or not run. Setup's migrations run AFTER the gate
+#     returns, never under it (the lane-stack skill, Setup).
 #     A gate killed by SIGTERM or SIGKILL leaves its
 #     command running without the lock (Ctrl-C reaches both); the next start
 #     may then count before that stack is up. Stated, not handled.
@@ -47,6 +55,39 @@
 #     it starts with `compose up -d --no-build`.
 #     The lock follows $HOME: a start under another HOME (sudo, another WSL
 #     distro on the same Docker) takes a different lock. Stated, not handled.
+#     Holder file (L70 item 4): once a start holds the lock, it writes
+#     ~/.config/cepa/stack-gate.holder (pid, the pid's start time from
+#     /proc/<pid>/stat, project, lane, start time; lane is the basename of
+#     the caller's git top level, else of its working directory), and
+#     removes it when the command returns. A start that waits, and a
+#     `lock busy` refusal, name the holder from it: `held by <project> (lane
+#     <l>, pid <n>, since <time>)`. The file is a label, never a lock: the
+#     gate never reads it to decide whether to wait, so a stale file never
+#     blocks. It names a holder only when that pid is running AND its start
+#     time equals the recorded one; else it says `holder unknown (stale
+#     holder file: …)`, so a dead or reused pid is never shown as a live
+#     holder. A gate killed by SIGKILL leaves the file; the next start that
+#     takes the lock overwrites it. A failed write prints a WARN and the
+#     start goes on. Values are read, never sourced, and printed through
+#     the same [A-Za-z0-9._/-] filter as the listing. The build lock has no
+#     holder file.
+#   stack-gate.sh --pull <project> -- <compose command…>
+#     Pulls the project's missing pull-only images OUTSIDE the start lock
+#     (L70 item 3), so a start does not pull under it. The compose command
+#     is given WITHOUT a verb, as for --build. It takes no lock, reads no
+#     count, and runs `<compose…> pull --ignore-buildable --policy missing`
+#     with COMPOSE_PROJECT_NAME=<project>: `--ignore-buildable` leaves built
+#     images to --build, and `--policy missing` pulls only what is absent,
+#     as `up` would (a plain `pull` re-pulls every tag). It first reads
+#     `<compose…> pull --help`. A Compose whose help lacks either flag, or
+#     whose help fails, is never sent them (an unknown flag exits 1 with
+#     `unknown flag`, measured on 5.5.1): it prints `STACK pull: skipped —
+#     …` and exits 0, and the start then pulls what is missing under the
+#     lock, as before. Both flags exist on Compose 5.5.1 (measured). A
+#     failed pull exits with the pull's own code, and the caller starts
+#     nothing: an image that cannot be pulled would fail the start too. The
+#     pull has no time limit of its own. Inside a gated command it refuses,
+#     like --build.
 #   stack-gate.sh --build <project> -- <compose command…>
 #   stack-gate.sh --rebuild <project> -- <compose command…>
 #     One image build at a time on this machine (punch-list L70 item 1). The
@@ -141,7 +182,9 @@
 # Exit: 3 refused (the command was not run), 2 usage, otherwise the start
 # command's own exit code. --count: 0, or 1 when unreadable. --build and
 # --rebuild: 0 skipped, 3 refused (lock busy, cannot lock, inside a gate),
-# 2 usage, otherwise the build's own exit code. The command can
+# 2 usage, otherwise the build's own exit code. --pull: 0 pulled or
+# skipped, 3 refused (inside a gate), 2 usage, otherwise the pull's own
+# exit code. The command can
 # itself exit 2 or 3 (`make` exits 2 on any error; a nested gate exits 3), so
 # the `STACK gate:` line, not the exit code, says whether the gate refused.
 #
@@ -161,7 +204,8 @@
 #                          so 60 min leaves half again as slack. At the end
 #                          it refuses ("lock busy").
 # The start lock is flock(1) on the config directory itself, created if
-# absent; the build lock is the file build.lock inside it.
+# absent; the build lock is the file build.lock inside it; the start lock's
+# holder file is stack-gate.holder inside it.
 #
 # Requires: bash, docker, flock, timeout, date (GNU). No jq. python3 for the
 # --build skip only: without it --build always builds.
@@ -178,11 +222,12 @@ cepa_sg_min=2048
 cepa_sg_wait=600
 cepa_sg_bwait=3600
 cepa_sg_block="$cepa_sg_dir/build.lock"
+cepa_sg_holder="$cepa_sg_dir/stack-gate.holder"
 cepa_sg_meminfo=${CEPA_STACK_GATE_MEMINFO:-/proc/meminfo}
 
 cepa_sg_usage() {
   echo "STACK gate: usage — $1" >&2
-  echo "usage: stack-gate.sh [--build|--rebuild] <project> -- <command…> | stack-gate.sh --count" >&2
+  echo "usage: stack-gate.sh [--build|--rebuild|--pull] <project> -- <command…> | stack-gate.sh --count" >&2
   exit 2
 }
 
@@ -451,17 +496,90 @@ cepa_sg_build_mode() {
   exit "$brc"
 }
 
+# --pull: missing pull-only images, outside every lock (L70 item 3).
+cepa_sg_pull_mode() {
+  local help
+  if [ -n "${CEPA_STACK_GATE_HELD:-}" ]; then
+    echo "STACK pull: refused — inside a gated command (the start lock for $(cepa_sg_clean "$CEPA_STACK_GATE_HELD") is held); pull before the gate, never under it"
+    exit 3
+  fi
+  if ! help=$(COMPOSE_PROJECT_NAME="$cepa_sg_proj" timeout --foreground -k 2 30 "$@" pull --help 2>/dev/null); then
+    echo "STACK pull: skipped — $cepa_sg_proj: \`pull --help\` failed, so its flags cannot be checked; the start pulls what is missing, under the lock"
+    exit 0
+  fi
+  if ! grep -qE -- '(^|[[:space:],])--ignore-buildable([[:space:]]|$)' <<<"$help" ||
+    ! grep -qE -- '(^|[[:space:],])--policy([[:space:]]|$)' <<<"$help"; then
+    echo "STACK pull: skipped — $cepa_sg_proj: this Compose's pull has no --ignore-buildable or no --policy; the start pulls what is missing, under the lock"
+    exit 0
+  fi
+  echo "STACK pull: pulling — $cepa_sg_proj: missing pull-only images, outside the start lock"
+  COMPOSE_PROJECT_NAME="$cepa_sg_proj" command "$@" pull --ignore-buildable --policy missing
+  exit $?
+}
+
+# Field 22 (starttime) of /proc/<pid>/stat; returns 1 when the pid is gone.
+# The fields after the command name start at field 3, so it is the 20th.
+cepa_sg_pstart() {
+  local st
+  st=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+  st="${st##*) }"
+  # shellcheck disable=SC2086 # split the numeric fields on purpose
+  set -- $st
+  [[ ${20:-} =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "${20}"
+}
+
+# Written once the start lock is held. A label, never a lock (L70 item 4).
+cepa_sg_write_holder() {
+  local tmp="$cepa_sg_holder.$$" top ps
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || top="$PWD"
+  ps=$(cepa_sg_pstart "$$") || ps=unknown
+  if ! printf 'pid=%s\npid_start=%s\nproject=%s\nlane=%s\nstarted=%s\n' "$$" "$ps" "$cepa_sg_proj" \
+    "${top##*/}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$tmp" 2>/dev/null || ! mv -f "$tmp" "$cepa_sg_holder" 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null
+    echo "STACK gate: WARN — cannot write $cepa_sg_holder; a lock-busy refusal will not name this start" >&2
+  fi
+}
+
+# Who holds the start lock, from the holder file. Trusted only when its pid
+# runs AND that pid's start time is the recorded one.
+cepa_sg_holder_desc() {
+  local line k v n=0 pid="" pst="" proj="" lane="" since="" cur
+  if [ ! -f "$cepa_sg_holder" ] || [ ! -r "$cepa_sg_holder" ]; then
+    printf 'holder unknown (no holder file)'
+    return 0
+  fi
+  while IFS= read -r line && [ "$n" -lt 20 ]; do
+    n=$((n + 1))
+    k="${line%%=*}"; v="${line#*=}"
+    case "$k" in
+      pid) pid="$v" ;; pid_start) pst="$v" ;; project) proj="$v" ;; lane) lane="$v" ;; started) since="$v" ;;
+    esac
+  done <"$cepa_sg_holder"
+  if [[ ! $pid =~ ^[0-9]{1,10}$ ]]; then
+    printf 'holder unknown (the holder file names no pid)'
+  elif ! cur=$(cepa_sg_pstart "$pid"); then
+    printf 'holder unknown (stale holder file: pid %s is not running)' "$pid"
+  elif [ "$cur" != "$pst" ]; then
+    printf 'holder unknown (stale holder file: pid %s now belongs to another process)' "$pid"
+  else
+    printf 'held by %s (lane %s, pid %s, since %s)' "$(cepa_sg_clean "$proj")" "$(cepa_sg_clean "$lane")" \
+      "$pid" "$(cepa_sg_clean "$since")"
+  fi
+}
+
 # --- arguments ---
 [ $# -ge 1 ] || cepa_sg_usage "no arguments"
 if [ "$1" = --count ]; then shift; cepa_sg_count_mode "$@"; fi
 cepa_sg_mode=start
-case "$1" in --build|--rebuild) cepa_sg_mode="$1"; shift ;; esac
+case "$1" in --build|--rebuild|--pull) cepa_sg_mode="$1"; shift ;; esac
 cepa_sg_proj="${1:-}"; [ $# -ge 1 ] && shift
 [[ $cepa_sg_proj =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]] || cepa_sg_usage "project is not a compose project name"
 [[ $cepa_sg_proj == *-wt-* ]] || cepa_sg_usage "project $cepa_sg_proj has no -wt- (the gate is for worktree stacks)"
 [ "${1:-}" = -- ] || cepa_sg_usage "expected -- after the project"
 shift
 [ $# -ge 1 ] || cepa_sg_usage "no start command after --"
+[ "$cepa_sg_mode" != --pull ] || cepa_sg_pull_mode "$@"
 [ "$cepa_sg_mode" = start ] || cepa_sg_build_mode "$@"
 
 # A gated target that calls another gated start-only target for the SAME
@@ -487,13 +605,13 @@ exec {cepa_sg_fd}<"$cepa_sg_dir" || cepa_sg_refuse "cannot open $cepa_sg_dir for
 if flock -n "$cepa_sg_fd"; then
   cepa_sg_lrc=0
 else
-  echo "STACK gate: waiting up to ${cepa_sg_wait}s for another start's lock on $cepa_sg_dir" >&2
+  echo "STACK gate: waiting up to ${cepa_sg_wait}s for another start's lock on $cepa_sg_dir; $(cepa_sg_holder_desc)" >&2
   flock -w "$cepa_sg_wait" "$cepa_sg_fd"
   cepa_sg_lrc=$?
 fi
 case "$cepa_sg_lrc" in
   0) ;;
-  1) cepa_sg_refuse "lock busy — another start held $cepa_sg_dir for ${cepa_sg_wait}s" ;;
+  1) cepa_sg_refuse "lock busy — another start held $cepa_sg_dir for ${cepa_sg_wait}s; $(cepa_sg_holder_desc)" ;;
   *) cepa_sg_refuse "cannot lock $cepa_sg_dir — flock exited $cepa_sg_lrc" ;;
 esac
 
@@ -515,5 +633,9 @@ if [ "$cepa_sg_mem" -lt "$cepa_sg_min" ]; then
 fi
 
 echo "STACK gate: ok — $cepa_sg_proj: $cepa_sg_others other running -wt- stacks, limit $cepa_sg_max; ${cepa_sg_mem} MiB available, minimum $cepa_sg_min MiB$([ "$cepa_sg_self" = yes ] && echo "; already running")"
+cepa_sg_write_holder
 CEPA_STACK_GATE_HELD="$cepa_sg_proj" command "$@" {cepa_sg_fd}<&-
-exit $?
+cepa_sg_rc=$?
+# Still under the lock, so the file is this start's own.
+rm -f "$cepa_sg_holder" 2>/dev/null
+exit "$cepa_sg_rc"
