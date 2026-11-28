@@ -354,13 +354,23 @@ botsend("a bot named <repo>-bot is sent to, ahead of the Run list",
 botsend("a bot target given nudge is sent as no-nudge", state(bots=["dpc-pro-bot"], bot_chat=BOTC), 0,
         "bot:dpc-pro-bot", nudge="nudge",
         want_line="Orca nudge not needed: bot:dpc-pro-bot is a mailbox Orca delivers; sent as no-nudge")
-for label, bots in (("a prefix repo's bot", ["dpc-pro-docs-bot"]), ("a bot named for the bare repo", ["dpc-pro"]),
-                    ("two bots of the same name", ["dpc-pro-bot", "dpc-pro-bot"])):
-    resolve("%s is not the coordinator" % label, state(bots=bots), 0, sent_to=HR)
+for label, st in (("a prefix repo's bot", state(bots=["dpc-pro-docs-bot"])),
+                  ("a bot named for the bare repo", state(bots=["dpc-pro"])),
+                  ("a paused bot", state(bots=["dpc-pro-bot"], bots_paused=["dpc-pro-bot"]))):
+    resolve("%s is not the coordinator" % label, st, 0, sent_to=HR)
+resolve("two bots of the same name are ambiguous", state(bots=["dpc-pro-bot", "dpc-pro-bot"]), 6, "outbox_ambiguous",
+        want_line="more than one bot is named dpc-pro-bot")
 for label, mode in (("a failed bot list", "botlist_fail"), ("a bot list of an unknown shape", "botlist_shape"),
                     ("an Orca with no bot command", "botlist_none")):
     out = resolve("%s falls back to the terminal coord@main" % label, state(bots=["dpc-pro-bot"], mode=[mode]), 0,
                   sent_to=HR, want_line="trying the terminal coord@main")
+reset()
+rc, out = send({"target": "coord:dpc-pro"}, st=state(bots=["dpc-pro-bot"], bot_chat=BOTC, mode=["botchats_closed"]))
+fl = files()
+check("RESOLVE a bot send to a closed chat stays pending",
+      rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
+      and any(l.startswith("Orca send failed: not proven stored — ") and "not an open chat of bot:dpc-pro-bot" in l
+              for l in out), "rc=%s files=%s out=%s" % (rc, fl, out))
 reset()
 rc, out = send({"target": "coord:dpc-pro"}, st=state(bots=["dpc-pro-bot"], store_to="run:run_000000000001"))
 fl = files()

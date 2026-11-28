@@ -591,6 +591,8 @@ REASONS = [re.compile(x) for x in (
     r"the reply is threaded on " + MID + r", and the re-read does not show " + MID + r" in that thread",
     MID + r" is stored for orca_session_id:[0-9a-f-]{36}, which is not an open chat of bot:[A-Za-z0-9_][A-Za-z0-9._-]{0,104}",
     r"the chats of bot:[A-Za-z0-9_][A-Za-z0-9._-]{0,104} could not be read, so " + MID + r" is unconfirmed",
+    r"the reply names no recipient for bot:[A-Za-z0-9_][A-Za-z0-9._-]{0,104}",
+    r"more than one bot is named [A-Za-z0-9_-]{1,100}-bot",
     r"a worker_done target is not dispatch:ctx_<id>",
     r"the task id is not task_<id>", r"the worker_done outcome is not succeeded or failed",
     r"the type is not status, question, handoff, escalation, merge_ready, reply or worker_done",

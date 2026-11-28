@@ -221,7 +221,7 @@ SEND_MUTANTS = [
     # reply mode (punch-list L35)
     ('reply-thread-unchecked', '        if th != target:\n', '        if False:\n',
      {'REPLY not threaded on the question', 'REPLY thread missing', 'REPLY thread not a message id', 'REPLYTHREAD another row of the thread quotes the question', 'REPLYTHREAD another row of the thread quotes the question is not nudged', 'REPLYTHREAD question is a root', 'REPLYTHREAD question is a root is not nudged', 'REPLYTHREAD question on another thread', 'REPLYTHREAD question on another thread is not nudged', 'REPLYTHREAD question out of the window', 'REPLYTHREAD question out of the window is not nudged'}),
-    ('reply-self-unchecked', 'sys.exit(1 if not found else 4 if not threaded else 3 if mine else 0)', 'sys.exit(1 if not found else 4 if not threaded else 0)',
+    ('reply-self-unchecked', 'sys.exit(1 if not found else 3 if mine else 4 if not threaded else 0)', 'sys.exit(1 if not found else 4 if not threaded else 0)',
      {'CHATSENDER reply Orca addressed to this chat is misaddressed', 'CHATSENDER reply to a question this chat sent is misaddressed', 'REPLY addressed to this session, question out of window', 'REPLY misaddressed is not nudged', 'REPLY to a message this session sent', 'REPLYTHREAD reply to its own reply is misaddressed'}),
     ('reply-no-request-id', '--body "$cepa_send_body" --retry-request "$cepa_send_req" --json --full ;;', '--body "$cepa_send_body" --json --full ;;',
      {'REPLY argv', 'REPLY retry reuses the request id'}),
@@ -426,7 +426,7 @@ SEND_MUTANTS = [
     ('send-readback-body', 'if not isinstance(x.get("body"), str) or x["body"].rstrip() != body:', 'if not isinstance(x.get("body"), str):', {'READBACK row with another body'}),
     ('send-readback-subject', 'elif x.get("type") != typ or x.get("subject") != subj:', 'elif x.get("type") != typ:', {'READBACK row with another subject'}),
     ('send-readback-type', 'elif x.get("type") != typ or x.get("subject") != subj:', 'elif x.get("subject") != subj:', {'READBACK row of another type'}),
-    ('send-readback-thread', '        if x.get("thread_id") not in threads:\n', '        if False:\n', {'READBACK reply on another thread fails', 'READBACK reply to a reply with no question row fails'}),
+    ('send-readback-thread', '        if x.get("thread_id") != target:\n', '        if False:\n', {'READBACK reply on another thread fails', 'READBACK reply to a reply with no question row fails'}),
     ('send-readback-payload', 'if not isinstance(p, dict) or p.get("dispatchId") != target[len("dispatch:"):] \\', 'if not isinstance(p, dict) \\', {'READBACK worker_done row of another dispatch fails'}),
     ('send-readback-wdone-state', 'sys.exit(0 if st == sys.argv[2] else 1)', 'sys.exit(0)', {'READBACK worker_done with an open dispatch is unproven'}),
     ('send-readback-date', '    if t is None or t < int(t0) - 120:', '    if t is not None and t < int(t0) - 120:', {'READBACK row with no date'}),
@@ -501,8 +501,6 @@ SEND_MUTANTS = [
     ('reply-root-unproven-dropped', '  4) unproven "the reply is threaded on', '  4) : "the reply is threaded on', {'REPLY not threaded on the question', 'REPLYTHREAD another row of the thread quotes the question', 'REPLYTHREAD another row of the thread quotes the question is not nudged', 'REPLYTHREAD question is a root', 'REPLYTHREAD question is a root is not nudged', 'REPLYTHREAD question on another thread', 'REPLYTHREAD question on another thread is not nudged', 'REPLYTHREAD question out of the window', 'REPLYTHREAD question out of the window is not nudged'}),
     ('reply-root-any-row', 'threaded = not root or any(isinstance(x, dict) and x.get("id") == q and x.get("thread_id") == root', 'threaded = not root or any(isinstance(x, dict) and x.get("thread_id") == root', {'REPLYTHREAD another row of the thread quotes the question', 'REPLYTHREAD another row of the thread quotes the question is not nudged'}),
     ('reply-root-shape-unchecked', '            if not (isinstance(th, str) and re.fullmatch(MIDRE, th)):\n                return "UNPROVEN the reply is not threaded on %s" % target', '            if not isinstance(th, str):\n                return "UNPROVEN the reply is not threaded on %s" % target', {'REPLY thread not a message id'}),
-    ('readback-root-ignored', '        threads.add(x["thread_id"])', '        pass', {"READBACK reply to a reply counts on the question's root"}),
-    ('readback-root-any-row', '    if isinstance(x, dict) and x.get("id") == target and isinstance(x.get("thread_id"), str) \\', '    if isinstance(x, dict) and isinstance(x.get("thread_id"), str) \\', {'READBACK reply on another thread fails', 'READBACK reply to a reply with no question row fails'}),
     # L98: a chat recipient counts.
     ('chat-recipient-refused', 'ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64}|orca_session_id:[0-9a-f-]{36})"\nMIDRE = r"msg_[0-9a-f]{6,32}"\n\ndef verdict():', 'ADDR = r"(term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64})"\nMIDRE = r"msg_[0-9a-f]{6,32}"\n\ndef verdict():', {"BOT a chat id quoted in a title is not the bot's", 'BOT a chat with no closed field is not proven', "BOT a closed chat is not the bot's", "BOT another chat id is not the bot's", 'BOT argv and order, no nudge', 'BOT chat row missing from the inbox', 'BOT chats not JSON are unreadable', 'BOT chats not ok are unreadable', 'BOT chats of another bot are unreadable', 'BOT chats that fail are unreadable', 'BOT no-nudge prints no downgrade', "BOT send to a bot's chat counts", 'BOT to an earlier chat of the bot counts', 'CHATREPLY reply stored for a chat counts', 'CHATSENDER reply Orca addressed to this chat is misaddressed'}),
     # L103 C1: a chat sender's own address.
@@ -516,6 +514,11 @@ SEND_MUTANTS = [
     ('bot-chats-other-bot', 'if not isinstance(r, dict) or r.get("bot") != sys.argv[2] or not isinstance(r.get("chats"), list):\n        sys.exit(2)', 'if not isinstance(r, dict) or not isinstance(r.get("chats"), list):\n        sys.exit(2)', {'BOT chats of another bot are unreadable'}),
     ('bot-chats-parse-is-absence', 'except Exception:\n    sys.exit(2)\nsys.exit(0 if hit else 1)', 'except Exception:\n    sys.exit(1)\nsys.exit(0 if hit else 1)', {'BOT chats not JSON are unreadable'}),
     ('bot-recipient-any', '        if not (isinstance(to, str) and to.startswith("orca_session_id:")):\n            return "UNPROVEN the reply names no valid recipient"', '        if False:\n            return "UNPROVEN the reply names no valid recipient"', {'BOT stored for a Run is not a bot'}),
+    # PR #149 review fixes.
+    ('reply-mine-after-thread', 'sys.exit(1 if not found else 3 if mine else 4 if not threaded else 0)', 'sys.exit(1 if not found else 4 if not threaded else 3 if mine else 0)', set()),
+    ('chat-recipient-any-type', '    if to.startswith("orca_session_id:") and typ != "reply" and not target.startswith("bot:"):', '    if False:', set()),
+    ('chat-reply-claimed', '  if [[ $cepa_send_to == orca_session_id:* ]]; then\n    echo "Orca nudge skipped: Orca stored it for', '  if false; then\n    echo "Orca nudge skipped: Orca stored it for', set()),
+    ('bot-no-recipient-unproven', '            return "FAIL the reply names no recipient for %s" % target', '            return "UNPROVEN the reply names no recipient for %s" % target', set()),
     ('bot-readback-any', '            if not (isinstance(to, str) and to.startswith("orca_session_id:")):\n                continue', '            pass', {'BOT read back skips a row for a Run'}),
 ]
 # orca-health.sh mutants (punch-list L34). Each runs only the health half,

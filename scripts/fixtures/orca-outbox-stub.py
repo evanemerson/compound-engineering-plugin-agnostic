@@ -82,7 +82,8 @@ if verb == "orchestration send":
     out({"id": "x", "ok": True, "result": {"message": m}})
 # L103 C2: `bot list` (Orca 1.4.280: result.bots[{name, ...}]) and `bot
 # chats` (result.{bot, chats[{id, closed}]}). State "bots" lists the names;
-# "bot_chat" is the Home chat id each bot has. Modes: botlist_fail (exit 1),
+# "bot_chat" is the Home chat id each bot has; "bots_paused" names paused
+# ones. Mode botchats_closed answers that chat as closed. Modes: botlist_fail (exit 1),
 # botlist_shape (no bots list), botlist_none (no `bot` command: exit 64).
 if verb == "bot list":
     if "botlist_none" in MODE:
@@ -91,11 +92,12 @@ if verb == "bot list":
         err("runtime_unavailable")
     if "botlist_shape" in MODE:
         out({"id": "x", "ok": True, "result": {"bot": st.get("bots", [])}})
-    out({"id": "x", "ok": True, "result": {"bots": [{"name": n, "agent": "claude", "paused": False, "linked": []}
+    paused = set(st.get("bots_paused", []))
+    out({"id": "x", "ok": True, "result": {"bots": [{"name": n, "agent": "claude", "paused": n in paused, "linked": []}
                                                      for n in st.get("bots", [])], "unreachable": []}})
 if verb == "bot chats":
     out({"id": "x", "ok": True, "result": {"bot": opt("--bot"), "chats": [
-        {"id": st.get("bot_chat", "0" * 36), "title": "Home", "home": True, "closed": False}]}})
+        {"id": st.get("bot_chat", "0" * 36), "title": "Home", "home": True, "closed": "botchats_closed" in MODE}]}})
 if verb == "orchestration inbox":
     out({"id": "x", "ok": True, "result": {"messages": list(reversed(st.get("sent", [])))}})
 if verb == "orchestration run-current":

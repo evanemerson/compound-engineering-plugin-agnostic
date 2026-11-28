@@ -1068,6 +1068,12 @@ if LEGS in ("all", "send"):
                       inbox_json=inbox({"id": MID, "to_handle": H}, *rows))
         (ok if not sends(calls) else miss)(name + " is not nudged" if not sends(calls) else
                                            name + " is not nudged: %r" % sends(calls))
+    # A reply Orca addressed back to this session is misaddressed, even when
+    # its thread is not proven (the operator's next step is the same).
+    store("REPLYTHREAD reply addressed to this session wins over the thread", 1,
+          [MISADDR % OTHER, END + "Needed from you: check which session asked %s" % QID],
+          argv=RARGS, stdin=RBODY, osend_json=oreply(to=OTHER, thread=ROOT),
+          inbox_json=inbox({"id": MID, "to_handle": OTHER}), env_extra={"ORCA_TERMINAL_HANDLE": OTHER})
     # A reply to a reply this session sent is still misaddressed.
     store("REPLYTHREAD reply to its own reply is misaddressed", 1,
           [MISADDR % H, END + "Needed from you: check which session asked %s" % QID],
@@ -1079,12 +1085,18 @@ if LEGS in ("all", "send"):
     # stored for its `orca_session_id:` address (msg_cbe3e101fcd4, read
     # 2026-11-27). It counts, and Orca delivers it: no nudge.
     CHAT = "orca_session_id:34fefe5b-da39-4347-8b84-dabbcf095559"
-    calls = store("CHATREPLY reply stored for a chat counts", 0,
+    # PR #149 review: Orca's wake of a chat with no Run is not measured, so
+    # the delivery is not claimed: exit 1, and the operator tells the chat.
+    calls = store("CHATREPLY reply stored for a chat is not claimed delivered", 1,
                   ["Orca send stored: %s for %s" % (MID, CHAT),
-                   "Orca nudge not needed: Orca stored it in %s, a mailbox Orca delivers" % CHAT],
+                   SK + "Orca stored it for %s, a chat; whether Orca wakes it is not measured" % CHAT,
+                   END + "Needed from you: tell %s to check its Orca inbox" % CHAT],
                   argv=RARGS, stdin=RBODY, osend_json=oreply(to=CHAT), inbox_json=inbox({"id": MID, "to_handle": CHAT}))
     (ok if not sends(calls) else miss)("CHATREPLY makes no nudge call" if not sends(calls) else
                                        "CHATREPLY makes no nudge call: %r" % sends(calls))
+    # A plain send stored for a chat is not its term_ target's (PR #149 review).
+    store("CHATREPLY a term_ send stored for a chat is not proven", 5,
+          [UNPROVEN + "the reply names no valid recipient", PASTE], osend_json=osend(to=CHAT))
     for name, to in [("CHATREPLY chat address with shell text", "orca_session_id:34fefe5b; rm -rf ~"),
                      ("CHATREPLY chat address with no id", "orca_session_id:"),
                      ("CHATREPLY bot address as a recipient", "bot:orca-lab-bot")]:
@@ -1208,10 +1220,12 @@ if LEGS in ("all", "send"):
            "Orca nudge not needed: dispatch:ctx_abcdef is a mailbox Orca delivers; sent as no-nudge"],
           target="dispatch:ctx_abcdef", osend_json=json.dumps({"ok": True, "result": {}}),
           inbox_json=inbox(brow(to=FUP)))
-    # L97: a reply to a reply is read back on the question's own root.
-    store("READBACK reply to a reply counts on the question's root", 0,
-          [back_line(EMPTY1), STORED], argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY, osend_rc=1,
-          osend_json="", inbox_json=inbox(brow(typ="status", subj="Re: q", thread_id=ROOT), QROW))
+    # PR #149 review: never read back on the root. This row is this
+    # session's earlier reply, same body, to ANOTHER message of the thread.
+    store("READBACK reply is not read back on the question's root", 5, [NOSTORE + EMPTY1, PASTE_Q],
+          argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY, osend_rc=1,
+          osend_json="", inbox_json=inbox(brow(typ="status", subj="Re: q", thread_id=ROOT, frm=OTHER), QROW),
+          env_extra={"ORCA_TERMINAL_HANDLE": OTHER})
     store("READBACK reply to a reply with no question row fails", 5, [NOSTORE + EMPTY1, PASTE_Q],
           argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY, osend_rc=1, osend_json="",
           inbox_json=inbox(brow(typ="status", subj="Re: q", thread_id=ROOT)))
@@ -1235,10 +1249,10 @@ if LEGS in ("all", "send"):
             {"id": "cfb3024d-bf6a-4d25-a938-498a738592f8", "title": "M7", "home": False, "closed": False},
             {"id": HOMEC, "title": "Home", "home": True, "self": False, "closed": False}]}})
 
-    def bot(name, rc, want, chats=None, chats_rc=0, osend_json=None, inbox_json=None, **kw):
+    def bot(name, rc, want, chats=None, chats_rc=0, osend_json=None, inbox_json=None, target=BOT, **kw):
         env = {"STUB_BOTCHATS": chats if chats is not None else bchats(), "STUB_BOTCHATS_RC": str(chats_rc)}
         env.update(kw.pop("env_extra", {}))
-        return store(name, rc, want, target=BOT, typ="handoff",
+        return store(name, rc, want, target=target, typ="handoff",
                      osend_json=osend_json if osend_json is not None else osend(to=BCHAT, warnings=False),
                      inbox_json=inbox_json if inbox_json is not None else inbox({"id": MID, "to_handle": BCHAT}),
                      env_extra=env, **kw)
@@ -1272,8 +1286,8 @@ if LEGS in ("all", "send"):
              {"osend_json": osend(to="run:run_abc", warnings=False)}),
             ("BOT stored for the bot address is not a chat", 5, UNPROVEN + "the reply names no valid recipient",
              {"osend_json": osend(to=BOT, warnings=False)}),
-            ("BOT with no recipient is not proven", 5, UNPROVEN + "the reply names no valid recipient",
-             {"osend_json": osend(to=None, warnings=False)}),
+            ("BOT with no recipient and no row is not stored", 5,
+             NOSTORE + "the reply names no recipient for " + BOT, {"osend_json": osend(to=None, warnings=False)}),
             ("BOT chat row missing from the inbox", 5, NOSTORE + "%s is not in the inbox for %s" % (MID, BCHAT),
              {"inbox_json": inbox({"id": MID, "to_handle": "orca_session_id:" + "0" * 8 + HOMEC[8:]})})]:
         calls = bot(name, rc, [want, BPASTE], **kw)
@@ -1281,6 +1295,11 @@ if LEGS in ("all", "send"):
                                            name + " is not nudged: %r" % sends(calls))
     bot("BOT read back from the bot's chat", 0, [back_line(EMPTY1), BSTORED, BNN], osend_rc=1, osend_json="",
         inbox_json=inbox(brow(to=BCHAT, typ="handoff")))
+    bot("BOT with no recipient is read back from its chat", 0,
+        [back_line("the reply names no recipient for " + BOT), BSTORED, BNN],
+        osend_json=osend(to=None, warnings=False), inbox_json=inbox(brow(to=BCHAT, typ="handoff")))
+    bot("BOT a name of 105 characters is accepted", 0, ["Orca send stored: %s for %s" % (MID, BCHAT)],
+        mode="no-nudge", target="bot:" + "a" * 105, chats=bchats(bot="a" * 105))
     bot("BOT read back skips a row for a Run", 5, [NOSTORE + EMPTY1, BPASTE], osend_rc=1, osend_json="",
         inbox_json=inbox(brow(to="run:run_abc", typ="handoff")))
     for name, tgt in [("BOTREF empty name", "bot:"), ("BOTREF name starts with a dash", "bot:-x"),

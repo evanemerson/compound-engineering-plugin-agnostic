@@ -271,8 +271,8 @@
 # Windows', this one WSL's; with no clock there is no read-back), from
 # this session's own address (ORCA_TERMINAL_HANDLE when that is a term_
 # handle, else a chat's `orca_session_id:`), the same body (trailing
-# space aside), and the same type and subject (a reply: threaded on the
-# target, THE REPLY THREAD, instead), stored for the target itself (a
+# space aside), and the same type and subject (a reply: the same thread_id
+# as the target, never its root, THE REPLY THREAD, instead), stored for the target itself (a
 # `dispatch:` target: for any dispatch, as L88 item 2's rewrite was; a
 # `bot:` target: for an `orca_session_id:`, then proven by THE BOT ADDRESS). A worker_done also needs the payload's
 # dispatch, task and outcome, and then `worker-show` must report the dispatch
@@ -304,6 +304,11 @@
 # of the terminal's owner (THE FOLLOW-UP RE-READ). When it fails and takes
 # the re-read, add the inbox read-back, 4 reads and the chain walk's 9: at
 # most about 700 s in all (3 + 1 + 4 + 9 reads of 34 s and 124 s), no nudge.
+# A `coord:` send adds one `bot list` read before the Run list (THE BOT
+# FIRST), and a `bot:` send one `bot chats` read after the re-read, each at
+# most 34 s; a bot is never nudged, so a bot send takes at most about 140 s
+# (bot list, send, re-read, chats), and a failed bot list then adds the
+# terminal resolver's reads.
 # A session that runs the block again after a failure makes a new request id,
 # so that second run can still store a duplicate (§12b rule 1 accepts it).
 #
@@ -357,8 +362,12 @@
 #   - THE BOT FIRST (punch-list L103 C2). Before the Run list, the resolver
 #     reads `bot list --json` (Orca 1.4.280, read only, 2026-11-27: `ok`,
 #     then `result.bots`, a list of rows with a `name`). Exactly one row named
-#     `<repo>-bot` sends to `bot:<repo>-bot` (THE BOT ADDRESS), as `no-nudge`.
-#     No such row goes on to the terminal resolver above, as before. So does
+#     `<repo>-bot` that is not `paused: true` sends to `bot:<repo>-bot`
+#     (THE BOT ADDRESS), as `no-nudge`. Two or more such rows are pending with an `outbox_ambiguous` alert.
+#     No such row goes on to the terminal resolver above, as before. The
+#     bot wins over a live terminal coord@main of the same repo: that is the
+#     operator's design for a bot coordinator (L103 C2); the transition (C6)
+#     keeps a terminal coord@main only where no `<repo>-bot` exists. So does
 #     a list that could not be read (an Orca with no `bot` command): it
 #     prints `Orca send resolved: no bot list (<why>); trying the terminal
 #     coord@main` first. A delivered bot message moves to
@@ -379,8 +388,9 @@
 # address, or a chat list that cannot be read, is `not proven stored`. Orca
 # wakes the bot, so a bot is never nudged: `nudge` is sent as `no-nudge`,
 # as for a `run:` target. Not measured: the `send` reply's own `to_handle`
-# for a bot (no test send was made here); one without it is `not proven
-# stored`, never stored.
+# for a bot (no test send was made here); one with no `to_handle` is read
+# back (THE READ-BACK takes only an `orca_session_id:` row, then the chats
+# proof), and one with any other address is `not proven stored`.
 #
 # THE CHAT SENDER AND RECIPIENT (punch-list L98, L103 C1). A Chat or bot
 # session has no ORCA_TERMINAL_HANDLE. Its identity is ORCA_AGENT_SESSION_ID
@@ -393,20 +403,30 @@
 # Run>`, or for `orca_session_id:<id>` itself (read here: msg_cbe3e101fcd4,
 # 2026-11-23), and both count as a recipient. Up to 1.60.x the second was
 # refused as "the reply names no valid recipient" though it stored (L98).
-# Orca wakes a chat for mail to its Run (P2d), so a reply stored for one is
-# never nudged. Not measured: whether Orca wakes a chat that has no Run.
+# Orca wakes a chat for mail to its Run (P2d), so a reply stored for a Run
+# is never nudged. Not measured: whether Orca wakes a chat that has no Run,
+# so a reply stored for `orca_session_id:` itself is not claimed delivered:
+# it prints `Orca nudge skipped: … whether Orca wakes it is not measured`,
+# asks the operator to tell that chat, and exits 1 (PR #149 review).
 #
 # THE REPLY THREAD (punch-list L97). A reply's row carries `thread_id` = the
 # thread's ROOT, not the message it answers. Read here (Orca 1.4.280,
 # 2026-11-27, `orchestration inbox --limit 2000 --json --full`, read only:
-# 400 rows): no row has a parent or reply-to field; a root row has
+# 400 rows; the field scan was `python3 -c 'import json,sys,collections;
+# r=json.load(sys.stdin)["result"]["messages"]; print(len(r),
+# collections.Counter(k for x in r for k in x))'` and a count of
+# `thread_id` null / equal to `id`): no row has a parent or reply-to field; a root row has
 # `thread_id` null (348 rows) or its own id (14); a reply carries the root's
 # id. orca-lab's alert 1795389024-4JM95YWl was a reply to a reply that
 # stored with the root's id and exited 5. So a reply counts as threaded when
 # its `thread_id` is the target, OR the target's own row is in the same
 # inbox read and its `thread_id` is a msg_ id equal to the reply's. A target
 # row outside the 200-row window leaves a reply to a reply `not proven
-# stored`, as before.
+# stored`, as before. THE READ-BACK still matches a reply on the target's
+# own id only, never on the root: a root match would take this session's
+# earlier reply to ANOTHER message of the thread, with the same body, as
+# this one (PR #149 review). So a reply to a reply whose call failed is not
+# read back, as before this change.
 #
 # ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
 # 2026-11-02, read only, each read with and without `--full`. Without it,
@@ -943,8 +963,9 @@ d = json.load(open(sys.argv[1]))
 r = d["result"] if d.get("ok") is True else sys.exit(1)
 if not isinstance(r, dict) or not isinstance(r.get("bots"), list):
     sys.exit(1)
-n = sum(1 for b in r["bots"] if isinstance(b, dict) and b.get("name") == sys.argv[2])
-print("BOT" if n == 1 else "NONE")
+# A paused bot is no live coordinator (PR #149 review): it does not count.
+n = sum(1 for b in r["bots"] if isinstance(b, dict) and b.get("name") == sys.argv[2] and b.get("paused") is not True)
+print("BOT" if n == 1 else "AMBIG" if n > 1 else "NONE")
 PY
 ) || cepa_send_bot="the bot list has a shape this reader does not know"
   else
@@ -953,6 +974,7 @@ PY
   case "$cepa_send_bot" in
     BOT) cepa_send_bot=bot:$cepa_send_coord-bot ;;
     NONE) cepa_send_bot= ;;
+    AMBIG) pending outbox_ambiguous "more than one bot is named $cepa_send_coord-bot" ;;
     *) echo "Orca send resolved: no bot list ($cepa_send_bot); trying the terminal coord@main"
        cepa_send_bot= ;;
   esac
@@ -1241,6 +1263,9 @@ def verdict():
     elif target.startswith("bot:"):
         # A bot's mail is stored for its chat (THE BOT ADDRESS): only an
         # orca_session_id: recipient, which the re-read then pins to the bot.
+        # No recipient at all (not measured, header) is read back.
+        if to is None:
+            return "FAIL the reply names no recipient for %s" % target
         if not (isinstance(to, str) and to.startswith("orca_session_id:")):
             return "UNPROVEN the reply names no valid recipient"
     elif to is None:
@@ -1251,6 +1276,10 @@ def verdict():
                 or lc.get("dispatchId") != target[len("dispatch:"):] or lc.get("taskId") != task:
             return "UNPROVEN Orca did not record the dispatch as %s" % action
     if not isinstance(to, str) or not re.fullmatch(ADDR, to):
+        return "UNPROVEN the reply names no valid recipient"
+    # A chat recipient answers a reply (L98) or a bot (C1) only; a term_,
+    # run: or dispatch: send stored for a chat is not that target's.
+    if to.startswith("orca_session_id:") and typ != "reply" and not target.startswith("bot:"):
         return "UNPROVEN the reply names no valid recipient"
     return mid + " " + to + root
 
@@ -1288,12 +1317,6 @@ if not isinstance(rows, list):
 subj = open(sf, encoding="utf-8", errors="replace").read()
 body = open(bf, encoding="utf-8", errors="replace").read().rstrip()
 me = me if re.fullmatch(r"term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36}", me) else ""
-# THE REPLY THREAD (L97): the target, or the target row's own thread root.
-threads = {target}
-for x in rows:
-    if isinstance(x, dict) and x.get("id") == target and isinstance(x.get("thread_id"), str) \
-            and re.fullmatch(MIDRE, x["thread_id"]):
-        threads.add(x["thread_id"])
 
 def when(s):
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%d %H:%M:%S"):
@@ -1317,8 +1340,11 @@ for x in rows:
         continue
     if not isinstance(x.get("body"), str) or x["body"].rstrip() != body:
         continue
+    # A reply is read back only on the target's own thread id, never on its
+    # root (PR #149 review): an earlier reply of this session to another
+    # message of the same thread would match, and read as this one.
     if typ == "reply":
-        if x.get("thread_id") not in threads:
+        if x.get("thread_id") != target:
             continue
     elif x.get("type") != typ or x.get("subject") != subj:
         continue
@@ -1556,7 +1582,7 @@ try:
                                for x in rows)
 except Exception:
     sys.exit(2)
-sys.exit(1 if not found else 4 if not threaded else 3 if mine else 0)
+sys.exit(1 if not found else 3 if mine else 4 if not threaded else 0)
 PY
 case $? in
   0) ;;
@@ -1610,6 +1636,14 @@ if [ -n "$cepa_send_obox" ]; then
 fi
 if [ "$cepa_send_type" = reply ]; then
   [ "$cepa_send_mode" = nudge ] || exit 0
+  # A chat's own address (L98): no script can nudge a chat, and whether
+  # Orca wakes a chat that has no Run is not measured (header), so the
+  # delivery is not claimed.
+  if [[ $cepa_send_to == orca_session_id:* ]]; then
+    echo "Orca nudge skipped: Orca stored it for $cepa_send_to, a chat; whether Orca wakes it is not measured"
+    echo "Ending first line: Needed from you: tell $cepa_send_to to check its Orca inbox"
+    exit 1
+  fi
   if [[ $cepa_send_to != term_* ]]; then
     echo "Orca nudge not needed: Orca stored it in $cepa_send_to, a mailbox Orca delivers"
     exit 0
