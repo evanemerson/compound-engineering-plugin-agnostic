@@ -721,7 +721,7 @@ def check(root):
               else "no -wt- in what setup runs: the gate cannot count this lane's stack")
         r.add("OK" if GATE_RE.search(closure) else "MISS", "setup-gate",
               "setup calls the stack gate" if GATE_RE.search(closure)
-              else "setup never names stack-gate.sh (skill, Setup step 3)")
+              else "setup never names stack-gate.sh (skill, Setup step 4)")
         aliases = set()
         for _, t in texts:
             aliases |= compose_aliases(t)

@@ -27,11 +27,13 @@ start target, the worktree properties, and the coord@main first prompt.
   its header names what the probe cannot see. The rest of the first
   prompt's step 2 is still read by hand.
 
-**Status (2026-11-17): the gate (L66, 1.53.0), the `coord:<repo>` outbox
-(L61, 1.54.0), the build lock (L70, 1.55.0) and the `/cepa:setup` lane
-check (L67, 1.59.0) have shipped.** A loaded plugin older than one of these
+**Status (2026-11-27): the gate (L66, 1.53.0), the `coord:<repo>` outbox
+(L61, 1.54.0), the build lock (L70, 1.55.0), the `/cepa:setup` lane
+check (L67, 1.59.0), and the pull mode and holder file (L70, 1.62.0) have
+shipped.** A loaded plugin older than one of these
 fails the first prompt's step 0, its step 1 outbox drain, or its step 2
-build checks, or prints no `lane:` lines: refresh it first
+build checks, stops setup and `make up` at the pull (an older gate reads
+`--pull` as a project name and exits 2), or prints no `lane:` lines: refresh it first
 (`scripts/check-plugin-freshness.sh`). Without the gate
 every gated start refuses with `STACK gate: not found`, by design.
 
@@ -42,9 +44,9 @@ every gated start refuses with `STACK gate: not found`, by design.
 2. **A lane is made only by `orca-lane.sh create`** (coord@main, §12b
    rule 2). Never `git worktree add` by hand while Orca is present, and never
    a repo target that names the directory after a branch.
-3. **Setup builds outside the gate, then calls the gate before it writes
-   any lane file,** and runs the rest of the stack init under the gate. The
-   gate's lock covers the start, never a build (L68). Builds go one at a
+3. **Setup builds and pulls outside the gate, and the gate covers only the
+   start** (`up -d --no-build`). Migrations run after the gate returns,
+   and setup's stop trap still covers them (L70). Builds go one at a
    time on the machine-wide build lock, and are skipped when the lane's
    images exist (L70).
 4. **Setup ends by stopping its stack** (`compose stop`; volumes kept).
@@ -91,8 +93,8 @@ A Docker repo's `orca.yaml`:
 
 ```yaml
 scripts:
-  # Builds this lane's images outside the gate, then calls the stack gate and
-  # initializes this lane's own stack under the gate's lock, then stops it.
+  # Builds this lane's images outside the gate, writes .env, pulls, starts the
+  # stack through the gate (the start only), migrates after it, then stops it.
   # See "Setup" in cepa's lane-stack skill.
   setup: env -u COMPOSE_PROJECT_NAME make worktree-init
   # Removes this lane's own stack and volumes. Refuses in the main checkout.
@@ -180,12 +182,23 @@ The contract a caller relies on (design "Builder-check answers" 6 and
   keeps running the old image. Only the exact value `1` rebuilds
   (`BUILD=0` does not); a repo Makefile that already uses `BUILD` for
   something else renames this switch in its own `make up`.
+- **Pull:** `stack-gate.sh --pull <compose project name> -- <compose command…>`,
+  the compose command without a verb (L70). It pulls the missing pull-only
+  images with no lock, so the start does not pull under the lock. On a
+  Compose whose `pull` lacks the flags it needs, it skips, and the start
+  pulls under the lock as before. Which flags, and why, is the gate
+  header's. A failed pull starts nothing.
+- **Lock busy names the holder:** a `lock busy` refusal names the start
+  that holds the lock (project, lane, pid, start time), from a holder file
+  the gate never trusts as a lock. When and why it says `holder unknown`
+  is the gate header's (L70).
 - **Output:** one line, `STACK gate: ok — …` or `STACK gate: refused — …`.
-  The build mode prints `STACK build: …` lines instead (the header lists
-  them).
+  The build and pull modes print `STACK build: …` and `STACK pull: …`
+  lines instead (the header lists them).
 - **Exit:** `3` refused (the start command did not run); `2` usage; any
-  other code is the start command's own exit code. The build mode's exit
-  codes are the header's; `make up` treats any non-zero as a failed build.
+  other code is the start command's own exit code. The build and pull
+  modes' exit codes are the header's; `make up` treats any non-zero as a
+  failed build or pull.
 
 **Every worktree project name contains `-wt-`.** The gate counts only those
 names, so a lane stack named any other way is a stack the gate cannot see.
@@ -227,21 +240,48 @@ In order:
    lists (step 2). A step-4 start that fails with `No such image` means
    the build ran under another project name or other values: fix the
    repo, then rebuild the lane.
-3. **Call the gate** with that project name, and pass the rest of the
-   init as its start command, for example
-   `stack-gate.sh "$PROJECT" -- make worktree-init-stack`. The gate holds its
-   lock while the init runs. On exit 3, setup fails at once, having written
-   no lane file.
-4. **Under the gate:** set a trap that runs `compose stop` on ANY exit,
-   so a setup that fails part-way still stops its stack. Then write this
-   lane's `.env`, read back the isolation values from Compose's resolved
-   config (property 3), start the services that tests need with
-   `compose up -d --no-build` (never `make up`: its build step refuses
-   inside a gated command), and run migrations. The lock is held through the
-   migrations, so setup is the one gated command that is not the start
-   only. Its hold is minutes, not a cold build.
+3. **Set the stop trap,** a trap that runs `compose stop` on ANY exit, so
+   a setup that fails part-way still stops its stack. Then write this
+   lane's `.env` and read back the isolation values from Compose's resolved
+   config (property 3). Both run before the gate (L70): a setup the gate
+   refuses leaves this `.env`, and the refused path below re-creates the
+   lane anyway.
+4. **Pull, then call the gate for the start only:**
+   `stack-gate.sh --pull "$PROJECT" -- <compose command>`, then
+   `stack-gate.sh "$PROJECT" -- <compose command> up -d --no-build` (never
+   `make up`, which builds). The pull comes after the `.env`, because an
+   image name can read a value from it. The gate holds its lock for the
+   start and its health wait only (the gate header says why the wait
+   cannot be split). On exit 3, setup fails at once and migrates nothing.
+   Then run migrations, after the lock is released: a slow migration never
+   holds another lane's start. A failed migration still stops the stack,
+   through the trap.
 5. **Stop the stack:** `compose stop` (the trap). Containers and volumes
    stay. The lane is now warm but costs no RAM.
+
+Steps 3 to 5 as a repo's setup runs them (the `stack-gate` CI job runs
+this block with a stub Docker):
+
+```bash
+# Setup steps 3-5 (lane-stack skill), after the step-2 build. PROJECT, GATE
+# (the path of stack-gate.sh) and the COMPOSE array come from steps 1-2;
+# lane_env, lane_isolation and lane_migrate are the repo's own steps.
+set -eu
+lane_stop() {
+  rc=$?
+  if ! COMPOSE_PROJECT_NAME="$PROJECT" "${COMPOSE[@]}" stop; then
+    echo "STACK setup: compose stop failed — stop $PROJECT by hand" >&2
+    [ "$rc" -ne 0 ] || rc=1
+  fi
+  exit "$rc"
+}
+trap lane_stop EXIT
+lane_env
+lane_isolation
+bash "$GATE" --pull "$PROJECT" -- "${COMPOSE[@]}"
+bash "$GATE" "$PROJECT" -- "${COMPOSE[@]}" up -d --no-build
+lane_migrate
+```
 
 A service that must keep running after setup is an exception the repo names
 in its own CLAUDE.md, with the reason. None is known today.
@@ -275,9 +315,9 @@ reads the lane's `Setup` tab as above. It sees `STACK gate: refused`, asks
 the stop question (below), and then runs `orca-lane.sh rm` and `create` for
 that lane. It never re-runs setup by hand.
 
-**When setup fails for another reason** (a build, a migration): a failed
-build started nothing, and after a failed migration the trap has stopped the
-stack. coord@main confirms no container of that lane's
+**When setup fails for another reason** (a build, a pull, a migration): a
+failed build or pull started nothing, and after a failed migration the trap
+has stopped the stack. coord@main confirms no container of that lane's
 project is running (the probe under "The gated start target"), reports the
 Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 `create` for that lane after the cause is fixed.
@@ -286,7 +326,8 @@ Setup tab's error to the operator, and on a yes runs `orca-lane.sh rm` and
 
 Each Docker repo has one start target that a lane uses, `make up`. In a
 lane it builds first, through the gate's build mode (outside the start
-lock), and then starts the stack only through the gate, with
+lock), pulls the missing pull-only images (no lock), and then starts the
+stack only through the gate, with
 `up -d --no-build` (see "The stack gate"). When the lane's images exist the
 build is skipped, so a source edit alone never rebuilds; `make up BUILD=1`
 always rebuilds (when to use it: "The stack gate", **Rebuild**). A start that fails with `No such image` means the build
@@ -296,10 +337,10 @@ count it.
 
 ```make
 # In a lane: build through the gate's build lock (skipped when the images
-# exist; BUILD=1 always builds), then start through cepa's stack gate with
-# --no-build (lane-stack skill). In the main checkout: start directly.
+# exist; BUILD=1 always builds), pull missing pull-only images with no lock,
+# then start through cepa's stack gate with --no-build (lane-stack skill). In the main checkout: start directly.
 # Default-deny: an unknown identity, a project name without -wt-, a missing
-# gate, or a failed build each refuse, and nothing starts.
+# gate, or a failed build or pull each refuse, and nothing starts.
 up: worktree-guard
 	@GD=$$(git rev-parse --absolute-git-dir) && \
 	  CD=$$(git rev-parse --path-format=absolute --git-common-dir) && \
@@ -319,6 +360,8 @@ up: worktree-guard
 	    echo "STACK gate: not found — this lane's stack was not started (set CEPA_PLUGIN_ROOT)"; exit 1; }; \
 	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" $(if $(filter 1,$(BUILD)),--rebuild,--build) "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \
 	    echo "STACK build: failed — this lane's stack was not started"; exit 1; }; \
+	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" --pull "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) || { \
+	    echo "STACK pull: failed — this lane's stack was not started"; exit 1; }; \
 	  bash "$$CEPA_ROOT/scripts/stack-gate.sh" "$$COMPOSE_PROJECT_NAME" -- $(DEV_COMPOSE) up -d --no-build; \
 	fi
 ```
@@ -417,7 +460,8 @@ lock file, a build arg or a compose `build:` section: plain `make up` keeps
 the old image. After a failed build, the next `make up` builds again. A
 build can wait a long time for another lane's build: run `make up` in the
 background or with a long timeout. If it prints `STACK gate: refused`,
-`STACK build: refused` or `STACK build: failed`, stop and
+`STACK build: refused`, `STACK build: failed` or `STACK pull: failed`,
+stop and
 `ask` your coordinator; do not start the stack another way. When your PR is
 open and reviewed, stop the stack (`compose stop`; keep volumes).
 ```
@@ -458,8 +502,9 @@ reaches a question, and record each strip.
    repo, `worktree-init` and every Makefile target that runs `compose up`,
    `restart` or `start`. Compare them with `cepa:lane-stack`: the
    `orca.yaml` contract; setup builds with `stack-gate.sh --build` (one
-   build at a time, skipped when the images exist), outside the gate, and
-   then calls the gate; setup stops its stack; a gated `make up` that
+   build at a time, skipped when the images exist), outside the gate,
+   pulls with `stack-gate.sh --pull`, gates only the start, and migrates
+   after the gate; setup stops its stack; a gated `make up` that
    builds the same way, rebuilds on `make up BUILD=1` (`--rebuild`), and
    starts through the gate with `up -d --no-build`; a build that reads
    nothing from the lane's `.env`; no fixed `image:` on a built service;
