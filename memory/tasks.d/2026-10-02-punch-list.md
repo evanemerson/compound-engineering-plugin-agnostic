@@ -2858,7 +2858,7 @@ L95. **Handoff before compact: a two-strike PreCompact plugin hook.**
 L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches after cepa runs.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: formulation (tab51@formulation)
     From orca-lab coord@main (msg_b56ad51ef3e5, 2026-11-21; orca-lab L23;
     sender-reported). dpc-pro had 20 `.claude/worktrees/agent-*` folders
     (made 2026-11-05 and 2026-11-11 under cepa runs) and 59
@@ -2875,7 +2875,7 @@ L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches aft
 L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca threads on the root.**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: optimization (tab50@optimization, with L98 and L103 C1–C2)
     From orca-lab coord@main (msg_304b19dbda9c, 2026-11-23; sender-reported,
     Orca 1.4.264, cepa 1.60.4). Alert 1795389024-4JM95YWl (send_unproven,
     reply to msg_a3c163427775, 23:10 UTC 2026-11-22): the reply
@@ -2892,7 +2892,7 @@ L97. **`orca-send.sh` reply proof fails on a reply deeper than one level: Orca t
 L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address (Chat and bot sessions).**
     status: pending
     severity: P2
-    owner: unassigned
+    owner: optimization (tab50@optimization)
     From orca-lab coord@main (msg_0aba81bb605b, 2026-11-23; sender-reported).
     evan-skills (term_df1c30ed) replying to an ai-lab Chat session that
     sends as `orca_session_id:34fefe5b-…` failed "the reply names no valid
@@ -2907,7 +2907,7 @@ L98. **`orca-send.sh` cannot reply to, or send to, an `orca_session_id:` address
 L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) as an unknown shape.**
     status: pending
     severity: P1
-    owner: unassigned
+    owner: matrix (tab49@matrix)
     From dpc-pro coord@main (outbox 20261123T184816Z-ZzkhPnO8, 2026-11-23;
     sender-reported) and measured here 2026-11-24 on Orca 1.4.272:
     `orchestration run-show --id run_2010992e1390 --json --full` returned
@@ -2926,6 +2926,14 @@ L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) 
     restart (1.4.264 -> 1.4.272) old Runs survive with dead or null holders,
     so this case is now common. Expected: null holder = free Run; with
     confirm:, take it with run-use and prove consumer_generation + 1.
+    REFRAMED 2026-11-27 by orca-lab (outbox 20261127T143049Z-XWjIEHec and
+    20261127T234154Z-sgFeoj80 item C3; sender-measured on Orca 1.4.272): a
+    chat or bot that runs `run-create` owns a Run whose run-show shows
+    `coordinator_handle: null`. So null does NOT mean free, and the
+    "Expected" line above is wrong as written. Required: null = holder
+    unknown; take it only with the operator's `confirm:` line, and never
+    take it on run-current's word alone. Part of L103 (C3).
+    owner: matrix (tab49@matrix, 2026-11-28).
 
 L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**
     status: pending
@@ -2974,6 +2982,42 @@ L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) c
     ORCA_AGENT_SESSION_ID or the Run's agent session, or fall back to Claude
     cross-session messaging), and/or make that coordinator's turn start show
     pending outbox files. Related: L98 (`orca_session_id:` addresses), L99.
+
+L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
+    status: pending
+    severity: P1
+    owner: split — C1+C2 optimization (tab50, with L97/L98); C3 matrix
+      (tab49, = L99); C4+C6 formulation after those two merge (with L100,
+      L102).
+    From orca-lab coord@main (outbox 20261127T143049Z-XWjIEHec and
+    20261127T234154Z-sgFeoj80, 2026-11-27; sender-measured on Orca 1.4.272
+    and 1.4.280; evidence in evanemerson/orca-lab
+    docs/research/2026-11-27-chat-coordinator-probes.md,
+    docs/research/2026-11-23-bot-coordinator-pilot.md and
+    docs/plans/2026-11-27-fleet-bots-design.md). Goal (handoff Goals: "an
+    Orca bot as coord@main"): each repo's coord@main can live in an Orca bot
+    `<repo>-bot` (or a Chat UI session) with the same authority. Measured
+    facts (sender's): a chat has no ORCA_TERMINAL_HANDLE; its identity is
+    ORCA_AGENT_SESSION_ID with ORCA_STRUCTURED_SESSION=1; run-create from a
+    chat binds a Run with coordinator_handle null; its mail has from_handle
+    `orca_session_id:<id>`; a reply to it is stored to the chat's Run; Orca
+    wakes an idle chat when mail reaches its Run (no nudge needed); a bot
+    should answer with `orchestration reply --id <msg>`.
+    C1 orca-send.sh accepts a `bot:<name>` target and a sender with no
+    terminal handle. C2 `coord:<repo>` resolves to `bot:<repo>-bot` when
+    `bot list` has it, else the terminal coord@main. C3 null-holder Run is
+    not free (L99). C4 §12b "bot mode": orca-health.sh from a bot (cwd
+    ~/.orca/bots/<name>, not a git checkout) shows every repo's alerts, alerts
+    orca-unreadable:run-current with no Run argument, and turns off the
+    own-question check; orca-outbox.sh refuses outside a git checkout; rule 6
+    (no tab title) and rule 7 (asks as `bot item set --status needs-you`
+    cards) need a bot form. C5 worker rules unchanged (worker_done reaches
+    the starting bot's Run, measured). C6 outbox drain keeps running for
+    repos with a terminal coord@main during the transition.
+    orca-lab re-measures after each cepa release (C1 send to
+    bot:orca-lab-bot stores; C2 coord:orca-lab resolves to the bot; C3
+    rebind refuses a null Run it does not own; C4 health and outbox from a
+    bot).
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
