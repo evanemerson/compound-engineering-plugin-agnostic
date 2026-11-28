@@ -3153,6 +3153,10 @@ L104. ~~**`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to 
     `memory/tasks.d/2026-11-28-fix-matrix-bot-send-proof.md` (items 12-16).
     Item 1 of `2026-11-27-fix-optimization-send-bot-addressing.md` is
     answered: a bot send's to_handle is run:<id> (flipped there).
+    Live on 1.63.2 2026-11-28: coord@main's release note to bot:orca-lab-bot
+    printed "Orca send stored: msg_c23ce4f68ac3 for run:run_cf8f7c0d2b33",
+    exit 0 (1.61.0 false-failed the same send). orca-lab asked to re-measure
+    C4, L104 and L105.
 
 
 L105. ~~**`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**~~
