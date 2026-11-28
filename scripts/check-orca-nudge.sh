@@ -2566,6 +2566,87 @@ if LEGS in ("all", "health"):
                 "confirm: %s lines)" % (rid, rid, rid)]
     rebind("REBIND dead holder is re-bound", 0, [DONE], calls_want=FULL)
     rebind("REBIND run-show names this terminal", 0, [BOUND], show=rrun(RB_RUN, H), calls_want=[RCUR, RSHOW])
+    # L99 / L103 C3: a null holder is holder unknown, never free and never an
+    # unknown shape. Shape measured on Orca 1.4.272 (run_2010992e1390,
+    # 2026-11-24): coordinator_handle null, consumer_generation 2, legacy, and
+    # a result.removedWork key beside result.run.
+    def rmeasured(rid, holder, gen=2):
+        return json.dumps({"ok": True, "result": {
+            "run": {"id": rid, "objective": "compound-engineering coord@main", "coordinator_handle": holder,
+                    "consumer_generation": gen, "legacy": 0, "created_at": "2026-11-20T15:00:00.000Z",
+                    "updated_at": "2026-11-23T18:00:00.000Z"},
+            "removedWork": []}})
+    CONFIRMED = "cli: orca-ide\nrun: %s\nconfirm: %s\n" % (RB_RUN, RB_RUN)
+    NULLASK = ["ORCA rebind: ask — %s has no recorded holder (run-show reports coordinator_handle null), and a chat or "
+               "bot that ran run-create owns a Run that shows this, so whether this session coordinates %s is unproven; "
+               "nothing was changed" % (RB_RUN, RB_RUN),
+               ASKEND + "say whether this session coordinates %s, or a chat or bot does (if this session, it runs the "
+               "re-bind again with a confirm: %s line)" % (RB_RUN, RB_RUN)]
+    DONENULL = "ORCA rebind: done — %s moved from no recorded holder to this terminal" % RB_RUN
+    NULLPATH = [RCUR, RSHOW, RSHOW, RUSE, RSHOW]
+    rebind("REBIND null holder without confirm asks", 1, NULLASK, cur=rrun(RB_RUN, None), show=rrun(RB_RUN, None),
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND null holder in the measured shape without confirm asks", 1, NULLASK,
+           cur=rmeasured(RB_RUN, None), show=rmeasured(RB_RUN, None), calls_want=[RCUR, RSHOW])
+    rebind("REBIND confirmed null holder re-binds", 0, [DONENULL], stdin=CONFIRMED, cur=NORUN,
+           show=rrun(RB_RUN, None), calls_want=NULLPATH)
+    rebind("REBIND confirmed null holder in the measured shape re-binds", 0, [DONENULL], stdin=CONFIRMED,
+           cur=rmeasured(RB_RUN, None), show=rmeasured(RB_RUN, None), show2=rmeasured(RB_RUN, H, 3),
+           calls_want=NULLPATH)
+    rebind("REBIND confirmed null holder that moved before run-use asks", 1,
+           ["ORCA rebind: ask — %s moved while this session checked it (run-show now reports %s %s 3, was %s (no recorded holder) 2); "
+            "nothing was changed" % (RB_RUN, RB_RUN, OTHER, RB_RUN),
+            ASKEND + "say whether this session should still coordinate %s (then it runs the re-bind again)" % RB_RUN],
+           stdin=CONFIRMED, cur=NORUN, show=rrun(RB_RUN, None), show2=rrun(RB_RUN, OTHER, 3),
+           env_extra={"STUB_RUNSHOW_N": "1"}, calls_want=[RCUR, RSHOW, RSHOW])
+    rebind("REBIND confirmed null holder generation rose by two fails", 3,
+           ["ORCA rebind failed: after run-use (exit 0), this terminal holds %s, but consumer_generation is 4, not 3: "
+            "another session may have re-bound it at the same moment (and may have printed done), or Orca raised the "
+            "generation for another reason" % RB_RUN, FAILEND],
+           stdin=CONFIRMED, cur=NORUN, show=rrun(RB_RUN, None), show2=rrun(RB_RUN, H, 4), calls_want=NULLPATH)
+    rebind("REBIND no run field and a null-holder current Run asks", 1,
+           ["ORCA rebind: ask — this session named no Run; run-current reports %s with no recorded holder "
+            "(coordinator_handle null), and a chat or bot that ran run-create owns a Run that shows this, so it is "
+            "never re-bound without run: and confirm: lines; nothing was changed" % RB_RUN,
+            ASKEND + "say whether this session coordinates %s, or a chat or bot does (if this session, it runs the "
+            "re-bind again with run: %s and confirm: %s lines)" % (RB_RUN, RB_RUN, RB_RUN)],
+           stdin="cli: orca-ide\n", cur=rrun(RB_RUN, None), calls_want=[RCUR])
+    rebind("REBIND run-show with removedWork re-binds", 0, [DONE], cur=rmeasured(RB_RUN, DEAD),
+           show=rmeasured(RB_RUN, DEAD), show2=rmeasured(RB_RUN, H, 3), calls_want=FULL)
+    # PR #148 review: a malformed holder is still an unknown shape; only JSON
+    # null is holder unknown (a literal "-" cannot pose as the sentinel).
+    SHOWSHAPE0 = ["ORCA rebind failed: run-show returned a shape this reader does not know", FAILEND]
+    rebind("REBIND run-show with no holder key fails", 3, SHOWSHAPE0, stdin=CONFIRMED,
+           show=json.dumps({"ok": True, "result": {"run": {"id": RB_RUN, "consumer_generation": 2}}}),
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND run-show empty holder fails", 3, SHOWSHAPE0, stdin=CONFIRMED, show=rrun(RB_RUN, ""),
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND run-show dash holder fails", 3, SHOWSHAPE0, stdin=CONFIRMED, show=rrun(RB_RUN, "-"),
+           calls_want=[RCUR, RSHOW])
+    rebind("REBIND confirmed null holder whose generation moved asks", 1,
+           ["ORCA rebind: ask — %s moved while this session checked it (run-show now reports %s (no recorded holder) 3, "
+            "was %s (no recorded holder) 2); nothing was changed" % (RB_RUN, RB_RUN, RB_RUN),
+            ASKEND + "say whether this session should still coordinate %s (then it runs the re-bind again)" % RB_RUN],
+           stdin=CONFIRMED, cur=NORUN, show=rrun(RB_RUN, None), show2=rrun(RB_RUN, None, 3),
+           env_extra={"STUB_RUNSHOW_N": "1"}, calls_want=[RCUR, RSHOW, RSHOW])
+    rebind("REBIND confirmed null holder that run-use left null fails", 3,
+           ["ORCA rebind failed: after run-use (exit 0), run-show still reports %s with no recorded holder at "
+            "consumer_generation 2, so run-use did not take it" % RB_RUN,
+            ASKEND + "check in Orca whether a chat or bot holds %s; if none does, ask this session to run the re-bind "
+            "again" % RB_RUN],
+           stdin=CONFIRMED, cur=NORUN, show=rrun(RB_RUN, None), show2=rrun(RB_RUN, None, 2), calls_want=NULLPATH)
+    rebind("REBIND confirmed null holder still null one generation up fails", 3,
+           ["ORCA rebind failed: after run-use (exit 0), run-show reports %s (no recorded holder) 3, not %s %s 3 "
+            "(consumer_generation one above 2): another session may have re-bound %s at the same moment"
+            % (RB_RUN, RB_RUN, H, RB_RUN), FAILEND],
+           stdin=CONFIRMED, cur=NORUN, show=rrun(RB_RUN, None), show2=rrun(RB_RUN, None, 3), calls_want=NULLPATH)
+    rebind("REBIND confirmed null holder while run-current reports another Run re-binds", 0, [DONENULL],
+           stdin=CONFIRMED, cur=rrun("run_other", OTHER), show=rrun(RB_RUN, None), calls_want=NULLPATH)
+    rebind("REBIND run-current holder and a null run-show disagree asks", 1,
+           ["ORCA rebind: ask — run-current reports %s held by %s, but run-show reports no recorded holder, so the two "
+            "reads disagree and whether %s is still open is unchecked; nothing was changed" % (RB_RUN, DEAD, DEAD),
+            ASKEND + "check whether terminal %s is still open, then ask this session to run the re-bind again" % DEAD],
+           stdin=CONFIRMED, cur=rrun(RB_RUN, DEAD), show=rrun(RB_RUN, None), calls_want=[RCUR, RSHOW])
     # L46: no run field — report only, never run-use.
     rebind("REBIND no run field and no current Run", 0,
            ["ORCA rebind: ok — no Run named and run-current reports none"], stdin="cli: orca-ide\n", cur=NORUN,

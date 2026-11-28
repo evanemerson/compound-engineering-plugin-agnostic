@@ -2263,7 +2263,11 @@ limits.
      `run:` field: it then only reports what this pane's `run-current`
      shows, and asks when that Run is bound elsewhere. With `run:`, it takes the Run only
      when `run-current` reports that same Run or a `confirm:` line names it,
-     and only when the Run's terminal is absent from `terminal list`. It
+     and only when the Run's terminal is absent from `terminal list`. A Run
+     whose `run-show` names no holder (`coordinator_handle: null`) is not
+     free: a chat or bot that ran `run-create` owns one that reads so. It
+     needs a `confirm:` line even when `run-current` agrees (punch-list L99;
+     the script's header, THE NULL HOLDER, holds the measurement). It
      counts only when `run-show`, read after `run-use`, names this terminal
      (`ORCA_TERMINAL_HANDLE`) with `consumer_generation` exactly one higher,
      so of two sessions that re-bind at once, at most one prints `done`.
@@ -2298,8 +2302,9 @@ limits.
      `<cli>` is the §12a `cli=` value. The block's result is its first line.
      `ORCA rebind: ok — …` and `ORCA rebind: done — …` need nothing more.
      `ORCA rebind: ask — …` (no named Run while `run-current` shows one bound
-     elsewhere, a named Run that `run-current` does not report and no
-     `confirm:` names, a Run that moved, or a terminal still open or not
+     elsewhere or with no recorded holder, a named Run that `run-current`
+     does not report and no `confirm:` names, a Run with no recorded holder
+     and no `confirm:`, a Run that moved, or a terminal still open or not
      checked) and `ORCA rebind failed: …` (the re-read does not name this
      terminal at one generation higher) change nothing that is not proven; the turn
      ends as rule 7's **The operator** kind, with the script's
