@@ -2087,8 +2087,8 @@ L69. **L61 follow-ups from PR #127's review (finding #15 + P3s #16-#26).**
     L63's roll-out makes re-shows noisy.
     #16-#26: `todos/review-2026-11-02-094119-feat-gain-coord-outbox.md`.
 
-L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
-    status: pending
+L70. ~~**Stack-gate follow-ups from PR #128 (builds outside the gate).**~~
+    status: completed
     severity: P2
     owner: unassigned (each needs an operator design choice first)
     Four items, filed by tab34@roles in
@@ -2115,6 +2115,13 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     them), and a holder file so "lock busy" names the holder. owner:
     formulation (tab52@formulation).
     tab52 done 2026-11-28: PR #151 (coord re-bumped to 1.62.0), pending CI.
+    DONE 2026-11-28: PR #151 merged `616ec4c` (1.62.0). Head 4f2b028 CI
+    70/70 green; base drift after it was the punch list only (no shared
+    file, no code). Branch deleted; formulation lane already holds tab57's
+    branch. Loaded plugin 1.62.0 (freshness rc=0). Still open, filed in
+    the PR's shards: the build-lock holder
+    (`memory/tasks.d/2026-11-27-fix-formulation-gate-release-early.md`
+    item 1) and #16-#19 of `2026-11-02-fix-roles-bounded-builds.md`.
 
 L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
     status: completed
@@ -3064,6 +3071,16 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     null appears when a Run's terminal is closed; a structworker_ holder
     still reads as an unknown shape in orca-rebind.sh — C4/L102 must cover
     it.
+    tab54 done 2026-11-28 (msg_0ba522f7bc7b): PR #153, head 66d794c =
+    Handoff. C4 target corrected: health from a bot shows only the named
+    repo (repo: argument or ~/.orca/bots/<repo>-bot home), else one
+    orca-unreadable:repo alert; never every repo's alerts. structworker_
+    shape measured by tab54 as structworker_[0-9a-f-]{36} (a bot's worker
+    terminal handle); the "run-create gives structworker_" fact did not
+    reproduce there (bot Run run_cf8f7c0d2b33 reads null), and it is read
+    as a null holder either way. L100 one-hour wait kept as shipped
+    (coord@main; shard item 13 stays the alternative). coord re-bumped to
+    1.63.0 (d11ae7e) after #151 took 1.62.0; pending CI.
 
 L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
     status: pending
