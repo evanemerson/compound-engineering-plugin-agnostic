@@ -242,6 +242,30 @@ every probe defect in the gate's own first cut, were found that way and none by
 reading a diff. (The shard owns the counts — restating them here is how the
 extractor's docstring came to claim "five" after the sixth was recorded.)
 
+### A leg that runs a fenced block selects it by a line no mutant edits
+
+When a checker leg finds a block in a doc and runs it, every text it uses to
+find it — the needle and any regex that must match before the block runs —
+must be text no control mutant edits. Otherwise the mutant goes red because the
+block is no longer found, the control reads "killed", and the behaviour it
+mutated was never run. `output []` on every case of a leg is the sign. Check a
+new block mutant against the leg's selectors before trusting its kill. The
+instances, their probe, and the unbuilt mechanical check are owned by
+`memory/tasks.d/2026-11-27-docs-matrix-shard-flip-and-block-select-rules.md`
+(punch-list L56) — read them there.
+
+### Flip the shard line in the commit that closes its item
+
+A commit that closes a finding (`todos/`) or a punch-list item also flips every
+open `memory/tasks.d/` line that tracks it, or writes on that line what is
+still open. Before closing `L<n>`, run `git grep -n 'L<n>\b' -- memory/tasks.d/`.
+The probe is `python3 -I scripts/probe-shard-lag.py`: it prints candidates, not
+verdicts, so read each one (its header says why it is not a gate). On
+origin/main `f4443ef` (2026-11-27) it printed 9 candidates, 4 of them lag; the
+2026-11-01 triage had counted 7 with no stated probe. The per-line evidence is
+in `memory/tasks.d/2026-11-27-docs-matrix-shard-flip-and-block-select-rules.md`
+(punch-list L51).
+
 ## Conventions
 
 - `docs/` is deliberately gitignored — plans stay local; the durable records

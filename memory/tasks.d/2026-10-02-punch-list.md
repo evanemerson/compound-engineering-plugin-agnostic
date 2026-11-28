@@ -1648,16 +1648,20 @@ L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
     read through a quoted heredoc and checked inside the block. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
 L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
-    status: pending
+    status: completed
     severity: P3
     owner: matrix (tab53@matrix) —  (via `/cepa:compound`)
+    Closed 2026-11-28: PR #150 merged bfde0cd (repo docs, no version bump).
+    CLAUDE.md "Flip the shard line in the commit that closes its item" +
+    scripts/probe-shard-lag.py; 4 lagging lines flipped in #150. Solution doc
+    copied to the main checkout's docs/solutions/logic-errors/.
     review-2026-10-30-192000 #16. L48 measured 7 shard lines that lagged
     findings or punch-list items already closed. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
 L52. **Detection-gate control gaps (L48 D7) — after L46.**
     status: pending
     severity: P3
-    owner: unassigned (a test-only worker, after L46 merges)
+    owner: formulation (tab56@formulation; L46 merged #116)
     152000 #11, session-names finding 12, hostile `json.py` fixture (094500
     #24 + 125030 #15; #15 also covers the rule 6 block). See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -1740,7 +1744,14 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
 L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mutant edits.**
     status: pending
     severity: P3
-    owner: matrix (tab53@matrix) —  (via `/cepa:compound`, with L51)
+    owner: unassigned — next lane after tab54 and tab55 merge (both edit check-orca-nudge*) —  (via `/cepa:compound`, with L51)
+    2026-11-28: rule RECORDED by PR #150 (bfde0cd, CLAUDE.md "A leg that runs
+    a fenced block selects it by a line no mutant edits"). Still open: L56
+    instance 4 (check-orca-nudge.sh BLOCK leg, mutant
+    block-unquoted-delimiter) and the mechanical check in
+    check-orca-nudge-controls.sh — shard
+    memory/tasks.d/2026-11-27-docs-matrix-shard-flip-and-block-select-rules.md
+    lines 59-60.
     From tab25@roles (L46): three of its mutants first went red only because
     the block they mutated was no longer found, not because the leg caught
     the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
@@ -2103,6 +2114,7 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     migrations after the lock is released (the stop trap still covers
     them), and a holder file so "lock busy" names the holder. owner:
     formulation (tab52@formulation).
+    tab52 done 2026-11-28: PR #151 (coord re-bumped to 1.62.0), pending CI.
 
 L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
     status: completed
@@ -3044,11 +3056,35 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     bot:orca-lab-bot stores; C2 coord:orca-lab resolves to the bot; C3
     rebind refuses a null Run it does not own; C4 health and outbox from a
     bot).
+    2026-11-28 orca-lab re-measure (msg_e1b7d7860b11, orca-lab PR #83,
+    sender-measured, Orca 1.4.280, cepa 1.61.0): C3 PASS both ways (no
+    confirm: -> ask, Run unchanged; run: + confirm: -> done, generation
+    3 -> 4). New facts, forwarded to tab54 (msg_b5bbc6c0603b): run-create
+    from a structured session records a `structworker_` holder, not null;
+    null appears when a Run's terminal is closed; a structworker_ holder
+    still reads as an unknown shape in orca-rebind.sh — C4/L102 must cover
+    it.
 
 L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
     status: pending
     severity: P1
     owner: matrix (tab55@matrix)
+    DECIDED 2026-11-28 (coord@main, tab55's question msg_48f32c0ce9ff):
+    option A — a bot: send counts with to_handle run:<id> only when the
+    re-read finds our msg id stored for that run:, its payload carries
+    Orca's botRequest, run-show <id> is ok with coordinator_handle null,
+    and `bot chats` lists an open Home chat; the header states run<->bot is
+    Orca's routing, not independently proven. No Orca field ties a run to a
+    bot (tab55 measured bot list, bot chats, run-show, bot.json).
+    Live confirmation 2026-11-28 06:01Z: a status to bot:orca-lab-bot
+    stored as msg_37bdf3448873, to_handle run:run_cf8f7c0d2b33,
+    delivered_at set, payload has botRequest — option A's fields; 1.61.0
+    still printed the false "not proven stored" (alert 1795845717-pJ1MDygM).
+    Also measured: a terminal's `orchestration reply` to a message a BOT sent
+    (msg_ceda090dbc42) is refused by Orca with `bot_reply_not_yours`; a
+    terminal answers a bot with a plain send to bot:<name>. orca-send.sh's
+    reply type should say so instead of a generic refusal (tab55: in scope
+    if cheap, else a residual).
     Measured here 2026-11-28 on Orca 1.4.280, cepa 1.61.0 (#149): coord@main
     sent a status to `coord:orca-lab`; orca-send.sh printed "Orca send
     resolved: coord:orca-lab is bot:orca-lab-bot", then "Orca send failed:
@@ -3068,6 +3104,30 @@ L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to th
     chat's lastAsked, or a bot/run field), and keep every other proof.
     Side effect: the pending outbox copy will be shown again to orca-lab as
     a duplicate of msg_ede2e13a5255 (orca-lab told).
+
+
+L105. **`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**
+    status: pending
+    severity: P2
+    owner: formulation (tab57@formulation; re-route branch only, beside tab55)
+    From orca-lab (msg_ceda090dbc42, 2026-11-28, sent by orca-lab-bot from a
+    bot chat with orca-send.sh — which itself re-measures 1.61.0 C1/C2 bot ->
+    terminal coord@main as working; orca-lab L30; evidence orca-lab
+    docs/research/2026-11-28-worker-mail-not-seen.md; sender-measured on
+    Orca 1.4.280, not measured here). A `term_` send to a worker-start
+    worker was stored for `dispatch:<ctx>` (that worker's Dispatch); the
+    re-route branch (orca-send.sh ~1675-1683 in 1.61.0) counts only a
+    `run:` re-route as delivered, so it printed "Orca nudge skipped … not the
+    target", exit 1, and asked the operator to tell the worker to check its
+    inbox — 2.7 min after Orca had prompted the worker (~1 s) and it had read
+    the mail (59 s). Sender's requested change: D1 a stored `dispatch:<ctx>`
+    whose Dispatch terminal equals the term_ target prints "Orca nudge not
+    needed …", exit 0; D2 prove it with one bounded `orchestration
+    worker-show --dispatch <ctx> --json` (`result.terminal == target`); any
+    other answer keeps today's skip + exit 1; D3 header/comment name the
+    dispatch: re-route beside run:; D4 tests for own Dispatch, another
+    terminal's Dispatch, and worker-show failing. orca-lab re-measures on
+    the next release.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
