@@ -41,7 +41,7 @@
 # What it does, in order:
 #   1. `run-current`. With no `run:` field, it only reports: a Run bound here
 #      is `ok` (it is the session's named Run), none is `ok`, and a Run bound
-#      elsewhere asks. It never calls `run-use`.
+#      elsewhere or with no recorded holder asks. It never calls `run-use`.
 #   2. With `run:`, `run-current` must report that same Run, or a
 #      `confirm:` line must name it; otherwise it asks (#113 finding 12:
 #      `run-show` has no repo or worktree field either, measured below).
@@ -121,18 +121,28 @@
 # returned `result.run.coordinator_handle: null` with `consumer_generation: 2`,
 # and a `result.removedWork` key beside `result.run`; two other repos reported
 # the same (sender-reported; the punch-list entry holds the outbox ids). Up to
-# 1.60.4 the reader required a `term_` handle, so this read as an unknown
+# cepa 1.60.4 the reader required a `term_` handle, so this read as an unknown
 # shape (exit 3). orca-lab measured on Orca 1.4.272 (sender report, not re-run
 # here) that a chat or bot that runs `run-create` owns a Run whose run-show
 # shows `coordinator_handle: null`. So null is read as "holder unknown": never
 # as free and never as an unknown shape. It asks, and only the operator's
 # `confirm:` line takes it (run-current's word is not enough). Extra keys such
-# as `removedWork` are ignored; the reader keys only on `result.run`.
+# as `removedWork` are ignored; the reader keys only on `result.run`. What
+# `removedWork` means was not measured. Messages print a null holder as
+# `(no recorded holder)`.
 #
 # STATED LIMITS:
 #   - A confirmed null-holder Run is taken with no liveness check: a chat or
 #     bot holder has no terminal to look for, so `confirm:` is the only proof
 #     of ownership. The recheck before `run-use` still asks if the Run moved.
+#     When this pane's run-current names the same Run held by a `term_`
+#     handle while run-show reads null, the two reads disagree and it asks
+#     (PR #148 review): a holder seen live is never dropped for a null.
+#   - Whether `run-use` on a null-holder Run raises `consumer_generation` by
+#     exactly 1 was not measured. If not, a take prints `failed` with this
+#     terminal holding the Run, and a rerun prints `ok`: that fails closed.
+#     A `run-use` that leaves the Run null at the same generation prints its
+#     own `failed` line (PR #148 review).
 #   - The re-read after `run-use` must name this terminal. A structured
 #     session with no `term_` handle cannot run this script at all (refused
 #     at ORCA_TERMINAL_HANDLE; punch-list L102).
@@ -389,6 +399,10 @@ if [ "$cepa_rb_old" = "$cepa_rb_me" ]; then
 fi
 # L99 / L103 C3: no recorded holder is not a free Run. Only the operator's
 # confirm: line takes it, never run-current's word alone (THE NULL HOLDER).
+if [ "$cepa_rb_old" = - ] && [ "$cepa_rb_cur_id" = "$cepa_rb_run" ] && [ "$cepa_rb_cur_h" != - ]; then
+  ask "run-current reports $cepa_rb_run held by $cepa_rb_cur_h, but run-show reports no recorded holder, so the two reads disagree and whether $cepa_rb_cur_h is still open is unchecked; nothing was changed" \
+    "check whether terminal $cepa_rb_cur_h is still open, then ask this session to run the re-bind again"
+fi
 if [ "$cepa_rb_old" = - ] && [ "$cepa_rb_run" != "$cepa_rb_confirm" ]; then
   ask "$cepa_rb_run has no recorded holder (run-show reports coordinator_handle null), and a chat or bot that ran run-create owns a Run that shows this, so whether this session coordinates $cepa_rb_run is unproven; nothing was changed" \
     "say whether this session coordinates $cepa_rb_run, or a chat or bot does (if this session, it runs the re-bind again with a confirm: $cepa_rb_run line)"
@@ -529,7 +543,7 @@ cepa_rb_orca "$cepa_rb_tmp/recheck.json" 1 orchestration run-show --id "$cepa_rb
 cepa_rb_recheck=$(cepa_rb_read_run "$cepa_rb_tmp/recheck.json" gen) \
   || failed "run-show returned a shape this reader does not know on the recheck before run-use; nothing was changed"
 if [ "$cepa_rb_recheck" != "$cepa_rb_shown" ]; then
-  ask "$cepa_rb_run moved while this session checked it (run-show now reports $cepa_rb_recheck, was $cepa_rb_shown); nothing was changed" \
+  ask "$cepa_rb_run moved while this session checked it (run-show now reports ${cepa_rb_recheck/ - / (no recorded holder) }, was ${cepa_rb_shown/ - / (no recorded holder) }); nothing was changed" \
     "say whether this session should still coordinate $cepa_rb_run (then it runs the re-bind again)"
 fi
 
@@ -551,4 +565,9 @@ read -r cepa_rb_a_id cepa_rb_a_h cepa_rb_a_gen <<<"$cepa_rb_gen_after"
 if [ "$cepa_rb_a_id" = "$cepa_rb_run" ] && [ "$cepa_rb_a_h" = "$cepa_rb_me" ]; then
   failed "after run-use (exit $cepa_rb_use), this terminal holds $cepa_rb_run, but consumer_generation is $cepa_rb_a_gen, not $((cepa_rb_gen + 1)): another session may have re-bound it at the same moment (and may have printed done), or Orca raised the generation for another reason"
 fi
-failed "after run-use (exit $cepa_rb_use), run-show reports $cepa_rb_gen_after, not $cepa_rb_gen_want (consumer_generation one above $cepa_rb_gen): another session may have re-bound $cepa_rb_run at the same moment"
+if [ "$cepa_rb_old" = - ] && [ "$cepa_rb_gen_after" = "$cepa_rb_shown" ]; then
+  echo "ORCA rebind failed: after run-use (exit $cepa_rb_use), run-show still reports $cepa_rb_run with no recorded holder at consumer_generation $cepa_rb_gen, so run-use did not take it"
+  echo "Ending first line: Needed from you: check in Orca whether a chat or bot holds $cepa_rb_run; if none does, ask this session to run the re-bind again"
+  exit 3
+fi
+failed "after run-use (exit $cepa_rb_use), run-show reports ${cepa_rb_gen_after/ - / (no recorded holder) }, not $cepa_rb_gen_want (consumer_generation one above $cepa_rb_gen): another session may have re-bound $cepa_rb_run at the same moment"

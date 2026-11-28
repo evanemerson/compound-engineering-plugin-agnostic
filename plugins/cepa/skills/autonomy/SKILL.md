@@ -2244,9 +2244,10 @@ limits.
      `<cli>` is the §12a `cli=` value. The block's result is its first line.
      `ORCA rebind: ok — …` and `ORCA rebind: done — …` need nothing more.
      `ORCA rebind: ask — …` (no named Run while `run-current` shows one bound
-     elsewhere, a named Run that `run-current` does not report and no
-     `confirm:` names, a Run with no recorded holder and no `confirm:`, a Run
-     that moved, or a terminal still open or not checked) and `ORCA rebind failed: …` (the re-read does not name this
+     elsewhere or with no recorded holder, a named Run that `run-current`
+     does not report and no `confirm:` names, a Run with no recorded holder
+     and no `confirm:`, a Run that moved, or a terminal still open or not
+     checked) and `ORCA rebind failed: …` (the re-read does not name this
      terminal at one generation higher) change nothing that is not proven; the turn
      ends as rule 7's **The operator** kind, with the script's
      `Ending first line: ` text as its first line. A mismatch is reported,
