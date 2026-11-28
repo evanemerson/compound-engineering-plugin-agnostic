@@ -563,8 +563,10 @@ cepa_send_alert() {
   [ -z "${cepa_send_awt-}" ] || wt=$cepa_send_awt
   [[ $repo =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || repo=unknown
   [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
-  me=${ORCA_TERMINAL_HANDLE:-}
-  [[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
+  # This session's own address (THE CHAT SENDER AND RECIPIENT): a chat's
+  # alert names its orca_session_id: (L103 C4; orca-health.sh reads it).
+  me=${cepa_send_me:-}
+  [[ $me =~ ^(term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36})$ ]] || me=unknown
   tgt=$cepa_send_target
   [[ $tgt =~ ^(msg_[0-9a-f]{6,32}|term_[0-9a-f-]{36}|run:[A-Za-z0-9_-]{1,64}|dispatch:[A-Za-z0-9_-]{1,64}|coord:[A-Za-z0-9_-]{1,100}|bot:[A-Za-z0-9_][A-Za-z0-9._-]{0,104})$ ]] || tgt=invalid
   # A coord: repo that is not its own slug (`-x`, `a--b`) is no address.
@@ -638,8 +640,8 @@ cepa_send_obox_write() {
   wt=$(git rev-parse --show-toplevel 2>/dev/null) || wt=
   wt=${wt##*/}
   [[ $wt =~ ^[A-Za-z0-9._@-]{1,100}$ ]] || wt=unknown
-  me=${ORCA_TERMINAL_HANDLE:-}
-  [[ ${me} =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown
+  me=${cepa_send_me:-}
+  [[ $me =~ ^(term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36})$ ]] || me=unknown
   typ=$cepa_send_type
   [[ $typ =~ ^[a-z_]{1,20}$ ]] || typ=invalid
   sess=${cepa_send_f_session-}

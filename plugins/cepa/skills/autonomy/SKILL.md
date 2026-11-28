@@ -3018,7 +3018,7 @@ limits.
      `… failed: …` or `… skipped: …` (the drain did not run: the body says
      so, and the operator is told the outbox was not read). A worktree
      coordinator and a worker never run it: the script refuses outside a
-     main checkout.
+     main checkout, except in bot mode (rule 9).
    - **Stated limit.** The health check runs only inside a turn, so an idle
      coordinator watches nothing until something wakes it (the limit
      above). A dispatched worker never runs it: its own failed sends reach
@@ -3043,6 +3043,50 @@ limits.
      the `--ack` step is still the one that marks the batch read, and a
      wrong `--ack` id returns `"ok": true` and acks nothing (measured L35):
      a duplicate, never a loss.
+9. **Bot mode: a coordinator in an Orca bot or chat.** A repo's coord@main
+   may live in an Orca bot named `<repo>-bot`, or in a Chat UI session, with
+   the same authority (punch-list L103; the operator's global rules define
+   the repo bot role). Such a session has no `ORCA_TERMINAL_HANDLE`. Its
+   identity is `orca_session_id:<ORCA_AGENT_SESSION_ID>` with
+   `ORCA_STRUCTURED_SESSION=1`, and a bot's working directory is its home,
+   `~/.orca/bots/<name>`, which is not a git checkout. Every rule above
+   applies, with these changes. The scripts' headers own the measurements
+   and the limits: `orca-rebind.sh` (THE CHAT), `orca-health.sh` (BOT MODE,
+   THE REPO-LESS FILE), `orca-outbox.sh` (BOT MODE), and `orca-send.sh`
+   (THE CHAT SENDER AND RECIPIENT, THE BOT FIRST).
+   - **Rule 2, the Run.** The chat's own `run-create` binds its Run, and
+     that Run is its named Run. The re-bind block runs as written on the
+     first turn. From a chat the script never calls `run-use`: it prints
+     `ok` for the Run that the chat's own `run-current` reports, and asks
+     for any other Run. After an `ask` or `retired`, the bot creates a new
+     Run with `run-create`. It never takes another session's Run.
+   - **Rule 6, the name.** A chat has no tab title, so the rename block does
+     not run. The bot's own name (`<repo>-bot`) is its name in every
+     hand-off and report. It names a worker's tab after `worker-start` only
+     when the start returns a `term_` handle. orca-lab's worker from a bot
+     (M5) was a structured session with no tab handle.
+   - **Rule 7, the asks.** A repo bot asks the operator only with an item
+     card (`bot item set --status needs-you --ask … --option … --recommended
+     …`), in plain English, with ids only on a last `Details:` line. It
+     does not use AskUserQuestion, and it never asks only in chat text. Mail
+     that asks the bot something (a `handoff` or a `question`) gets one
+     `orchestration reply --id <msg>`. The first-line rule and the
+     attention block stay as written. In rules 2, 7 and 8, "the turn ends
+     as **The operator** kind" means a card.
+   - **Rule 8, health and outbox.** The peek is `check --peek --full --json`
+     with no `--terminal`: Orca picks the chat's own Run. Orca wakes an idle
+     chat for mail to its Run, so no nudge reaches or is needed for a chat.
+     The health block and the outbox drain run every turn, as for a main
+     checkout. A bot home named `<repo>-bot` names the repo by itself. Any
+     other home puts the line `repo:<repo>` under the `<cli>` line of each
+     block, so the scripts see the repo this bot coordinates. Without a
+     repo, health shows no named repo's alert and raises
+     `orca-unreadable:repo`, and the drain refuses. It never shows every
+     repo's alerts. During the move to repo bots, a repo with a terminal
+     coord@main keeps its drain in that checkout, unchanged (L103 C6).
+   - **Workers are unchanged** (L103 C5). A worker started by a bot reports
+     with `worker_done` to the bot's Run, and asks it with `ask`, as rule 3
+     and rule 4 say.
 
 A name line inside an Orca preamble is §10a's to judge (rung 1).
 

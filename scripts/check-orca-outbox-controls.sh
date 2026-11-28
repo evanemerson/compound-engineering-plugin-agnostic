@@ -33,7 +33,7 @@ FILES = {"SEND": "plugins/cepa/scripts/orca-send.sh", "HEALTH": "plugins/cepa/sc
          "OUTBOX": "plugins/cepa/scripts/orca-outbox.sh", "SKILL": "plugins/cepa/skills/autonomy/SKILL.md"}
 ORDER = ["SEND", "HEALTH", "OUTBOX", "SKILL"]
 CHECK = "scripts/check-orca-outbox.sh"
-LEGS = ["TARGET", "WRITE", "RESOLVE", "PRUNE", "HEALTH", "DRAIN", "BLOCK"]
+LEGS = ["TARGET", "WRITE", "RESOLVE", "PRUNE", "HEALTH", "DRAIN", "BOT", "BLOCK"]
 
 SENDS = ["RESOLVE one live coord@main is sent to and moved to delivered",
          "RESOLVE objective with nothing after the name matches",
@@ -118,7 +118,7 @@ MUTANTS = [
      {"DRAIN each body sits between markers with its own nonce"}),
     ("OUTBOX", "ack-keeps-name", "    dst=$cepa_ob_dir/delivered/${n%%.*}.drained.md", "    dst=$cepa_ob_dir/delivered/$n", None),
     ("OUTBOX", "linked-worktree-drains", '[ "$cepa_ob_gitdir" = "$cepa_ob_common" ] || refuse', 'true || refuse',
-     {"DRAIN refuses a linked worktree"}),
+     {'BOT a repo argument does not open a linked worktree', 'DRAIN refuses a linked worktree'}),
     ("OUTBOX", "fail-open-liveness", "        return set()   # unknown: every delivered file is shown",
      "        return {'" + "term_" + "b" * 8 + "-0000-0000-0000-" + "b" * 12 + "', '" + "term_" + "c" * 8 + "-0000-0000-0000-" + "c" * 12 + "'}",
      {"DRAIN a failed terminal read shows every recent delivered file"}),
@@ -136,6 +136,26 @@ MUTANTS = [
     ("OUTBOX", "none-when-skipped", "if not shown and skipped:", "if False:", None),
     ("OUTBOX", "listing-trusts-any-dir", "if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():\n        print(\"ORCA outbox failed",
      "if False:\n        print(\"ORCA outbox failed", None),
+    # BOT MODE (punch-list L103 C4, C6).
+    ("OUTBOX", "bot-home-off", '        cepa_ob_repo=${cepa_ob_bn%-bot}', '        :', {'BOT a <repo>-bot home drains coord:<repo>', "BOT a bot acks its repo's file", 'BOT a chat sender prints as a claim', 'BOT a sender that only quotes a session id is an unknown shape'}),
+    ("OUTBOX", "bot-home-anywhere", '      if [ -n "$cepa_ob_bots" ] && [ "$cepa_ob_here" = "$cepa_ob_bots/$cepa_ob_bn" ] \\',
+     '      if [ -n "$cepa_ob_bots" ] \\', {'BOT a <repo>-bot directory outside the bots home with no repo argument is refused'}),
+    ("OUTBOX", "bot-home-any-name", '[[ $cepa_ob_bn =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,104}-bot$ ]]',
+     '[[ $cepa_ob_bn =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,104}$ ]]', {'BOT a bot home with no -bot suffix with no repo argument is refused'}),
+    ("OUTBOX", "repo-arg-mismatch-ok", '      || refuse "the repo: argument names another repo than this checkout\'s" ;;', '      || : ;;', {'BOT another repo inside a checkout is refused'}),
+    ("OUTBOX", "repo-arg-unchecked", '[[ $2 =~ ^repo:[A-Za-z0-9._@-]{1,100}$ ]] || refuse', 'true || refuse', {'BLOCK a repo argument line with shell text runs nothing', 'BOT an empty repo is refused', 'BOT shell text is refused'}),
+    ("OUTBOX", "repo-arg-ignored", '    cepa_ob_repo=$cepa_ob_argrepo\n', '    cepa_ob_repo=\n', {'BLOCK a repo argument line reaches the script', 'BOT a repo argument outside a checkout drains that repo'}),
+    ("OUTBOX", "norepo-not-refused", '    [ -n "$cepa_ob_repo" ] || refuse "not inside a git checkout, and no repo: argument or <repo>-bot home names a repo" ;;',
+     '    : ;;', {'BOT a <repo>-bot directory outside the bots home with no repo argument is refused', 'BOT a bot home with no -bot suffix with no repo argument is refused', 'BOT a chat scratch dir with no repo argument is refused'}),
+    ("OUTBOX", "chat-sender-skipped", '("sender", r"term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36}|unknown"),',
+     '("sender", r"term_[0-9a-f-]{36}|unknown"),', {'BOT a <repo>-bot home drains coord:<repo>', 'BOT a chat sender prints as a claim', "BOT a repo argument equal to the checkout's drains it", 'BOT a repo argument outside a checkout drains that repo'}),
+    ("OUTBOX", "chat-sender-loose", '("sender", r"term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36}|unknown"),',
+     '("sender", r"term_[0-9a-f-]{36}|orca_session_id:.+|unknown"),', {'BOT a sender that only quotes a session id is an unknown shape'}),
+    ("HEALTH", "norepo-outbox-shown", '            if norepo and h["repo"] != "unknown":', '            if False:', {"BOT health with no repo reads no named repo's outbox"}),
+    ("HEALTH", "bot-home-not-main", '      cepa_h_main=1 cepa_h_wt=bot@$cepa_h_repo', '      cepa_h_wt=bot@$cepa_h_repo', {'BOT health from a <repo>-bot home gets the inbound note'}),
+    ("SEND", "outbox-chat-sender-unknown",
+     '  me=${cepa_send_me:-}\n  [[ $me =~ ^(term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36})$ ]] || me=unknown\n  typ=',
+     '  me=${cepa_send_me:-}\n  [[ $me =~ ^term_[0-9a-f-]{36}$ ]] || me=unknown\n  typ=', {"BOT a chat's coord send records its session id as the sender"}),
     # SEND: alert target, ending line, unproven, prune owner, slug objective.
     ("SEND", "alert-coord-target", "|dispatch:[A-Za-z0-9_-]{1,64}|coord:[A-Za-z0-9_-]{1,100}|bot:[A-Za-z0-9_][A-Za-z0-9._-]{0,104})$ ]] || tgt=invalid",
      "|dispatch:[A-Za-z0-9_-]{1,64}|bot:[A-Za-z0-9_][A-Za-z0-9._-]{0,104})$ ]] || tgt=invalid", None),
@@ -182,8 +202,7 @@ MUTANTS = [
     # BLOCK
     ("SKILL", "drain-args-joined", 'bash "$CEPA_ROOT/scripts/orca-outbox.sh" "${cepa_outbox_argv[@]}" || true',
      'bash "$CEPA_ROOT/scripts/orca-outbox.sh" "${cepa_outbox_argv[*]}" || true',
-     {"BLOCK show runs the script", "BLOCK the ack form passes each name as one argument",
-      "BLOCK a cli with a command substitution runs nothing"}),
+     {'BLOCK a cli with a command substitution runs nothing', 'BLOCK a repo argument line reaches the script', 'BLOCK a repo argument line with shell text runs nothing', 'BLOCK show runs the script', 'BLOCK the ack form passes each name as one argument'}),
 ]
 # REASONS added by L61: each removal must show as `an unrecognised reason`.
 REASON_MUTANTS = [
@@ -223,10 +242,7 @@ EXPECT = {
         'DRAIN each body sits between markers with its own nonce',
         'DRAIN never shows refused, live, own, old, drained or unknown-shape files',
         'DRAIN shows pending and gone-handle files oldest first, nothing else'},
-    'guard-field': {'DRAIN a failed terminal read shows every recent delivered file',
-        'DRAIN each body sits between markers with its own nonce',
-        'DRAIN never shows refused, live, own, old, drained or unknown-shape files',
-        'DRAIN shows pending and gone-handle files oldest first, nothing else'},
+    'guard-field': {'BOT a sender that only quotes a session id is an unknown shape', 'DRAIN a failed terminal read shows every recent delivered file', 'DRAIN each body sits between markers with its own nonce', 'DRAIN never shows refused, live, own, old, drained or unknown-shape files', 'DRAIN shows pending and gone-handle files oldest first, nothing else'},
     'guard-name-pairing': {'DRAIN a failed terminal read shows every recent delivered file',
         'DRAIN each body sits between markers with its own nonce',
         'DRAIN never shows refused, live, own, old, drained or unknown-shape files',
@@ -237,7 +253,7 @@ EXPECT = {
         'DRAIN a pending file under 10 minutes old is held back',
         'DRAIN each body sits between markers with its own nonce',
         'DRAIN shows pending and gone-handle files oldest first, nothing else'},
-    'none-when-skipped': {'DRAIN only unreadable files is never none'},
+    'none-when-skipped': {'BOT a sender that only quotes a session id is an unknown shape', 'DRAIN only unreadable files is never none'},
     'listing-trusts-any-dir': {'DRAIN an outbox directory it cannot trust fails, never none'},
     'alert-coord-target': {"PRUNE an alert names the pruned file's own sender", 'RESOLVE a bad cursor is unreadable', 'RESOLVE a failed run-list is unreadable', 'RESOLVE a failed worktree ps is unreadable', 'RESOLVE a live coord@main in a linked worktree is a mismatch', "RESOLVE a live coord@main in another repo's main checkout is a mismatch", 'RESOLVE a run-list in the 1.4.246 short shape is unreadable', 'RESOLVE a truncated terminal list is unreadable', 'RESOLVE two bots of the same name are ambiguous', 'RESOLVE two live coord@main handles are ambiguous'},
     'alert-slug-unchecked': {'TARGET double dash is refused and kept in _invalid',
@@ -259,7 +275,7 @@ EXPECT = {
                          "DRAIN never shows refused, live, own, old, drained or unknown-shape files",
                          "DRAIN each body sits between markers with its own nonce",
                          "DRAIN a failed terminal read shows every recent delivered file"},
-    "ack-keeps-name": {"DRAIN ack moves pending and delivered files to drained"},
+    'ack-keeps-name': {"BOT a bot acks its repo's file", 'DRAIN ack moves pending and delivered files to drained'},
 }
 
 passed = failed = 0

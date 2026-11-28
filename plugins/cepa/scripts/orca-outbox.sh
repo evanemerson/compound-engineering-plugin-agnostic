@@ -8,13 +8,27 @@
 # session does with the result; orca-send.sh owns how a file is written; this
 # script owns which files are shown and how they are acked.
 #
-# Usage: orca-outbox.sh <cli> show          list and show the waiting files
-#        orca-outbox.sh <cli> ack <name>...  mark shown files as answered
+# Usage: orca-outbox.sh <cli> [repo:<repo>] show          list and show the waiting files
+#        orca-outbox.sh <cli> [repo:<repo>] ack <name>...  mark shown files as answered
 #   <cli>   §12a's printed `cli=` value, checked as orca-send.sh checks it.
+#   <repo>  BOT MODE only (below): the repo this bot coordinates.
 #   <name>  a file name exactly as a `ORCA outbox file: <name>` line printed it.
-#   It runs only in a main checkout: the receiver's key is slug(<main
-#   checkout directory name>) by autonomy §5, the same rule orca-send.sh
-#   applies to a `coord:<repo>` target.
+#   It runs only in a main checkout, or in BOT MODE: the receiver's key is
+#   slug(<main checkout directory name>) by autonomy §5, the same rule
+#   orca-send.sh applies to a `coord:<repo>` target.
+#
+# BOT MODE (punch-list L103 C4, C6). An Orca bot runs in its home,
+# ~/.orca/bots/<name>, which is not a git checkout (orca-lab M1 and M6, Orca
+# 1.4.272 and 1.4.280, 2026-11-27, sender report: up to 1.61.x this script
+# refused it with "not inside a git checkout"). Outside a checkout the repo
+# is the `repo:` argument, else the bot home's own name when it is
+# `<repo>-bot` (the name orca-send.sh's `coord:<repo>` resolve looks for,
+# L103 C2): the real path of the working directory must be exactly
+# `$HOME/.orca/bots/<repo>-bot`. With neither, it refuses. Inside a checkout a
+# `repo:` must name that checkout's repo, and a linked worktree is still
+# refused. C6: a terminal coord@main of a repo with no bot runs this exactly
+# as before; a bot and a terminal coord@main of one repo would each show the
+# same files (the limit below), and orca-send.sh delivers to the bot first.
 #
 # WHAT IS SHOWN, oldest first:
 #   - every pending file in <outbox>/<repo>/ (nobody could take it);
@@ -56,6 +70,9 @@
 # crashed: nothing was shown, and the turn says so).
 #
 # STATED LIMITS:
+#   - BOT MODE trusts the bot home's name: a bot named `<repo>-bot` drains
+#     `coord:<repo>`, and `repo:` names any repo. Every session runs as one
+#     user, so neither is proof of which repo a bot coordinates.
 #   - The outbox is on this machine, and every session runs as one user, so
 #     a sender is a claim, never proven.
 #   - Two coord@main sessions of one repo would each show the same files;
@@ -64,7 +81,7 @@ set -u
 
 cepa_ob_cli=${1-}
 refuse() { echo "ORCA outbox refused: $1"; exit 4; }
-[ $# -ge 2 ] || refuse "usage: orca-outbox.sh <cli> show, or <cli> ack <name>..."
+[ $# -ge 2 ] || refuse "usage: orca-outbox.sh <cli> [repo:<repo>] show, or <cli> [repo:<repo>] ack <name>..."
 case "$cepa_ob_cli" in
   ''|-*|*[!A-Za-z0-9._/-]*) refuse "the cli is not a plain command name" ;;
   /*) [ "$cepa_ob_cli" = "${ORCA_CLI_COMMAND:-}" ] || refuse "a cli path must equal ORCA_CLI_COMMAND" ;;
@@ -84,6 +101,14 @@ case "${cepa_ob_cli##*/}" in
   esac ;;
   *) refuse "the cli does not name an Orca CLI" ;;
 esac
+# BOT MODE (header): an optional `repo:<repo>` right after <cli>.
+cepa_ob_argrepo=
+if [[ $2 == repo:* ]]; then
+  [[ $2 =~ ^repo:[A-Za-z0-9._@-]{1,100}$ ]] || refuse "the repo: argument is not repo: followed by [A-Za-z0-9._@-]"
+  cepa_ob_argrepo=${2#repo:}
+  set -- "$1" "${@:3}"
+  [ $# -ge 2 ] || refuse "usage: orca-outbox.sh <cli> [repo:<repo>] show, or <cli> [repo:<repo>] ack <name>..."
+fi
 cepa_ob_act=$2
 case "$cepa_ob_act" in
   show) [ $# -eq 2 ] || refuse "show takes no names" ;;
@@ -101,9 +126,26 @@ cepa_ob_root=${CEPA_ORCA_OUTBOX_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/cepa/
 cepa_ob_common= cepa_ob_gitdir=
 { IFS= read -r cepa_ob_common && IFS= read -r cepa_ob_gitdir; } < <(
   git rev-parse --path-format=absolute --git-common-dir --git-dir 2>/dev/null) || :
-case "$cepa_ob_common" in /*/.git) ;; *) refuse "not inside a git checkout" ;; esac
-[ "$cepa_ob_gitdir" = "$cepa_ob_common" ] || refuse "only a main checkout's coordinator drains the outbox"
-cepa_ob_repo=${cepa_ob_common%/.git} cepa_ob_repo=${cepa_ob_repo##*/}
+case "$cepa_ob_common" in
+  /*/.git)
+    [ "$cepa_ob_gitdir" = "$cepa_ob_common" ] || refuse "only a main checkout's coordinator drains the outbox"
+    cepa_ob_repo=${cepa_ob_common%/.git} cepa_ob_repo=${cepa_ob_repo##*/}
+    [ -z "$cepa_ob_argrepo" ] || [ "$cepa_ob_argrepo" = "$cepa_ob_repo" ] \
+      || refuse "the repo: argument names another repo than this checkout's" ;;
+  *)
+    # BOT MODE (header): the repo: argument, else the bot home's name.
+    cepa_ob_repo=$cepa_ob_argrepo
+    if [ -z "$cepa_ob_repo" ]; then
+      cepa_ob_bots=$(cd "$HOME/.orca/bots" 2>/dev/null && pwd -P) || cepa_ob_bots=
+      cepa_ob_here=$(pwd -P 2>/dev/null) || cepa_ob_here=
+      cepa_ob_bn=${cepa_ob_here##*/}
+      if [ -n "$cepa_ob_bots" ] && [ "$cepa_ob_here" = "$cepa_ob_bots/$cepa_ob_bn" ] \
+          && [[ $cepa_ob_bn =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,104}-bot$ ]]; then
+        cepa_ob_repo=${cepa_ob_bn%-bot}
+      fi
+    fi
+    [ -n "$cepa_ob_repo" ] || refuse "not inside a git checkout, and no repo: argument or <repo>-bot home names a repo" ;;
+esac
 cepa_ob_key=$(LC_ALL=C; printf '%s' "$cepa_ob_repo" | tr -c 'A-Za-z0-9_-' '-' | tr -s '-')
 cepa_ob_key=${cepa_ob_key#-} cepa_ob_key=${cepa_ob_key%-}
 [[ $cepa_ob_key =~ ^[A-Za-z0-9_-]{1,100}$ ]] || refuse "this repo's name has no slug"
@@ -146,7 +188,8 @@ sys.excepthook = _crash
 d, key, me, tmp = sys.argv[1:5]
 ONAME = re.compile(r"(\d{8}T\d{6}Z)-[A-Za-z0-9]{8}(\.to-(term_[0-9a-f-]{36})|\.drained)?\.md")
 OHEAD = [("time", r"\d{1,12}"), ("repo", r"[A-Za-z0-9._@-]{1,100}"), ("worktree", r"[A-Za-z0-9._@-]{1,100}"),
-         ("sender", r"term_[0-9a-f-]{36}|unknown"), ("target", r"coord:[A-Za-z0-9_-]{1,100}|invalid"),
+         ("sender", r"term_[0-9a-f-]{36}|orca_session_id:[0-9a-f-]{36}|unknown"),
+         ("target", r"coord:[A-Za-z0-9_-]{1,100}|invalid"),
          ("type", r"[a-z_]{1,20}"), ("session", r"([A-Za-z0-9._@][A-Za-z0-9._@-]{0,99})?")]
 CUT = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(time.time() - 7 * 86400))
 # A pending file under 10 minutes old may be a send still in progress to a

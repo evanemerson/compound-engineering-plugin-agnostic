@@ -83,7 +83,8 @@
 #      the Run, or the generation did not rise by exactly 1. A mismatch after
 #      `run-use` is reported here, never ignored.
 #   4  `ORCA rebind refused: <reason>` — a field or the environment failed
-#      its check. No Orca call was made.
+#      its check (a session with neither a term_ handle nor a chat identity
+#      included). No Orca call was made.
 #
 # ORCA 1.4.246 SHORT OUTPUT (punch-list L72). Measured on Orca 1.4.246 (WSL),
 # 2026-11-02, read only, each read with and without `--full`. Without it,
@@ -131,6 +132,29 @@
 # `removedWork` means was not measured. Messages print a null holder as
 # `(no recorded holder)`.
 #
+# THE CHAT (punch-list L102 a, L103 C4). A Chat UI session or an Orca bot
+# has no ORCA_TERMINAL_HANDLE. Up to 1.61.x this script refused it ("not a
+# term_ handle") and a coordinator started there could not pass rule 2.
+# orca-lab measured on Orca 1.4.272, 2026-11-27 (sender report, not re-run
+# here; evanemerson/orca-lab docs/research/2026-11-27-chat-coordinator-probes.md
+# P1): a chat's identity is ORCA_AGENT_SESSION_ID with
+# ORCA_STRUCTURED_SESSION=1; its `run-current` reports `"run": null` until
+# it runs `run-create`, then the new Run, whose `coordinator_handle` stays
+# null. So with that identity and no terminal handle (orca-send.sh's rule) it
+# runs in chat mode, after step 1's `run-current`:
+#   - no `run:`, or `run:` equal to run-current's Run: none is `ok` (the chat
+#     binds one with `run-create`), a null holder is `ok` (its own Run, as a
+#     chat's reads), a `term_` holder asks;
+#   - a `run:` that run-current does not report: `retired` when run-show
+#     answers run_not_found, else it asks.
+# It never calls `run-use`, `terminal list` or the recheck: `run-use` from a
+# chat was not measured, and a chat that takes a Run is a guess about Orca.
+# So `confirm:` lifts nothing in chat mode. THE NULL HOLDER's rule is
+# unchanged: from a terminal, a null-holder Run is still taken only with
+# `confirm:`. Not measured: whether a restarted bot (a new chat) still gets
+# its old Run from `run-current` (it then asks, naming the Run), and whether
+# `run-current` from a chat can report another chat's Run.
+#
 # STATED LIMITS:
 #   - A confirmed null-holder Run is taken with no liveness check: a chat or
 #     bot holder has no terminal to look for, so `confirm:` is the only proof
@@ -143,9 +167,8 @@
 #     terminal holding the Run, and a rerun prints `ok`: that fails closed.
 #     A `run-use` that leaves the Run null at the same generation prints its
 #     own `failed` line (PR #148 review).
-#   - The re-read after `run-use` must name this terminal. A structured
-#     session with no `term_` handle cannot run this script at all (refused
-#     at ORCA_TERMINAL_HANDLE; punch-list L102).
+#   - The re-read after `run-use` must name this terminal. A chat or bot
+#     never reaches `run-use` (THE CHAT, below).
 #   - `run-use --help`: "A worker cannot bind its own or ancestor Run". A
 #     dispatched worker that runs this gets `ok — no Run` or a failed
 #     `run-use`, never a stolen Run.
@@ -294,8 +317,15 @@ cepa_rb_want=${cepa_rb_f_run-}
 cepa_rb_confirm=${cepa_rb_f_confirm-}
 [ -z "$cepa_rb_confirm" ] || [ "$cepa_rb_confirm" = "$cepa_rb_want" ] \
   || refuse "the confirm field must equal the run field"
-cepa_rb_me=${ORCA_TERMINAL_HANDLE:-}
-[[ $cepa_rb_me =~ ^term_[0-9a-f-]{36}$ ]] || refuse "ORCA_TERMINAL_HANDLE is not a term_ handle"
+# THE CHAT (header): a chat or bot has no terminal handle; its identity is
+# ORCA_AGENT_SESSION_ID with ORCA_STRUCTURED_SESSION=1 (orca-send.sh's rule).
+cepa_rb_me=${ORCA_TERMINAL_HANDLE:-} cepa_rb_chat=
+if [ -z "$cepa_rb_me" ] && [ "${ORCA_STRUCTURED_SESSION:-}" = 1 ] && [[ ${ORCA_AGENT_SESSION_ID:-} =~ ^[0-9a-f-]{36}$ ]]; then
+  cepa_rb_chat=orca_session_id:$ORCA_AGENT_SESSION_ID
+else
+  [[ $cepa_rb_me =~ ^term_[0-9a-f-]{36}$ ]] \
+    || refuse "ORCA_TERMINAL_HANDLE is not a term_ handle, and this session is no chat (ORCA_STRUCTURED_SESSION=1 with ORCA_AGENT_SESSION_ID)"
+fi
 command -v "$cepa_rb_cli" >/dev/null 2>&1 || refuse "$cepa_rb_cli is not on PATH"
 command -v timeout >/dev/null 2>&1 || refuse "no timeout command to bound the Orca calls"
 command -v python3 >/dev/null 2>&1 || refuse "no python3 to read the Orca output"
@@ -354,6 +384,30 @@ cepa_rb_orca "$cepa_rb_tmp/cur.json" 1 orchestration run-current --json --full |
 cepa_rb_cur=$(cepa_rb_read_run "$cepa_rb_tmp/cur.json") || failed "run-current returned a shape this reader does not know"
 cepa_rb_cur_id=${cepa_rb_cur% *} cepa_rb_cur_h=${cepa_rb_cur#* }
 [ -n "$cepa_rb_cur" ] || cepa_rb_cur_id= cepa_rb_cur_h=
+
+# THE CHAT (header): a chat's Run is the one its own run-current reports. It
+# never runs run-use, terminal list or the re-bind: it reports or asks.
+if [ -n "$cepa_rb_chat" ]; then
+  if [ -z "$cepa_rb_want" ] || [ "$cepa_rb_cur_id" = "$cepa_rb_want" ]; then
+    if [ -z "$cepa_rb_cur_id" ]; then
+      echo "ORCA rebind: ok — no Run named and run-current reports none; this chat binds a Run with run-create (cepa:autonomy §12b, bot mode)"
+      exit 0
+    fi
+    if [ "$cepa_rb_cur_h" = - ]; then
+      echo "ORCA rebind: ok — $cepa_rb_cur_id is this chat's Run (its run-current reports it with no recorded holder, as a chat's Run reads)"
+      exit 0
+    fi
+    ask "this chat's run-current reports $cepa_rb_cur_id held by terminal $cepa_rb_cur_h, and a chat never takes a Run from a terminal (run-use from a chat is not measured); nothing was changed" \
+      "say whether terminal $cepa_rb_cur_h or this chat coordinates $cepa_rb_cur_id (if this chat, it creates a new Run with run-create)"
+  fi
+  # A named Run that this chat's run-current does not report: gone, or not
+  # this chat's. confirm: lifts nothing here: no run-use runs from a chat.
+  cepa_rb_run=$cepa_rb_want
+  cepa_rb_orca "$cepa_rb_tmp/show.json" 1 orchestration run-show --id "$cepa_rb_run" --json --full \
+    || ! cepa_rb_gone_run "$cepa_rb_tmp/show.json" || retired
+  ask "this chat's run-current reports ${cepa_rb_cur_id:-no Run}, not $cepa_rb_run, and a chat never takes a Run it does not report (run-use from a chat is not measured), so this chat cannot coordinate $cepa_rb_run; nothing was changed" \
+    "say whether this chat creates a new Run with run-create (its workers then report there), or another session coordinates $cepa_rb_run"
+fi
 
 # No Run named: report only. A Run this pane's run-current shows held by
 # another terminal is never re-bound without a `run:` line (L46).
