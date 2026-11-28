@@ -19,7 +19,11 @@ this shard holds what this branch did not close.
    send was made: `bot create` makes a bot only when its owner accepts a
    card, so there was no bot of this worker's own to send to. Both stored
    forms are now accepted; orca-lab's re-measure settles which the reply
-   carries.
+   carries. This is the open half of item 1 in
+   memory/tasks.d/2026-11-27-fix-optimization-send-bot-addressing.md
+   (#149's shard). That shard's line was not edited here (another worker's
+   shard): coord@main may want to note on it that the STORED row is now
+   counted in both forms and only the send reply's field stays open.
 3. [P3] Measured 2026-11-28: a bot's Home chat bound to a Run gets mail in
    `run:<id>` (orca-lab-bot), and one with no Run in `orca_session_id:<chat>`
    (fleet). When Orca binds or unbinds that Run is not measured; the script

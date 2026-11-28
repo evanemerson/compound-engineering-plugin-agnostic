@@ -1409,6 +1409,12 @@ if LEGS in ("all", "send"):
         calls = botrun(name, rc, [want, BPASTE], **kw)
         (ok if not sends(calls) else miss)(name + " is not nudged" if not sends(calls) else
                                            name + " is not nudged: %r" % sends(calls))
+    # L104: Orca refuses a reply to a message a bot sent; the reason says
+    # how to answer a bot instead.
+    store("BOT a reply to a bot's message says to send to the bot", 5,
+          [NOSTORE + 'Orca did not return "ok": true (bot_reply_not_yours); a bot is answered with a send to '
+           "bot:<name>, not a reply", PASTE_Q], argv=["orca-ide", QID, "reply", "no-nudge"], stdin=RBODY,
+          osend_rc=1, osend_json=osend(ok=False, message=False, error={"code": "bot_reply_not_yours", "message": "x"}))
     for name, tgt in [("BOTREF empty name", "bot:"), ("BOTREF name starts with a dash", "bot:-x"),
                       ("BOTREF name with shell text", "bot:a;rm"), ("BOTREF name too long", "bot:" + "a" * 106),
                       ("BOTREF name with a space", "bot:a b")]:

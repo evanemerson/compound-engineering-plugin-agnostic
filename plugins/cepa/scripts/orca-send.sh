@@ -430,6 +430,10 @@
 #   no `to_handle` is read back (THE READ-BACK takes an `orca_session_id:` or
 #   a `run:` row, then the proof above), and one with any other address is
 #   `not proven stored`.
+#   A REPLY TO A BOT is refused by Orca (coord@main, Orca 1.4.280,
+#   2026-11-28: a terminal's reply to msg_ceda090dbc42, which a bot sent,
+#   answered `bot_reply_not_yours`). The refusal exits 5 as before, and its
+#   reason adds that a bot is answered with a send to `bot:<name>`.
 #
 # THE CHAT SENDER AND RECIPIENT (punch-list L98, L103 C1). A Chat or bot
 # session has no ORCA_TERMINAL_HANDLE. Its identity is ORCA_AGENT_SESSION_ID
@@ -1528,6 +1532,11 @@ case "$cepa_send_got" in
   ''|'FAIL '*)
     cepa_send_why=${cepa_send_got#FAIL }
     [ -n "$cepa_send_why" ] || cepa_send_why="the send output could not be read"
+    # Orca 1.4.280 refuses a terminal's reply to a message a bot sent
+    # (`bot_reply_not_yours`, coord@main 2026-11-28, msg_ceda090dbc42): the
+    # reason says how a bot is answered (punch-list L104).
+    case "$cepa_send_why" in *'(bot_reply_not_yours)')
+      fail "$cepa_send_why; a bot is answered with a send to bot:<name>, not a reply" ;; esac
     case "$cepa_send_why" in 'Orca did not return "ok": true'*) fail "$cepa_send_why" ;; esac
     # With no clock there is no window, so any older row would match.
     [ "$cepa_send_t0" != 0 ] || fail "$cepa_send_why"
