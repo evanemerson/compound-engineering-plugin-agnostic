@@ -1658,12 +1658,17 @@ L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
     review-2026-10-30-192000 #16. L48 measured 7 shard lines that lagged
     findings or punch-list items already closed. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
-L52. **Detection-gate control gaps (L48 D7) — after L46.**
-    status: pending
+L52. ~~**Detection-gate control gaps (L48 D7) — after L46.**~~
+    status: completed
     severity: P3
     owner: formulation (tab56@formulation; L46 merged #116)
     152000 #11, session-names finding 12, hostile `json.py` fixture (094500
     #24 + 125030 #15; #15 also covers the rule 6 block). See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
+    DONE 2026-11-28: PR #152 merged `86968fe` (test only). Head 9e99c5a
+    after update-branch, CI 70/70 green. Merged right after #153 without a
+    second update: #153 is code drift but shares no file with #152; main's
+    CI on 86968fe is the check. Residuals:
+    `memory/tasks.d/2026-11-27-test-formulation-detection-gate-controls.md`.
 
 L53. **`orca-health.sh` hardening batch (L48 D4) — after L47.**
     status: deferred
@@ -2980,8 +2985,8 @@ L99. **`orca-rebind.sh` reads a Run with no holder (`coordinator_handle: null`) 
     take it on run-current's word alone. Part of L103 (C3).
     owner: matrix (tab49@matrix, 2026-11-28).
 
-L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**
-    status: pending
+L100. ~~**A repo-less alert file (`repo=unknown`) shows in every coordinator, and each must ack it.**~~
+    status: completed
     severity: P3
     owner: optimization (tab54@optimization, with L103 C4)
     From orca-lab coord@main (outbox 20261123T221226Z-V1IMzqej, 2026-11-23;
@@ -2992,6 +2997,11 @@ L100. **A repo-less alert file (`repo=unknown`) shows in every coordinator, and 
     target when the writer knows them; let one ack of a repo-less alert count
     for all; or show it only to the coordinator whose Run or terminal it
     names. Related: L98 (`orca_session_id:` senders give "unknown").
+    DONE 2026-11-28: PR #153 merged `82e7b1c` (1.63.0). A repo-less alert
+    shows to the session it names, and one ack clears it everywhere. The
+    one-hour wait before other tabs see it is kept (coord@main); the
+    alternatives are item 13 of
+    `memory/tasks.d/2026-11-27-feat-optimization-bot-coordinator-mode.md`.
 
 L101. **A merge approval relayed by Orca message does not pass the worker's auto-mode classifier.**
     status: pending
@@ -3027,6 +3037,12 @@ L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) c
     ORCA_AGENT_SESSION_ID or the Run's agent session, or fall back to Claude
     cross-session messaging), and/or make that coordinator's turn start show
     pending outbox files. Related: L98 (`orca_session_id:` addresses), L99.
+    2026-11-28: (a) DONE in PR #153 `82e7b1c` (1.63.0): a chat is no longer
+    refused by the re-bind and never calls run-use. (b) DONE for a repo
+    bot: coord:<repo> resolves to bot:<repo>-bot (#149), and a bot drains
+    its repo's outbox (#153). Still open: a plain chat coord@main that is
+    not a repo bot has no coord:<repo> address. owner: unassigned; waits
+    for orca-lab's chat probes (items 4-7 of the #153 shard).
 
 L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     status: pending
@@ -3081,6 +3097,11 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     as a null holder either way. L100 one-hour wait kept as shipped
     (coord@main; shard item 13 stays the alternative). coord re-bumped to
     1.63.0 (d11ae7e) after #151 took 1.62.0; pending CI.
+    C4+C6 DONE 2026-11-28: PR #153 merged `82e7b1c` (1.63.0), CI 70/70
+    green, optimization lane parked, branch deleted, tab54's terminal
+    gone from terminal list, loaded plugin 1.63.0 (freshness rc=0). Every
+    part C1-C6 is now merged. L103 stays open for orca-lab's C4 re-measure
+    (bot health and outbox; probe list items 1-3 of the #153 shard).
 
 L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**
     status: pending
