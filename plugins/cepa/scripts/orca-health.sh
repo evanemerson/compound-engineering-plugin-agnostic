@@ -1091,7 +1091,7 @@ try:
     oid, oh = open(os.path.join(tmp, "run.other")).read().split()
     k = "unbound:%s:%d" % (oid, hour)
     if (oh == "-" or oh.startswith("structworker_")) and not chat:
-        # PR #153 review: before 1.62.0 this read as orca-unreadable; a note
+        # PR #153 review: before 1.63.0 this read as orca-unreadable; a note
         # alone would read ok while the Run's workers go unchecked.
         if k not in acked:
             alert(k, "this pane's Run %s %s, not this terminal, so its workers are not checked; run the re-bind "

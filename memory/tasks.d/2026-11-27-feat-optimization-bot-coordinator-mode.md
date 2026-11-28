@@ -12,7 +12,7 @@ and outbox files now record `orca_session_id:<id>`, and both readers take it).
 ## Probe list for orca-lab (not measurable from a terminal worker)
 
 Each is stated in the script header named beside it. Expected results are
-what cepa 1.62.0 prints.
+what cepa 1.63.0 prints.
 
 1. [P2] Health from a bot home. In `orca-lab-bot`'s chat (cwd
    `~/.orca/bots/orca-lab-bot`), run rule 8's health block with no Run line.
