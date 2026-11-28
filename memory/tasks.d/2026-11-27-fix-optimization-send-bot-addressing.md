@@ -27,3 +27,26 @@ this shard holds what this branch did not close.
    window stays `not proven stored` (stated in the script header, THE REPLY
    THREAD). A larger window, or an Orca read of one message by id, would
    close it; no such read exists on 1.4.280 (`orchestration --help`).
+
+## Deferred from the PR #149 review (todos/review-2026-11-27-205920-fix-optimization-send-bot-addressing.md)
+
+6. [P2] `plugins/cepa/scripts/orca-send.sh` THE BOT FIRST `*)` arm: an
+   unreadable `bot list` (timeout, `ok:false`) falls back to the terminal
+   coord@main, so when a bot coordinator also exists the route can flip
+   between sends. Options: pending + `outbox_unreadable` on a transient
+   failure, falling back only when the `bot` command is absent; or keep the
+   fallback (today, for older Orca and the C6 transition). (finding 6)
+7. [P2] `plugins/cepa/scripts/orca-send.sh` THE BOT FIRST: a `<repo>-bot`
+   wins over a live terminal coord@main, and the delivered copy is
+   `.drained`, so no drain shows it. That is L103 C2 as written; coord@main
+   decides whether a live terminal coordinator should make it ambiguous for
+   C6. (finding 7)
+8. [P2] `plugins/cepa/scripts/orca-send.sh` bot chats proof: a stored bot send
+   whose chats read fails exits 5 and stays pending; a resend duplicates it.
+   Kept for the proof rule. (finding 8)
+9. [P3] `scripts/check-orca-outbox.sh` / `scripts/check-orca-nudge.sh`: no case
+   for a `bot list` that answers `ok:false` with rc 0, an escalation to a
+   `bot:` target, or a quoted bot name in another row's field. (finding 16)
+10. [P3] `plugins/cepa/scripts/orca-send.sh` bot chats proof accepts any open
+   chat, not only Home; `bot list` is read with no paging. Neither seen on
+   Orca 1.4.280. (finding 18)
