@@ -1657,7 +1657,7 @@ L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
 L52. **Detection-gate control gaps (L48 D7) — after L46.**
     status: pending
     severity: P3
-    owner: unassigned (a test-only worker, after L46 merges)
+    owner: formulation (tab56@formulation; L46 merged #116)
     152000 #11, session-names finding 12, hostile `json.py` fixture (094500
     #24 + 125030 #15; #15 also covers the rule 6 block). See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -2103,6 +2103,7 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     migrations after the lock is released (the stop trap still covers
     them), and a holder file so "lock busy" names the holder. owner:
     formulation (tab52@formulation).
+    tab52 done 2026-11-28: PR #151 (coord re-bumped to 1.62.0), pending CI.
 
 L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
     status: completed
@@ -3049,6 +3050,13 @@ L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to th
     status: pending
     severity: P1
     owner: matrix (tab55@matrix)
+    DECIDED 2026-11-28 (coord@main, tab55's question msg_48f32c0ce9ff):
+    option A — a bot: send counts with to_handle run:<id> only when the
+    re-read finds our msg id stored for that run:, its payload carries
+    Orca's botRequest, run-show <id> is ok with coordinator_handle null,
+    and `bot chats` lists an open Home chat; the header states run<->bot is
+    Orca's routing, not independently proven. No Orca field ties a run to a
+    bot (tab55 measured bot list, bot chats, run-show, bot.json).
     Measured here 2026-11-28 on Orca 1.4.280, cepa 1.61.0 (#149): coord@main
     sent a status to `coord:orca-lab`; orca-send.sh printed "Orca send
     resolved: coord:orca-lab is bot:orca-lab-bot", then "Orca send failed:
