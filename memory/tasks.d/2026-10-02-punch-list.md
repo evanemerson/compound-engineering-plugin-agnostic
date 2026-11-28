@@ -1648,9 +1648,13 @@ L50. **`sweep.md` puts model-filled values in single quotes (L48 D5).**
     read through a quoted heredoc and checked inside the block. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
 L51. **Record the "flip the shard line in the same commit" rule (L48 D8).**
-    status: pending
+    status: completed
     severity: P3
     owner: matrix (tab53@matrix) —  (via `/cepa:compound`)
+    Closed 2026-11-28: PR #150 merged bfde0cd (repo docs, no version bump).
+    CLAUDE.md "Flip the shard line in the commit that closes its item" +
+    scripts/probe-shard-lag.py; 4 lagging lines flipped in #150. Solution doc
+    copied to the main checkout's docs/solutions/logic-errors/.
     review-2026-10-30-192000 #16. L48 measured 7 shard lines that lagged
     findings or punch-list items already closed. See `memory/tasks.d/2026-11-01-chore-integrity-p3-backlog-triage.md`.
 
@@ -1740,7 +1744,14 @@ L55. **One lane lifecycle through Orca: create named + setup, remove with hooks.
 L56. **Repo rule: a test leg that runs a fenced block selects it by a line no mutant edits.**
     status: pending
     severity: P3
-    owner: matrix (tab53@matrix) —  (via `/cepa:compound`, with L51)
+    owner: unassigned — next lane after tab54 and tab55 merge (both edit check-orca-nudge*) —  (via `/cepa:compound`, with L51)
+    2026-11-28: rule RECORDED by PR #150 (bfde0cd, CLAUDE.md "A leg that runs
+    a fenced block selects it by a line no mutant edits"). Still open: L56
+    instance 4 (check-orca-nudge.sh BLOCK leg, mutant
+    block-unquoted-delimiter) and the mechanical check in
+    check-orca-nudge-controls.sh — shard
+    memory/tasks.d/2026-11-27-docs-matrix-shard-flip-and-block-select-rules.md
+    lines 59-60.
     From tab25@roles (L46): three of its mutants first went red only because
     the block they mutated was no longer found, not because the leg caught
     the defect. Source: `memory/tasks.d/2026-11-01-fix-roles-rename-rebind-hardening.md`.
