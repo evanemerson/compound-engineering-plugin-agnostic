@@ -3088,6 +3088,30 @@ L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to th
     Side effect: the pending outbox copy will be shown again to orca-lab as
     a duplicate of msg_ede2e13a5255 (orca-lab told).
 
+
+L105. **`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**
+    status: pending
+    severity: P2
+    owner: unassigned — next after tab55 (L104) merges; both edit orca-send.sh
+    From orca-lab (msg_ceda090dbc42, 2026-11-28, sent by orca-lab-bot from a
+    bot chat with orca-send.sh — which itself re-measures 1.61.0 C1/C2 bot ->
+    terminal coord@main as working; orca-lab L30; evidence orca-lab
+    docs/research/2026-11-28-worker-mail-not-seen.md; sender-measured on
+    Orca 1.4.280, not measured here). A `term_` send to a worker-start
+    worker was stored for `dispatch:<ctx>` (that worker's Dispatch); the
+    re-route branch (orca-send.sh ~1675-1683 in 1.61.0) counts only a
+    `run:` re-route as delivered, so it printed "Orca nudge skipped … not the
+    target", exit 1, and asked the operator to tell the worker to check its
+    inbox — 2.7 min after Orca had prompted the worker (~1 s) and it had read
+    the mail (59 s). Sender's requested change: D1 a stored `dispatch:<ctx>`
+    whose Dispatch terminal equals the term_ target prints "Orca nudge not
+    needed …", exit 0; D2 prove it with one bounded `orchestration
+    worker-show --dispatch <ctx> --json` (`result.terminal == target`); any
+    other answer keeps today's skip + exit 1; D3 header/comment name the
+    dispatch: re-route beside run:; D4 tests for own Dispatch, another
+    terminal's Dispatch, and worker-show failing. orca-lab re-measures on
+    the next release.
+
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
 (rebuild same names); artist360 cake lucero sonvolt (rebuild) + ozomatli
