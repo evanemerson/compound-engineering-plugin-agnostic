@@ -30,6 +30,11 @@
 #             handles), one handle in two Runs, pagination (#24) and a bad
 #             cursor, a failed or truncated read (unreadable alert), the send
 #             argv and the delivered move, a failed send kept pending.
+#             L103 C2: a bot named <repo>-bot is sent to first (delivered as
+#             `.drained`, never nudged, no Run-list read); a prefix repo's
+#             bot, a bot named for the bare repo and two bots of one name are
+#             not; a failed, shapeless or missing bot list falls back to the
+#             terminal coord@main; a bot send stored for a Run stays pending.
 #   PRUNE   — files older than 7 days go in every status; a pending or
 #             refused one leaves an outbox_pruned alert, a delivered one none,
 #             and one already acked (L87) none.
@@ -324,6 +329,45 @@ UNC_DOT = "\\\\wsl.localhost\\U\\home\\x\\webapps\\dpc.pro"
 resolve("an objective named by the raw directory matches its slug",
         state(runs=[run(1, "dpc.pro coord@main: x", HR)], terminals=[term(HR, UNC_DOT)],
               worktrees=[wt(UNC_DOT, True, [agent(1)])]), 0, sent_to=HR)
+# L103 C2: a bot named <repo>-bot is the coordinator, ahead of the Run list.
+BOTC = "1" * 8 + "-2222-4333-8444-" + "5" * 12
+def botsend(name, st, want_rc, sent_to, want_line=None, nudge="no-nudge", drained=True):
+    reset()
+    rc, out = send({"target": "coord:dpc-pro", "nudge": nudge}, st=st)
+    cl = calls()
+    sends = [c for c in cl if c[:2] == ["orchestration", "send"]]
+    fl = files()
+    good = rc == want_rc and len(sends) == 1 and sends[0][sends[0].index("--to") + 1] == sent_to \
+        and "Orca send resolved: coord:dpc-pro is %s" % sent_to in out and not alerts() \
+        and not [c for c in cl if c[:2] == ["terminal", "send"]]
+    if drained:
+        good = good and len(fl) == 1 and re.fullmatch(r"dpc-pro/delivered/\d{8}T\d{6}Z-[A-Za-z0-9]{8}\.drained\.md", fl[0]) \
+            and "Orca outbox: delivered: " + fl[0] in out \
+            and not [c for c in cl if c[:2] == ["orchestration", "run-list"]]
+    if want_line:
+        good = good and want_line in out
+    check("RESOLVE " + name, good, "rc=%s files=%s sends=%s out=%s" % (rc, fl, sends, out))
+    return out
+botsend("a bot named <repo>-bot is sent to, ahead of the Run list",
+        state(bots=["fleet", "dpc-pro-bot"], bot_chat=BOTC), 0, "bot:dpc-pro-bot",
+        want_line="Orca send stored: msg_000000abc001 for orca_session_id:" + BOTC)
+botsend("a bot target given nudge is sent as no-nudge", state(bots=["dpc-pro-bot"], bot_chat=BOTC), 0,
+        "bot:dpc-pro-bot", nudge="nudge",
+        want_line="Orca nudge not needed: bot:dpc-pro-bot is a mailbox Orca delivers; sent as no-nudge")
+for label, bots in (("a prefix repo's bot", ["dpc-pro-docs-bot"]), ("a bot named for the bare repo", ["dpc-pro"]),
+                    ("two bots of the same name", ["dpc-pro-bot", "dpc-pro-bot"])):
+    resolve("%s is not the coordinator" % label, state(bots=bots), 0, sent_to=HR)
+for label, mode in (("a failed bot list", "botlist_fail"), ("a bot list of an unknown shape", "botlist_shape"),
+                    ("an Orca with no bot command", "botlist_none")):
+    out = resolve("%s falls back to the terminal coord@main" % label, state(bots=["dpc-pro-bot"], mode=[mode]), 0,
+                  sent_to=HR, want_line="trying the terminal coord@main")
+reset()
+rc, out = send({"target": "coord:dpc-pro"}, st=state(bots=["dpc-pro-bot"], store_to="run:run_000000000001"))
+fl = files()
+check("RESOLVE a bot send stored for a Run stays pending",
+      rc == 5 and len(fl) == 1 and re.fullmatch(r"dpc-pro/" + NAME, fl[0])
+      and "Orca send failed: not proven stored — the reply names no valid recipient" in out,
+      "rc=%s files=%s out=%s" % (rc, fl, out))
 reset()
 rc, out = send({"target": "coord:dpc-pro"}, st=state(store_to="bogus"))
 fl = files()

@@ -1776,6 +1776,16 @@ limits.
      sender never puts patient data in a coordinator message: the outbox
      keeps it on disk for up to 7 days. The script's header owns the
      resolver, the outbox format and their limits (punch-list L61).
+   - **A bot is addressed as `bot:<name>`; a Chat or bot session can send
+     and be answered** (punch-list L97, L98, L103 C1–C2). `orca-send.sh`
+     takes a `bot:<name>` target, and `coord:<repo>` goes first to the bot
+     `<repo>-bot` when `bot list` shows one, before the Run list above. A
+     reply counts on Orca's thread root (a reply to a reply), and when Orca
+     stored it for a chat's `orca_session_id:` address. A session with no
+     terminal handle sends as its chat. Orca wakes a bot or a chat itself, so
+     neither is nudged. The script's header owns the proof for each (THE BOT
+     ADDRESS, THE BOT FIRST, THE CHAT SENDER AND RECIPIENT, THE REPLY
+     THREAD) and the measurements behind it.
    - **Every send runs through the block below.** That is each
      `orchestration send` a rule in this section asks for: this rule's
      hand-off, rule 3's report, rule 7's question and its delivery. Its

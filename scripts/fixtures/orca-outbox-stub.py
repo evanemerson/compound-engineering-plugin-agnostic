@@ -72,11 +72,30 @@ if verb == "orchestration send":
         err("invalid_argument")
     to = opt("--to")
     n = len(st.setdefault("sent", [])) + 1
+    # A bot: send is stored for the bot's chat, as Orca does (L103 C1).
+    if isinstance(to, str) and to.startswith("bot:") and "store_to" not in st:
+        to = "orca_session_id:" + st.get("bot_chat", "0" * 36)
     m = {"id": "msg_%012x" % (0xabc000 + n), "to_handle": st.get("store_to", to), "from_handle": "term_" + "1" * 36,
          "type": opt("--type"), "subject": opt("--subject"), "body": opt("--body"),
          "thread_id": None, "created_at": "2026-11-02 01:00:00"}
     st["sent"].append(m)
     out({"id": "x", "ok": True, "result": {"message": m}})
+# L103 C2: `bot list` (Orca 1.4.280: result.bots[{name, ...}]) and `bot
+# chats` (result.{bot, chats[{id, closed}]}). State "bots" lists the names;
+# "bot_chat" is the Home chat id each bot has. Modes: botlist_fail (exit 1),
+# botlist_shape (no bots list), botlist_none (no `bot` command: exit 64).
+if verb == "bot list":
+    if "botlist_none" in MODE:
+        sys.exit(64)
+    if "botlist_fail" in MODE:
+        err("runtime_unavailable")
+    if "botlist_shape" in MODE:
+        out({"id": "x", "ok": True, "result": {"bot": st.get("bots", [])}})
+    out({"id": "x", "ok": True, "result": {"bots": [{"name": n, "agent": "claude", "paused": False, "linked": []}
+                                                     for n in st.get("bots", [])], "unreachable": []}})
+if verb == "bot chats":
+    out({"id": "x", "ok": True, "result": {"bot": opt("--bot"), "chats": [
+        {"id": st.get("bot_chat", "0" * 36), "title": "Home", "home": True, "closed": False}]}})
 if verb == "orchestration inbox":
     out({"id": "x", "ok": True, "result": {"messages": list(reversed(st.get("sent", [])))}})
 if verb == "orchestration run-current":
