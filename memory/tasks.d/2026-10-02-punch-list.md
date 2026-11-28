@@ -3044,8 +3044,8 @@ L102. **A coord@main in an Orca structured session (no `ORCA_TERMINAL_HANDLE`) c
     not a repo bot has no coord:<repo> address. owner: unassigned; waits
     for orca-lab's chat probes (items 4-7 of the #153 shard).
 
-L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
-    status: pending
+L103. ~~**Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**~~
+    status: completed
     severity: P1
     owner: split — C1+C2 DONE (#149); C3 DONE (#148, = L99); C4+C6
       optimization (tab54@optimization, with L100, L102, and tab49's
@@ -3102,6 +3102,15 @@ L103. **Bot and chat coordinator mode (orca-lab L27 + L29 R2: C1–C6).**
     gone from terminal list, loaded plugin 1.63.0 (freshness rc=0). Every
     part C1-C6 is now merged. L103 stays open for orca-lab's C4 re-measure
     (bot health and outbox; probe list items 1-3 of the #153 shard).
+    CLOSED 2026-11-28 on orca-lab's re-measure of 1.63.2 (msg_f934602b75f4,
+    sender-measured from orca-lab-bot's Home chat, Orca 1.4.280): C4 health
+    from a bot home PASS (scoped to orca-lab + repo-less, no
+    orca-unreadable:run-current); outbox PASS (was exit 4); re-bind from the
+    chat with run: run_cf8f7c0d2b33 PASS, no run-use. Not measured, kept in
+    the #153 shard: probes 4-7 (restart, run-use from a chat, chat inbox,
+    run-current of another chat). Sender's clarification: the structworker_
+    holder was a Run made inside a structured worker session; a Run made
+    from a chat reads null. Self-send refusal filed as L107.
 
 L104. ~~**`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to the bot's Run, not an `orca_session_id:`.**~~
     status: completed
@@ -3157,6 +3166,9 @@ L104. ~~**`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to 
     printed "Orca send stored: msg_c23ce4f68ac3 for run:run_cf8f7c0d2b33",
     exit 0 (1.61.0 false-failed the same send). orca-lab asked to re-measure
     C4, L104 and L105.
+    orca-lab re-measure (msg_f934602b75f4): L104 PASS to bot:fleet, stored
+    for the bot's chat (orca_session_id:), exit 0 — both stored forms now
+    count. L105 not measured (orca-lab has no term_ worker).
 
 
 L105. ~~**`orca-send.sh` reports a send re-routed to the target worker's own Dispatch as undelivered.**~~
@@ -3206,6 +3218,18 @@ L106. **A re-route, chat or downgraded nudge skip in `orca-send.sh` writes no `n
     skips as alert-free. Source:
     `memory/tasks.d/2026-11-28-fix-formulation-dispatch-reroute-delivered.md`
     (the P2 line).
+
+L107. **`orca-send.sh` to the sender's own bot reads as a failed store and asks to paste.**
+    status: pending
+    severity: P3
+    owner: unassigned — after tab58 (L69) merges (orca-send.sh)
+    From orca-lab re-measure of 1.63.2 (msg_f934602b75f4, sender-measured,
+    Orca 1.4.280): a send to bot:orca-lab-bot from orca-lab-bot's own Home
+    chat is refused by Orca (runtime_error "You are already in that chat;
+    nothing was sent…"); orca-send.sh prints "Orca send failed: no message
+    stored … (runtime_error)", exit 5, with a paste ask. Sender's ask:
+    detect a self-target (the sender's ORCA_AGENT_SESSION_ID is an open chat
+    of the target bot) and refuse early with a plain message.
 
 L63 OPERATOR LANE NAMES 2026-11-02 (all coord@main sessions restarted on
 1.55.1 by the operator): dpc-pro apgar bath cori levi taussig wright
