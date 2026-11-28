@@ -2098,6 +2098,11 @@ L70. **Stack-gate follow-ups from PR #128 (builds outside the gate).**
     `memory/tasks.d/2026-11-02-fix-roles-bounded-builds.md` — #16 (P2) skip
     on a build-input hash so base drift rebuilds; #17 (P2) a build time
     limit; #18-#19 (P3). Items 2-4 above stay open.
+    DECIDED 2026-11-28 (operator, this session): items 2-4 all —
+    pre-pull images outside the gate, gate only `up -d --no-build`, run
+    migrations after the lock is released (the stop trap still covers
+    them), and a holder file so "lock busy" names the holder. owner:
+    formulation (tab52@formulation).
 
 L71. **coord@main first-prompt template fixes (lane-stack skill), after L70 #1.**
     status: completed
@@ -2856,9 +2861,17 @@ L95. **Handoff before compact: a two-strike PreCompact plugin hook.**
     (disable-model-invocation).
 
 L96. **Leftover `agent-*` subagent worktrees and `worktree-agent-*` branches after cepa runs.**
-    status: pending
+    status: completed
     severity: P2
     owner: formulation (tab51@formulation)
+    Closed 2026-11-28: PR #147 merged b9baa09 (1.60.5; loaded, freshness
+    rc=0). Proven leak: an isolated agent that only moves HEAD has its
+    worktree removed by the harness but keeps `worktree-agent-<id>`; §11b
+    now deletes that branch under snapshot/holder/tip/reflog guards. Not
+    proven (tab51 shard U1–U3,
+    memory/tasks.d/2026-11-27-fix-formulation-agent-worktree-leftovers.md):
+    why dpc-pro's 20 folders were kept — dpc-pro's coord@main can read that
+    run's KEPT/UNCLAIMED lines. Review findings #14–#18 deferred there.
     From orca-lab coord@main (msg_b56ad51ef3e5, 2026-11-21; orca-lab L23;
     sender-reported). dpc-pro had 20 `.claude/worktrees/agent-*` folders
     (made 2026-11-05 and 2026-11-11 under cepa runs) and 59

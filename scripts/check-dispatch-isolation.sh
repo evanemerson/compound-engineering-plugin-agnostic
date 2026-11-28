@@ -40,9 +40,10 @@
 #   - the Agent tool reports a kept worktree's path; 11c says so.
 #   - the snapshot block's own run-name check is NOT covered: the cleanup
 #     repeats it, so dropping either one alone changes no output, and neither
-#     is mutated. Nor are the `HEAD unreadable`, `HEAD reflog unreadable` and
-#     `git branch -D failed` branches: no fixture reaches them once the
-#     guards before them pass.
+#     is mutated. Nor are the `HEAD unreadable`, `HEAD reflog unreadable`,
+#     gone-path `branch reflog unreadable`, and removed-path `git branch -D
+#     failed` branches: no fixture reaches them once the guards before them
+#     pass. (The gone path's `git branch -D failed` is reached by a stub.)
 #   - an id line equal to the heredoc terminator CEPA_IDS. The orchestrator's
 #     `^[a-z0-9]+$` check rejects it before substitution; the block cannot.
 #   - SITES covers files that declare a dispatch tier (the TIER pattern); a
@@ -272,6 +273,7 @@ def cleanup_leg():
 case "$STUB" in
   list-fail) [ "$1" = worktree ] && [ "$2" = list ] && exit 128 ;;
   status-fail) [ "$1" = status ] && exit 128 ;;
+  branchd-fail) [ "$1" = branch ] && [ "$2" = -D ] && exit 1 ;;
 esac
 exec "$REAL_GIT" "$@"
 """)
@@ -445,6 +447,52 @@ exec "$REAL_GIT" "$@"
         g(m, "worktree", "add", "-q", h, "worktree-agent-a1")
         return m, "a1", ["REMOVED {agent-a1}; kept branch worktree-agent-a1: a worktree holds it"], \
                {w: False, h: True}, {"worktree-agent-a1": True}
+    # The harness removed the worktree of an agent that only moved HEAD and
+    # kept its branch (measured 2026-11-27, autonomy section 11, L96).
+    def harness_removed(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w)
+        return m, "a1", ["DELETED branch worktree-agent-a1: worktree {agent-a1} is gone"], \
+               {w: False}, {"worktree-agent-a1": False}
+    def harness_removed_report(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w)
+        return m, "a1", ["WOULD-DELETE branch worktree-agent-a1: worktree {agent-a1} is gone"], \
+               {w: False}, {"worktree-agent-a1": True}
+    def harness_removed_both(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w); g(m, "branch", "-D", "worktree-agent-a1")
+        return m, "a1", ["GONE {agent-a1}: no worktree and no branch worktree-agent-a1"], {w: False}, {}
+    def harness_removed_unique(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w)
+        extra = out(m, "commit-tree", "origin/main^{tree}", "-p", "origin/main", "-m", "on-branch")
+        g(m, "update-ref", "refs/heads/worktree-agent-a1", extra)
+        return m, "a1", ["KEPT branch worktree-agent-a1: worktree {agent-a1} is gone; tip <sha> is on no origin ref"], \
+               {w: False}, {"worktree-agent-a1": True}
+    def harness_removed_held(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w); h = wtp(m, "holder")
+        g(m, "worktree", "add", "-q", h, "worktree-agent-a1")
+        return m, "a1", ["KEPT branch worktree-agent-a1: worktree {agent-a1} is gone, but a worktree holds the branch"], \
+               {w: False, h: True}, {"worktree-agent-a1": True}
+    def harness_removed_reflog_lost(m, c):
+        # The agent committed, then reset its branch back to origin: the
+        # commit is reachable only through the branch's own reflog.
+        c.before(); w = planted_agent(m); g(w, "switch", "-q", "worktree-agent-a1")
+        g(w, "commit", "-q", "--allow-empty", "-m", "agent-work"); g(w, "reset", "-q", "--hard", "origin/main")
+        g(m, "worktree", "remove", w)
+        return m, "a1", ["KEPT branch worktree-agent-a1: worktree {agent-a1} is gone; branch reflog holds a commit no origin ref has"], \
+               {w: False}, {"worktree-agent-a1": True}
+    def harness_removed_symlink(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w); os.symlink("/nonexistent-cepa-target", w)
+        return m, "a1", ["KEPT {agent-a1}: not a worktree of this repo"], {}, {"worktree-agent-a1": True}
+    def harness_removed_delete_fails(m, c):
+        c.before(); w = planted_agent(m); g(m, "worktree", "remove", w)
+        return m, "a1", ["KEPT branch worktree-agent-a1: worktree {agent-a1} is gone; git branch -D failed"], \
+               {w: False}, {"worktree-agent-a1": True}
+    def harness_removed_pre_existing(m, c):
+        w = planted_agent(m); c.before(); g(m, "worktree", "remove", w)
+        return m, "a1", ["KEPT {agent-a1}: gone now, but existed before this run's dispatch"], \
+               {w: False}, {"worktree-agent-a1": True}
+    def harness_removed_no_snapshot(m, c):
+        w = planted_agent(m); g(m, "worktree", "remove", w)
+        return m, "a1", ["KEPT {agent-a1}: no pre-dispatch snapshot"], {w: False}, {"worktree-agent-a1": True}
     def unclaimed(m, c):
         c.before(); w = planted_agent(m); o = planted_agent(m, "agent-b2")
         return m, "a1", [REMOVED, "UNCLAIMED {agent-b2}: new since this run's snapshot, not one of its own dispatches — left alone"], \
@@ -467,7 +515,18 @@ exec "$REAL_GIT" "$@"
              Case("cleanup-stray-line", stray_line, clean_mode="remove\nextra"),
              Case("quoted-run", quoted_run, run="x'; touch PWNED; : '"),
              Case("no-branch", no_branch), Case("branch-unique-commit", branch_unique),
-             Case("branch-held", branch_held), Case("unclaimed", unclaimed)]
+             Case("branch-held", branch_held), Case("unclaimed", unclaimed),
+             Case("harness-removed", harness_removed),
+             Case("harness-removed-report", harness_removed_report, mode="report"),
+             Case("harness-removed-both", harness_removed_both),
+             Case("harness-removed-unique-tip", harness_removed_unique),
+             Case("harness-removed-held", harness_removed_held),
+             Case("harness-removed-no-snapshot", harness_removed_no_snapshot, snap=False),
+             Case("harness-removed-unique-tip-report", harness_removed_unique, mode="report"),
+             Case("harness-removed-reflog-lost", harness_removed_reflog_lost),
+             Case("harness-removed-symlink", harness_removed_symlink),
+             Case("harness-removed-pre-existing", harness_removed_pre_existing),
+             Case("harness-removed-delete-fails", harness_removed_delete_fails, stub="branchd-fail")]
 
     class Ctx:
         pass
@@ -565,6 +624,17 @@ exec "$REAL_GIT" "$@"
         ("clean", "no-branch-check", 'if [ -z "$tip" ]; then echo "REMOVED $wt; no branch $br"; continue; fi', ":"),
         ("clean", "no-held-check", 'case "$nl$held$nl" in *"${nl}branch refs/heads/$br$nl"*) echo "REMOVED $wt; kept branch $br: a worktree holds it"; continue ;; esac', ":"),
         ("clean", "no-tip-check", 'if [ -z "$bon" ]; then', "if false; then"),
+        ("clean", "gone-ignores-disk", 'if [ -z "$reg" ] && [ ! -e "$wt" ] && [ ! -L "$wt" ]; then', 'if [ -z "$reg" ]; then'),
+        ("clean", "no-gone-path", 'if [ -z "$reg" ] && [ ! -e "$wt" ] && [ ! -L "$wt" ]; then', "if false; then"),
+        ("clean", "no-gone-prior", '*"$nl""worktree $wt$nl"*) echo "KEPT $wt: gone now', '*"cepa-never-matches"*) echo "KEPT $wt: gone now'),
+        ("clean", "no-gone-branch-check", 'if [ -z "$gtip" ]; then echo "GONE $wt: no worktree and no branch $gbr"; continue; fi', ":"),
+        ("clean", "no-gone-held-check", 'case "$nl$now$nl" in *"${nl}branch refs/heads/$gbr$nl"*) echo "KEPT branch $gbr: worktree $wt is gone, but a worktree holds the branch"; continue ;; esac', ":"),
+        ("clean", "no-gone-tip-check", 'if [ -z "$gon" ]; then', "if false; then"),
+        ("clean", "no-gone-symlink-check", ' && [ ! -L "$wt" ]; then', "; then"),
+        ("clean", "no-gone-reflog-check", 'if [ -n "$glost" ]; then', "if false; then"),
+        ("clean", "gone-delete-fail-reports-deleted", 'if git branch -D "$gbr" >/dev/null 2>&1; then', "if git branch -D \"$gbr\" >/dev/null 2>&1 || true; then"),
+        ("clean", "gone-mode-before-tip", '    if [ -z "$gon" ]; then echo', '    case "$mode" in remove) ;; *) echo "WOULD-DELETE branch $gbr: worktree $wt is gone"; continue ;; esac\n    if [ -z "$gon" ]; then echo'),
+        ("clean", "gone-report-deletes", 'case "$mode" in remove) ;; *) echo "WOULD-DELETE', 'case "$mode" in *) ;; remove) echo "WOULD-DELETE'),
         ("clean", "unclaimed-ignores-snapshot", '    case "$nl$snap$nl" in *"${nl}worktree $p$nl"*) continue ;; esac\n', ""),
         ("clean", "no-unclaimed-report", 'echo "UNCLAIMED $p', 'true "UNCLAIMED $p'),
         ("clean", "snapshot-not-consumed", 'if [ -n "$snapf" ] && [ -f "$snapf" ]; then : > "$snapf"; fi', ":"),
