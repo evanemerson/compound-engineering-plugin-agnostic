@@ -3068,6 +3068,15 @@ L104. **`orca-send.sh` false-fails a stored `bot:` send: Orca addresses it to th
     and `bot chats` lists an open Home chat; the header states run<->bot is
     Orca's routing, not independently proven. No Orca field ties a run to a
     bot (tab55 measured bot list, bot chats, run-show, bot.json).
+    Live confirmation 2026-11-28 06:01Z: a status to bot:orca-lab-bot
+    stored as msg_37bdf3448873, to_handle run:run_cf8f7c0d2b33,
+    delivered_at set, payload has botRequest — option A's fields; 1.61.0
+    still printed the false "not proven stored" (alert 1795845717-pJ1MDygM).
+    Also measured: a terminal's `orchestration reply` to a message a BOT sent
+    (msg_ceda090dbc42) is refused by Orca with `bot_reply_not_yours`; a
+    terminal answers a bot with a plain send to bot:<name>. orca-send.sh's
+    reply type should say so instead of a generic refusal (tab55: in scope
+    if cheap, else a residual).
     Measured here 2026-11-28 on Orca 1.4.280, cepa 1.61.0 (#149): coord@main
     sent a status to `coord:orca-lab`; orca-send.sh printed "Orca send
     resolved: coord:orca-lab is bot:orca-lab-bot", then "Orca send failed:
