@@ -9,7 +9,7 @@ file at that path today is PR #108's (`scope: pr:#108`). No `todos/` file holds
 `scope: pr:#107` (probe: `grep -lE '^scope: pr:#?107' todos/*.md` prints nothing).
 Corrected 2026-11-01 (L49, L48 D9).
 
-- [ ] P3 — The two line-hit TITLE-SURFACES controls accept any `TITLE-SURFACES:` MISS as a kill; let a control name a killer substring — `scripts/check-orca-detection-controls.sh` `mutate()` (finding 12).
+- [x] P3 — The two line-hit TITLE-SURFACES controls accept any `TITLE-SURFACES:` MISS as a kill; let a control name a killer substring — `scripts/check-orca-detection-controls.sh` `mutate()` (finding 12). Resolved 2026-11-27 on test/formulation/detection-gate-controls (punch-list L52): a killer may be a (leg, substring) pair; all five TITLE-SURFACES controls name theirs and are in EXACT.
 - [ ] P3 — PR #96 findings 12 and 15 still apply to the unchanged rule 6 rename block; tracked in `2026-10-30-feat-roles-orca-session-titles.md`, not duplicated here (finding 13).
 
 ## Owed by the operator

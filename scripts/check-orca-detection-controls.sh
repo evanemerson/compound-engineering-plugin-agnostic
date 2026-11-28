@@ -8,7 +8,12 @@
 # shipped text changed shape and these mutants need re-reading.
 #
 # What each mutant reverts is in its name; the MUTANTS table pairs it with the
-# case that must catch it. Every leg and every CITES check family has at least
+# case that must catch it. A killer is a case name, or a (leg, substring) pair
+# when one leg has several assertions: then the MISS line must also hold the
+# substring, so a mutant is killed by its own assertion and not by another one
+# of that leg. A mutant in EXACT must turn red ONLY on its killer: every MISS
+# line it causes must be a hit. EXACT holds the mutants written to show that a
+# case catches something no other case does. Every leg and every CITES check family has at least
 # one mutant here that names it; FIXTURES cases that share one code path (the
 # several malformed-JSON answers) share one mutant.
 #
@@ -36,6 +41,7 @@ SITES = "plugins/cepa/commands"
 CHECK = "scripts/check-orca-detection.sh"
 TO = 'timeout -k "$cepa_orca_kill" "$cepa_orca_wait" '
 PROBE = '  ' + TO + '"$cepa_orca_cli" status --json </dev/null >"$cepa_orca_tmp" 2>"$cepa_orca_err" && return 0'
+ISOLATED = "\nelif python3 -I -c"  # 12a's parse line; the title block's is indented
 # (name, file, old, new, killer) — file is "skill" or a command file name.
 # old and new may be equal-length tuples: every anchor is replaced, and each
 # must occur exactly once.
@@ -88,6 +94,27 @@ MUTANTS = [
      "env-dash"),
     ("env-bare-orca", "skill", '*) cepa_orca_why="ORCA_CLI_COMMAND names bare orca on Linux" ;;', "*) ;;",
      "env-bare-orca-linux"),
+    # Only these cases catch these three (review 152000 #11). A valid
+    # ORCA_CLI_COMMAND whose probe exits 0 must still answer ok:true.
+    ("env-trusts-exit", "skill", ISOLATED, '\nelif [ "$cepa_orca_via" = ORCA_CLI_COMMAND ] || python3 -I -c',
+     "env-stale-not-ok"),
+    # Bare orca is refused on Linux only.
+    ("env-bare-orca-any-os", "skill", 'orca) [ "$cepa_orca_os" != Linux ] || case', "orca) case",
+     "env-bare-orca-darwin"),
+    # Reads the probe through a pipe and stops at the document's closing line,
+    # so bg-child-holds-stdout (which answers, then leaves a child on the pipe)
+    # stays green. A probe that hangs before it answers, with a grandchild in
+    # its own session that the timeout's group kill misses, keeps the pipe
+    # open for 30 s.
+    ("pipe-read-to-brace", "skill", PROBE + "\n  cepa_orca_rc=$?\n",
+     '  ' + TO + '"$cepa_orca_cli" status --json </dev/null 2>"$cepa_orca_err" | '
+     '{ while IFS= read -r l; do printf \'%s\\n\' "$l"; [ "$l" != "}" ] || break; done; } >"$cepa_orca_tmp"\n'
+     '  cepa_orca_rc=${PIPESTATUS[0]}; [ "$cepa_orca_rc" != 0 ] || return 0\n',
+     "setsid-grandchild-holds-stdout"),
+    # A json.py in the cwd (review 094500 #24, 125030 #15).
+    ("no-isolated-python", "skill", ISOLATED, "\nelif python3 -c", "hostile-json-in-cwd"),
+    ("title-no-isolated-python", "skill", "     elif python3 -I -c", "     elif python3 -c",
+     "title-hostile-json-in-cwd"),
     ("env-any-name", "skill", '*) cepa_orca_why="ORCA_CLI_COMMAND does not name an Orca CLI" ;;', "*) ;;",
      "env-not-orca"),
     ("env-no-path-check", "skill", 'if [ -z "$cepa_orca_why" ] && ! command -v "$cepa_orca_cli"',
@@ -219,22 +246,31 @@ MUTANTS = [
     ("task-no-cite", "task.md", "apply `cepa:autonomy` §12 —", "apply the adapter —",
      "task.md carries the §12 citation sentence"),
     ("lfg-no-rule3", "lfg.md", "autonomy §12b rule 3", "autonomy rule 3", "lfg.md cites §12b rule 3"),
+    # TITLE-SURFACES has one assertion per pin and one per file, so each
+    # mutant names the line it must turn red (session-names shard, finding 12).
     ("rule6-no-set-name-ban", "skill", "**Never set Claude Code's own name.**", "**Name it freely.**",
-     "TITLE-SURFACES"),
+     ("TITLE-SURFACES", "rule 6 says **Never set Claude Code's own name.**")),
     ("rule6-no-show-ban", "skill", "**Never check a rename with `terminal show` or `terminal list`.**",
-     "**Check a rename with `terminal show`.**", "TITLE-SURFACES"),
+     "**Check a rename with `terminal show`.**",
+     ("TITLE-SURFACES", "rule 6 says **Never check a rename with `terminal show` or `terminal list`.**")),
     ("rule6-no-coord-first-turn", "skill", "A coordinator also names its own tab on its",
-     "A coordinator may name its own tab on its", "TITLE-SURFACES"),
+     "A coordinator may name its own tab on its",
+     ("TITLE-SURFACES", "rule 6 says A coordinator also names its own tab on its first turn")),
     ("skill-runs-rename", "skill", "Then it names the\n   worker's tab (rule 6)",
-     "Then it runs `/rename <role>@<wt>` in the\n   worker's tab (rule 6)", "TITLE-SURFACES"),
+     "Then it runs `/rename <role>@<wt>` in the\n   worker's tab (rule 6)",
+     ("TITLE-SURFACES", "/SKILL.md line ")),
     ("task-launches-named", "task.md", "apply `cepa:autonomy` §12 —",
-     "start the worker with `claude --name tab3@wt`, then apply `cepa:autonomy` §12 —", "TITLE-SURFACES"),
+     "start the worker with `claude --name tab3@wt`, then apply `cepa:autonomy` §12 —",
+     ("TITLE-SURFACES", "/commands/task.md line ")),
     # handoff.md cites rule 1 twice; the second wraps, so remove both.
     ("handoff-no-rule1", "handoff.md", ("§12b rule 1", "§12b\n  rule 1)"), ("§12b", "§12b)"),
      "handoff.md cites §12b rule 1"),
     ("handoff-no-ask-grant", "handoff.md", ", Bash(orca-ide orchestration ask:*)", "",
      "handoff.md grants Bash(orca-ide orchestration ask:*)"),
 ]
+EXACT = {"env-trusts-exit", "env-bare-orca-any-os", "pipe-read-to-brace", "no-isolated-python",
+         "title-no-isolated-python", "rule6-no-set-name-ban", "rule6-no-show-ban",
+         "rule6-no-coord-first-turn", "skill-runs-rename", "task-launches-named"}
 passed = failed = 0
 TMP = tempfile.mkdtemp(prefix="cepa-orca-ctl-")
 
@@ -289,10 +325,15 @@ def mutate(name, target, old, new, killer):
     rc, misses = run(skill, sites)
     if rc is None:
         return False, "%s: check still running after 600s" % name
-    hit = [m for m in misses if m.startswith(killer + ":") or m == "CITES: " + killer]
+    leg, sub = killer if isinstance(killer, tuple) else (killer, "")
+    hit = [m for m in misses if (m.startswith(leg + ":") or m == "CITES: " + leg) and sub in m]
+    label = "%s %r" % (leg, sub) if sub else leg
+    if rc != 0 and hit and name in EXACT and len(hit) != len(misses):
+        return False, "%s: red on more than %s (MISS lines: %r)" % (
+            name, label, [m for m in misses if m not in hit][:2])
     if rc != 0 and hit:
-        return True, "%s killed by %s" % (name, killer)
-    return False, "%s: not killed by %s (rc=%s, MISS lines: %r)" % (name, killer, rc, misses[:2])
+        return True, "%s killed by %s" % (name, label)
+    return False, "%s: not killed by %s (rc=%s, MISS lines: %r)" % (name, label, rc, misses[:2])
 
 # Four at a time: the check's slowest case waits about 2.3 s, and its time
 # bounds leave room for a loaded runner.
