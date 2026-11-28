@@ -191,7 +191,8 @@
 #      resend` after the reason.
 #   0  Orca send stored: <msg id> for <recipient>, then either orca-nudge.sh's
 #      `Orca nudge sent to <handle>`, this script's `Orca nudge not needed:
-#      <reason>` (stored in a Run mailbox, `nudge` given for a `run:` or
+#      <reason>` (stored in a Run mailbox, or a `term_` send stored in the
+#      target's own live Dispatch mailbox, L105; `nudge` given for a `run:` or
 #      `dispatch:` target and sent as `no-nudge`, or a host `term_` target
 #      given `on:` and stored for it, L89 a), or nothing more (`no-nudge`).
 #   1, 2, 3  stored, then the nudge skipped, refused or failed: orca-nudge.sh's
@@ -256,7 +257,13 @@
 # reported. Orca can store a send for another mailbox than the one named: a
 # send to a Run coordinator's `term_` handle was stored for `run:<id>`
 # (msg_6d1566506a61). Such a row is a Run mailbox, which Orca prompts, so it
-# gets no nudge.
+# gets no nudge. A send to a worker-start worker's `term_` handle was stored
+# for `dispatch:<ctx>`, that worker's own Dispatch, and Orca prompted the
+# worker itself (punch-list L105; sender-measured on Orca 1.4.280). Such a
+# row gets no nudge only when one bounded `worker-show --dispatch <ctx> --json
+# --full` names that Dispatch `dispatched`, with the target as both its
+# `assigneeHandle` and its `terminal.handle` (THE OWN DISPATCH). A failed or
+# timed-out read, any other answer, or a host (`on:`) send keeps the skip.
 #
 # THE READ-BACK (punch-list L84). "Read Orca's state before reporting a
 # failure" (L79, #134 learning 3). A send whose call failed in a way that
@@ -1675,6 +1682,34 @@ fi
 if [ "$cepa_send_to" != "$cepa_send_target" ]; then
   if [[ $cepa_send_to == run:* ]]; then
     echo "Orca nudge not needed: Orca stored it in $cepa_send_to, a Run mailbox it prompts"
+    exit 0
+  fi
+  # THE OWN DISPATCH (L105; header, THE RE-READ): a term_ send stored for
+  # dispatch:<ctx> reached the target only when that Dispatch is the
+  # target's own, live. One bounded worker-show proves it; a failed read,
+  # a timeout or any other answer keeps the skip below. A host send (`on:`)
+  # is not measured, so it keeps the skip too.
+  if [[ $cepa_send_to == dispatch:* && $cepa_send_target == term_* ]] && [ -z "$cepa_send_on" ] \
+      && cepa_send_orca "$cepa_send_tmp/own.json" orchestration worker-show \
+        --dispatch "${cepa_send_to#dispatch:}" --json --full \
+      && python3 -I - "$cepa_send_tmp/own.json" "${cepa_send_to#dispatch:}" "$cepa_send_target" <<'PY' >/dev/null 2>&1
+import json, sys
+# Measured on Orca 1.4.280 (a live worker-start Dispatch, read only):
+# result.dispatch has id, status `dispatched` and assigneeHandle; result.terminal
+# is an object whose `handle` is the Dispatch's terminal.
+try:
+    d = json.load(open(sys.argv[1]))
+    r = d["result"] if isinstance(d, dict) and d.get("ok") is True else None
+    disp = r.get("dispatch") if isinstance(r, dict) else None
+    term = r.get("terminal") if isinstance(r, dict) else None
+    own = isinstance(disp, dict) and disp.get("id") == sys.argv[2] and disp.get("status") == "dispatched" \
+        and disp.get("assigneeHandle") == sys.argv[3] and isinstance(term, dict) and term.get("handle") == sys.argv[3]
+except Exception:
+    own = False
+sys.exit(0 if own else 1)
+PY
+  then
+    echo "Orca nudge not needed: Orca stored it in $cepa_send_to, the target's Dispatch mailbox, which it prompts"
     exit 0
   fi
   echo "Orca nudge skipped: Orca stored it for $cepa_send_to, not the target"
