@@ -3079,7 +3079,8 @@ limits.
      The health block and the outbox drain run every turn, as for a main
      checkout. A bot home named `<repo>-bot` names the repo by itself. Any
      other home puts the line `repo:<repo>` under the `<cli>` line of each
-     block, so the scripts see the repo this bot coordinates. Without a
+     block, in its `ack` form too, so the scripts see the repo this bot
+     coordinates and an ack lands where the next check reads it. Without a
      repo, health shows no named repo's alert and raises
      `orca-unreadable:repo`, and the drain refuses. It never shows every
      repo's alerts. During the move to repo bots, a repo with a terminal

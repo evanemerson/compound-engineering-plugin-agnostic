@@ -719,6 +719,24 @@ rc, out = health([], BHOME)
 check("BOT health from a <repo>-bot home gets the inbound note",
       any("1 outbox message for coord:dpc-pro wait; rule 8's drain block shows them" in l for l in out)
       and not [l for l in out if "coord:helm" in l], "rc=%s out=%s" % (rc, out))
+# A chat's own coord: send (sender orca_session_id:) is counted by health,
+# and one that only quotes a session id is an unknown shape there too.
+reset()
+c1 = stamp(0.5) + "-Abot0006.md"
+plant("dpc-pro/" + c1, header={"repo": "otherrepo", "worktree": "otherrepo", "sender": "orca_session_id:" + CHAT_ID})
+rc, out = health([], BHOME)
+check("BOT health reads a chat-sent outbox file",
+      any("1 outbox message for coord:dpc-pro wait; rule 8's drain block shows them" in l for l in out)
+      and not [l for l in out if ":unknown-shape:" in l], "rc=%s out=%s" % (rc, out))
+reset()
+plant("dpc-pro/" + c1, header={"repo": "otherrepo", "worktree": "otherrepo",
+                               "sender": "orca_session_id:%s $(id)" % CHAT_ID})
+rc, out = health([], BHOME)
+check("BOT health reads a quoted chat sender as an unknown shape",
+      rc == 1 and len([l for l in out if ":unknown-shape:" in l]) == 1, "rc=%s out=%s" % (rc, out))
+reset()
+plant("dpc-pro/" + b1, header={"repo": "otherrepo", "worktree": "otherrepo"})
+plant("helm/" + stamp(0.5) + "-Abot0005.md", header={"repo": "otherrepo", "worktree": "otherrepo"})
 rc, out = health([], os.path.join(T, "chat"))
 check("BOT health with no repo reads no named repo's outbox",
       rc == 1 and any(l.startswith("ORCA alert: orca-unreadable:repo:") and "2 alert or outbox files of named repos" in l

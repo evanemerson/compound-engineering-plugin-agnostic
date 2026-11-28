@@ -69,3 +69,34 @@ what cepa 1.62.0 prints.
    `<repo>`'s alerts and drains `coord:<repo>`. Every session runs as one
    user, so this is a claim, as a checkout's directory name is.
    — `orca-outbox.sh` (STATED LIMITS)
+
+## Deferred from the PR #153 review (todos/review-2026-11-28-005445-feat-optimization-bot-coordinator-mode.md)
+
+13. [P2] The L100 one-hour wait can hide a repo-less `send_failed` file that
+   names a session which already ended from the coordinator that needs it.
+   Options: wait only for `nudge_skipped`, or drop the wait and keep the
+   shared ack. L100's design choice; coord@main decides. (finding 6)
+   — `plugins/cepa/scripts/orca-health.sh` section 1
+14. [P2] A chat's `ok` (rebind) and own-Run check (health) trust that a
+   chat's run-current reports only its own Run; probe 7 measures it.
+   (finding 7) — `plugins/cepa/scripts/orca-rebind.sh` THE CHAT
+15. [P3] The rule 8 health and drain blocks have no placeholder line for a
+   bot's `repo:`; it is given in rule 9's prose only. Adding one needs the
+   BLOCK and HEALTHBLOCK legs changed with it. (finding 13)
+   — `plugins/cepa/skills/autonomy/SKILL.md` rule 8
+16. [P3] For coord@main's fold: L103 C4's text ("shows every repo's alerts")
+   is orca-lab's M6 observation. This branch shows only the named repo's
+   files, and alerts `orca-unreadable:repo` when it names none. orca-lab's
+   C4 re-measure should expect that. (finding 14)
+   — `memory/tasks.d/2026-10-02-punch-list.md` L103
+17. [P3] A no-repo session skips unknown-shape outbox entries and prints a
+   plain `ok` when no named-repo file exists, so a forgotten `repo:` stays
+   invisible. (finding 15) — `plugins/cepa/scripts/orca-health.sh` section 1b
+18. [P3] The bot-home rule depends on HOME and on the bot home not being
+   inside a git checkout; say which repo was derived and how in the
+   summary. (finding 16) — `plugins/cepa/scripts/orca-health.sh` BOT MODE
+19. [P3] Case gaps: a chat's own repo-less failed send seen from a no-repo
+   session; a stale worker's commit read from a bot home; a bot home
+   through a symlink or a 101-character name; `term_x` beside a chat
+   identity in health; a shared ack marker that cannot be written.
+   (finding 18) — `scripts/check-orca-nudge.sh` HEALTH

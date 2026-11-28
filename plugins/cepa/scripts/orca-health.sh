@@ -155,6 +155,12 @@
 #                        it, and the re-bind block asks before it takes one
 #                        (orca-rebind.sh, THE NULL HOLDER). From a chat, a
 #                        `term_` holder raises it and a null one does not.
+#                        With no Run named, a terminal whose run-current Run
+#                        has a null holder raises it too (PR #153 review: a
+#                        note alone read `ok` while the Run went unchecked;
+#                        up to 1.61.x it was orca-unreadable). A
+#                        `structworker_` holder (orca-rebind.sh, THE
+#                        STRUCTURED HOLDER) is read as a null one is.
 #   HOST DISPATCHES (punch-list L89 g): a dispatch on an Orca host. orca-lab
 #                        reported its `worker-list` row as `projection: null`
 #                        (Orca 1.4.262, live WSL host). This run re-read
@@ -256,14 +262,19 @@
 # 2026-11-21/22 (sender report). Now it is shown, unlabeled, to the session
 # it names: its sender or target is this session's address, or its target is
 # `run:<this session's Run>`. One that names another session (a known
-# sender, or another `run:`) is not shown for its first hour, so that session
-# answers it; after the hour it is shown to every coordinator, so a file
+# sender, or a target that is another session's address or `run:`) is not
+# shown for its first hour, so that session answers it; after the hour, or
+# when its time is in the future, it is shown to every coordinator, so a file
 # whose session is gone is never lost. One that names no session is shown to
 # every coordinator, labeled `no repo recorded; …`. An ack of a repo-less
-# file is written under <alert dir>/acked/_shared/, and that marker hides it
-# in every coordinator: one ack, never one per tab. The ack reads the file's
-# last `repo=` line, as the reader does, so a reason that quotes
-# `repo=unknown` changes nothing.
+# file is also written under <alert dir>/acked/_shared/, and that marker
+# hides it in every coordinator: one ack, never one per tab. Every ack also
+# writes this worktree's own marker, so an ack always holds where it was
+# given, even for a file the reader cannot parse (PR #153 review). The ack
+# reads the file's last `repo=` line, and the reader splits lines on `\n`
+# only, as the ack's `sed` does, so a reason that quotes `repo=unknown`
+# changes nothing. A worktree named `_shared` or `bot@…` acks as `unknown`,
+# never into the shared or a bot's directory.
 # BOT MODE (punch-list L103 C4). orca-lab measured from an Orca bot on Orca
 # 1.4.280, 2026-11-27 (sender report, not re-run here; evanemerson/orca-lab
 # docs/research/2026-11-23-bot-coordinator-pilot.md M6): its cwd is
@@ -290,7 +301,7 @@
 #     raises `orca-unreadable:repo:<hour>` naming how many it did not read:
 #     never every repo's alerts.
 #   - Not measured: which mailbox `inbox` lists from a chat (the inbox window
-#     is read as from a terminal); and a stale worker's commit read (LIFE)
+#     is read as from a terminal, and a chat's summary line says so); and a stale worker's commit read (LIFE)
 #     needs this repo's `git worktree list`, which a bot home has none of, so
 #     it reads `unread` there.
 # THE REASON. An alert file's reason is shown only when it matches one that
@@ -410,7 +421,10 @@ cepa_h_main=0
 case "$cepa_h_common" in
   /*/.git)
     [ -z "$cepa_h_argrepo" ] || [ "$cepa_h_argrepo" = "$cepa_h_repo" ] \
-      || refuse "the repo: argument names another repo than this checkout's" ;;
+      || refuse "the repo: argument names another repo than this checkout's"
+    # A worktree named like the shared or a bot's ack directory acks as
+    # unknown, never into theirs (PR #153 review).
+    case "$cepa_h_wt" in _shared|bot@*) cepa_h_wt=unknown ;; esac ;;
   *)
     # No git checkout (a bot home or a chat scratch dir): the repo is the
     # repo: argument, else the bot home's name, else none (BOT MODE).
@@ -457,18 +471,22 @@ elif [ $# -ge 2 ]; then
     [[ $k =~ ^outbox:[^:]+:(ambiguous|mismatch|unreadable|pruned):(.+)$ ]] && cepa_h_af=${BASH_REMATCH[2]}
     # L100: an alert file with no known repo is acked once for every
     # coordinator (its marker goes under acked/_shared/).
-    cepa_h_to=$cepa_h_acked
-    # The reader keeps the last repo= line (a dict of the lines), so this does.
+    # The marker always goes under this worktree's directory, so the ack
+    # holds here whatever the file says. One that reads repo-less (its last
+    # repo= line, as the reader keeps it) also goes under _shared/, where
+    # every coordinator reads it (PR #153 review: a reader and an ack that
+    # disagree must never leave an ack that does not hold).
     cepa_h_frepo=
     [ -z "$cepa_h_af" ] || [ ! -f "$cepa_h_dir/$cepa_h_af" ] \
       || cepa_h_frepo=$(sed -n 's/^repo=//p' "$cepa_h_dir/$cepa_h_af" 2>/dev/null | tail -n 1)
-    if [ "$cepa_h_frepo" = unknown ]; then
-      cepa_h_to=$cepa_h_shared
-      mkdir -p "$cepa_h_to" 2>/dev/null || :
-    fi
+    cepa_h_share=1
+    [ "$cepa_h_frepo" != unknown ] \
+      || { mkdir -p "$cepa_h_shared" 2>/dev/null && : >"$cepa_h_shared/$k" 2>/dev/null; } || cepa_h_share=0
     if [ -n "$cepa_h_af" ] && [ ! -f "$cepa_h_dir/$cepa_h_af" ]; then
       echo "ORCA ack failed: $k — no such alert file"; cepa_h_bad=1
-    elif : >"$cepa_h_to/$k" 2>/dev/null; then
+    elif [ "$cepa_h_share" = 0 ]; then
+      echo "ORCA ack failed: $k — the shared ack marker could not be written"; cepa_h_bad=1
+    elif : >"$cepa_h_acked/$k" 2>/dev/null; then
       echo "ORCA ack: $k"
     else
       echo "ORCA ack failed: $k — the ack marker could not be written"; cepa_h_bad=1
@@ -543,11 +561,13 @@ i, h = r["id"], r["coordinator_handle"]
 if not (isinstance(i, str) and re.fullmatch(r"run_[A-Za-z0-9_-]{1,64}", i)):
     sys.exit(1)
 chat = sys.argv[2].startswith("orca_session_id:")
-if h is None:
+# A structured session holds with a structworker_ handle (orca-rebind.sh,
+# THE STRUCTURED HOLDER): read as a null holder is.
+if h is None or isinstance(h, str) and re.fullmatch(r"structworker_[0-9a-f-]{36}", h):
     if chat:
         print(i)
     else:
-        open(sys.argv[3], "w").write("%s -" % i)
+        open(sys.argv[3], "w").write("%s %s" % (i, h or "-"))
     sys.exit(0)
 if not (isinstance(h, str) and re.fullmatch(r"term_[0-9a-f-]{36}", h)):
     sys.exit(1)
@@ -881,7 +901,8 @@ for n in listdir(adir, "alert-dir"):
         continue
     key = "send-failed:" + n
     try:
-        lines = open(os.path.join(adir, n), encoding="ascii").read().splitlines()
+        # Split on \n only, as the ack path's sed does (PR #153 review).
+        lines = open(os.path.join(adir, n), encoding="ascii").read().split("\n")
         f = dict(l.split("=", 1) for l in lines[1:] if "=" in l)
         shaped = lines[:1] == ["cepa-orca-alert 1"] and all(re.fullmatch(FIELD[k], f.get(k, "")) for k in FIELD)
     except Exception:
@@ -897,8 +918,8 @@ for n in listdir(adir, "alert-dir"):
         # every coordinator, labeled, and one ack (under acked/_shared/)
         # clears it in all of them.
         names_me = bool(me) and me in (f["sender"], f["target"]) or bool(run) and f["target"] == "run:" + run
-        names_other = f["sender"] != "unknown" or f["target"].startswith("run:")
-        if not names_me and names_other and now - int(f["time"]) < 3600:
+        names_other = f["sender"] != "unknown" or re.match(r"(run:|term_|orca_session_id:|bot:)", f["target"]) is not None
+        if not names_me and names_other and 0 <= now - int(f["time"]) < 3600:
             other += 1
             continue
         if not names_me:
@@ -1068,9 +1089,15 @@ if os.path.exists(os.path.join(tmp, "run.fail")):
     unreadable("run-current" if os.path.exists(os.path.join(tmp, "run.current")) else "run-show")
 try:
     oid, oh = open(os.path.join(tmp, "run.other")).read().split()
-    if oh == "-":
-        notes.append("this pane's Run %s has no recorded holder (a chat or bot's Run reads so), not this terminal; "
-                     "not checked (§12b rule 2)" % oid)
+    k = "unbound:%s:%d" % (oid, hour)
+    if (oh == "-" or oh.startswith("structworker_")) and not chat:
+        # PR #153 review: before 1.62.0 this read as orca-unreadable; a note
+        # alone would read ok while the Run's workers go unchecked.
+        if k not in acked:
+            alert(k, "this pane's Run %s %s, not this terminal, so its workers are not checked; run the re-bind "
+                     "block (§12b rule 2), which asks before it takes it"
+                  % (oid, "has no recorded holder (a chat or bot's Run reads so)" if oh == "-"
+                     else "is held by the structured session %s" % oh))
     else:
         notes.append("this %s's Run %s is held by %s, not this %s; not checked (§12b rule 2)"
                      % ("chat" if chat else "pane", oid, oh, "chat" if chat else "terminal"))
@@ -1082,7 +1109,11 @@ if run and me:
     rr = ((load("run.json") or {}).get("result") or {}).get("run") or {}
     holder = rr.get("coordinator_handle") if isinstance(rr, dict) else None
     k = "unbound:%s:%d" % (run, hour)
-    if isinstance(holder, str) and re.fullmatch(r"term_[0-9a-f-]{36}", holder) and holder != me and k not in acked:
+    # From a terminal a structworker_ holder is another session's, as a
+    # term_ one is; from a chat it may be the chat itself (THE STRUCTURED
+    # HOLDER, orca-rebind.sh), so it raises nothing there.
+    hold_rx = r"term_[0-9a-f-]{36}" if chat else r"(term|structworker)_[0-9a-f-]{36}"
+    if isinstance(holder, str) and re.fullmatch(hold_rx, holder) and holder != me and k not in acked:
         alert(k, "Run %s is bound to %s, not this %s, so Orca prompts that terminal; "
                  "run the re-bind block (§12b rule 2)" % (run, holder, "chat" if chat else "terminal"))
     elif holder is None and isinstance(rr, dict) and "coordinator_handle" in rr and not chat and k not in acked:
@@ -1162,6 +1193,8 @@ if any(not isinstance(x, dict)
     rows = []
 if len(rows) >= 200:
     notes.append("inbox window full: questions older than 200 rows not read")
+if chat:
+    notes.append("inbox read as from a terminal: which mailbox a chat's inbox lists is not measured")
 if not me:
     notes.append("own-question check off: no term_ handle in ORCA_TERMINAL_HANDLE and no chat identity "
                  "(ORCA_STRUCTURED_SESSION=1 with ORCA_AGENT_SESSION_ID)")
